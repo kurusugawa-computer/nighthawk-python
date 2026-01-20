@@ -9,6 +9,7 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 - Sandboxing for workspace tools (expression evaluation in particular).
 - Restricting template preprocessing evaluation.
 - Path allowlists and traversal protection for include functions.
+- Expand the evaluation environment safely over time (MVP keeps `context_globals` minimal).
 
 ### Persistence
 
@@ -48,7 +49,7 @@ After MVP, consider alternatives that reduce cost and tighten semantics:
 
 ### Include functions (templating)
 
-In `docs/design.md`, `include(path)` is described as an example helper for template preprocessing.
+In `docs/design.md`, `include(path)` is described as an example helper for template preprocessing under a trusted-input threat model.
 
 After MVP, we expect include helpers to be domain-specific and to resolve paths relative to well-defined locations in the workspace, for example:
 

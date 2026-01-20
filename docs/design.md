@@ -24,6 +24,7 @@ This document specifies the MVP design for Nighthawk.
 ## 3. Hard constraints (MVP)
 
 - Python 3.14+ (template preprocessing uses Python 3.14 template strings).
+- Default OpenAI model (MVP): `gpt-5.2`.
 - LLM provider: OpenAI only, integrated via `pydantic-ai-slim[openai]`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
@@ -49,7 +50,8 @@ This document specifies the MVP design for Nighthawk.
 ### 5.2. Configuration
 
 - `Configuration`
-  - OpenAI model name
+  - OpenAI model name (default: `gpt-5.2`)
+  - Environment variable support (`NIGHTHAWK_*`)
   - Optional tool enablement flags
   - Optional memory model type (user-provided `BaseModel`)
   - Template evaluation context (see Section 10)
@@ -74,9 +76,15 @@ The remainder of the docstring is the Natural program.
 
 Inside a function body, a standalone string literal expression statement whose first non-empty line is exactly `natural` is treated as a Natural block.
 
+MVP decision (inline shape):
+
+- The inline Natural block is defined by the AST shape "expression statement containing a string literal".
+- Parentheses do not matter. For example, `"""natural\n..."""` and `("""natural\n...""")` are treated the same.
+
 Notes:
 
 - The sentinel is case-sensitive and must match exactly `natural`.
+- Sentinel matching rule: after docstring/inline string literal unwrapping, skip leading empty lines; the first logical line must be exactly `natural` (no leading or trailing whitespace).
 
 ## 7. Natural DSL: bindings
 
@@ -144,6 +152,10 @@ Memory summary (if enabled):
 ### 8.3. Tools available to the LLM
 
 MVP tools operate against `context_locals` and a limited `context_globals`.
+
+MVP decision (context_globals):
+
+- `context_globals` includes only `__builtins__` (no additional helpers).
 
 The host should pre-bind `memory` into `context_locals` when memory is enabled, so expressions can read the current memory state.
 
