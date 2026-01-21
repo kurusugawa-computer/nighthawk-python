@@ -31,7 +31,7 @@ def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
     return "".join(out)
 
 
-def include(path: str, *, repo_root: Path, allowed_roots: tuple[str, ...] = ("docs/", "tests/")) -> str:
+def include(path: str, *, workspace_root: Path, allowed_roots: tuple[str, ...] = ("docs/", "tests/")) -> str:
     if os.path.isabs(path):
         raise NaturalExecutionError("include(path): absolute paths are not allowed")
     if ".." in Path(path).parts:
@@ -41,10 +41,10 @@ def include(path: str, *, repo_root: Path, allowed_roots: tuple[str, ...] = ("do
     if not any(path.startswith(r) for r in allowed_roots):
         raise NaturalExecutionError("include(path): path must start with docs/ or tests/")
 
-    full = (repo_root / path).resolve()
-    # Ensure the resolved path stays within repo_root.
-    if repo_root.resolve() not in full.parents and full != repo_root.resolve():
-        raise NaturalExecutionError("include(path): resolved path is outside repository root")
+    full = (workspace_root / path).resolve()
+    # Ensure the resolved path stays within workspace_root.
+    if workspace_root.resolve() not in full.parents and full != workspace_root.resolve():
+        raise NaturalExecutionError("include(path): resolved path is outside workspace root")
 
     try:
         return full.read_text(encoding="utf-8")

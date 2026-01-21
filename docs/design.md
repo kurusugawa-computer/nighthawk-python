@@ -237,13 +237,23 @@ The host commits `context_locals["result"]` into the Python local `result` at th
 
 If a Natural execution requests `effect.type == "return"`, the runtime returns the validated return value immediately.
 
-## 10. Template preprocessing (runtime)
+## 10. Runtime context
 
-### 10.1. Rationale
+Nighthawk supports an implicit runtime context that can be set by the host Python code and is automatically inherited across Python call stacks.
+
+- The runtime context includes `workspace_root`, which is used as the base directory for any workspace tools and include resolution.
+- The host sets the current context with:
+  - `with nighthawk.runtime_context(workspace_root=...): ...`
+
+If no runtime context is set, the current working directory is treated as the workspace root.
+
+## 11. Template preprocessing (runtime)
+
+### 11.1. Rationale
 
 Natural programs may reference external markdown or compose prompts. Nighthawk supports this by preprocessing the Natural block at runtime.
 
-### 10.2. Mechanism
+### 11.2. Mechanism
 
 - The Natural block is evaluated as a Python 3.14 template string at runtime (function call time).
 - The evaluation environment can provide helper functions.
@@ -261,7 +271,7 @@ Decision:
 - Template preprocessing may execute arbitrary functions.
 - This is acceptable only under the trusted-input threat model.
 
-## 11. Memory model (example shape)
+## 12. Memory model (example shape)
 
 The user defines a `MemoryModel` as a Pydantic `BaseModel` using shallow types.
 
@@ -279,7 +289,7 @@ Note:
 
 - This is an example, not a fixed requirement. The memory schema influences the LLM's mental model.
 
-## 12. Error handling
+## 13. Error handling
 
 Nighthawk distinguishes:
 

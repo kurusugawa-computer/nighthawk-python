@@ -20,6 +20,11 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 
 - Executing workflows that embed Python code fences inside natural language documents (a broader hybrid beyond docstrings).
 
+### Runtime context propagation (future)
+
+- Propagate runtime context across tool execution boundaries when tools run in different threads or processes.
+- Define an explicit serialization/propagation mechanism for runtime context for multi-process execution.
+
 ### Skills-style packaging
 
 - A directory structure similar to Claude Skills (SKILL.md, REFERENCE.md, scripts/).
@@ -29,11 +34,15 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 
 - Support multiple LLM providers beyond OpenAI.
 
-### CLI
+### Runtime context
 
-- Provide a `nighthawk` CLI suitable for `uv run nighthawk`.
-- Workspace root is required. Accept it via `NIGHTHAWK_WORKSPACE_ROOT` (preferred) or `--workspace-root`.
-- Use the workspace root as the repository root for include resolution and any workspace tools.
+- Provide an API for an implicit runtime context (dynamic scoping) that can be set by host Python code.
+- Workspace root is required for workspace tools. Set it via `nighthawk.runtime_context(workspace_root=...)`.
+- Use the workspace root for include resolution and any workspace tools.
+
+### CLI (deprioritized)
+
+- A `nighthawk` CLI may be added later, but the preferred approach is that users choose their own Python entry point.
 
 ### Better Natural DSL
 

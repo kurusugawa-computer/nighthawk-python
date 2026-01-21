@@ -33,7 +33,6 @@ class NaturalTransformer(ast.NodeTransformer):
     """
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
-        node = self.generic_visit(node)  # type: ignore[assignment]
         if not node.body:
             return node
 
@@ -44,9 +43,38 @@ class NaturalTransformer(ast.NodeTransformer):
                 program = _extract_program(doc)
                 output_names = _extract_output_names(program)
                 injected = _build_runtime_call_and_assignments(program, output_names)
-                # Remove docstring statement and prepend injected statements.
-                node.body = injected + node.body[1:]
 
+                body_without_docstring = node.body[1:]
+
+                if output_names:
+                    assigned: set[str] = set()
+
+                    def note_assigned(stmt: ast.stmt) -> None:
+                        if isinstance(stmt, ast.Assign):
+                            for t in stmt.targets:
+                                if isinstance(t, ast.Name):
+                                    assigned.add(t.id)
+                        elif isinstance(stmt, ast.AnnAssign):
+                            t = stmt.target
+                            if isinstance(t, ast.Name):
+                                assigned.add(t.id)
+                        elif isinstance(stmt, ast.AugAssign):
+                            t = stmt.target
+                            if isinstance(t, ast.Name):
+                                assigned.add(t.id)
+
+                    insert_at = 0
+                    for i, stmt in enumerate(body_without_docstring):
+                        note_assigned(stmt)
+                        if set(output_names).issubset(assigned):
+                            insert_at = i + 1
+                            break
+
+                    node.body = body_without_docstring[:insert_at] + injected + body_without_docstring[insert_at:]
+                else:
+                    node.body = injected + body_without_docstring
+
+        node = self.generic_visit(node)  # type: ignore[assignment]
         return node
 
     def visit_Expr(self, node: ast.Expr) -> ast.AST:

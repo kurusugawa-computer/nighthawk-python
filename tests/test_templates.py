@@ -9,7 +9,7 @@ def test_include_allows_docs_and_md_only(tmp_path: Path):
     (repo / "tests").mkdir()
     (repo / "docs" / "a.md").write_text("hello", encoding="utf-8")
 
-    assert include("docs/a.md", repo_root=repo) == "hello"
+    assert include("docs/a.md", workspace_root=repo) == "hello"
 
 
 def test_include_rejects_traversal(tmp_path: Path):
@@ -17,7 +17,7 @@ def test_include_rejects_traversal(tmp_path: Path):
     (repo / "docs").mkdir()
 
     try:
-        include("docs/../secrets.md", repo_root=repo)
+        include("docs/../secrets.md", workspace_root=repo)
     except Exception as e:
         assert "traversal" in str(e)
     else:

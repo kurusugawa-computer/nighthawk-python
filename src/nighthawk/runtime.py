@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .configuration import Configuration
+from .context import get_workspace_root
 from .errors import NaturalExecutionError
 from .templates import evaluate_template, include
 from .tools import ToolContext, assign_tool, dir_tool, eval_tool, help_tool
@@ -17,14 +18,12 @@ from .tools import ToolContext, assign_tool, dir_tool, eval_tool, help_tool
 @dataclass
 class Runtime:
     configuration: Configuration
-    repo_root: Path
     memory: BaseModel | None
 
     @classmethod
-    def from_configuration(cls, configuration: Configuration, *, repo_root: Path) -> "Runtime":
+    def from_configuration(cls, configuration: Configuration) -> "Runtime":
         return cls(
             configuration=configuration,
-            repo_root=repo_root,
             memory=configuration.create_memory(),
         )
 
@@ -36,11 +35,12 @@ class Runtime:
 
         python_locals = caller.f_locals
 
+        workspace_root = get_workspace_root() or Path.cwd()
         template_locals: dict[str, object] = {
             **python_locals,
             "include": lambda p: include(
                 p,
-                repo_root=self.repo_root,
+                workspace_root=workspace_root,
                 allowed_roots=self.configuration.include_roots,
             ),
         }
