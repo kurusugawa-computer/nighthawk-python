@@ -9,6 +9,6 @@ def test_readme_quick_example_style():
         <:result>
         {{"assignments": [{{"target": "<result>", "expression": "sum(numbers) / len(numbers)"}}]}}
         """
-        return result
+        return result  # type: ignore  # noqa: F821
 
     assert calculate_average([1, 2, 3, 4]) == 2.5

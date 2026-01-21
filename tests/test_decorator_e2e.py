@@ -1,7 +1,3 @@
-import textwrap
-
-import pytest
-
 import nighthawk as nh
 
 
@@ -14,6 +10,7 @@ def test_decorator_updates_output_binding_via_docstring_natural_block(tmp_path, 
         <:result>
         {{"assignments": [{{"target": "<result>", "expression": "x + 1"}}]}}
         """
+        result = 0
         return result
 
     assert f(10) == 11
