@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(uv add:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest:*)",
+      "Bash(git add:*)"
     ]
   }
 }
