@@ -22,7 +22,11 @@ class Runtime:
 
     @classmethod
     def from_configuration(cls, configuration: Configuration, *, repo_root: Path) -> "Runtime":
-        return cls(configuration=configuration, repo_root=repo_root, memory=configuration.create_memory())
+        return cls(
+            configuration=configuration,
+            repo_root=repo_root,
+            memory=configuration.create_memory(),
+        )
 
     def run_block(self, natural_program: str, output_names: list[str]) -> dict[str, object]:
         frame = inspect.currentframe()
@@ -34,7 +38,11 @@ class Runtime:
 
         template_locals: dict[str, object] = {
             **python_locals,
-            "include": lambda p: include(p, repo_root=self.repo_root, allowed_roots=self.configuration.include_roots),
+            "include": lambda p: include(
+                p,
+                repo_root=self.repo_root,
+                allowed_roots=self.configuration.include_roots,
+            ),
         }
         processed = evaluate_template(natural_program, template_locals)
 

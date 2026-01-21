@@ -10,7 +10,6 @@ from .ast_transform import transform_function_source
 from .configuration import Configuration
 from .runtime import Runtime
 
-
 F = TypeVar("F", bound=Callable[..., Any])
 
 

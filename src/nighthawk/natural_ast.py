@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .errors import NaturalParseError
 
-
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _BINDING_RE = re.compile(r"<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
 
@@ -53,6 +52,7 @@ def _extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             outputs.append(name)
         else:
             inputs.append(name)
+
     # Preserve order but de-dup
     def dedup(xs: list[str]) -> tuple[str, ...]:
         seen: set[str] = set()
