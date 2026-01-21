@@ -19,7 +19,8 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 ## Design principles
 
 - Avoid premature abstraction: Do not add classes/parameters just for hypothetical reuse; match the current call graph.
-- Naming: Use full words in code signatures (e.g., `Reference` not `Ref`, `Options` not `Opts`) unless defined in the Glossary.
+- Naming: Use full words in code signatures (e.g., `Reference` not `Ref`, `Repository` not `Repo`, `Options` not `Opts`) unless defined in the Glossary.
+- When the user requests "radical" changes, prioritize extensive, global, disruptive, or thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
 
 ## Glossary
@@ -83,6 +84,9 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 - Enable and run integration tests (OpenAI smoke):
   - `NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q tests/test_openai_client_smoke.py -W default`
+
+- Run python for investigating:
+  - `uv run python`
 
 If you see an `uv` warning about hardlinking (common in containers / cross-filesystem workspaces), it does not indicate test failure. If you want to suppress it:
 
