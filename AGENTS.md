@@ -66,6 +66,15 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - Install/sync dependencies:
   - `uv sync`
 
+- Format code:
+  - `uv run ruff format .`
+
+- Run lint checks:
+  - `uv run ruff check .`
+
+- Auto-fix lint issues:
+  - `uv run ruff check --fix .`
+
 - Run the full test suite:
   - `uv run pytest`
 
