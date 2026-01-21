@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "(tool == \"Edit\" || tool == \"Write\") && tool_input.file_path matches \"\\\\.py$\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "#!/usr/bin/env bash\n# Auto-format and auto-fix edited Python files with Ruff\ninput=$(cat)\nfile_path=$(echo \"$input\" | jq -r '.tool_input.file_path // \"\"')\n\nif [ -n \"$file_path\" ] && [ -f \"$file_path\" ] && uv run ruff --version >/dev/null 2>&1; then\n  uv run ruff format \"$file_path\" 2>&1 | head -50 >&2 || true\n  uv run ruff check --fix \"$file_path\" 2>&1 | head -50 >&2 || true\nfi\n\necho \"$input\""
+          }
+        ],
+        "description": "Auto-format and auto-fix edited Python files with Ruff"
+      }
+    ]
+  }
+}
