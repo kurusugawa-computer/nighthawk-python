@@ -10,27 +10,27 @@ References:
 
 ## Status
 
-- This repo currently contains design docs and project scaffolding.
-- MVP targets OpenAI only (via `pydantic-ai-slim[openai]`).
-- MVP default model: `gpt-5.2`.
+- This repo contains the library implementation, tests, and design docs.
+- Targets OpenAI only (via `pydantic-ai-slim[openai]`).
+- Default model: `gpt-5.2`.
 - Configuration is provided via `NIGHTHAWK_*` environment variables.
 - Supported Python version: 3.14+ (by design).
 
 ## Documentation
 
-- Design spec (MVP): `docs/design.md`
-- Roadmap and non-MVP items: `docs/roadmap.md`
+- Design spec: `docs/design.md`
+- Roadmap: `docs/roadmap.md`
 
-## Safety model (MVP)
+## Safety model
 
-MVP assumes the Natural DSL source and any imported markdown are trusted, repository-managed assets.
+This project assumes the Natural DSL source and any imported markdown are trusted, repository-managed assets.
 
-### Trusted inputs (MVP)
+### Trusted inputs
 
-MVP assumes Natural blocks and any included markdown are trusted, repository-managed assets.
+Assume Natural blocks and any included markdown are trusted, repository-managed assets.
 Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into template preprocessing or include helpers.
 
-The MVP is intentionally permissive:
+The current implementation is intentionally permissive:
 
 - The Natural DSL may be preprocessed by evaluating Python template strings.
 - The LLM may be given access to Python tools and to a tool-local workspace.

@@ -1,6 +1,6 @@
-# Nighthawk design (MVP)
+# Nighthawk design
 
-This document specifies the MVP design for Nighthawk.
+This document describes the current design and implementation constraints for Nighthawk.
 
 ## 1. Goals
 
@@ -14,17 +14,17 @@ This document specifies the MVP design for Nighthawk.
   - commit selected state back into Python locals at Natural block boundaries
 - Optionally map state into a user-defined Pydantic `BaseModel` ("memory") for recognition alignment and validation.
 
-## 2. Non-goals (MVP)
+## 2. Non-goals
 
 - Sandboxing or hard security isolation.
 - Persistence across processes.
 - A full "Skills" framework.
 - Executing Python code blocks embedded in markdown (a broader "Natural -> Python -> Natural" nesting beyond docstrings).
 
-## 3. Hard constraints (MVP)
+## 3. Hard constraints
 
 - Python 3.14+ (template preprocessing uses Python 3.14 template strings).
-- Default OpenAI model (MVP): `gpt-5.2`.
+- Default OpenAI model: `gpt-5.2`.
 - LLM provider: OpenAI only, integrated via `pydantic-ai-slim[openai]`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
@@ -58,7 +58,7 @@ This document specifies the MVP design for Nighthawk.
   - Locals summary options (max length, max frames, value summarization rules)
   - Memory summary options (max length, value summarization rules)
 
-(Names are placeholders; the MVP should keep configuration minimal.)
+(Names are placeholders; keep configuration minimal.)
 
 ## 6. Natural block detection
 
@@ -76,7 +76,7 @@ The remainder of the docstring is the Natural program.
 
 Inside a function body, a standalone string literal expression statement whose first non-empty line is exactly `natural` is treated as a Natural block.
 
-MVP decision (inline shape):
+Decision (inline shape):
 
 - The inline Natural block is defined by the AST shape "expression statement containing a string literal".
 - Parentheses do not matter. For example, `"""natural\n..."""` and `("""natural\n...""")` are treated the same.
@@ -93,7 +93,7 @@ The Natural program may contain bindings with angle brackets:
 - `<name>`: input binding. The current Python value of `name` is made available to the LLM.
 - `<:name>`: output binding. The LLM may update the value of `name`.
 
-MVP constraints:
+Constraints:
 
 - `name` is a simple identifier (no dotted paths).
 - For `<:name>`, the variable is expected to be declared in Python before the Natural block.
@@ -151,9 +151,9 @@ Memory summary (if enabled):
 
 ### 8.3. Tools available to the LLM
 
-MVP tools operate against `context_locals` and a limited `context_globals`.
+Tools operate against `context_locals` and a limited `context_globals`.
 
-MVP decision (context_globals):
+Decision (context_globals):
 
 - `context_globals` includes only `__builtins__` (no additional helpers).
 
@@ -171,7 +171,7 @@ Write tool:
 
 - `assign(target: str, expression: str) -> object`
 
-Target grammar (MVP):
+Target grammar:
 
 - Local target: `<name>`
   - `<name>` must be a simple identifier.
@@ -219,7 +219,7 @@ If execution fails, the LLM returns:
   - `message`: string
   - `type`: string (optional)
 
-MVP chooses strict parsing. Any non-JSON final response is an error.
+The implementation chooses strict parsing. Any non-JSON final response is an error.
 
 Notes:
 
@@ -256,7 +256,7 @@ Notes:
 
 - `include(path)` is a sample helper. In practice we expect more domain-specific include helpers (see `docs/roadmap.md`).
 
-MVP decision:
+Decision:
 
 - Template preprocessing may execute arbitrary functions.
 - This is acceptable only under the trusted-input threat model.
@@ -279,7 +279,7 @@ Note:
 
 - This is an example, not a fixed requirement. The memory schema influences the LLM's mental model.
 
-## 12. Error handling (MVP)
+## 12. Error handling
 
 Nighthawk distinguishes:
 
