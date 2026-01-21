@@ -3,7 +3,6 @@ from __future__ import annotations
 import inspect
 import textwrap
 from functools import wraps
-from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from .ast_transform import transform_function_source
@@ -40,8 +39,7 @@ def fn(func: F | None = None, *, configuration: Configuration | None = None) -> 
     code = compile(transformed_source, filename, "exec")
 
     def _make_runtime() -> Runtime:
-        repo_root = Path.cwd()
-        return Runtime.from_configuration(config, repo_root=repo_root)
+        return Runtime.from_configuration(config)
 
     globals_ns: dict[str, object] = dict(func.__globals__)
     globals_ns["__nighthawk_runtime__"] = _make_runtime()
