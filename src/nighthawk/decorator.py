@@ -6,17 +6,23 @@ from functools import wraps
 from typing import Any, Callable, TypeVar
 
 from .ast_transform import transform_function_source
-from .configuration import Configuration
 from .runtime import Runtime
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def fn(func: F | None = None, *, configuration: Configuration | None = None) -> F:
-    if func is None:
-        return lambda f: fn(f, configuration=configuration)  # type: ignore[return-value]
+class _RuntimeProxy:
+    def run_block(self, natural_program: str, output_names: list[str]) -> dict[str, object]:
+        from .context import get_runtime_context
 
-    config = configuration or Configuration()
+        ctx = get_runtime_context()
+        runtime = Runtime.from_runtime_context(ctx)
+        return runtime.run_block(natural_program, output_names)
+
+
+def fn(func: F | None = None) -> F:
+    if func is None:
+        return lambda f: fn(f)  # type: ignore[return-value]
 
     # Compile once at decoration time.
     lines, _lineno = inspect.getsourcelines(func)
@@ -38,11 +44,8 @@ def fn(func: F | None = None, *, configuration: Configuration | None = None) -> 
     filename = inspect.getsourcefile(func) or "<nighthawk>"
     code = compile(transformed_source, filename, "exec")
 
-    def _make_runtime() -> Runtime:
-        return Runtime.from_configuration(config)
-
     globals_ns: dict[str, object] = dict(func.__globals__)
-    globals_ns["__nighthawk_runtime__"] = _make_runtime()
+    globals_ns["__nighthawk_runtime__"] = _RuntimeProxy()
 
     # Execute compiled module to define transformed function.
     module_ns: dict[str, object] = {}
