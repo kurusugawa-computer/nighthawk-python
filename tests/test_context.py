@@ -125,7 +125,7 @@ def test_decorated_function_requires_runtime_context():
     def f(x: int):
         """natural
         <:result>
-        {{"assignments": [{{"target": "<result>", "expression": "x + 1"}}]}}
+        {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {x + 1}}}}}
         """
         result = 0
         return result

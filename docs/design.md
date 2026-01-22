@@ -12,6 +12,7 @@ Decisions for the next implementation steps:
 - Tool eval return shape: adopt the current implementation (eval returns JSON text).
 - Template preprocessing: design target is to evaluate templates using the caller frame's Python locals and globals. Nighthawk does not provide built-in template helpers; hosts can bind functions (for example include) into the caller frame environment.
 - Runtime context: agent and memory are required by the runtime context API.
+- Stub backend contract: adopt the current implementation shape (stub reads a JSON envelope containing `natural_final` and `outputs`).
 - Decorator: keep design at a high level; avoid describing compilation mechanics in detail.
 
 Known gaps (implementation differs from this document as of 2026-01-22):
@@ -19,8 +20,15 @@ Known gaps (implementation differs from this document as of 2026-01-22):
 - Locals summary and memory summary are specified (Section 8.2) but not yet implemented.
 - The assign tool's diagnostic return object is specified (Section 8.3) but the current implementation returns a reduced shape.
 - Compile-time type extraction for `<:name>` bindings is specified (Section 7) but not yet connected end-to-end.
-- The final JSON contract and control-flow effects are specified (Section 8.4 and Section 9) but are not yet implemented end-to-end.
 - The runtime state-layer contract is specified (Section 8.1), but the current implementation does not yet fully match the commit and prompt-context behavior described here.
+
+Alignment update (implemented as of 2026-01-22):
+
+- The final JSON contract and control-flow effects (Section 8.4 and Section 9) are now implemented end-to-end, including:
+  - strict `NaturalFinal` parsing in agent mode
+  - stub mode support for a JSON envelope carrying `natural_final` and `outputs`
+  - `return` effect `value_json` parsing plus return-type validation/coercion
+  - loop-only enforcement for `break` and `continue`
 
 ## 1. Goals
 
@@ -230,7 +238,8 @@ At the end of each Natural execution, the LLM returns a final JSON object.
     - `type`: string, one of `continue`, `break`, `return`
     - `value_json`: optional string
       - If `type` is `return`, this may be provided as a JSON text representing the function return value.
-      - The host validates/coerces the return value to the function's return type annotation (or treats it as `Any` if unspecified).
+      - The host parses `value_json` using `json.loads` and validates/coerces the resulting Python value to the function's return type annotation.
+      - If `value_json` is omitted or `null`, the return value is treated as `None`.
 
 If execution fails, the LLM returns:
 
@@ -243,7 +252,8 @@ The implementation chooses strict parsing. Any non-JSON final response is an err
 Notes:
 
 - Control-flow effects are expressed only via the final JSON `effect` (there are no control-flow effect tools).
-- Python locals are committed from `context_locals` at Natural block boundaries based on `<:name>` bindings.
+- `break` and `continue` effects are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
+- Python locals are committed at Natural block boundaries based on `<:name>` bindings.
 - Memory is updated via tools during reasoning and is not returned in the final JSON.
 
 ## 9. Return value
@@ -252,7 +262,7 @@ In the simplest docstring pattern, the Python function body returns a variable t
 
 - `return result`
 
-The host commits `context_locals["result"]` into the Python local `result` at the end of the Natural execution.
+The host commits output values for `<:name>` bindings into Python locals at the end of the Natural execution.
 
 If a Natural execution requests `effect.type == "return"`, the runtime returns the validated return value immediately.
 
