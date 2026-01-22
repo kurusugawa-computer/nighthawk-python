@@ -90,7 +90,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
   - `uv run pytest -q`
 
 - Enable and run integration tests (OpenAI smoke):
-  - `NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q tests/test_openai_client_smoke.py -W default`
+  - `NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q`
 
 - Run python for investigating:
   - `uv run python`
