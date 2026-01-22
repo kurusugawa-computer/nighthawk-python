@@ -83,29 +83,6 @@ In practice, the memory schema influences the LLM's mental model, so we expect i
 - prompt iteration
 - analysis of LLM behavior
 
-## Concept and alternative approaches
-
-This section preserves design motivation and concepts that are either broader than the current implementation or not planned for near-term implementation.
-
-### Nightjar style
-
-- Write strict control flow in Python.
-- Embed Natural blocks where semantic interpretation is needed.
-
-### Skills (reverse Nightjar) style (future)
-
-- Natural-language-first workflow.
-- Mix in code only where strict procedures are needed.
-- Main challenge: synchronizing execution state between the natural-language world and the code world.
-
-### Hybrid nesting beyond docstrings (future)
-
-- Allow nesting such as Natural -> Python -> Natural inside larger natural language documents.
-
-### Mapping LLM state to the interpreter
-
-- Treat the Python interpreter as the primary external memory.
-- The agent writes durable state into Python variables and structured objects for inspection.
 
 ## Open questions
 

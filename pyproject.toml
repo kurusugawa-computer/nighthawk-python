@@ -2,7 +2,7 @@
 name = "nighthawk"
 version = "0.1.0"
 description = "Compact reimplementation of nightjarpy-like Natural blocks in Python."
-readme = "docs/README.md"
+readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
   "pydantic>=2",
