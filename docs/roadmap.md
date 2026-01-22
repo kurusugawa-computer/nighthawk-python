@@ -4,6 +4,15 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 
 ## Planned items
 
+### Configuration (future)
+
+- Environment variable support (for example `NIGHTHAWK_*`).
+- Optional tool enablement flags.
+- Optional memory model type selection via configuration.
+- Template evaluation context controls.
+- Locals summary options (max length, max frames, value summarization rules).
+- Memory summary options (max length, value summarization rules).
+
 ### Security and sandboxing
 
 - Sandboxing for workspace tools (expression evaluation in particular).
@@ -44,6 +53,12 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 
 - A `nighthawk` CLI may be added later, but the preferred approach is that users choose their own Python entry point.
 
+### Implementation consistency
+
+- Unify Natural DSL binding extraction into a single source of truth.
+  - Today, bindings are extracted in multiple places (AST transform and Natural block parsing).
+  - Target: one binding parser used for both output allowlists and any compile-time type extraction.
+
 ### Better Natural DSL
 
 - Dotted-path bindings (e.g., `<user.name>`).
@@ -64,7 +79,7 @@ As follow-ups, consider alternatives that reduce cost and tighten semantics:
 
 ### Include functions (templating)
 
-In `docs/design.md`, `include(path)` is described as an example helper for template preprocessing under a trusted-input threat model.
+In `docs/design.md`, template preprocessing is described as evaluating templates in the caller frame environment. Hosts may choose to bind helper functions (for example `include(path)`) into the caller frame locals or globals under a trusted-input threat model.
 
 In future, we expect include helpers to be domain-specific and to resolve paths relative to well-defined locations in the workspace, for example:
 
