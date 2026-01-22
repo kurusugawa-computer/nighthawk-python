@@ -19,7 +19,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 ## Design principles
 
 - Avoid premature abstraction: Do not add classes/parameters just for hypothetical reuse; match the current call graph.
-- Naming: Use full words in code signatures (e.g., `Reference` not `Ref`, `Repository` not `Repo`, `Options` not `Opts`) unless defined in the Glossary.
+- Naming: Use full words in code signatures (e.g., `Context` not `Ctx`, `Reference` not `Ref`, `Repository` not `Repo`, `Options` not `Opts`) unless defined in the Glossary.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, or thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
 

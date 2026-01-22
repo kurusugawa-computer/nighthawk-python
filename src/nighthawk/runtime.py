@@ -33,24 +33,19 @@ class Runtime:
             raise NaturalExecutionError("No caller frame")
 
         caller = frame.f_back
-        if (
-            caller.f_globals.get("__name__") == "nighthawk.decorator"
-            and caller.f_code.co_name == "run_block"
-            and caller.f_back is not None
-        ):
+        if caller.f_globals.get("__name__") == "nighthawk.decorator" and caller.f_code.co_name == "run_block" and caller.f_back is not None:
             caller = caller.f_back
 
         python_locals = caller.f_locals
 
         ctx = get_runtime_context()
-        workspace_root = ctx.workspace_root or Path.cwd()
+        workspace_root = ctx.workspace_root
 
         template_locals: dict[str, object] = {
             **python_locals,
             "include": lambda p: include(
                 p,
                 workspace_root=workspace_root,
-                allowed_roots=self.configuration.include_roots,
             ),
         }
         processed = evaluate_template(natural_program, template_locals)

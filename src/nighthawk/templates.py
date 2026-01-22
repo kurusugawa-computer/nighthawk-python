@@ -31,14 +31,17 @@ def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
     return "".join(out)
 
 
-def include(path: str, *, workspace_root: Path, allowed_roots: tuple[str, ...] = ("docs/", "tests/")) -> str:
+_ALLOWED_INCLUDE_ROOTS: tuple[str, ...] = ("docs/", "tests/")
+
+
+def include(path: str, *, workspace_root: Path) -> str:
     if os.path.isabs(path):
         raise NaturalExecutionError("include(path): absolute paths are not allowed")
     if ".." in Path(path).parts:
         raise NaturalExecutionError("include(path): path traversal is not allowed")
     if not path.endswith(".md"):
         raise NaturalExecutionError("include(path): only .md files are allowed")
-    if not any(path.startswith(r) for r in allowed_roots):
+    if not any(path.startswith(r) for r in _ALLOWED_INCLUDE_ROOTS):
         raise NaturalExecutionError("include(path): path must start with docs/ or tests/")
 
     full = (workspace_root / path).resolve()

@@ -7,6 +7,10 @@ import nighthawk as nh
 from nighthawk.errors import NighthawkError
 
 
+class Memory(BaseModel):
+    n: int = 0
+
+
 class MemoryV1(BaseModel):
     n: int = 1
 
@@ -16,9 +20,23 @@ class MemoryV2(BaseModel):
 
 
 def test_runtime_context_replace_and_getter(tmp_path: Path):
-    cfg = nh.Configuration(memory_factory=MemoryV1)
+    cfg = nh.Configuration(
+        model="openai:gpt-5-nano",
+    )
+    from nighthawk.openai_client import make_agent
 
-    with nh.runtime_context(nh.RuntimeContext(configuration=cfg, workspace_root=tmp_path)):
+    agent = make_agent(cfg)
+
+    memory = MemoryV1()
+
+    with nh.runtime_context(
+        nh.RuntimeContext(
+            configuration=cfg,
+            agent=agent,
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
         ctx = nh.get_runtime_context()
         assert ctx.workspace_root == tmp_path.resolve()
         assert ctx.configuration == cfg
@@ -35,9 +53,23 @@ def test_runtime_context_override_workspace_root_nesting(tmp_path: Path):
     root1.mkdir()
     root2.mkdir()
 
-    cfg = nh.Configuration()
+    cfg = nh.Configuration(
+        model="openai:gpt-5-nano",
+    )
+    from nighthawk.openai_client import make_agent
 
-    with nh.runtime_context(nh.RuntimeContext(configuration=cfg, workspace_root=root1)):
+    agent = make_agent(cfg)
+
+    memory = Memory()
+
+    with nh.runtime_context(
+        nh.RuntimeContext(
+            configuration=cfg,
+            agent=agent,
+            memory=memory,
+            workspace_root=root1,
+        )
+    ):
         assert nh.get_runtime_context().workspace_root == root1.resolve()
 
         with nh.runtime_context_override(workspace_root=root2):
@@ -46,18 +78,35 @@ def test_runtime_context_override_workspace_root_nesting(tmp_path: Path):
         assert nh.get_runtime_context().workspace_root == root1.resolve()
 
 
-def test_runtime_context_override_configuration_regenerates_memory(tmp_path: Path):
-    cfg1 = nh.Configuration(memory_factory=MemoryV1)
-    cfg2 = nh.Configuration(memory_factory=MemoryV2)
+def test_runtime_context_override_configuration_replaces_memory(tmp_path: Path):
+    cfg1 = nh.Configuration(
+        model="openai:gpt-5-nano",
+    )
+    cfg2 = nh.Configuration(
+        model="openai:gpt-5-nano",
+    )
+    from nighthawk.openai_client import make_agent
 
-    with nh.runtime_context(nh.RuntimeContext(configuration=cfg1, workspace_root=tmp_path)):
+    agent = make_agent(cfg1)
+
+    memory1 = MemoryV1()
+
+    with nh.runtime_context(
+        nh.RuntimeContext(
+            configuration=cfg1,
+            agent=agent,
+            memory=memory1,
+            workspace_root=tmp_path,
+        )
+    ):
         m1 = nh.get_runtime_context().memory
         assert isinstance(m1, MemoryV1)
 
-        with nh.runtime_context_override(configuration=cfg2):
+        memory2 = MemoryV2()
+        with nh.runtime_context_override(configuration=cfg2, memory=memory2):
             m2 = nh.get_runtime_context().memory
             assert isinstance(m2, MemoryV2)
-            assert m2 is not m1
+            assert m2 is memory2
 
         assert nh.get_runtime_context().memory is m1
 
