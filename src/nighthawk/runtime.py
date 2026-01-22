@@ -5,11 +5,12 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from .configuration import Configuration
 from .context import RuntimeContext, get_runtime_context
 from .errors import NaturalExecutionError
+from .openai_client import NaturalFinal
 from .templates import evaluate_template, include
 from .tools import ToolContext, assign_tool, dir_tool, eval_tool, help_tool
 
@@ -26,7 +27,22 @@ class Runtime:
             memory=ctx.memory,
         )
 
-    def run_block(self, natural_program: str, output_names: list[str]) -> dict[str, object]:
+    def _parse_and_coerce_return_value(self, value_json: str | None, return_annotation: object) -> object:
+        if value_json is None:
+            parsed = None
+        else:
+            try:
+                parsed = json.loads(value_json)
+            except json.JSONDecodeError as e:
+                raise NaturalExecutionError(f"Invalid return value_json: {e}") from e
+
+        try:
+            adapted = TypeAdapter(return_annotation)
+            return adapted.validate_python(parsed)
+        except Exception as e:
+            raise NaturalExecutionError(f"Return value validation failed: {e}") from e
+
+    def run_block(self, natural_program: str, output_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
         frame = inspect.currentframe()
         if frame is None or frame.f_back is None:
             raise NaturalExecutionError("No caller frame")
@@ -62,8 +78,10 @@ class Runtime:
             memory=self.memory,
         )
 
+        final: NaturalFinal
+        effect_value: object | None = None
+
         if ctx.natural_backend == "stub":
-            # Stub: interpret the template output as JSON describing assignments.
             json_start = processed.find("{")
             if json_start == -1:
                 raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
@@ -72,39 +90,57 @@ class Runtime:
             except json.JSONDecodeError as e:
                 raise NaturalExecutionError(f"Natural execution expected JSON (stub mode): {e}") from e
 
-            if not isinstance(data, dict) or "assignments" not in data:
-                raise NaturalExecutionError("Natural inline execution expected {'assignments': [...]} in stub mode")
+            if not isinstance(data, dict):
+                raise NaturalExecutionError("Natural execution expected JSON object (stub mode)")
 
-            assignments = data["assignments"]
-            if not isinstance(assignments, list):
-                raise NaturalExecutionError("assignments must be a list")
+            if "natural_final" not in data:
+                raise NaturalExecutionError("Stub Natural execution expected 'natural_final' in envelope")
+            if "outputs" not in data:
+                raise NaturalExecutionError("Stub Natural execution expected 'outputs' in envelope")
 
-            type_hints: dict[str, Any] = {}
-            for item in assignments:
-                if not isinstance(item, dict):
-                    continue
-                target = item.get("target")
-                expr = item.get("expression")
-                if not isinstance(target, str) or not isinstance(expr, str):
-                    continue
-                assign_tool(tool_ctx, target, expr, type_hints=type_hints)
+            try:
+                final = NaturalFinal.model_validate(data["natural_final"])
+            except Exception as e:
+                raise NaturalExecutionError(f"Stub Natural execution has invalid natural_final: {e}") from e
+
+            outputs_obj = data["outputs"]
+            if not isinstance(outputs_obj, dict):
+                raise NaturalExecutionError("Stub Natural execution expected 'outputs' to be an object")
+
+            outputs: dict[str, object] = {}
+            for name in output_names:
+                if name in outputs_obj:
+                    outputs[name] = outputs_obj[name]
 
         elif ctx.natural_backend == "agent":
             result = ctx.agent.run_sync(processed, deps=tool_ctx)
             final = result.output
+
             error = getattr(final, "error", None)
             if error is not None:
                 message = getattr(error, "message", str(error))
                 raise NaturalExecutionError(f"Natural execution failed: {message}")
 
+            outputs = {}
+            for name in output_names:
+                if name in context_locals:
+                    outputs[name] = context_locals[name]
+
         else:
             raise NaturalExecutionError(f"Unknown Natural backend: {ctx.natural_backend}")
 
-        outputs: dict[str, object] = {}
-        for name in output_names:
-            if name in context_locals:
-                outputs[name] = context_locals[name]
-        return outputs
+        effect = final.effect
+        if effect is not None:
+            if effect.type in ("break", "continue") and not is_in_loop:
+                raise NaturalExecutionError(f"Effect '{effect.type}' is only allowed inside loops")
+            if effect.type == "return":
+                effect_value = self._parse_and_coerce_return_value(effect.value_json, return_annotation)
+
+        return {
+            "natural_final": final,
+            "outputs": outputs,
+            "effect_value": effect_value,
+        }
 
     def tools_for_llm(self) -> dict[str, Any]:
         # Placeholder used later by OpenAI integration.

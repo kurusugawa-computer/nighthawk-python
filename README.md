@@ -165,7 +165,7 @@ def calculate_average(numbers: list[int]):
     """natural
     <numbers>
     <:result>
-    {{"assignments": [{{"target": "<result>", "expression": "sum(numbers) / len(numbers)"}}]}}
+    {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {sum(numbers) / len(numbers)}}}}}
     """
     return result  # type: ignore[name-defined]
 ```
@@ -173,7 +173,7 @@ def calculate_average(numbers: list[int]):
 Notes:
 - A Natural block is a docstring or a standalone string literal whose first non-empty line is exactly `natural`.
 - `<name>` is an input binding and `<:name>` is an output binding.
-- In stub mode, you write `{"assignments": ...}` inside the block to drive updates.
+- In stub mode, you write a JSON envelope with `natural_final` and `outputs` inside the block to drive updates.
 - Because the block is preprocessed as a template string, literal `{` / `}` are written as `{{` / `}}`.
 
 

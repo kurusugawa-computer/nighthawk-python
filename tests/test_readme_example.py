@@ -31,7 +31,7 @@ def test_readme_quick_example_style(tmp_path):
             """natural
             <numbers>
             <:result>
-            {{"assignments": [{{"target": "<result>", "expression": "sum(numbers) / len(numbers)"}}]}}
+            {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {sum(numbers) / len(numbers)}}}}}
             """
             return result  # type: ignore  # noqa: F821
 

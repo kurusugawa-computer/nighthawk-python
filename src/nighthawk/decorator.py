@@ -12,12 +12,12 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 class _RuntimeProxy:
-    def run_block(self, natural_program: str, output_names: list[str]) -> dict[str, object]:
+    def run_block(self, natural_program: str, output_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
         from .context import get_runtime_context
 
         ctx = get_runtime_context()
         runtime = Runtime.from_runtime_context(ctx)
-        return runtime.run_block(natural_program, output_names)
+        return runtime.run_block(natural_program, output_names, return_annotation, is_in_loop)
 
 
 def fn(func: F | None = None) -> F:
