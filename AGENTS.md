@@ -19,7 +19,10 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 ## Design principles
 
 - Avoid premature abstraction: Do not add classes/parameters just for hypothetical reuse; match the current call graph.
-- Naming: Use full words in code signatures (e.g., `Context` not `Ctx`, `Reference` not `Ref`, `Repository` not `Repo`, `Options` not `Opts`) unless defined in the Glossary.
+- Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
+  - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
+  - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
+  - If existing code violates these naming rules, ask the PO how to proceed before doing broad renames across a file or the codebase.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, or thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
 
@@ -27,6 +30,10 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 - `Id` = Identifier
 - `DSL` = Domain Specific Language
+
+### Allowed abbreviations (by PO exception)
+
+- Loop indices: `i`, `j`, `k` (e.g., `for i in range(n): ...`).
 
 ## Context and orientation
 
@@ -36,8 +43,8 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - `tests/`: Pytest suite.
 - `docs/`: Product/design documentation.
   - `docs/README.md`: User-facing overview.
-  - `docs/design.md`: MVP design specification.
-  - `docs/roadmap.md`: Non-MVP items.
+  - `docs/design.md`: Design specification.
+  - `docs/roadmap.md`: Non implemented items.
 - `.agent/`: Agent artifacts.
   - `.agent/execplans/`: ExecPlans (only when explicitly requested).
   - `.agent/PLANS.md`: The ExecPlan format and requirements.

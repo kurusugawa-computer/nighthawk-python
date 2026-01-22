@@ -2,6 +2,26 @@
 
 This document describes the current design and implementation constraints for Nighthawk.
 
+## Alignment notes (2026-01-22)
+
+This document currently includes both implemented behavior and intended near-term behavior. When the implementation and this document diverge, we explicitly choose which side is authoritative and record it here.
+
+Decisions for the next implementation steps:
+
+- Configuration: adopt the current implementation shape (minimal Configuration) and move expansion items to docs/roadmap.md.
+- Tool eval return shape: adopt the current implementation (eval returns JSON text).
+- Template preprocessing: design target is to evaluate templates using the caller frame's Python locals and globals. Nighthawk does not provide built-in template helpers; hosts can bind functions (for example include) into the caller frame environment.
+- Runtime context: agent and memory are required by the runtime context API.
+- Decorator: keep design at a high level; avoid describing compilation mechanics in detail.
+
+Known gaps (implementation differs from this document as of 2026-01-22):
+
+- Locals summary and memory summary are specified (Section 8.2) but not yet implemented.
+- The assign tool's diagnostic return object is specified (Section 8.3) but the current implementation returns a reduced shape.
+- Compile-time type extraction for `<:name>` bindings is specified (Section 7) but not yet connected end-to-end.
+- The final JSON contract and control-flow effects are specified (Section 8.4 and Section 9) but are not yet implemented end-to-end.
+- The runtime state-layer contract is specified (Section 8.1), but the current implementation does not yet fully match the commit and prompt-context behavior described here.
+
 ## 1. Goals
 
 - Provide a compact reimplementation of nightjarpy-like Natural blocks in Python.
@@ -12,7 +32,7 @@ This document describes the current design and implementation constraints for Ni
   - expose a summary of local variables to the LLM
   - allow the LLM to synchronize intermediate state into a context locals mapping during reasoning
   - commit selected state back into Python locals at Natural block boundaries
-- Optionally map state into a user-defined Pydantic `BaseModel` ("memory") for recognition alignment and validation.
+- Map state into a user-defined Pydantic `BaseModel` ("memory") for recognition alignment and validation.
 
 ## 2. Non-goals
 
@@ -24,7 +44,7 @@ This document describes the current design and implementation constraints for Ni
 ## 3. Hard constraints
 
 - Python 3.14+ (template preprocessing uses Python 3.14 template strings).
-- Default OpenAI model: `gpt-5.2`.
+- Recommended OpenAI model: `gpt-5.2`.
 - LLM provider: OpenAI only, integrated via `pydantic-ai-slim[openai]`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
@@ -37,28 +57,27 @@ This document describes the current design and implementation constraints for Ni
 - Context locals (`context_locals`): a locals mapping used as the evaluation environment for LLM expressions; updated during reasoning via tools.
 - Context globals (`context_globals`): a limited globals mapping used as the evaluation environment for LLM expressions.
 - Locals summary: a bounded text summary of (selected) locals across the call stack, included in the LLM prompt.
-- Memory: an optional structured state model (Pydantic `BaseModel`) stored and validated by the host; updated during reasoning via tools.
+- Memory: a structured state model (Pydantic `BaseModel`) stored and validated by the host; updated during reasoning via tools.
 - Control-flow effect: a request to the Python interpreter to run `continue`, `break`, or `return`.
 
-## 5. User-facing API (proposed)
+## 5. User-facing API
 
 ### 5.1. Decorator
 
 - `nighthawk.fn`
   - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
+  - Compilation happens at decoration time, and Natural blocks are executed at function call time.
+  - Note: The decorator requires the function source to be available for inspection.
 
 ### 5.2. Configuration
 
 - `Configuration`
-  - OpenAI model name (default: `gpt-5.2`)
-  - Environment variable support (`NIGHTHAWK_*`)
-  - Optional tool enablement flags
-  - Optional memory model type (user-provided `BaseModel`)
-  - Template evaluation context (see Section 10)
-  - Locals summary options (max length, max frames, value summarization rules)
-  - Memory summary options (max length, value summarization rules)
+  - OpenAI model name.
 
-(Names are placeholders; keep configuration minimal.)
+Notes:
+
+- Nighthawk intentionally keeps Configuration minimal in the current implementation.
+- Configuration expansion ideas (environment variable support, tool enablement flags, template context controls, locals/memory summary options) are tracked in docs/roadmap.md.
 
 ## 6. Natural block detection
 
@@ -121,7 +140,7 @@ Nighthawk uses multiple state layers.
 - During a Natural execution, the LLM can update `context_locals` via tools (Section 8.3).
 - At the end of the Natural execution, values for `<:name>` bindings are committed from `context_locals[name]` into Python locals.
 
-3) Memory (optional)
+3) Memory
 
 - A user-defined Pydantic `BaseModel` used for recognition alignment.
 - The host owns and persists the current memory instance for the duration of the process.
@@ -144,7 +163,7 @@ Recommended summarization rules:
 - For containers, include shape summaries (for example length and a small sample of keys/elements).
 - For other objects, include the type name and a short, bounded representation.
 
-Memory summary (if enabled):
+Memory summary:
 
 - The host provides a bounded summary of the current memory state in the prompt.
 - The memory schema influences the LLM's mental model and may be iterated over time.
@@ -157,7 +176,7 @@ Decision (context_globals):
 
 - `context_globals` includes only `__builtins__` (no additional helpers).
 
-The host should pre-bind `memory` into `context_locals` when memory is enabled, so expressions can read the current memory state.
+The host pre-binds `memory` into `context_locals`, so expressions can read the current memory state.
 
 Read tools:
 
@@ -165,7 +184,7 @@ Read tools:
 - `help(expr: str) -> str`
 - `eval(expr: str) -> str`
   - Evaluates a Python expression in `context_globals` and `context_locals`.
-  - Returns a JSON-safe string representation.
+  - Returns JSON text (for example via `json.dumps(obj, default=repr)`).
 
 Write tool:
 
@@ -243,10 +262,10 @@ Nighthawk uses an implicit runtime context (dynamic scoping) carried via `contex
 
 The runtime context is required for Natural execution and contains:
 
-- `configuration` (required): the Nighthawk `Configuration` used for include roots and memory configuration.
-- `workspace_root` (optional): base directory for include resolution. If not set, the current working directory is used.
-- `agent` (optional for now): reserved for future LLM execution wiring. (In stub mode it is not required.)
-- `memory` (optional): created once per context by `Configuration.create_memory()` unless explicitly provided.
+- `configuration` (required)
+- `workspace_root` (required): base directory for include resolution.
+- `agent` (required): the LLM execution agent.
+- `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the context.
 
 API:
 
@@ -261,10 +280,24 @@ Example:
 
 ```py
 import nighthawk as nh
+from pydantic import BaseModel
 
-cfg = nh.Configuration()
+cfg = nh.Configuration(model="gpt-5.2")
 
-with nh.runtime_context(nh.RuntimeContext(configuration=cfg, workspace_root=None, agent=None)):
+class Memory(BaseModel):
+    pass
+
+memory = Memory()
+agent = ...
+
+with nh.runtime_context(
+    nh.RuntimeContext(
+        configuration=cfg,
+        workspace_root="/path/to/workspace",
+        agent=agent,
+        memory=memory,
+    )
+):
     ...
 
 with nh.runtime_context_override(workspace_root="/tmp/repo"):
@@ -280,15 +313,16 @@ Natural programs may reference external markdown or compose prompts. Nighthawk s
 ### 11.2. Mechanism
 
 - The Natural block is evaluated as a Python 3.14 template string at runtime (function call time).
-- The evaluation environment can provide helper functions.
+- The template evaluation environment is the caller frame's Python environment:
+  - `python_locals`: the caller frame locals.
+  - `python_globals`: the caller frame globals (so imported functions and module-level symbols are available).
+  - Name resolution follows Python rules (locals shadow globals).
+- Nighthawk does not provide built-in template helper functions.
+  - If hosts want helpers (for example `include(path)`), they should bind them into the caller frame locals or globals.
 
-Example helper:
+Note:
 
-- `include(path: str) -> str`
-
-Notes:
-
-- `include(path)` is a sample helper. In practice we expect more domain-specific include helpers (see `docs/roadmap.md`).
+- Template preprocessing is distinct from the `eval` tool. Template evaluation uses the caller frame environment, while the `eval` tool uses `context_globals` and `context_locals`.
 
 Decision:
 
