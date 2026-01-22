@@ -37,7 +37,7 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 ### Runtime context
 
 - Provide an API for an implicit runtime context (dynamic scoping) that can be set by host Python code.
-- Workspace root is required for workspace tools. Set it via `nighthawk.runtime_context(workspace_root=...)`.
+- Workspace root is used for workspace tools and include resolution. Set it by entering a runtime context, for example: `with nighthawk.runtime_context(nighthawk.RuntimeContext(configuration=cfg, workspace_root=...)):`.
 - Use the workspace root for include resolution and any workspace tools.
 
 ### CLI (deprioritized)

@@ -5,7 +5,8 @@ def test_decorator_updates_output_binding_via_docstring_natural_block(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    with nh.runtime_context(workspace_root=tmp_path):
+    cfg = nh.Configuration()
+    with nh.runtime_context(nh.RuntimeContext(configuration=cfg, workspace_root=tmp_path)):
 
         @nh.fn
         def f(x: int):
@@ -23,7 +24,8 @@ def test_decorator_updates_output_binding_via_inline_natural_block(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    with nh.runtime_context(workspace_root=tmp_path):
+    cfg = nh.Configuration()
+    with nh.runtime_context(nh.RuntimeContext(configuration=cfg, workspace_root=tmp_path)):
 
         @nh.fn
         def f(x: int):

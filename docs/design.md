@@ -239,13 +239,37 @@ If a Natural execution requests `effect.type == "return"`, the runtime returns t
 
 ## 10. Runtime context
 
-Nighthawk supports an implicit runtime context that can be set by the host Python code and is automatically inherited across Python call stacks.
+Nighthawk uses an implicit runtime context (dynamic scoping) carried via `contextvars.ContextVar`.
 
-- The runtime context includes `workspace_root`, which is used as the base directory for any workspace tools and include resolution.
-- The host sets the current context with:
-  - `with nighthawk.runtime_context(workspace_root=...): ...`
+The runtime context is required for Natural execution and contains:
 
-If no runtime context is set, the current working directory is treated as the workspace root.
+- `configuration` (required): the Nighthawk `Configuration` used for include roots and memory configuration.
+- `workspace_root` (optional): base directory for include resolution. If not set, the current working directory is used.
+- `agent` (optional for now): reserved for future LLM execution wiring. (In stub mode it is not required.)
+- `memory` (optional): created once per context by `Configuration.create_memory()` unless explicitly provided.
+
+API:
+
+- `nighthawk.runtime_context(ctx: RuntimeContext)`
+  - Replace/bootstrap. Can be used even when no context is currently set.
+- `nighthawk.runtime_context_override(...)`
+  - Overlay. Requires an existing context. Only specified fields are overridden for the duration of the `with`.
+- `nighthawk.get_runtime_context() -> RuntimeContext`
+  - Get the current context. Raises if unset.
+
+Example:
+
+```py
+import nighthawk as nh
+
+cfg = nh.Configuration()
+
+with nh.runtime_context(nh.RuntimeContext(configuration=cfg, workspace_root=None, agent=None)):
+    ...
+
+with nh.runtime_context_override(workspace_root="/tmp/repo"):
+    ...
+```
 
 ## 11. Template preprocessing (runtime)
 

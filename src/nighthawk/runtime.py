@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .configuration import Configuration
-from .context import get_workspace_root
+from .context import RuntimeContext, get_runtime_context
 from .errors import NaturalExecutionError
 from .templates import evaluate_template, include
 from .tools import ToolContext, assign_tool, dir_tool, eval_tool, help_tool
@@ -21,21 +21,30 @@ class Runtime:
     memory: BaseModel | None
 
     @classmethod
-    def from_configuration(cls, configuration: Configuration) -> "Runtime":
+    def from_runtime_context(cls, ctx: RuntimeContext) -> "Runtime":
         return cls(
-            configuration=configuration,
-            memory=configuration.create_memory(),
+            configuration=ctx.configuration,
+            memory=ctx.memory,
         )
 
     def run_block(self, natural_program: str, output_names: list[str]) -> dict[str, object]:
         frame = inspect.currentframe()
         if frame is None or frame.f_back is None:
             raise NaturalExecutionError("No caller frame")
+
         caller = frame.f_back
+        if (
+            caller.f_globals.get("__name__") == "nighthawk.decorator"
+            and caller.f_code.co_name == "run_block"
+            and caller.f_back is not None
+        ):
+            caller = caller.f_back
 
         python_locals = caller.f_locals
 
-        workspace_root = get_workspace_root() or Path.cwd()
+        ctx = get_runtime_context()
+        workspace_root = ctx.workspace_root or Path.cwd()
+
         template_locals: dict[str, object] = {
             **python_locals,
             "include": lambda p: include(
