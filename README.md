@@ -14,19 +14,19 @@ Reference (upstream concept): https://github.com/psg-mit/nightjarpy
 
 Nighthawk is a research vehicle. The main validation goals are:
 
-1) Hard control + soft reasoning works in practice
+1. Hard control + soft reasoning works in practice
 - Keep loops, conditionals, data plumbing, and "must run exactly N times" logic in Python.
 - Delegate semantic interpretation to Natural blocks.
 
-2) Reduce "LLM is a black box" by mapping state into the interpreter
+2. Reduce "LLM is a black box" by mapping state into the interpreter
 - Treat the Python interpreter as the primary external memory.
 - Make intermediate state visible as Python locals / structured objects rather than hidden chat history.
 
-3) Constrain and validate updates at boundaries
+3. Constrain and validate updates at boundaries
 - Use explicit output bindings (e.g., `<:result>`) so the LLM can only commit specific values.
 - Optionally use a typed memory model (Pydantic) to force a domain mental model and validate updates.
 
-4) Explore alternative workflow styles (Nightjar vs Skills-style)
+4. Explore alternative workflow styles (Nightjar vs Skills-style)
 - Natural-language-first workflows are attractive, but require solving state synchronization between natural language and code.
 - Nighthawk starts from the Nightjar side and explores how far we can push interpreter-visible state mapping.
 
@@ -35,7 +35,7 @@ Nighthawk is a research vehicle. The main validation goals are:
 
 This section summarizes the tradeoffs in terms of "hard control" vs "flexibility".
 
-### 1) Nightjar style (hard control, embedded Natural blocks)
+### 1 Nightjar style (hard control, embedded Natural blocks)
 
 You write strict flow in Python, and embed Natural blocks where semantics are needed.
 
@@ -63,7 +63,7 @@ result = calculate_average([1, "2", "three", "cuatro", "五"])
 print(result)  # 3.0
 ```
 
-### 2) Skills-style / reverse Nightjar (flexible workflow, code snippets as needed)
+### 2 Skills-style / reverse Nightjar (flexible workflow, code snippets as needed)
 
 You write a natural language workflow first, and embed code only where strict procedures are needed.
 
@@ -92,7 +92,7 @@ def calculate_average(numbers):
 Target list: `[1, "2", "three", "cuatro", "五"]`
 ````
 
-### 3) Hybrid nesting (Natural -> Python -> Natural -> ...)
+### 3 Hybrid nesting (Natural -> Python -> Natural -> ...)
 
 Allow nested alternation between natural language and code.
 
