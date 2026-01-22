@@ -35,6 +35,7 @@ def test_runtime_context_replace_and_getter(tmp_path: Path):
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
+            natural_backend="stub",
         )
     ):
         ctx = nh.get_runtime_context()
@@ -68,6 +69,7 @@ def test_runtime_context_override_workspace_root_nesting(tmp_path: Path):
             agent=agent,
             memory=memory,
             workspace_root=root1,
+            natural_backend="stub",
         )
     ):
         assert nh.get_runtime_context().workspace_root == root1.resolve()
@@ -97,6 +99,7 @@ def test_runtime_context_override_configuration_replaces_memory(tmp_path: Path):
             agent=agent,
             memory=memory1,
             workspace_root=tmp_path,
+            natural_backend="stub",
         )
     ):
         m1 = nh.get_runtime_context().memory
