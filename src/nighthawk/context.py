@@ -4,13 +4,15 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Literal
 
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from .configuration import Configuration
 from .errors import NighthawkError
+
+NaturalBackend = Literal["stub", "agent"]
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,7 @@ class RuntimeContext:
     agent: Agent
     memory: BaseModel
     workspace_root: Path
+    natural_backend: NaturalBackend = "agent"
 
 
 _runtime_context_var: ContextVar[RuntimeContext | None] = ContextVar(
@@ -62,6 +65,7 @@ def runtime_context_override(
     configuration: Configuration | None = None,
     agent: Agent | None = None,
     memory: BaseModel | None = None,
+    natural_backend: NaturalBackend | None = None,
 ) -> Iterator[RuntimeContext]:
     current = get_runtime_context()
 
@@ -79,6 +83,9 @@ def runtime_context_override(
 
     if memory is not None:
         next_context = replace(next_context, memory=memory)  # type: ignore[arg-type]
+
+    if natural_backend is not None:
+        next_context = replace(next_context, natural_backend=natural_backend)
 
     token = _runtime_context_var.set(next_context)
     try:

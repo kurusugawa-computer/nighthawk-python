@@ -22,6 +22,7 @@ def test_readme_quick_example_style(tmp_path):
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
+            natural_backend="stub",
         )
     ):
 

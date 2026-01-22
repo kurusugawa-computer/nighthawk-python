@@ -3,7 +3,6 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -63,33 +62,43 @@ class Runtime:
             memory=self.memory,
         )
 
-        # Stub: interpret the template output as JSON describing assignments.
-        # Real LLM integration will replace this.
-        json_start = processed.find("{")
-        if json_start == -1:
-            raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
-        try:
-            data = json.loads(processed[json_start:])
-        except json.JSONDecodeError as e:
-            raise NaturalExecutionError(f"Natural execution expected JSON (stub mode): {e}") from e
+        if ctx.natural_backend == "stub":
+            # Stub: interpret the template output as JSON describing assignments.
+            json_start = processed.find("{")
+            if json_start == -1:
+                raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
+            try:
+                data = json.loads(processed[json_start:])
+            except json.JSONDecodeError as e:
+                raise NaturalExecutionError(f"Natural execution expected JSON (stub mode): {e}") from e
 
-        if not isinstance(data, dict) or "assignments" not in data:
-            raise NaturalExecutionError("Natural inline execution expected {'assignments': [...]} in stub mode")
+            if not isinstance(data, dict) or "assignments" not in data:
+                raise NaturalExecutionError("Natural inline execution expected {'assignments': [...]} in stub mode")
 
-        assignments = data["assignments"]
-        if not isinstance(assignments, list):
-            raise NaturalExecutionError("assignments must be a list")
+            assignments = data["assignments"]
+            if not isinstance(assignments, list):
+                raise NaturalExecutionError("assignments must be a list")
 
-        type_hints: dict[str, Any] = {}
-        for item in assignments:
-            if not isinstance(item, dict):
-                continue
-            target = item.get("target")
-            expr = item.get("expression")
-            if not isinstance(target, str) or not isinstance(expr, str):
-                continue
-            # Minimal/obvious checks first; then Pydantic validation in assign_tool.
-            assign_tool(tool_ctx, target, expr, type_hints=type_hints)
+            type_hints: dict[str, Any] = {}
+            for item in assignments:
+                if not isinstance(item, dict):
+                    continue
+                target = item.get("target")
+                expr = item.get("expression")
+                if not isinstance(target, str) or not isinstance(expr, str):
+                    continue
+                assign_tool(tool_ctx, target, expr, type_hints=type_hints)
+
+        elif ctx.natural_backend == "agent":
+            result = ctx.agent.run_sync(processed, deps=tool_ctx)
+            final = result.output
+            error = getattr(final, "error", None)
+            if error is not None:
+                message = getattr(error, "message", str(error))
+                raise NaturalExecutionError(f"Natural execution failed: {message}")
+
+        else:
+            raise NaturalExecutionError(f"Unknown Natural backend: {ctx.natural_backend}")
 
         outputs: dict[str, object] = {}
         for name in output_names:
