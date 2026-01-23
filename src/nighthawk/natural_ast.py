@@ -15,7 +15,7 @@ class NaturalBlock:
     kind: str  # 'docstring' | 'inline'
     text: str
     input_bindings: tuple[str, ...]
-    output_bindings: tuple[str, ...]
+    bindings: tuple[str, ...]
     lineno: int
 
 
@@ -42,14 +42,14 @@ def _extract_program(text: str) -> str:
 
 def _extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     inputs: list[str] = []
-    outputs: list[str] = []
+    bindings: list[str] = []
     for m in _BINDING_RE.finditer(program):
         is_out = m.group(1) == ":"
         name = m.group(2)
         if not _IDENTIFIER_RE.match(name):
             raise NaturalParseError(f"Invalid binding name: {name!r}")
         if is_out:
-            outputs.append(name)
+            bindings.append(name)
         else:
             inputs.append(name)
 
@@ -64,7 +64,7 @@ def _extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             out.append(x)
         return tuple(out)
 
-    return dedup(inputs), dedup(outputs)
+    return dedup(inputs), dedup(bindings)
 
 
 def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
@@ -98,7 +98,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
                 kind="docstring",
                 text=program,
                 input_bindings=ins,
-                output_bindings=outs,
+                bindings=outs,
                 lineno=getattr(func_def, "lineno", 1),
             )
         )
@@ -120,7 +120,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
                         kind="inline",
                         text=program,
                         input_bindings=ins,
-                        output_bindings=outs,
+                        bindings=outs,
                         lineno=getattr(stmt, "lineno", 1),
                     )
                 )

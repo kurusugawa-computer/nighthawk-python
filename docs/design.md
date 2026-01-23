@@ -9,16 +9,16 @@ This document currently includes both implemented behavior and intended near-ter
 Decisions for the next implementation steps:
 
 - Configuration: adopt the current implementation shape (minimal Configuration) and move expansion items to docs/roadmap.md.
-- Tool eval return shape: adopt the current implementation (eval returns JSON text).
+- Tool eval return shape: adopt the current implementation (nh_eval returns JSON text).
 - Template preprocessing: design target is to evaluate templates using the caller frame's Python locals and globals. Nighthawk does not provide built-in template helpers; hosts can bind functions (for example include) into the caller frame environment.
-- Runtime context: agent and memory are required by the runtime context API.
-- Stub backend contract: adopt the current implementation shape (stub reads a JSON envelope containing `natural_final` and `outputs`).
+- Environment: agent and memory are required by the environment API.
+- Stub backend contract: adopt the current implementation shape (stub reads a JSON envelope containing `natural_final` and `bindings`).
 - Decorator: keep design at a high level; avoid describing compilation mechanics in detail.
 
 Known gaps (implementation differs from this document as of 2026-01-22):
 
 - Locals summary and memory summary are specified (Section 8.2) but not yet implemented.
-- The assign tool's diagnostic return object is specified (Section 8.3) but the current implementation returns a reduced shape.
+- The nh_assign tool's diagnostic return object is specified (Section 8.3) but the current implementation returns a reduced shape.
 - Compile-time type extraction for `<:name>` bindings is specified (Section 7) but not yet connected end-to-end.
 - The runtime state-layer contract is specified (Section 8.1), but the current implementation does not yet fully match the commit and prompt-context behavior described here.
 
@@ -26,7 +26,7 @@ Alignment update (implemented as of 2026-01-22):
 
 - The final JSON contract and control-flow effects (Section 8.4 and Section 9) are now implemented end-to-end, including:
   - strict `NaturalFinal` parsing in agent mode
-  - stub mode support for a JSON envelope carrying `natural_final` and `outputs`
+  - stub mode support for a JSON envelope carrying `natural_final` and `bindings`
   - `return` effect `value_json` parsing plus return-type validation/coercion
   - loop-only enforcement for `break` and `continue`
 
@@ -118,7 +118,7 @@ Notes:
 The Natural program may contain bindings with angle brackets:
 
 - `<name>`: input binding. The current Python value of `name` is made available to the LLM.
-- `<:name>`: output binding. The LLM may update the value of `name`.
+- `<:name>`: binding (writable binding). The LLM may update the value of `name`.
 
 Constraints:
 
@@ -146,7 +146,7 @@ Nighthawk uses multiple state layers.
 - `context_locals` is a mapping used as the locals environment for expression evaluation.
 - It is initialized from the current Python locals at the start of each Natural execution.
 - During a Natural execution, the LLM can update `context_locals` via tools (Section 8.3).
-- At the end of the Natural execution, values for `<:name>` bindings are committed from `context_locals[name]` into Python locals.
+- At the end of the Natural execution, values for `<:name>` bindings (writable bindings) are committed from `context_locals[name]` into Python locals.
 
 3) Memory
 
@@ -178,6 +178,32 @@ Memory summary:
 
 ### 8.3. Tools available to the LLM
 
+Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
+
+User-defined tools:
+
+- The host defines tools using the `@nighthawk.tool` decorator.
+- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.agent.ToolContext]` as their first parameter.
+
+Tool scopes:
+
+- Global scope: tools registered when no environment or decorated call is active.
+- Environment scope: tools registered while inside `with nighthawk.environment(...):`, but outside any `@nighthawk.fn` decorated call.
+- Call scope: tools registered during a `@nighthawk.fn` decorated call. Call-scoped tools are visible to subsequent Natural blocks in that call and to nested decorated calls.
+
+The global registry is live: tools registered later (for example via an import that happens mid-run) apply to the next Natural block execution.
+
+Name conflicts:
+
+- Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
+- If a tool name conflicts with a currently visible tool (built-ins + global + environment + call), registration fails unless `overwrite=True` is explicitly provided.
+
+Built-in tools:
+
+- Built-in tools are always available by default.
+- Built-in tools are provided with names prefixed by `nh_` to reduce collisions.
+- Built-ins can be overwritten only if `overwrite=True` is provided.
+
 Tools operate against `context_locals` and a limited `context_globals`.
 
 Decision (context_globals):
@@ -188,29 +214,30 @@ The host pre-binds `memory` into `context_locals`, so expressions can read the c
 
 Read tools:
 
-- `dir(expr: str) -> str`
-- `help(expr: str) -> str`
-- `eval(expr: str) -> str`
+- `nh_dir(expression: str) -> str`
+- `nh_help(expression: str) -> str`
+- `nh_eval(expression: str) -> str`
   - Evaluates a Python expression in `context_globals` and `context_locals`.
   - Returns JSON text (for example via `json.dumps(obj, default=repr)`).
 
 Write tool:
 
-- `assign(target: str, expression: str) -> object`
+- `nh_assign(target: str, expression: str) -> object`
 
 Target grammar:
 
 - Local target: `<name>`
   - `<name>` must be a simple identifier.
-  - `<name>` is restricted to the allowlist derived from `<:name>` bindings in the current Natural block.
+  - `<name>` is restricted to the allowlist derived from `<:name>` bindings (writable bindings) in the current Natural block.
 
 - Memory target: `memory.<field>`
   - `<field>` must be a top-level memory field name (a simple identifier).
   - Memory targets are available only if memory is enabled.
 
-Semantics of `assign`:
+Semantics of `nh_assign`:
 
 - The tool evaluates `expression` as a Python expression using `eval(expression, context_globals, context_locals)`.
+  - Note: this is the Python built-in `eval`, not the `nh_eval` tool.
 - If `target` is a local target `<name>`:
   - The tool validates and may coerce the resulting value to the declared type of `<name>` (Pydantic-based validation).
   - If validation succeeds, it updates `context_locals[<name>]`.
@@ -266,25 +293,25 @@ The host commits output values for `<:name>` bindings into Python locals at the 
 
 If a Natural execution requests `effect.type == "return"`, the runtime returns the validated return value immediately.
 
-## 10. Runtime context
+## 10. Environment
 
-Nighthawk uses an implicit runtime context (dynamic scoping) carried via `contextvars.ContextVar`.
+Nighthawk uses an implicit environment (dynamic scoping) carried via `contextvars.ContextVar`.
 
-The runtime context is required for Natural execution and contains:
+The environment is required for Natural execution and contains:
 
 - `configuration` (required)
 - `workspace_root` (required): base directory for include resolution.
 - `agent` (required): the LLM execution agent.
-- `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the context.
+- `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the environment.
 
 API:
 
-- `nighthawk.runtime_context(ctx: RuntimeContext)`
-  - Replace/bootstrap. Can be used even when no context is currently set.
-- `nighthawk.runtime_context_override(...)`
-  - Overlay. Requires an existing context. Only specified fields are overridden for the duration of the `with`.
-- `nighthawk.get_runtime_context() -> RuntimeContext`
-  - Get the current context. Raises if unset.
+- `nighthawk.environment(environment: Environment)`
+  - Replace/bootstrap. Can be used even when no environment is currently set.
+- `nighthawk.environment_override(...)`
+  - Overlay. Requires an existing environment. Only specified fields are overridden for the duration of the `with`.
+- `nighthawk.get_environment() -> Environment`
+  - Get the current environment. Raises if unset.
 
 Example:
 
@@ -300,8 +327,8 @@ class Memory(BaseModel):
 memory = Memory()
 agent = ...
 
-with nh.runtime_context(
-    nh.RuntimeContext(
+with nh.environment(
+    nh.Environment(
         configuration=cfg,
         workspace_root="/path/to/workspace",
         agent=agent,
@@ -310,7 +337,7 @@ with nh.runtime_context(
 ):
     ...
 
-with nh.runtime_context_override(workspace_root="/tmp/repo"):
+with nh.environment_override(workspace_root="/tmp/repo"):
     ...
 ```
 
@@ -332,7 +359,7 @@ Natural programs may reference external markdown or compose prompts. Nighthawk s
 
 Note:
 
-- Template preprocessing is distinct from the `eval` tool. Template evaluation uses the caller frame environment, while the `eval` tool uses `context_globals` and `context_locals`.
+- Template preprocessing is distinct from the `nh_eval` tool. Template evaluation uses the caller frame environment, while the `nh_eval` tool uses `context_globals` and `context_locals`.
 
 Decision:
 
@@ -363,6 +390,6 @@ Nighthawk distinguishes:
 
 - Parse errors: invalid or non-JSON LLM output.
 - Tool evaluation errors: invalid expressions, runtime errors from expression evaluation.
-- Tool validation errors: type validation/coercion fails for `assign`.
+- Tool validation errors: type validation/coercion fails for `nh_assign`.
 
 All errors are surfaced as Python exceptions.

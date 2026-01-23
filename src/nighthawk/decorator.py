@@ -3,20 +3,21 @@ from __future__ import annotations
 import inspect
 import textwrap
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, cast
 
 from .ast_transform import transform_function_source
 from .runtime import Runtime
+from .tools import call_scope
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
 class _RuntimeProxy:
     def run_block(self, natural_program: str, output_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
-        from .context import get_runtime_context
+        from .environment import get_environment
 
-        ctx = get_runtime_context()
-        runtime = Runtime.from_runtime_context(ctx)
+        environment = get_environment()
+        runtime = Runtime.from_environment(environment)
         return runtime.run_block(natural_program, output_names, return_annotation, is_in_loop)
 
 
@@ -25,7 +26,7 @@ def fn(func: F | None = None) -> F:
         return lambda f: fn(f)  # type: ignore[return-value]
 
     # Compile once at decoration time.
-    lines, _lineno = inspect.getsourcelines(func)
+    lines, _ = inspect.getsourcelines(func)
     source = textwrap.dedent("".join(lines))
 
     # Strip decorators from the extracted function source to avoid re-decoration.
@@ -57,6 +58,7 @@ def fn(func: F | None = None) -> F:
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        return transformed(*args, **kwargs)
+        with call_scope():
+            return transformed(*args, **kwargs)
 
-    return wrapper  # type: ignore[return-value]
+    return cast(F, wrapper)  # type: ignore[return-value]

@@ -18,7 +18,7 @@ def test_agent_import_and_construction_and_run():
     tool_context = ToolContext(
         context_globals={"__builtins__": __builtins__},
         context_locals={},
-        allowed_local_targets=set(),
+        allowed_binding_targets=set(),
         memory=None,
     )
 

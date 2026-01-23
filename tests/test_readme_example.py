@@ -16,8 +16,8 @@ def test_readme_quick_example_style(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -31,7 +31,7 @@ def test_readme_quick_example_style(tmp_path):
             """natural
             <numbers>
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {sum(numbers) / len(numbers)}}}}}
+            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
             """
             return result  # type: ignore  # noqa: F821
 

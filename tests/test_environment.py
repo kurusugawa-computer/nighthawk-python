@@ -19,7 +19,7 @@ class MemoryV2(BaseModel):
     n: int = 2
 
 
-def test_runtime_context_replace_and_getter(tmp_path: Path):
+def test_environment_replace_and_getter(tmp_path: Path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
@@ -29,8 +29,8 @@ def test_runtime_context_replace_and_getter(tmp_path: Path):
 
     memory = MemoryV1()
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -38,17 +38,17 @@ def test_runtime_context_replace_and_getter(tmp_path: Path):
             natural_backend="stub",
         )
     ):
-        runtime_context = nh.get_runtime_context()
-        assert runtime_context.workspace_root == tmp_path.resolve()
-        assert runtime_context.configuration == configuration
-        assert runtime_context.memory is not None
-        assert isinstance(runtime_context.memory, MemoryV1)
+        environment = nh.get_environment()
+        assert environment.workspace_root == tmp_path.resolve()
+        assert environment.configuration == configuration
+        assert environment.memory is not None
+        assert isinstance(environment.memory, MemoryV1)
 
     with pytest.raises(NighthawkError):
-        nh.get_runtime_context()
+        nh.get_environment()
 
 
-def test_runtime_context_override_workspace_root_nesting(tmp_path: Path):
+def test_environment_override_workspace_root_nesting(tmp_path: Path):
     root1 = tmp_path / "root1"
     root2 = tmp_path / "root2"
     root1.mkdir()
@@ -63,8 +63,8 @@ def test_runtime_context_override_workspace_root_nesting(tmp_path: Path):
 
     memory = Memory()
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -72,15 +72,15 @@ def test_runtime_context_override_workspace_root_nesting(tmp_path: Path):
             natural_backend="stub",
         )
     ):
-        assert nh.get_runtime_context().workspace_root == root1.resolve()
+        assert nh.get_environment().workspace_root == root1.resolve()
 
-        with nh.runtime_context_override(workspace_root=root2):
-            assert nh.get_runtime_context().workspace_root == root2.resolve()
+        with nh.environment_override(workspace_root=root2):
+            assert nh.get_environment().workspace_root == root2.resolve()
 
-        assert nh.get_runtime_context().workspace_root == root1.resolve()
+        assert nh.get_environment().workspace_root == root1.resolve()
 
 
-def test_runtime_context_override_configuration_replaces_memory(tmp_path: Path):
+def test_environment_override_configuration_replaces_memory(tmp_path: Path):
     configuration_1 = nh.Configuration(
         model="openai:gpt-5-nano",
     )
@@ -93,8 +93,8 @@ def test_runtime_context_override_configuration_replaces_memory(tmp_path: Path):
 
     memory1 = MemoryV1()
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration_1,
             agent=agent,
             memory=memory1,
@@ -102,30 +102,30 @@ def test_runtime_context_override_configuration_replaces_memory(tmp_path: Path):
             natural_backend="stub",
         )
     ):
-        memory_in_context = nh.get_runtime_context().memory
+        memory_in_context = nh.get_environment().memory
         assert isinstance(memory_in_context, MemoryV1)
 
         memory2 = MemoryV2()
-        with nh.runtime_context_override(configuration=configuration_2, memory=memory2):
-            memory_in_overridden_context = nh.get_runtime_context().memory
+        with nh.environment_override(configuration=configuration_2, memory=memory2):
+            memory_in_overridden_context = nh.get_environment().memory
             assert isinstance(memory_in_overridden_context, MemoryV2)
             assert memory_in_overridden_context is memory2
 
-        assert nh.get_runtime_context().memory is memory_in_context
+        assert nh.get_environment().memory is memory_in_context
 
 
-def test_runtime_context_override_requires_existing_context(tmp_path: Path):
+def test_environment_override_requires_existing_environment(tmp_path: Path):
     with pytest.raises(NighthawkError):
-        with nh.runtime_context_override(workspace_root=tmp_path):
+        with nh.environment_override(workspace_root=tmp_path):
             pass
 
 
-def test_decorated_function_requires_runtime_context():
+def test_decorated_function_requires_environment():
     @nh.fn
     def f(x: int):
         """natural
         <:result>
-        {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {x + 1}}}}}
+        {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
         """
         result = 0
         return result

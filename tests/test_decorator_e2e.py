@@ -21,8 +21,8 @@ def test_decorator_updates_output_binding_via_docstring_natural_block(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -35,7 +35,7 @@ def test_decorator_updates_output_binding_via_docstring_natural_block(tmp_path):
         def f(x: int):
             """natural
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {x + 1}}}}}
+            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
             result = 0
             return result
@@ -55,8 +55,8 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -68,7 +68,7 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"natural_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "outputs": {{}}}}
+            {{"natural_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "bindings": {{}}}}
             """
             return 0
 
@@ -87,8 +87,8 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -100,7 +100,7 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"natural_final": {{"effect": {{"type": "return", "value_json": "\\\"not an int\\\""}}, "error": null}}, "outputs": {{}}}}
+            {{"natural_final": {{"effect": {{"type": "return", "value_json": "\\\"not an int\\\""}}, "error": null}}, "bindings": {{}}}}
             """
             return 0
 
@@ -120,8 +120,8 @@ def test_stub_continue_effect_skips_following_statements(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -136,7 +136,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path):
             for i in range(5):
                 total += 1
                 """natural
-                {{"natural_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "outputs": {{}}}}
+                {{"natural_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -156,8 +156,8 @@ def test_stub_break_effect_breaks_loop(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -172,7 +172,7 @@ def test_stub_break_effect_breaks_loop(tmp_path):
             for i in range(5):
                 total += 1
                 """natural
-                {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "outputs": {{}}}}
+                {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -192,8 +192,8 @@ def test_stub_break_outside_loop_raises(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -205,7 +205,7 @@ def test_stub_break_outside_loop_raises(tmp_path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "outputs": {{}}}}
+            {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
             """
             return 1
 
@@ -225,8 +225,8 @@ def test_decorator_updates_output_binding_via_inline_natural_block(tmp_path):
 
     agent = make_agent(configuration)
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -240,7 +240,7 @@ def test_decorator_updates_output_binding_via_inline_natural_block(tmp_path):
             result = 0
             """natural
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {x * 2}}}}}
+            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x * 2}}}}}
             """
             return result
 
@@ -274,8 +274,8 @@ def test_decorator_uses_agent_backend_by_default(tmp_path):
     memory = Memory()
     agent = FakeAgent()
 
-    with nh.runtime_context(
-        nh.RuntimeContext(
+    with nh.environment(
+        nh.Environment(
             configuration=configuration,
             agent=agent,
             memory=memory,
@@ -287,7 +287,7 @@ def test_decorator_uses_agent_backend_by_default(tmp_path):
         def f(x: int):
             """natural
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "outputs": {{"result": {x + 1}}}}}
+            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
             result = 0
             return result

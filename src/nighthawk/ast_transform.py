@@ -15,11 +15,11 @@ class NaturalTransformer(ast.NodeTransformer):
     rewrite to (schematic):
 
         __nh_envelope__ = __nighthawk_runtime__.run_block(program_text, ['x', 'y'], return_annotation, is_in_loop)
-        __nh_outputs__ = __nh_envelope__['outputs']
-        if 'x' in __nh_outputs__:
-            x = __nh_outputs__['x']
-        if 'y' in __nh_outputs__:
-            y = __nh_outputs__['y']
+        __nh_bindings__ = __nh_envelope__['bindings']
+        if 'x' in __nh_bindings__:
+            x = __nh_bindings__['x']
+        if 'y' in __nh_bindings__:
+            y = __nh_bindings__['y']
 
         __nh_final__ = __nh_envelope__['natural_final']
         __nh_effect__ = __nh_final__.effect
@@ -62,13 +62,13 @@ class NaturalTransformer(ast.NodeTransformer):
                     doc = first_stmt.value.value
                     if _is_natural_sentinel(doc):
                         program = _extract_program(doc)
-                        output_names = _extract_output_names(program)
+                        binding_names = _extract_binding_names(program)
                         return_annotation = self._current_return_annotation_expr()
-                        injected = _build_runtime_call_and_assignments(program, output_names, return_annotation, is_in_loop=self._loop_depth > 0)
+                        injected = _build_runtime_call_and_assignments(program, binding_names, return_annotation, is_in_loop=self._loop_depth > 0)
 
                         body_without_docstring = node.body[1:]
 
-                        if output_names:
+                        if binding_names:
                             assigned: set[str] = set()
 
                             def note_assigned(stmt: ast.stmt) -> None:
@@ -88,7 +88,7 @@ class NaturalTransformer(ast.NodeTransformer):
                             insert_at = 0
                             for i, stmt in enumerate(body_without_docstring):
                                 note_assigned(stmt)
-                                if set(output_names).issubset(assigned):
+                                if set(binding_names).issubset(assigned):
                                     insert_at = i + 1
                                     break
 
@@ -130,10 +130,10 @@ class NaturalTransformer(ast.NodeTransformer):
             source = value.value
             if _is_natural_sentinel(source):
                 program = _extract_program(source)
-                output_names = _extract_output_names(program)
+                binding_names = _extract_binding_names(program)
                 return_annotation = self._current_return_annotation_expr()
                 is_in_loop = self._loop_depth > 0
-                stmts = _build_runtime_call_and_assignments(program, output_names, return_annotation, is_in_loop=is_in_loop)
+                stmts = _build_runtime_call_and_assignments(program, binding_names, return_annotation, is_in_loop=is_in_loop)
                 return [ast.copy_location(stmt, node) for stmt in stmts]  # type: ignore[return-value]
         return node
 
@@ -148,7 +148,7 @@ class NaturalTransformer(ast.NodeTransformer):
 
 def _build_runtime_call_and_assignments(
     program: str,
-    output_names: tuple[str, ...],
+    binding_names: tuple[str, ...],
     return_annotation: ast.expr,
     *,
     is_in_loop: bool,
@@ -162,7 +162,7 @@ def _build_runtime_call_and_assignments(
         ),
         args=[
             ast.Constant(program),
-            ast.List(elts=[ast.Constant(n) for n in output_names], ctx=ast.Load()),
+            ast.List(elts=[ast.Constant(n) for n in binding_names], ctx=ast.Load()),
             return_annotation,
             ast.Constant(is_in_loop),
         ],
@@ -174,28 +174,28 @@ def _build_runtime_call_and_assignments(
 
     assigns.append(
         ast.Assign(
-            targets=[ast.Name(id="__nh_outputs__", ctx=ast.Store())],
+            targets=[ast.Name(id="__nh_bindings__", ctx=ast.Store())],
             value=ast.Subscript(
                 value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                slice=ast.Constant("outputs"),
+                slice=ast.Constant("bindings"),
                 ctx=ast.Load(),
             ),
         )
     )
 
-    for name in output_names:
+    for name in binding_names:
         assigns.append(
             ast.If(
                 test=ast.Compare(
                     left=ast.Constant(name),
                     ops=[ast.In()],
-                    comparators=[ast.Name(id="__nh_outputs__", ctx=ast.Load())],
+                    comparators=[ast.Name(id="__nh_bindings__", ctx=ast.Load())],
                 ),
                 body=[
                     ast.Assign(
                         targets=[ast.Name(id=name, ctx=ast.Store())],
                         value=ast.Subscript(
-                            value=ast.Name(id="__nh_outputs__", ctx=ast.Load()),
+                            value=ast.Name(id="__nh_bindings__", ctx=ast.Load()),
                             slice=ast.Constant(name),
                             ctx=ast.Load(),
                         ),
@@ -318,7 +318,7 @@ def _extract_program(text: str) -> str:
     return "\n".join(lines[i + 1 :])
 
 
-def _extract_output_names(program: str) -> tuple[str, ...]:
+def _extract_binding_names(program: str) -> tuple[str, ...]:
     out: list[str] = []
     i = 0
     while True:
