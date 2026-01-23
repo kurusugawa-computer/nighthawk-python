@@ -16,3 +16,7 @@ class ToolEvaluationError(NighthawkError):
 
 class ToolValidationError(NighthawkError):
     pass
+
+
+class ToolRegistrationError(NighthawkError):
+    pass

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import BaseModel, TypeAdapter
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 
 from .configuration import Configuration
 from .errors import ToolEvaluationError, ToolValidationError
@@ -16,7 +16,7 @@ from .errors import ToolEvaluationError, ToolValidationError
 class ToolContext:
     context_globals: dict[str, object]
     context_locals: dict[str, object]
-    allowed_local_targets: set[str]
+    allowed_binding_targets: set[str]
     memory: BaseModel | None
 
 
@@ -56,7 +56,7 @@ def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type
 
     if target.startswith("<") and target.endswith(">"):
         name = target[1:-1]
-        if name not in tool_context.allowed_local_targets:
+        if name not in tool_context.allowed_binding_targets:
             return {"ok": False, "error": f"Target not allowed: {name}"}
 
         hinted = type_hints.get(name)
@@ -139,31 +139,5 @@ def make_agent(configuration: Configuration) -> NaturalAgent:
         output_type=NaturalFinal,
         deps_type=ToolContext,
     )
-
-    @agent.tool(name="dir")
-    def tool_dir(run_context: RunContext[ToolContext], expression: str) -> str:
-        return dir_tool(run_context.deps, expression)
-
-    @agent.tool(name="help")
-    def tool_help(run_context: RunContext[ToolContext], expression: str) -> str:
-        return help_tool(run_context.deps, expression)
-
-    @agent.tool(name="eval")
-    def tool_eval(run_context: RunContext[ToolContext], expression: str) -> str:
-        return eval_tool(run_context.deps, expression)
-
-    @agent.tool(name="assign")
-    def tool_assign(
-        run_context: RunContext[ToolContext],
-        target: str,
-        expression: str,
-        type_hints: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return assign_tool(
-            run_context.deps,
-            target,
-            expression,
-            type_hints=(type_hints or {}),
-        )
 
     return agent

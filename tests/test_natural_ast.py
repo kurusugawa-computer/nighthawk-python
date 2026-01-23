@@ -18,7 +18,7 @@ def test_docstring_natural_block_detected_and_bindings_extracted():
     b = blocks[0]
     assert b.kind == "docstring"
     assert b.input_bindings == ("numbers",)
-    assert b.output_bindings == ("result",)
+    assert b.bindings == ("result",)
 
 
 def test_inline_natural_block_detected():
@@ -35,4 +35,4 @@ def test_inline_natural_block_detected():
     blocks = find_natural_blocks(src)
     assert len(blocks) == 1
     assert blocks[0].kind == "inline"
-    assert blocks[0].output_bindings == ("y",)
+    assert blocks[0].bindings == ("y",)

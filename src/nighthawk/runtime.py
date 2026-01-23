@@ -3,15 +3,17 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, TypeAdapter
+from pydantic_ai.toolsets.function import FunctionToolset
 
-from .agent import NaturalFinal, ToolContext, assign_tool, dir_tool, eval_tool, help_tool
+from .agent import NaturalFinal, ToolContext
 from .configuration import Configuration
-from .context import RuntimeContext, get_runtime_context
+from .environment import Environment, get_environment
 from .errors import NaturalExecutionError
 from .templates import evaluate_template, include
+from .tools import get_visible_tools
 
 
 @dataclass
@@ -20,10 +22,10 @@ class Runtime:
     memory: BaseModel | None
 
     @classmethod
-    def from_runtime_context(cls, runtime_context: RuntimeContext) -> "Runtime":
+    def from_environment(cls, environment: Environment) -> "Runtime":
         return cls(
-            configuration=runtime_context.configuration,
-            memory=runtime_context.memory,
+            configuration=environment.configuration,
+            memory=environment.memory,
         )
 
     def _parse_and_coerce_return_value(self, value_json: str | None, return_annotation: object) -> object:
@@ -41,7 +43,7 @@ class Runtime:
         except Exception as e:
             raise NaturalExecutionError(f"Return value validation failed: {e}") from e
 
-    def run_block(self, natural_program: str, output_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
+    def run_block(self, natural_program: str, binding_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
         frame = inspect.currentframe()
         if frame is None or frame.f_back is None:
             raise NaturalExecutionError("No caller frame")
@@ -52,8 +54,8 @@ class Runtime:
 
         python_locals = caller.f_locals
 
-        runtime_context = get_runtime_context()
-        workspace_root = runtime_context.workspace_root
+        environment = get_environment()
+        workspace_root = environment.workspace_root
 
         template_locals: dict[str, object] = {
             **python_locals,
@@ -69,18 +71,18 @@ class Runtime:
         if self.memory is not None:
             context_locals["memory"] = self.memory
 
-        allowed = set(output_names)
+        allowed = set(binding_names)
         tool_context = ToolContext(
             context_globals=context_globals,
             context_locals=context_locals,
-            allowed_local_targets=allowed,
+            allowed_binding_targets=allowed,
             memory=self.memory,
         )
 
-        final: NaturalFinal
+        final: object
         effect_value: object | None = None
 
-        if runtime_context.natural_backend == "stub":
+        if environment.natural_backend == "stub":
             json_start = processed.find("{")
             if json_start == -1:
                 raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
@@ -94,25 +96,50 @@ class Runtime:
 
             if "natural_final" not in data:
                 raise NaturalExecutionError("Stub Natural execution expected 'natural_final' in envelope")
-            if "outputs" not in data:
-                raise NaturalExecutionError("Stub Natural execution expected 'outputs' in envelope")
+            if "bindings" not in data:
+                raise NaturalExecutionError("Stub Natural execution expected 'bindings' in envelope")
 
             try:
                 final = NaturalFinal.model_validate(data["natural_final"])
             except Exception as e:
                 raise NaturalExecutionError(f"Stub Natural execution has invalid natural_final: {e}") from e
 
-            outputs_obj = data["outputs"]
-            if not isinstance(outputs_obj, dict):
-                raise NaturalExecutionError("Stub Natural execution expected 'outputs' to be an object")
+            bindings_obj = data["bindings"]
+            if not isinstance(bindings_obj, dict):
+                raise NaturalExecutionError("Stub Natural execution expected 'bindings' to be an object")
 
-            outputs: dict[str, object] = {}
-            for name in output_names:
-                if name in outputs_obj:
-                    outputs[name] = outputs_obj[name]
+            bindings: dict[str, object] = {}
+            for name in binding_names:
+                if name in bindings_obj:
+                    bindings[name] = bindings_obj[name]
 
-        elif runtime_context.natural_backend == "agent":
-            result = runtime_context.agent.run_sync(processed, deps=tool_context)
+        elif environment.natural_backend == "agent":
+            tools = get_visible_tools()
+            toolset = FunctionToolset(
+                tools,
+            )
+
+            output_type = NaturalFinal
+            should_normalize_final = False
+            if not is_in_loop:
+
+                class NaturalEffectNoLoop(BaseModel, extra="forbid"):
+                    type: Literal["return"]
+                    value_json: str | None = None
+
+                class NaturalFinalNoLoop(BaseModel, extra="forbid"):
+                    effect: NaturalEffectNoLoop | None = None
+                    error: object | None = None
+
+                output_type = NaturalFinalNoLoop
+                should_normalize_final = True
+
+            result = environment.agent.run_sync(
+                processed,
+                deps=tool_context,
+                toolsets=[toolset],
+                output_type=output_type,
+            )
             final = result.output
 
             error = getattr(final, "error", None)
@@ -120,15 +147,23 @@ class Runtime:
                 message = getattr(error, "message", str(error))
                 raise NaturalExecutionError(f"Natural execution failed: {message}")
 
-            outputs = {}
-            for name in output_names:
+            # When running with a loop-restricted output schema, normalize back to NaturalFinal.
+            if should_normalize_final:
+                final = NaturalFinal.model_validate(final.model_dump())
+
+            bindings = {}
+            for name in binding_names:
                 if name in context_locals:
-                    outputs[name] = context_locals[name]
+                    bindings[name] = context_locals[name]
 
         else:
-            raise NaturalExecutionError(f"Unknown Natural backend: {runtime_context.natural_backend}")
+            raise NaturalExecutionError(f"Unknown Natural backend: {environment.natural_backend}")
 
-        effect = final.effect
+        final_typed = final
+        if not isinstance(final_typed, NaturalFinal):
+            final_typed = NaturalFinal.model_validate(final_typed.model_dump())
+
+        effect = final_typed.effect
         if effect is not None:
             if effect.type in ("break", "continue") and not is_in_loop:
                 raise NaturalExecutionError(f"Effect '{effect.type}' is only allowed inside loops")
@@ -136,16 +171,7 @@ class Runtime:
                 effect_value = self._parse_and_coerce_return_value(effect.value_json, return_annotation)
 
         return {
-            "natural_final": final,
-            "outputs": outputs,
+            "natural_final": final_typed,
+            "bindings": bindings,
             "effect_value": effect_value,
-        }
-
-    def tools_for_llm(self) -> dict[str, Any]:
-        # Placeholder used later by OpenAI integration.
-        return {
-            "dir": dir_tool,
-            "help": help_tool,
-            "eval": eval_tool,
-            "assign": assign_tool,
         }

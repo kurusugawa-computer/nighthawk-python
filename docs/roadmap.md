@@ -29,10 +29,10 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 
 - Executing workflows that embed Python code fences inside natural language documents (a broader hybrid beyond docstrings).
 
-### Runtime context propagation (future)
+### Environment propagation (future)
 
-- Propagate runtime context across tool execution boundaries when tools run in different threads or processes.
-- Define an explicit serialization/propagation mechanism for runtime context for multi-process execution.
+- Propagate environment across tool execution boundaries when tools run in different threads or processes.
+- Define an explicit serialization/propagation mechanism for environment for multi-process execution.
 
 ### Skills-style packaging
 
@@ -43,10 +43,10 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 
 - Support multiple LLM providers beyond OpenAI.
 
-### Runtime context
+### Environment
 
-- Provide an API for an implicit runtime context (dynamic scoping) that can be set by host Python code.
-- Workspace root is used for workspace tools and include resolution. Set it by entering a runtime context, for example: `with nighthawk.runtime_context(nighthawk.RuntimeContext(configuration=cfg, workspace_root=...)):`.
+- Provide an API for an implicit environment (dynamic scoping) that can be set by host Python code.
+- Workspace root is used for workspace tools and include resolution. Set it by entering an environment, for example: `with nighthawk.environment(nighthawk.Environment(configuration=cfg, workspace_root=...)):`.
 - Use the workspace root for include resolution and any workspace tools.
 
 ### CLI (deprioritized)
@@ -62,7 +62,7 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 ### Better Natural DSL
 
 - Dotted-path bindings (e.g., `<user.name>`).
-- Richer binding contracts and typed outputs per binding.
+- Richer binding contracts and typed bindings per binding.
 - Memory patch protocols (diff/patch rather than full replacement).
 - Dotted assignment targets (e.g., `x.y.z`) beyond the current `assign` target grammar.
 
