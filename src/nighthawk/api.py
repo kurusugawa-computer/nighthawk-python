@@ -5,31 +5,54 @@ import textwrap
 from functools import wraps
 from typing import Any, Callable, TypeVar, cast
 
-from .ast_transform import transform_function_source
+from . import core as core_module
+from . import tools as tools_module
+from .dsl import transform_function_source
 from .runtime import Runtime
 from .tools import call_scope
+
+Configuration = core_module.Configuration
+Environment = core_module.Environment
+environment = core_module.environment
+environment_override = core_module.environment_override
+get_environment = core_module.get_environment
+
+tool = tools_module.tool
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
 class _RuntimeProxy:
-    def run_block(self, natural_program: str, output_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
-        from .environment import get_environment
+    def run_block(
+        self,
+        natural_program: str,
+        output_names: list[str],
+        return_annotation: object,
+        is_in_loop: bool,
+    ) -> dict[str, object]:
+        frame = inspect.currentframe()
+        if frame is None or frame.f_back is None:
+            raise RuntimeError("No caller frame")
+        caller_frame = frame.f_back
 
-        environment = get_environment()
-        runtime = Runtime.from_environment(environment)
-        return runtime.run_block(natural_program, output_names, return_annotation, is_in_loop)
+        current_environment = get_environment()
+        runtime = Runtime.from_environment(current_environment)
+        return runtime.run_block(
+            natural_program,
+            output_names,
+            return_annotation,
+            is_in_loop,
+            caller_frame=caller_frame,
+        )
 
 
 def fn(func: F | None = None) -> F:
     if func is None:
         return lambda f: fn(f)  # type: ignore[return-value]
 
-    # Compile once at decoration time.
     lines, _ = inspect.getsourcelines(func)
     source = textwrap.dedent("".join(lines))
 
-    # Strip decorators from the extracted function source to avoid re-decoration.
     try:
         mod = __import__("ast").parse(source)
         for node in mod.body:
@@ -45,14 +68,13 @@ def fn(func: F | None = None) -> F:
     filename = inspect.getsourcefile(func) or "<nighthawk>"
     code = compile(transformed_source, filename, "exec")
 
-    globals_ns: dict[str, object] = dict(func.__globals__)
-    globals_ns["__nighthawk_runtime__"] = _RuntimeProxy()
+    globals_namespace: dict[str, object] = dict(func.__globals__)
+    globals_namespace["__nighthawk_runtime__"] = _RuntimeProxy()
 
-    # Execute compiled module to define transformed function.
-    module_ns: dict[str, object] = {}
-    exec(code, globals_ns, module_ns)
+    module_namespace: dict[str, object] = {}
+    exec(code, globals_namespace, module_namespace)
 
-    transformed = module_ns.get(func.__name__)
+    transformed = module_namespace.get(func.__name__)
     if not callable(transformed):
         raise RuntimeError("Transformed function not found after compilation")
 

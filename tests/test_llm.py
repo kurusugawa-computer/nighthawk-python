@@ -7,8 +7,9 @@ def test_agent_import_and_construction_and_run():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
-    from nighthawk.agent import ToolContext, make_agent
-    from nighthawk.configuration import Configuration
+    from nighthawk.core import Configuration
+    from nighthawk.llm import make_agent
+    from nighthawk.tools import ToolContext
 
     configuration = Configuration(
         model="openai:gpt-5-nano",

@@ -4,13 +4,44 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import Any, Iterator, Literal, Protocol
 
 from pydantic import BaseModel
 
-from .agent import NaturalAgent
-from .configuration import Configuration
-from .errors import NighthawkError
+
+class NighthawkError(Exception):
+    pass
+
+
+class NaturalParseError(NighthawkError):
+    pass
+
+
+class NaturalExecutionError(NighthawkError):
+    pass
+
+
+class ToolEvaluationError(NighthawkError):
+    pass
+
+
+class ToolValidationError(NighthawkError):
+    pass
+
+
+class ToolRegistrationError(NighthawkError):
+    pass
+
+
+@dataclass(frozen=True)
+class Configuration:
+    model: str
+
+
+class NaturalAgent(Protocol):
+    def run_sync(self, user_prompt: str, /, *, deps: Any = None, toolsets: Any = None, output_type: Any = None, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
 
 NaturalBackend = Literal["stub", "agent"]
 
@@ -44,10 +75,9 @@ def environment(environment_value: Environment) -> Iterator[None]:
     if environment_value.memory is None:
         raise NighthawkError("Environment memory is not set")
 
-    resolved = environment_value
     resolved = replace(
-        resolved,
-        workspace_root=Path(resolved.workspace_root).expanduser().resolve(),
+        environment_value,
+        workspace_root=Path(environment_value.workspace_root).expanduser().resolve(),
     )
 
     from .tools import environment_scope

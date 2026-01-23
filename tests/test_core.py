@@ -4,18 +4,18 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.errors import NighthawkError
+from nighthawk.core import NighthawkError
 
 
-class Memory(BaseModel):
+class FakeMemory(BaseModel):
     n: int = 0
 
 
-class MemoryV1(BaseModel):
+class FakeMemoryV1(BaseModel):
     n: int = 1
 
 
-class MemoryV2(BaseModel):
+class FakeMemoryV2(BaseModel):
     n: int = 2
 
 
@@ -23,11 +23,11 @@ def test_environment_replace_and_getter(tmp_path: Path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    from nighthawk.agent import make_agent
+    from nighthawk.llm import make_agent
 
     agent = make_agent(configuration)
 
-    memory = MemoryV1()
+    memory = FakeMemoryV1()
 
     with nh.environment(
         nh.Environment(
@@ -42,7 +42,7 @@ def test_environment_replace_and_getter(tmp_path: Path):
         assert environment.workspace_root == tmp_path.resolve()
         assert environment.configuration == configuration
         assert environment.memory is not None
-        assert isinstance(environment.memory, MemoryV1)
+        assert isinstance(environment.memory, FakeMemoryV1)
 
     with pytest.raises(NighthawkError):
         nh.get_environment()
@@ -57,11 +57,11 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    from nighthawk.agent import make_agent
+    from nighthawk.llm import make_agent
 
     agent = make_agent(configuration)
 
-    memory = Memory()
+    memory = FakeMemory()
 
     with nh.environment(
         nh.Environment(
@@ -87,11 +87,11 @@ def test_environment_override_configuration_replaces_memory(tmp_path: Path):
     configuration_2 = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    from nighthawk.agent import make_agent
+    from nighthawk.llm import make_agent
 
     agent = make_agent(configuration_1)
 
-    memory1 = MemoryV1()
+    memory1 = FakeMemoryV1()
 
     with nh.environment(
         nh.Environment(
@@ -103,12 +103,12 @@ def test_environment_override_configuration_replaces_memory(tmp_path: Path):
         )
     ):
         memory_in_context = nh.get_environment().memory
-        assert isinstance(memory_in_context, MemoryV1)
+        assert isinstance(memory_in_context, FakeMemoryV1)
 
-        memory2 = MemoryV2()
+        memory2 = FakeMemoryV2()
         with nh.environment_override(configuration=configuration_2, memory=memory2):
             memory_in_overridden_context = nh.get_environment().memory
-            assert isinstance(memory_in_overridden_context, MemoryV2)
+            assert isinstance(memory_in_overridden_context, FakeMemoryV2)
             assert memory_in_overridden_context is memory2
 
         assert nh.get_environment().memory is memory_in_context

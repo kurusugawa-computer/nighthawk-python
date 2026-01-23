@@ -183,7 +183,7 @@ Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 User-defined tools:
 
 - The host defines tools using the `@nighthawk.tool` decorator.
-- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.agent.ToolContext]` as their first parameter.
+- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.tools.ToolContext]` as their first parameter.
 
 Tool scopes:
 
