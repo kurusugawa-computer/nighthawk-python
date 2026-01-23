@@ -13,17 +13,17 @@ def test_decorator_updates_output_binding_via_docstring_natural_block(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -47,17 +47,17 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -79,17 +79,17 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -112,17 +112,17 @@ def test_stub_continue_effect_skips_following_statements(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -133,7 +133,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path):
         @nh.fn
         def f() -> int:
             total = 0
-            for _i in range(5):
+            for i in range(5):
                 total += 1
                 """natural
                 {{"natural_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "outputs": {{}}}}
@@ -148,17 +148,17 @@ def test_stub_break_effect_breaks_loop(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -169,7 +169,7 @@ def test_stub_break_effect_breaks_loop(tmp_path):
         @nh.fn
         def f() -> int:
             total = 0
-            for _i in range(5):
+            for i in range(5):
                 total += 1
                 """natural
                 {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "outputs": {{}}}}
@@ -184,17 +184,17 @@ def test_stub_break_outside_loop_raises(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -217,17 +217,17 @@ def test_decorator_updates_output_binding_via_inline_natural_block(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "tests").mkdir()
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
@@ -257,8 +257,7 @@ def test_decorator_uses_agent_backend_by_default(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
-            from nighthawk.openai_client import NaturalEffect, NaturalFinal
-            from nighthawk.tools import assign_tool
+            from nighthawk.agent import NaturalEffect, NaturalFinal, assign_tool
 
             assert deps is not None
             assign_tool(deps, "<result>", "x + 1", type_hints={})
@@ -269,7 +268,7 @@ def test_decorator_uses_agent_backend_by_default(tmp_path):
                 )
             )
 
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
@@ -277,7 +276,7 @@ def test_decorator_uses_agent_backend_by_default(tmp_path):
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,

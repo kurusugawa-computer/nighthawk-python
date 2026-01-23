@@ -127,14 +127,14 @@ class NaturalTransformer(ast.NodeTransformer):
         self.generic_visit(node)
         value = node.value
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            s = value.value
-            if _is_natural_sentinel(s):
-                program = _extract_program(s)
+            source = value.value
+            if _is_natural_sentinel(source):
+                program = _extract_program(source)
                 output_names = _extract_output_names(program)
                 return_annotation = self._current_return_annotation_expr()
                 is_in_loop = self._loop_depth > 0
                 stmts = _build_runtime_call_and_assignments(program, output_names, return_annotation, is_in_loop=is_in_loop)
-                return [ast.copy_location(stmt, node) for stmt in stmts]
+                return [ast.copy_location(stmt, node) for stmt in stmts]  # type: ignore[return-value]
         return node
 
     def _current_return_annotation_expr(self) -> ast.expr:

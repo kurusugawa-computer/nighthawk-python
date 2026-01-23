@@ -5,7 +5,7 @@ This file provides repository-specific guidance for coding agents and human cont
 ## NON-NEGOTIABLE REQUIREMENTS
 
 - Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans).
-- When listing questions, confirmations, or proposed decisions for the Product Owner (PO), assign a short stable Id to each item so the PO can respond inline.
+- When listing questions, confirmations, or proposed decisions for the user, assign a short stable Id to each item so the user can respond inline.
   - Required format: `Q-FOO-01` (questions), `C-FOO-01` (confirmations), `P-FOO-01` (proposals). For follow-ups, append a suffix like `Q-FOO-01A`.
   - Each item must be answerable on its own and must include its Id in the text.
 
@@ -22,8 +22,8 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
   - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
   - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
-  - If existing code violates these naming rules, ask the PO how to proceed before doing broad renames across a file or the codebase.
-- When performing code analysis (type errors, symbol navigation, call graph understanding), prefer LSP-based tooling first.
+  - If existing code violates these naming rules, ask the user how to proceed before doing broad renames across a file or the codebase.
+- Type aliases: Prefer PEP 695 `type` aliases when introducing new type aliases.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, or thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
 
@@ -32,7 +32,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - `Id` = Identifier
 - `DSL` = Domain Specific Language
 
-### Allowed abbreviations (by PO exception)
+### Allowed abbreviations
 
 - Loop indices: `i`, `j`, `k` (e.g., `for i in range(n): ...`).
 
@@ -69,6 +69,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - Python: 3.14+.
 - Dependency management: `uv`.
 - Tests: `pytest`.
+- When performing code analysis (type errors, symbol navigation, call graph understanding), prefer LSP-based tooling first.
 
 ### Common commands (run from repo root)
 

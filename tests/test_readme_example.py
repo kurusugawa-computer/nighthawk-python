@@ -8,17 +8,17 @@ class Memory(BaseModel):
 
 
 def test_readme_quick_example_style(tmp_path):
-    cfg = nh.Configuration(
+    configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
     memory = Memory()
-    from nighthawk.openai_client import make_agent
+    from nighthawk.agent import make_agent
 
-    agent = make_agent(cfg)
+    agent = make_agent(configuration)
 
     with nh.runtime_context(
         nh.RuntimeContext(
-            configuration=cfg,
+            configuration=configuration,
             agent=agent,
             memory=memory,
             workspace_root=tmp_path,
