@@ -1,16 +1,96 @@
 from __future__ import annotations
 
+import builtins
+import json
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
+from pydantic import BaseModel, TypeAdapter
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
-from .agent import ToolContext
-from .errors import ToolRegistrationError
+from .core import ToolEvaluationError, ToolRegistrationError, ToolValidationError
+
+
+@dataclass
+class ToolContext:
+    context_globals: dict[str, object]
+    context_locals: dict[str, object]
+    allowed_binding_targets: set[str]
+    memory: BaseModel | None
+
+
+def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type_hints: dict[str, Any]) -> dict[str, Any]:
+    """Assign into context locals or memory.
+
+    Target forms:
+    - Local: <name>
+    - Memory: memory.<field>
+    """
+
+    try:
+        value = _eval_expression(tool_context, expression)
+    except ToolEvaluationError as e:
+        return {"ok": False, "error": str(e)}
+
+    if target.startswith("<") and target.endswith(">"):
+        name = target[1:-1]
+        if name not in tool_context.allowed_binding_targets:
+            return {"ok": False, "error": f"Target not allowed: {name}"}
+
+        hinted = type_hints.get(name)
+        if hinted is not None:
+            try:
+                adapted = TypeAdapter(hinted)
+                value = adapted.validate_python(value)
+            except Exception as e:
+                raise ToolValidationError(f"Validation failed for {name}: {e}") from e
+
+        tool_context.context_locals[name] = value
+        return {"ok": True, "target": name, "value": _summarize(value)}
+
+    if target.startswith("memory."):
+        if tool_context.memory is None:
+            return {"ok": False, "error": "Memory is not enabled"}
+        field = target.split(".", 1)[1]
+        if not field.isidentifier():
+            return {"ok": False, "error": "Invalid memory field"}
+
+        if not hasattr(tool_context.memory, field):
+            return {"ok": False, "error": f"Unknown memory field: {field}"}
+
+        field_type = tool_context.memory.model_fields[field].annotation
+        try:
+            adapted = TypeAdapter(field_type)
+            coerced = adapted.validate_python(value)
+        except Exception as e:
+            raise ToolValidationError(f"Validation failed for memory.{field}: {e}") from e
+
+        try:
+            setattr(tool_context.memory, field, coerced)
+        except Exception as e:
+            raise ToolValidationError(f"Failed to set memory.{field}: {e}") from e
+
+        return {"ok": True, "target": f"memory.{field}", "value": _summarize(coerced)}
+
+    return {"ok": False, "error": "Invalid target"}
+
+
+def _eval_expression(tool_context: ToolContext, expression: str) -> object:
+    try:
+        return eval(expression, tool_context.context_globals, tool_context.context_locals)
+    except Exception as e:
+        raise ToolEvaluationError(str(e)) from e
+
+
+def _summarize(value: object) -> str:
+    text = repr(value)
+    if len(text) > 200:
+        return text[:200] + "..."
+    return text
 
 
 @dataclass(frozen=True)
@@ -53,16 +133,99 @@ def ensure_builtin_tools_registered() -> None:
     if _builtin_tools_registered:
         return
 
-    from .builtin_tools import get_builtin_tool_definitions
+    metadata = {"nighthawk.builtin": True}
 
-    builtin_definitions: dict[str, ToolDefinition] = {}
-    for tool_definition in get_builtin_tool_definitions():
+    def nh_dir(run_context: RunContext[ToolContext], expression: str) -> str:
+        value = _eval_expression(run_context.deps, expression)
+        return "\n".join(builtins.dir(value))
+
+    def nh_help(run_context: RunContext[ToolContext], expression: str) -> str:
+        value = _eval_expression(run_context.deps, expression)
+        import pydoc
+
+        return pydoc.render_doc(value, renderer=pydoc.plaintext)
+
+    def nh_eval(run_context: RunContext[ToolContext], expression: str) -> str:
+        value = _eval_expression(run_context.deps, expression)
+        try:
+            return json.dumps(value, default=repr)
+        except Exception:
+            return json.dumps(repr(value))
+
+    def nh_assign(
+        run_context: RunContext[ToolContext],
+        target: str,
+        expression: str,
+        type_hints: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return assign_tool(
+            run_context.deps,
+            target,
+            expression,
+            type_hints=(type_hints or {}),
+        )
+
+    def nh_json_dumps(run_context: RunContext[ToolContext], value: object) -> str:
+        _ = run_context
+        try:
+            return json.dumps(value, default=repr)
+        except Exception:
+            return json.dumps(repr(value))
+
+    builtin_definitions = [
+        ToolDefinition(
+            name="nh_dir",
+            tool=Tool(
+                nh_dir,
+                name="nh_dir",
+                metadata=metadata,
+                description=("List available attributes on the evaluated value. Use this to explore Python objects safely without mutating state."),
+            ),
+        ),
+        ToolDefinition(
+            name="nh_help",
+            tool=Tool(
+                nh_help,
+                name="nh_help",
+                metadata=metadata,
+                description=("Return Python help() text for the evaluated value. Use this to read documentation for objects available in context."),
+            ),
+        ),
+        ToolDefinition(
+            name="nh_eval",
+            tool=Tool(
+                nh_eval,
+                name="nh_eval",
+                metadata=metadata,
+                description=("Evaluate a Python expression in the tool evaluation environment and return JSON text. Use this to inspect values; do not use it to mutate state."),
+            ),
+        ),
+        ToolDefinition(
+            name="nh_assign",
+            tool=Tool(
+                nh_assign,
+                name="nh_assign",
+                metadata=metadata,
+                description=("Assign a computed value into a writable binding (<name>) or into memory.<field>. Bindings are restricted to the allowlist derived from <:name> bindings in the current Natural block."),
+            ),
+        ),
+        ToolDefinition(
+            name="nh_json_dumps",
+            tool=Tool(
+                nh_json_dumps,
+                name="nh_json_dumps",
+                metadata=metadata,
+                description=("Serialize a Python value to JSON text using json.dumps(value, default=repr). This is a pure helper and does not access the interpreter context."),
+            ),
+        ),
+    ]
+
+    for tool_definition in builtin_definitions:
         _validate_tool_name(tool_definition.name)
-        if tool_definition.name in builtin_definitions:
+        if tool_definition.name in _builtin_tool_definitions:
             raise ToolRegistrationError(f"Duplicate builtin tool name: {tool_definition.name!r}")
-        builtin_definitions[tool_definition.name] = tool_definition
+        _builtin_tool_definitions[tool_definition.name] = tool_definition
 
-    _builtin_tool_definitions.update(builtin_definitions)
     _builtin_tools_registered = True
 
 
@@ -132,7 +295,6 @@ def call_scope() -> Iterator[None]:
 def get_visible_tools() -> list[Tool[ToolContext]]:
     ensure_builtin_tools_registered()
 
-    # Snapshot to avoid mutation during toolset construction.
     visible = dict(_visible_tool_definitions())
     return [definition.tool for definition in visible.values()]
 
@@ -181,7 +343,5 @@ def reset_global_tools_for_tests() -> None:
 
 
 def require_tool_signature(_run_context: RunContext[ToolContext], /) -> None:
-    # This exists to anchor documentation and to provide a stable import location for
-    # the required RunContext signature. It is not called.
     _ = _run_context
     raise NotImplementedError

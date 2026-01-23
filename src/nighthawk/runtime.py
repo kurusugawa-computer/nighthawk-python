@@ -3,17 +3,40 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import dataclass
+from types import FrameType
 from typing import Literal
 
 from pydantic import BaseModel, TypeAdapter
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from .agent import NaturalFinal, ToolContext
-from .configuration import Configuration
-from .environment import Environment, get_environment
-from .errors import NaturalExecutionError
-from .templates import evaluate_template, include
-from .tools import get_visible_tools
+from .core import Configuration, Environment, NaturalExecutionError, get_environment
+from .llm import NaturalFinal
+from .tools import ToolContext, get_visible_tools
+
+
+def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
+    """Evaluate a Python 3.14 template string from trusted input.
+
+    This intentionally allows function execution inside templates under the trusted-input model.
+    """
+
+    try:
+        template_object = eval("t" + repr(text), {"__builtins__": __builtins__}, template_locals)
+    except Exception as e:
+        raise NaturalExecutionError(f"Template evaluation failed: {e}") from e
+
+    try:
+        strings = template_object.strings
+        values = template_object.values
+    except Exception as e:
+        raise NaturalExecutionError(f"Unexpected template object: {e}") from e
+
+    out: list[str] = []
+    for i, s in enumerate(strings):
+        out.append(s)
+        if i < len(values):
+            out.append(str(values[i]))
+    return "".join(out)
 
 
 @dataclass
@@ -43,28 +66,18 @@ class Runtime:
         except Exception as e:
             raise NaturalExecutionError(f"Return value validation failed: {e}") from e
 
-    def run_block(self, natural_program: str, binding_names: list[str], return_annotation: object, is_in_loop: bool) -> dict[str, object]:
-        frame = inspect.currentframe()
-        if frame is None or frame.f_back is None:
-            raise NaturalExecutionError("No caller frame")
+    def run_block(
+        self,
+        natural_program: str,
+        binding_names: list[str],
+        return_annotation: object,
+        is_in_loop: bool,
+        *,
+        caller_frame: FrameType,
+    ) -> dict[str, object]:
+        python_locals = caller_frame.f_locals
 
-        caller = frame.f_back
-        if caller.f_globals.get("__name__") == "nighthawk.decorator" and caller.f_code.co_name == "run_block" and caller.f_back is not None:
-            caller = caller.f_back
-
-        python_locals = caller.f_locals
-
-        environment = get_environment()
-        workspace_root = environment.workspace_root
-
-        template_locals: dict[str, object] = {
-            **python_locals,
-            "include": lambda p: include(
-                p,
-                workspace_root=workspace_root,
-            ),
-        }
-        processed = evaluate_template(natural_program, template_locals)
+        processed = evaluate_template(natural_program, python_locals)
 
         context_globals: dict[str, object] = {"__builtins__": __builtins__}
         context_locals: dict[str, object] = dict(python_locals)
@@ -82,6 +95,7 @@ class Runtime:
         final: object
         effect_value: object | None = None
 
+        environment = get_environment()
         if environment.natural_backend == "stub":
             json_start = processed.find("{")
             if json_start == -1:
@@ -115,9 +129,7 @@ class Runtime:
 
         elif environment.natural_backend == "agent":
             tools = get_visible_tools()
-            toolset = FunctionToolset(
-                tools,
-            )
+            toolset = FunctionToolset(tools)
 
             output_type = NaturalFinal
             should_normalize_final = False
@@ -147,7 +159,6 @@ class Runtime:
                 message = getattr(error, "message", str(error))
                 raise NaturalExecutionError(f"Natural execution failed: {message}")
 
-            # When running with a loop-restricted output schema, normalize back to NaturalFinal.
             if should_normalize_final:
                 final = NaturalFinal.model_validate(final.model_dump())
 
@@ -175,3 +186,10 @@ class Runtime:
             "bindings": bindings,
             "effect_value": effect_value,
         }
+
+
+def get_caller_frame() -> FrameType:
+    frame = inspect.currentframe()
+    if frame is None or frame.f_back is None:
+        raise NaturalExecutionError("No caller frame")
+    return frame.f_back

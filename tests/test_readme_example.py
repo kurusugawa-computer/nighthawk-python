@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import nighthawk as nh
 
 
-class Memory(BaseModel):
+class FakeMemory(BaseModel):
     pass
 
 
@@ -11,8 +11,8 @@ def test_readme_quick_example_style(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    memory = Memory()
-    from nighthawk.agent import make_agent
+    memory = FakeMemory()
+    from nighthawk.llm import make_agent
 
     agent = make_agent(configuration)
 

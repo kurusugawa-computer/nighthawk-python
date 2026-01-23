@@ -4,10 +4,10 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.errors import ToolRegistrationError
+from nighthawk.core import ToolRegistrationError
 
 
-class Memory(BaseModel):
+class FakeMemory(BaseModel):
     pass
 
 
@@ -49,7 +49,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    memory = Memory()
+    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -57,7 +57,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.agent import NaturalFinal
+            from nighthawk.llm import NaturalFinal
 
             return FakeRunResult(NaturalFinal(effect=None, error=None))
 
@@ -95,7 +95,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    memory = Memory()
+    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -106,7 +106,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.agent import NaturalFinal
+            from nighthawk.llm import NaturalFinal
 
             assert toolsets is not None
             toolset = toolsets[0]
@@ -171,7 +171,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    memory = Memory()
+    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -182,7 +182,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.agent import NaturalFinal
+            from nighthawk.llm import NaturalFinal
 
             assert toolsets is not None
             toolset = toolsets[0]
@@ -230,7 +230,7 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    memory = Memory()
+    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -238,7 +238,7 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.agent import NaturalFinal
+            from nighthawk.llm import NaturalFinal
 
             return FakeRunResult(NaturalFinal(effect=None, error=None))
 

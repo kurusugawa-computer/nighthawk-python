@@ -1,51 +1,127 @@
 from __future__ import annotations
 
 import ast
+import re
+from dataclasses import dataclass
 
-from .errors import NaturalParseError
+from .core import NaturalParseError
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_BINDING_RE = re.compile(r"<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
+
+
+@dataclass(frozen=True)
+class NaturalBlock:
+    kind: str  # 'docstring' | 'inline'
+    text: str
+    input_bindings: tuple[str, ...]
+    bindings: tuple[str, ...]
+    lineno: int
+
+
+def is_natural_sentinel(text: str) -> bool:
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and lines[i] == "":
+        i += 1
+    if i >= len(lines):
+        return False
+    return lines[i] == "natural"
+
+
+def extract_program(text: str) -> str:
+    if not is_natural_sentinel(text):
+        raise NaturalParseError("Missing natural sentinel")
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and lines[i] == "":
+        i += 1
+    return "\n".join(lines[i + 1 :])
+
+
+def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    inputs: list[str] = []
+    outputs: list[str] = []
+    for match in _BINDING_RE.finditer(program):
+        is_output = match.group(1) == ":"
+        name = match.group(2)
+        if not _IDENTIFIER_RE.match(name):
+            raise NaturalParseError(f"Invalid binding name: {name!r}")
+        if is_output:
+            outputs.append(name)
+        else:
+            inputs.append(name)
+
+    def deduplicate(names: list[str]) -> tuple[str, ...]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in names:
+            if name in seen:
+                continue
+            seen.add(name)
+            ordered.append(name)
+        return tuple(ordered)
+
+    return deduplicate(inputs), deduplicate(outputs)
+
+
+def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
+    """Parse function source text and return Natural blocks (docstring + inline)."""
+
+    try:
+        module = ast.parse(func_source)
+    except SyntaxError as e:
+        raise NaturalParseError(str(e)) from e
+
+    blocks: list[NaturalBlock] = []
+
+    func_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+    for node in module.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func_def = node
+            break
+    if func_def is None:
+        raise NaturalParseError("No function definition found")
+
+    doc = ast.get_docstring(func_def, clean=False)
+    if doc and is_natural_sentinel(doc):
+        program = extract_program(doc)
+        input_bindings, output_bindings = extract_bindings(program)
+        blocks.append(
+            NaturalBlock(
+                kind="docstring",
+                text=program,
+                input_bindings=input_bindings,
+                bindings=output_bindings,
+                lineno=getattr(func_def, "lineno", 1),
+            )
+        )
+
+    start_index = 1 if func_def.body and isinstance(func_def.body[0], ast.Expr) and isinstance(getattr(func_def.body[0], "value", None), ast.Constant) and isinstance(getattr(getattr(func_def.body[0], "value", None), "value", None), str) else 0
+
+    for statement in func_def.body[start_index:]:
+        if not isinstance(statement, ast.Expr):
+            continue
+        value = statement.value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            text = value.value
+            if is_natural_sentinel(text):
+                program = extract_program(text)
+                input_bindings, output_bindings = extract_bindings(program)
+                blocks.append(
+                    NaturalBlock(
+                        kind="inline",
+                        text=program,
+                        input_bindings=input_bindings,
+                        bindings=output_bindings,
+                        lineno=getattr(statement, "lineno", 1),
+                    )
+                )
+
+    return tuple(blocks)
 
 
 class NaturalTransformer(ast.NodeTransformer):
-    """Rewrite Natural blocks into runtime calls plus explicit assignments.
-
-    For an inline Natural block (an expression statement containing a string literal):
-
-        <string literal whose first logical line is exactly 'natural'>
-
-    rewrite to (schematic):
-
-        __nh_envelope__ = __nighthawk_runtime__.run_block(program_text, ['x', 'y'], return_annotation, is_in_loop)
-        __nh_bindings__ = __nh_envelope__['bindings']
-        if 'x' in __nh_bindings__:
-            x = __nh_bindings__['x']
-        if 'y' in __nh_bindings__:
-            y = __nh_bindings__['y']
-
-        __nh_final__ = __nh_envelope__['natural_final']
-        __nh_effect__ = __nh_final__.effect
-        if __nh_effect__ is not None:
-            if __nh_effect__.type == 'return':
-                return __nh_envelope__['effect_value']
-            if __nh_effect__.type == 'break':
-                break
-            if __nh_effect__.type == 'continue':
-                continue
-
-    This yields real Python assignments (reliable) and real Python control flow, instead
-    of attempting to mutate frame locals.
-
-    For a Natural docstring:
-
-        def f():
-            <docstring whose first logical line is exactly 'natural'>
-            ...
-
-    rewrite by removing the docstring statement and inserting an equivalent runtime call
-    near the beginning of the function.
-
-    The runtime object is injected into globals when compiling.
-    """
-
     def __init__(self) -> None:
         super().__init__()
         self._return_annotation_stack: list[ast.expr | None] = []
@@ -57,38 +133,43 @@ class NaturalTransformer(ast.NodeTransformer):
         self._loop_depth = 0
         try:
             if node.body:
-                first_stmt = node.body[0]
-                if isinstance(first_stmt, ast.Expr) and isinstance(first_stmt.value, ast.Constant) and isinstance(first_stmt.value.value, str):
-                    doc = first_stmt.value.value
-                    if _is_natural_sentinel(doc):
-                        program = _extract_program(doc)
-                        binding_names = _extract_binding_names(program)
-                        return_annotation = self._current_return_annotation_expr()
-                        injected = _build_runtime_call_and_assignments(program, binding_names, return_annotation, is_in_loop=self._loop_depth > 0)
+                first_statement = node.body[0]
+                if isinstance(first_statement, ast.Expr) and isinstance(first_statement.value, ast.Constant) and isinstance(first_statement.value.value, str):
+                    doc = first_statement.value.value
+                    if is_natural_sentinel(doc):
+                        program = extract_program(doc)
+                        _input_bindings, output_bindings = extract_bindings(program)
+                        return_annotation = self._current_return_annotation_expression()
+                        injected = build_runtime_call_and_assignments(
+                            program,
+                            output_bindings,
+                            return_annotation,
+                            is_in_loop=self._loop_depth > 0,
+                        )
 
                         body_without_docstring = node.body[1:]
 
-                        if binding_names:
+                        if output_bindings:
                             assigned: set[str] = set()
 
-                            def note_assigned(stmt: ast.stmt) -> None:
-                                if isinstance(stmt, ast.Assign):
-                                    for t in stmt.targets:
-                                        if isinstance(t, ast.Name):
-                                            assigned.add(t.id)
-                                elif isinstance(stmt, ast.AnnAssign):
-                                    t = stmt.target
-                                    if isinstance(t, ast.Name):
-                                        assigned.add(t.id)
-                                elif isinstance(stmt, ast.AugAssign):
-                                    t = stmt.target
-                                    if isinstance(t, ast.Name):
-                                        assigned.add(t.id)
+                            def note_assigned(statement: ast.stmt) -> None:
+                                if isinstance(statement, ast.Assign):
+                                    for target in statement.targets:
+                                        if isinstance(target, ast.Name):
+                                            assigned.add(target.id)
+                                elif isinstance(statement, ast.AnnAssign):
+                                    target = statement.target
+                                    if isinstance(target, ast.Name):
+                                        assigned.add(target.id)
+                                elif isinstance(statement, ast.AugAssign):
+                                    target = statement.target
+                                    if isinstance(target, ast.Name):
+                                        assigned.add(target.id)
 
                             insert_at = 0
-                            for i, stmt in enumerate(body_without_docstring):
-                                note_assigned(stmt)
-                                if set(binding_names).issubset(assigned):
+                            for i, statement in enumerate(body_without_docstring):
+                                note_assigned(statement)
+                                if set(output_bindings).issubset(assigned):
                                     insert_at = i + 1
                                     break
 
@@ -127,17 +208,22 @@ class NaturalTransformer(ast.NodeTransformer):
         self.generic_visit(node)
         value = node.value
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            source = value.value
-            if _is_natural_sentinel(source):
-                program = _extract_program(source)
-                binding_names = _extract_binding_names(program)
-                return_annotation = self._current_return_annotation_expr()
+            text = value.value
+            if is_natural_sentinel(text):
+                program = extract_program(text)
+                _input_bindings, output_bindings = extract_bindings(program)
+                return_annotation = self._current_return_annotation_expression()
                 is_in_loop = self._loop_depth > 0
-                stmts = _build_runtime_call_and_assignments(program, binding_names, return_annotation, is_in_loop=is_in_loop)
-                return [ast.copy_location(stmt, node) for stmt in stmts]  # type: ignore[return-value]
+                statements = build_runtime_call_and_assignments(
+                    program,
+                    output_bindings,
+                    return_annotation,
+                    is_in_loop=is_in_loop,
+                )
+                return [ast.copy_location(statement, node) for statement in statements]  # type: ignore[return-value]
         return node
 
-    def _current_return_annotation_expr(self) -> ast.expr:
+    def _current_return_annotation_expression(self) -> ast.expr:
         if not self._return_annotation_stack:
             return ast.Name(id="object", ctx=ast.Load())
         annotation = self._return_annotation_stack[-1]
@@ -146,15 +232,15 @@ class NaturalTransformer(ast.NodeTransformer):
         return annotation
 
 
-def _build_runtime_call_and_assignments(
+def build_runtime_call_and_assignments(
     program: str,
     binding_names: tuple[str, ...],
     return_annotation: ast.expr,
     *,
     is_in_loop: bool,
 ) -> list[ast.stmt]:
-    envelope_var = ast.Name(id="__nh_envelope__", ctx=ast.Store())
-    call_expr = ast.Call(
+    envelope_variable = ast.Name(id="__nh_envelope__", ctx=ast.Store())
+    call_expression = ast.Call(
         func=ast.Attribute(
             value=ast.Name(id="__nighthawk_runtime__", ctx=ast.Load()),
             attr="run_block",
@@ -162,13 +248,13 @@ def _build_runtime_call_and_assignments(
         ),
         args=[
             ast.Constant(program),
-            ast.List(elts=[ast.Constant(n) for n in binding_names], ctx=ast.Load()),
+            ast.List(elts=[ast.Constant(name) for name in binding_names], ctx=ast.Load()),
             return_annotation,
             ast.Constant(is_in_loop),
         ],
         keywords=[],
     )
-    assign_envelope = ast.Assign(targets=[envelope_var], value=call_expr)
+    assign_envelope = ast.Assign(targets=[envelope_variable], value=call_expression)
 
     assigns: list[ast.stmt] = [assign_envelope]
 
@@ -296,45 +382,6 @@ def _build_runtime_call_and_assignments(
     )
 
     return assigns
-
-
-def _is_natural_sentinel(text: str) -> bool:
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines) and lines[i] == "":
-        i += 1
-    if i >= len(lines):
-        return False
-    return lines[i] == "natural"
-
-
-def _extract_program(text: str) -> str:
-    if not _is_natural_sentinel(text):
-        raise NaturalParseError("Missing natural sentinel")
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines) and lines[i] == "":
-        i += 1
-    return "\n".join(lines[i + 1 :])
-
-
-def _extract_binding_names(program: str) -> tuple[str, ...]:
-    out: list[str] = []
-    i = 0
-    while True:
-        start = program.find("<", i)
-        if start == -1:
-            break
-        end = program.find(">", start + 1)
-        if end == -1:
-            break
-        token = program[start + 1 : end]
-        if token.startswith(":"):
-            name = token[1:]
-            if name.isidentifier() and name not in out:
-                out.append(name)
-        i = end + 1
-    return tuple(out)
 
 
 def transform_function_source(func_source: str) -> str:
