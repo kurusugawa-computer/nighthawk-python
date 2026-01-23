@@ -23,6 +23,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
   - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
   - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
   - If existing code violates these naming rules, ask the PO how to proceed before doing broad renames across a file or the codebase.
+- When performing code analysis (type errors, symbol navigation, call graph understanding), prefer LSP-based tooling first.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, or thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
 
