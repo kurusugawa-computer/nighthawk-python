@@ -16,7 +16,7 @@
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "npm install -g @openai/codex @anthropic-ai/claude-code && pip install --no-cache-dir uv",
+	"postCreateCommand": "npm install -g @openai/codex @anthropic-ai/claude-code pyright && pip install --no-cache-dir uv",
 	"customizations": {
 		"vscode": {
 			"extensions": [

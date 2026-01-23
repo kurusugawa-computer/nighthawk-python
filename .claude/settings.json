@@ -7,5 +7,9 @@
       "Bash(uv run pytest:*)",
       "Bash(NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest:*)"
     ]
-  }
+  },
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "env": { "ENABLE_LSP_TOOL": "1" }
 }
