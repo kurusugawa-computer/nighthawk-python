@@ -7,12 +7,11 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
+from .agent import NaturalFinal, ToolContext, assign_tool, dir_tool, eval_tool, help_tool
 from .configuration import Configuration
 from .context import RuntimeContext, get_runtime_context
 from .errors import NaturalExecutionError
-from .openai_client import NaturalFinal
 from .templates import evaluate_template, include
-from .tools import ToolContext, assign_tool, dir_tool, eval_tool, help_tool
 
 
 @dataclass
@@ -21,10 +20,10 @@ class Runtime:
     memory: BaseModel | None
 
     @classmethod
-    def from_runtime_context(cls, ctx: RuntimeContext) -> "Runtime":
+    def from_runtime_context(cls, runtime_context: RuntimeContext) -> "Runtime":
         return cls(
-            configuration=ctx.configuration,
-            memory=ctx.memory,
+            configuration=runtime_context.configuration,
+            memory=runtime_context.memory,
         )
 
     def _parse_and_coerce_return_value(self, value_json: str | None, return_annotation: object) -> object:
@@ -53,8 +52,8 @@ class Runtime:
 
         python_locals = caller.f_locals
 
-        ctx = get_runtime_context()
-        workspace_root = ctx.workspace_root
+        runtime_context = get_runtime_context()
+        workspace_root = runtime_context.workspace_root
 
         template_locals: dict[str, object] = {
             **python_locals,
@@ -71,7 +70,7 @@ class Runtime:
             context_locals["memory"] = self.memory
 
         allowed = set(output_names)
-        tool_ctx = ToolContext(
+        tool_context = ToolContext(
             context_globals=context_globals,
             context_locals=context_locals,
             allowed_local_targets=allowed,
@@ -81,7 +80,7 @@ class Runtime:
         final: NaturalFinal
         effect_value: object | None = None
 
-        if ctx.natural_backend == "stub":
+        if runtime_context.natural_backend == "stub":
             json_start = processed.find("{")
             if json_start == -1:
                 raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
@@ -112,8 +111,8 @@ class Runtime:
                 if name in outputs_obj:
                     outputs[name] = outputs_obj[name]
 
-        elif ctx.natural_backend == "agent":
-            result = ctx.agent.run_sync(processed, deps=tool_ctx)
+        elif runtime_context.natural_backend == "agent":
+            result = runtime_context.agent.run_sync(processed, deps=tool_context)
             final = result.output
 
             error = getattr(final, "error", None)
@@ -127,7 +126,7 @@ class Runtime:
                     outputs[name] = context_locals[name]
 
         else:
-            raise NaturalExecutionError(f"Unknown Natural backend: {ctx.natural_backend}")
+            raise NaturalExecutionError(f"Unknown Natural backend: {runtime_context.natural_backend}")
 
         effect = final.effect
         if effect is not None:

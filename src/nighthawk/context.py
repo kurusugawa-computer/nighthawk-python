@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Iterator, Literal
 
 from pydantic import BaseModel
-from pydantic_ai import Agent
 
+from .agent import NaturalAgent
 from .configuration import Configuration
 from .errors import NighthawkError
 
@@ -18,7 +18,7 @@ NaturalBackend = Literal["stub", "agent"]
 @dataclass(frozen=True)
 class RuntimeContext:
     configuration: Configuration
-    agent: Agent
+    agent: NaturalAgent
     memory: BaseModel
     workspace_root: Path
     natural_backend: NaturalBackend = "agent"
@@ -31,10 +31,10 @@ _runtime_context_var: ContextVar[RuntimeContext | None] = ContextVar(
 
 
 def get_runtime_context() -> RuntimeContext:
-    ctx = _runtime_context_var.get()
-    if ctx is None:
+    runtime_context = _runtime_context_var.get()
+    if runtime_context is None:
         raise NighthawkError("Runtime context is not set")
-    return ctx
+    return runtime_context
 
 
 @contextmanager
@@ -63,7 +63,7 @@ def runtime_context_override(
     *,
     workspace_root: str | Path | None = None,
     configuration: Configuration | None = None,
-    agent: Agent | None = None,
+    agent: NaturalAgent | None = None,
     memory: BaseModel | None = None,
     natural_backend: NaturalBackend | None = None,
 ) -> Iterator[RuntimeContext]:
