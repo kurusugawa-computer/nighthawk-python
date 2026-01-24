@@ -163,7 +163,7 @@ Locals summary:
 
 - In the current implementation, the prompt includes a merged locals view derived from:
   - the current Python caller frame locals
-  - the current Natural evaluation locals (`ToolContext.context_locals`), including values created via `nh_assign`
+  - the current Natural evaluation locals (`ExecutionContext.locals`), including values created via `nh_assign`
   - for nested Natural execution, the outer Natural evaluation locals are merged into the inner evaluation locals before Python locals are overlaid
 - The summary may walk up the call stack.
 - The summary is built by concatenating per-frame summaries until a maximum total length is reached (for example 10000 characters).
@@ -187,7 +187,7 @@ Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 User-defined tools:
 
 - The host defines tools using the `@nighthawk.tool` decorator.
-- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.tools.ToolContext]` as their first parameter.
+- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.context.ExecutionContext]` as their first parameter.
 
 Tool scopes:
 

@@ -262,12 +262,12 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             assert deps is not None
             assign_tool(deps, "<result>", "x + 1", type_hints={})
 
-            # Prove that a normal Python function can read ToolContext via ContextVar
+            # Prove that a normal Python function can read ExecutionContext via ContextVar
             # while the agent run is executing.
-            from nighthawk import get_current_tool_context
+            from nighthawk import get_current_execution_context
 
-            tool_context = get_current_tool_context()
-            assert tool_context.context_locals["result"] == 11
+            execution_context = get_current_execution_context()
+            assert execution_context.locals["result"] == 11
 
             return FakeRunResult(
                 NaturalFinal(
