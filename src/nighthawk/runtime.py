@@ -4,46 +4,13 @@ import inspect
 import json
 from dataclasses import dataclass
 from types import FrameType
-from typing import Literal, cast
+from typing import cast
 
 from pydantic import BaseModel, TypeAdapter
-from pydantic_ai.toolsets.function import FunctionToolset
 
-from .context import ExecutionContext, execution_context_scope, get_execution_context_stack
+from .context import ExecutionContext, get_execution_context_stack
 from .core import Configuration, Environment, NaturalExecutionError, get_environment
 from .llm import NaturalFinal
-from .tools import get_visible_tools
-
-
-def _summarize_for_prompt(value: object) -> str:
-    text = repr(value)
-    if len(text) > 200:
-        return text[:200] + "..."
-    return text
-
-
-def build_locals_summary(*, execution_locals: dict[str, object], memory: BaseModel | None) -> str:
-    lines: list[str] = []
-    lines.append("[nighthawk.locals_summary]")
-
-    for name in sorted(execution_locals.keys()):
-        if name.startswith("__"):
-            continue
-        try:
-            value = execution_locals[name]
-        except Exception:
-            continue
-        lines.append(f"{name} = {_summarize_for_prompt(value)}")
-
-    if memory is not None:
-        try:
-            memory_json = memory.model_dump_json(indent=2)
-        except Exception:
-            memory_json = _summarize_for_prompt(memory)
-        lines.append("[nighthawk.memory_summary]")
-        lines.append(memory_json)
-
-    return "\n".join(lines) + "\n\n"
 
 
 def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
@@ -136,85 +103,12 @@ class Runtime:
         effect_value: object | None = None
 
         environment = get_environment()
-        if environment.natural_backend == "stub":
-            json_start = processed.find("{")
-            if json_start == -1:
-                raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
-            try:
-                data = json.loads(processed[json_start:])
-            except json.JSONDecodeError as e:
-                raise NaturalExecutionError(f"Natural execution expected JSON (stub mode): {e}") from e
-
-            if not isinstance(data, dict):
-                raise NaturalExecutionError("Natural execution expected JSON object (stub mode)")
-
-            if "natural_final" not in data:
-                raise NaturalExecutionError("Stub Natural execution expected 'natural_final' in envelope")
-            if "bindings" not in data:
-                raise NaturalExecutionError("Stub Natural execution expected 'bindings' in envelope")
-
-            try:
-                final = NaturalFinal.model_validate(data["natural_final"])
-            except Exception as e:
-                raise NaturalExecutionError(f"Stub Natural execution has invalid natural_final: {e}") from e
-
-            bindings_obj = data["bindings"]
-            if not isinstance(bindings_obj, dict):
-                raise NaturalExecutionError("Stub Natural execution expected 'bindings' to be an object")
-
-            bindings: dict[str, object] = {}
-            for name in binding_names:
-                if name in bindings_obj:
-                    bindings[name] = bindings_obj[name]
-
-        elif environment.natural_backend == "agent":
-            processed = build_locals_summary(execution_locals=execution_locals, memory=self.memory) + processed
-
-            tools = get_visible_tools()
-            toolset = FunctionToolset(tools)
-
-            output_type = NaturalFinal
-            should_normalize_final = False
-            if not is_in_loop:
-
-                class NaturalEffectNoLoop(BaseModel, extra="forbid"):
-                    type: Literal["return"]
-                    value_json: str | None = None
-
-                class NaturalFinalNoLoop(BaseModel, extra="forbid"):
-                    effect: NaturalEffectNoLoop | None = None
-                    error: object | None = None
-
-                output_type = NaturalFinalNoLoop
-                should_normalize_final = True
-
-            with execution_context_scope(execution_context):
-                result = environment.agent.run_sync(
-                    processed,
-                    deps=execution_context,
-                    toolsets=[toolset],
-                    output_type=output_type,
-                )
-            final = result.output
-
-            error = getattr(final, "error", None)
-            if error is not None:
-                message = getattr(error, "message", str(error))
-                raise NaturalExecutionError(f"Natural execution failed: {message}")
-
-            if should_normalize_final:
-                if isinstance(final, BaseModel):
-                    final = NaturalFinal.model_validate(final.model_dump())
-                else:
-                    final = NaturalFinal.model_validate(final)
-
-            bindings = {}
-            for name in binding_names:
-                if name in execution_locals:
-                    bindings[name] = execution_locals[name]
-
-        else:
-            raise NaturalExecutionError(f"Unknown Natural backend: {environment.natural_backend}")
+        final, bindings = environment.natural_executor.run_natural_block(
+            processed_natural_program=processed,
+            execution_context=execution_context,
+            binding_names=binding_names,
+            is_in_loop=is_in_loop,
+        )
 
         final_typed = final
         if not isinstance(final_typed, NaturalFinal):

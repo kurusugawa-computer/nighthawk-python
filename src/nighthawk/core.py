@@ -4,9 +4,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterator, Literal, Protocol
+from typing import TYPE_CHECKING, Iterator
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from .executors import NaturalExecutor
 
 
 class NighthawkError(Exception):
@@ -38,21 +41,12 @@ class Configuration:
     model: str
 
 
-class NaturalAgent(Protocol):
-    def run_sync(self, user_prompt: str, /, *, deps: Any = None, toolsets: Any = None, output_type: Any = None, **kwargs: Any) -> Any:
-        raise NotImplementedError
-
-
-NaturalBackend = Literal["stub", "agent"]
-
-
 @dataclass(frozen=True)
 class Environment:
     configuration: Configuration
-    agent: NaturalAgent
+    natural_executor: NaturalExecutor
     memory: BaseModel
     workspace_root: Path
-    natural_backend: NaturalBackend = "agent"
 
 
 _environment_var: ContextVar[Environment | None] = ContextVar(
@@ -70,8 +64,6 @@ def get_environment() -> Environment:
 
 @contextmanager
 def environment(environment_value: Environment) -> Iterator[None]:
-    if environment_value.agent is None:
-        raise NighthawkError("Environment agent is not set")
     if environment_value.memory is None:
         raise NighthawkError("Environment memory is not set")
 
@@ -95,9 +87,8 @@ def environment_override(
     *,
     workspace_root: str | Path | None = None,
     configuration: Configuration | None = None,
-    agent: NaturalAgent | None = None,
+    natural_executor: NaturalExecutor | None = None,
     memory: BaseModel | None = None,
-    natural_backend: NaturalBackend | None = None,
 ) -> Iterator[Environment]:
     current = get_environment()
 
@@ -110,14 +101,11 @@ def environment_override(
         resolved_root = Path(workspace_root).expanduser().resolve()  # type: ignore[arg-type]
         next_environment = replace(next_environment, workspace_root=resolved_root)
 
-    if agent is not None:
-        next_environment = replace(next_environment, agent=agent)  # type: ignore[arg-type]
+    if natural_executor is not None:
+        next_environment = replace(next_environment, natural_executor=natural_executor)
 
     if memory is not None:
         next_environment = replace(next_environment, memory=memory)  # type: ignore[arg-type]
-
-    if natural_backend is not None:
-        next_environment = replace(next_environment, natural_backend=natural_backend)
 
     from .tools import environment_scope
 

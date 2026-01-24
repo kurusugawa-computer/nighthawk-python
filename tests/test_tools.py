@@ -68,7 +68,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -119,7 +119,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -249,7 +249,7 @@ def test_locals_summary_is_prefixed_in_agent_backend_prompt(tmp_path):
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -301,7 +301,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -353,7 +353,7 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )

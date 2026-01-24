@@ -11,7 +11,7 @@ Decisions for the next implementation steps:
 - Configuration: adopt the current implementation shape (minimal Configuration) and move expansion items to docs/roadmap.md.
 - Tool eval return shape: adopt the current implementation (nh_eval returns JSON text).
 - Template preprocessing: design target is to evaluate templates using the caller frame's Python locals and globals. Nighthawk does not provide built-in template helpers; hosts can bind functions (for example include) into the caller frame environment.
-- Environment: agent and memory are required by the environment API.
+- Environment: natural_executor and memory are required by the environment API.
 - Stub backend contract: adopt the current implementation shape (stub reads a JSON envelope containing `natural_final` and `bindings`).
 - Decorator: keep design at a high level; avoid describing compilation mechanics in detail.
 
@@ -308,7 +308,7 @@ The environment is required for Natural execution and contains:
 
 - `configuration` (required)
 - `workspace_root` (required): base directory for include resolution.
-- `agent` (required): the LLM execution agent.
+- `natural_executor` (required): a runner strategy object responsible for executing Natural blocks.
 - `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the environment.
 
 API:
@@ -338,7 +338,7 @@ with nh.environment(
     nh.Environment(
         configuration=cfg,
         workspace_root="/path/to/workspace",
-        agent=agent,
+        natural_executor=nh.AgentExecutor(agent=agent),
         memory=memory,
     )
 ):

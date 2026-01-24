@@ -12,17 +12,12 @@ def test_readme_quick_example_style(tmp_path):
         model="openai:gpt-5-nano",
     )
     memory = FakeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
