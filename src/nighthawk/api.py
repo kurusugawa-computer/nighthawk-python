@@ -18,6 +18,8 @@ environment_override = core_module.environment_override
 get_environment = core_module.get_environment
 
 tool = tools_module.tool
+get_current_tool_context = tools_module.get_current_tool_context
+get_tool_context_stack = tools_module.get_tool_context_stack
 
 F = TypeVar("F", bound=Callable[..., Any])
 

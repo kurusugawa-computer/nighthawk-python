@@ -4,7 +4,7 @@ import inspect
 import json
 from dataclasses import dataclass
 from types import FrameType
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, TypeAdapter
 from pydantic_ai.toolsets.function import FunctionToolset
@@ -12,6 +12,37 @@ from pydantic_ai.toolsets.function import FunctionToolset
 from .core import Configuration, Environment, NaturalExecutionError, get_environment
 from .llm import NaturalFinal
 from .tools import ToolContext, get_visible_tools
+
+
+def _summarize_for_prompt(value: object) -> str:
+    text = repr(value)
+    if len(text) > 200:
+        return text[:200] + "..."
+    return text
+
+
+def build_locals_summary(*, context_locals: dict[str, object], memory: BaseModel | None) -> str:
+    lines: list[str] = []
+    lines.append("[nighthawk.locals_summary]")
+
+    for name in sorted(context_locals.keys()):
+        if name.startswith("__"):
+            continue
+        try:
+            value = context_locals[name]
+        except Exception:
+            continue
+        lines.append(f"{name} = {_summarize_for_prompt(value)}")
+
+    if memory is not None:
+        try:
+            memory_json = memory.model_dump_json(indent=2)
+        except Exception:
+            memory_json = _summarize_for_prompt(memory)
+        lines.append("[nighthawk.memory_summary]")
+        lines.append(memory_json)
+
+    return "\n".join(lines) + "\n\n"
 
 
 def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
@@ -80,7 +111,16 @@ class Runtime:
         processed = evaluate_template(natural_program, python_locals)
 
         context_globals: dict[str, object] = {"__builtins__": __builtins__}
-        context_locals: dict[str, object] = dict(python_locals)
+
+        context_locals: dict[str, object] = {}
+        from .tools import get_tool_context_stack
+
+        tool_context_stack = get_tool_context_stack()
+        if tool_context_stack:
+            context_locals.update(tool_context_stack[-1].context_locals)
+
+        context_locals.update(python_locals)
+
         if self.memory is not None:
             context_locals["memory"] = self.memory
 
@@ -88,7 +128,7 @@ class Runtime:
         tool_context = ToolContext(
             context_globals=context_globals,
             context_locals=context_locals,
-            allowed_binding_targets=allowed,
+            binding_commit_targets=allowed,
             memory=self.memory,
         )
 
@@ -128,6 +168,8 @@ class Runtime:
                     bindings[name] = bindings_obj[name]
 
         elif environment.natural_backend == "agent":
+            processed = build_locals_summary(context_locals=context_locals, memory=self.memory) + processed
+
             tools = get_visible_tools()
             toolset = FunctionToolset(tools)
 
@@ -146,12 +188,15 @@ class Runtime:
                 output_type = NaturalFinalNoLoop
                 should_normalize_final = True
 
-            result = environment.agent.run_sync(
-                processed,
-                deps=tool_context,
-                toolsets=[toolset],
-                output_type=output_type,
-            )
+            from .tools import tool_context_scope
+
+            with tool_context_scope(tool_context):
+                result = environment.agent.run_sync(
+                    processed,
+                    deps=tool_context,
+                    toolsets=[toolset],
+                    output_type=output_type,
+                )
             final = result.output
 
             error = getattr(final, "error", None)
@@ -160,7 +205,10 @@ class Runtime:
                 raise NaturalExecutionError(f"Natural execution failed: {message}")
 
             if should_normalize_final:
-                final = NaturalFinal.model_validate(final.model_dump())
+                if isinstance(final, BaseModel):
+                    final = NaturalFinal.model_validate(final.model_dump())
+                else:
+                    final = NaturalFinal.model_validate(final)
 
             bindings = {}
             for name in binding_names:
@@ -172,9 +220,17 @@ class Runtime:
 
         final_typed = final
         if not isinstance(final_typed, NaturalFinal):
-            final_typed = NaturalFinal.model_validate(final_typed.model_dump())
+            if isinstance(final_typed, BaseModel):
+                final_typed = NaturalFinal.model_validate(final_typed.model_dump())
+            else:
+                final_typed = NaturalFinal.model_validate(final_typed)
 
-        effect = final_typed.effect
+        if not isinstance(final_typed, NaturalFinal):
+            raise NaturalExecutionError("Natural execution produced unexpected final type")
+
+        final_typed_natural = cast(NaturalFinal, final_typed)
+
+        effect = final_typed_natural.effect
         if effect is not None:
             if effect.type in ("break", "continue") and not is_in_loop:
                 raise NaturalExecutionError(f"Effect '{effect.type}' is only allowed inside loops")

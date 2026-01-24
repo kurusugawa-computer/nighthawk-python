@@ -167,6 +167,107 @@ def test_builtin_tool_name_conflict_requires_overwrite():
             return "user"
 
 
+def test_assign_tool_allows_non_binding_local_target():
+    from nighthawk.tools import ToolContext, assign_tool
+
+    tool_context = ToolContext(
+        context_globals={"__builtins__": __builtins__},
+        context_locals={},
+        binding_commit_targets=set(),
+        memory=None,
+    )
+
+    result = assign_tool(tool_context, "<now>", "123", type_hints={})
+    assert result["ok"] is True
+    assert tool_context.context_locals["now"] == 123
+
+
+def test_assign_tool_rejects_reserved_local_targets():
+    from nighthawk.tools import ToolContext, assign_tool
+
+    tool_context = ToolContext(
+        context_globals={"__builtins__": __builtins__},
+        context_locals={},
+        binding_commit_targets=set(),
+        memory=None,
+    )
+
+    result_memory = assign_tool(tool_context, "<memory>", "123", type_hints={})
+    assert result_memory["ok"] is False
+    assert "memory" not in tool_context.context_locals
+
+    result_private = assign_tool(tool_context, "<__private>", "123", type_hints={})
+    assert result_private["ok"] is False
+    assert "__private" not in tool_context.context_locals
+
+
+def test_assign_tool_validates_only_when_type_hints_present():
+    from nighthawk.tools import ToolContext, assign_tool
+
+    tool_context = ToolContext(
+        context_globals={"__builtins__": __builtins__},
+        context_locals={},
+        binding_commit_targets=set(),
+        memory=None,
+    )
+
+    result_no_hint = assign_tool(tool_context, "<count>", "'1'", type_hints={})
+    assert result_no_hint["ok"] is True
+    assert tool_context.context_locals["count"] == "1"
+
+    result_with_hint = assign_tool(tool_context, "<count>", "'2'", type_hints={"count": int})
+    assert result_with_hint["ok"] is True
+    assert tool_context.context_locals["count"] == 2
+
+
+def test_locals_summary_is_prefixed_in_agent_backend_prompt(tmp_path):
+    configuration = nh.Configuration(
+        model="openai:gpt-5-nano",
+    )
+    memory = FakeMemory()
+
+    class FakeRunResult:
+        def __init__(self, output):
+            self.output = output
+
+    class FakeAgent:
+        def __init__(self):
+            self.seen_prompts: list[str] = []
+
+        def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            from nighthawk.llm import NaturalFinal
+
+            self.seen_prompts.append(user_prompt)
+            assert deps is not None
+            return FakeRunResult(NaturalFinal(effect=None, error=None))
+
+    agent = FakeAgent()
+
+    with nh.environment(
+        nh.Environment(
+            configuration=configuration,
+            agent=agent,
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f() -> None:
+            x = 10
+            """natural
+            Say hi.
+            """
+            _ = x
+
+        f()
+
+    assert len(agent.seen_prompts) == 1
+    prompt = agent.seen_prompts[0]
+    assert "[nighthawk.locals_summary]" in prompt
+    assert "x = 10" in prompt
+
+
 def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
