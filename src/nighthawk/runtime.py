@@ -9,9 +9,10 @@ from typing import Literal, cast
 from pydantic import BaseModel, TypeAdapter
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from .context import ExecutionContext, execution_context_scope, get_execution_context_stack
 from .core import Configuration, Environment, NaturalExecutionError, get_environment
 from .llm import NaturalFinal
-from .tools import ToolContext, get_visible_tools
+from .tools import get_visible_tools
 
 
 def _summarize_for_prompt(value: object) -> str:
@@ -21,15 +22,15 @@ def _summarize_for_prompt(value: object) -> str:
     return text
 
 
-def build_locals_summary(*, context_locals: dict[str, object], memory: BaseModel | None) -> str:
+def build_locals_summary(*, execution_locals: dict[str, object], memory: BaseModel | None) -> str:
     lines: list[str] = []
     lines.append("[nighthawk.locals_summary]")
 
-    for name in sorted(context_locals.keys()):
+    for name in sorted(execution_locals.keys()):
         if name.startswith("__"):
             continue
         try:
-            value = context_locals[name]
+            value = execution_locals[name]
         except Exception:
             continue
         lines.append(f"{name} = {_summarize_for_prompt(value)}")
@@ -110,25 +111,24 @@ class Runtime:
 
         processed = evaluate_template(natural_program, python_locals)
 
-        context_globals: dict[str, object] = {"__builtins__": __builtins__}
+        execution_globals: dict[str, object] = {"__builtins__": __builtins__}
 
-        context_locals: dict[str, object] = {}
-        from .tools import get_tool_context_stack
+        execution_locals: dict[str, object] = {}
 
-        tool_context_stack = get_tool_context_stack()
-        if tool_context_stack:
-            context_locals.update(tool_context_stack[-1].context_locals)
+        execution_context_stack = get_execution_context_stack()
+        if execution_context_stack:
+            execution_locals.update(execution_context_stack[-1].locals)
 
-        context_locals.update(python_locals)
+        execution_locals.update(python_locals)
 
         if self.memory is not None:
-            context_locals["memory"] = self.memory
+            execution_locals["memory"] = self.memory
 
-        allowed = set(binding_names)
-        tool_context = ToolContext(
-            context_globals=context_globals,
-            context_locals=context_locals,
-            binding_commit_targets=allowed,
+        binding_commit_targets = set(binding_names)
+        execution_context = ExecutionContext(
+            globals=execution_globals,
+            locals=execution_locals,
+            binding_commit_targets=binding_commit_targets,
             memory=self.memory,
         )
 
@@ -168,7 +168,7 @@ class Runtime:
                     bindings[name] = bindings_obj[name]
 
         elif environment.natural_backend == "agent":
-            processed = build_locals_summary(context_locals=context_locals, memory=self.memory) + processed
+            processed = build_locals_summary(execution_locals=execution_locals, memory=self.memory) + processed
 
             tools = get_visible_tools()
             toolset = FunctionToolset(tools)
@@ -188,12 +188,10 @@ class Runtime:
                 output_type = NaturalFinalNoLoop
                 should_normalize_final = True
 
-            from .tools import tool_context_scope
-
-            with tool_context_scope(tool_context):
+            with execution_context_scope(execution_context):
                 result = environment.agent.run_sync(
                     processed,
-                    deps=tool_context,
+                    deps=execution_context,
                     toolsets=[toolset],
                     output_type=output_type,
                 )
@@ -212,8 +210,8 @@ class Runtime:
 
             bindings = {}
             for name in binding_names:
-                if name in context_locals:
-                    bindings[name] = context_locals[name]
+                if name in execution_locals:
+                    bindings[name] = execution_locals[name]
 
         else:
             raise NaturalExecutionError(f"Unknown Natural backend: {environment.natural_backend}")

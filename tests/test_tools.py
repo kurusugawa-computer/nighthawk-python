@@ -168,56 +168,59 @@ def test_builtin_tool_name_conflict_requires_overwrite():
 
 
 def test_assign_tool_allows_non_binding_local_target():
-    from nighthawk.tools import ToolContext, assign_tool
+    from nighthawk.context import ExecutionContext
+    from nighthawk.tools import assign_tool
 
-    tool_context = ToolContext(
-        context_globals={"__builtins__": __builtins__},
-        context_locals={},
+    execution_context = ExecutionContext(
+        globals={"__builtins__": __builtins__},
+        locals={},
         binding_commit_targets=set(),
         memory=None,
     )
 
-    result = assign_tool(tool_context, "<now>", "123", type_hints={})
+    result = assign_tool(execution_context, "<now>", "123", type_hints={})
     assert result["ok"] is True
-    assert tool_context.context_locals["now"] == 123
+    assert execution_context.locals["now"] == 123
 
 
 def test_assign_tool_rejects_reserved_local_targets():
-    from nighthawk.tools import ToolContext, assign_tool
+    from nighthawk.context import ExecutionContext
+    from nighthawk.tools import assign_tool
 
-    tool_context = ToolContext(
-        context_globals={"__builtins__": __builtins__},
-        context_locals={},
+    execution_context = ExecutionContext(
+        globals={"__builtins__": __builtins__},
+        locals={},
         binding_commit_targets=set(),
         memory=None,
     )
 
-    result_memory = assign_tool(tool_context, "<memory>", "123", type_hints={})
+    result_memory = assign_tool(execution_context, "<memory>", "123", type_hints={})
     assert result_memory["ok"] is False
-    assert "memory" not in tool_context.context_locals
+    assert "memory" not in execution_context.locals
 
-    result_private = assign_tool(tool_context, "<__private>", "123", type_hints={})
+    result_private = assign_tool(execution_context, "<__private>", "123", type_hints={})
     assert result_private["ok"] is False
-    assert "__private" not in tool_context.context_locals
+    assert "__private" not in execution_context.locals
 
 
 def test_assign_tool_validates_only_when_type_hints_present():
-    from nighthawk.tools import ToolContext, assign_tool
+    from nighthawk.context import ExecutionContext
+    from nighthawk.tools import assign_tool
 
-    tool_context = ToolContext(
-        context_globals={"__builtins__": __builtins__},
-        context_locals={},
+    execution_context = ExecutionContext(
+        globals={"__builtins__": __builtins__},
+        locals={},
         binding_commit_targets=set(),
         memory=None,
     )
 
-    result_no_hint = assign_tool(tool_context, "<count>", "'1'", type_hints={})
+    result_no_hint = assign_tool(execution_context, "<count>", "'1'", type_hints={})
     assert result_no_hint["ok"] is True
-    assert tool_context.context_locals["count"] == "1"
+    assert execution_context.locals["count"] == "1"
 
-    result_with_hint = assign_tool(tool_context, "<count>", "'2'", type_hints={"count": int})
+    result_with_hint = assign_tool(execution_context, "<count>", "'2'", type_hints={"count": int})
     assert result_with_hint["ok"] is True
-    assert tool_context.context_locals["count"] == 2
+    assert execution_context.locals["count"] == 2
 
 
 def test_locals_summary_is_prefixed_in_agent_backend_prompt(tmp_path):

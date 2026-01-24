@@ -5,6 +5,7 @@ import textwrap
 from functools import wraps
 from typing import Any, Callable, TypeVar, cast
 
+from . import context as context_module
 from . import core as core_module
 from . import tools as tools_module
 from .dsl import transform_function_source
@@ -18,8 +19,8 @@ environment_override = core_module.environment_override
 get_environment = core_module.get_environment
 
 tool = tools_module.tool
-get_current_tool_context = tools_module.get_current_tool_context
-get_tool_context_stack = tools_module.get_tool_context_stack
+get_current_execution_context = context_module.get_current_execution_context
+get_execution_context_stack = context_module.get_execution_context_stack
 
 F = TypeVar("F", bound=Callable[..., Any])
 

@@ -8,22 +8,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
-from .core import NighthawkError, ToolEvaluationError, ToolRegistrationError, ToolValidationError
+from .context import ExecutionContext
+from .core import ToolEvaluationError, ToolRegistrationError, ToolValidationError
 
 
-@dataclass
-class ToolContext:
-    context_globals: dict[str, object]
-    context_locals: dict[str, object]
-    binding_commit_targets: set[str]
-    memory: BaseModel | None
-
-
-def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type_hints: dict[str, Any]) -> dict[str, Any]:
+def assign_tool(execution_context: ExecutionContext, target: str, expression: str, *, type_hints: dict[str, Any]) -> dict[str, Any]:
     """Assign into context locals or memory.
 
     Target forms:
@@ -32,7 +25,7 @@ def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type
     """
 
     try:
-        value = _eval_expression(tool_context, expression)
+        value = _eval_expression(execution_context, expression)
     except ToolEvaluationError as e:
         return {"ok": False, "error": str(e)}
 
@@ -57,20 +50,20 @@ def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type
             except Exception as e:
                 raise ToolValidationError(f"Validation failed for {name}: {e}") from e
 
-        tool_context.context_locals[name] = value
+        execution_context.locals[name] = value
         return {"ok": True, "target": name, "value": _summarize(value)}
 
     if target.startswith("memory."):
-        if tool_context.memory is None:
+        if execution_context.memory is None:
             return {"ok": False, "error": "Memory is not enabled"}
         field = target.split(".", 1)[1]
         if not field.isidentifier():
             return {"ok": False, "error": "Invalid memory field"}
 
-        if not hasattr(tool_context.memory, field):
+        if not hasattr(execution_context.memory, field):
             return {"ok": False, "error": f"Unknown memory field: {field}"}
 
-        field_type = tool_context.memory.model_fields[field].annotation
+        field_type = execution_context.memory.model_fields[field].annotation
         try:
             adapted = TypeAdapter(field_type)
             coerced = adapted.validate_python(value)
@@ -78,7 +71,7 @@ def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type
             raise ToolValidationError(f"Validation failed for memory.{field}: {e}") from e
 
         try:
-            setattr(tool_context.memory, field, coerced)
+            setattr(execution_context.memory, field, coerced)
         except Exception as e:
             raise ToolValidationError(f"Failed to set memory.{field}: {e}") from e
 
@@ -87,9 +80,9 @@ def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type
     return {"ok": False, "error": "Invalid target"}
 
 
-def _eval_expression(tool_context: ToolContext, expression: str) -> object:
+def _eval_expression(execution_context: ExecutionContext, expression: str) -> object:
     try:
-        return eval(expression, tool_context.context_globals, tool_context.context_locals)
+        return eval(expression, execution_context.globals, execution_context.locals)
     except Exception as e:
         raise ToolEvaluationError(str(e)) from e
 
@@ -104,7 +97,7 @@ def _summarize(value: object) -> str:
 @dataclass(frozen=True)
 class ToolDefinition:
     name: str
-    tool: Tool[ToolContext]
+    tool: Tool[ExecutionContext]
 
 
 _builtin_tool_definitions: dict[str, ToolDefinition] = {}
@@ -122,11 +115,6 @@ _call_scope_stack_var: ContextVar[list[dict[str, ToolDefinition]]] = ContextVar(
     default=[],
 )
 
-
-_tool_context_stack_var: ContextVar[list[ToolContext]] = ContextVar(
-    "nighthawk_tool_context_stack",
-    default=[],
-)
 
 _VALID_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -149,17 +137,17 @@ def ensure_builtin_tools_registered() -> None:
 
     metadata = {"nighthawk.builtin": True}
 
-    def nh_dir(run_context: RunContext[ToolContext], expression: str) -> str:
+    def nh_dir(run_context: RunContext[ExecutionContext], expression: str) -> str:
         value = _eval_expression(run_context.deps, expression)
         return "\n".join(builtins.dir(value))
 
-    def nh_help(run_context: RunContext[ToolContext], expression: str) -> str:
+    def nh_help(run_context: RunContext[ExecutionContext], expression: str) -> str:
         value = _eval_expression(run_context.deps, expression)
         import pydoc
 
         return pydoc.render_doc(value)
 
-    def nh_eval(run_context: RunContext[ToolContext], expression: str) -> str:
+    def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> str:
         value = _eval_expression(run_context.deps, expression)
         try:
             return json.dumps(value, default=repr)
@@ -167,7 +155,7 @@ def ensure_builtin_tools_registered() -> None:
             return json.dumps(repr(value))
 
     def nh_assign(
-        run_context: RunContext[ToolContext],
+        run_context: RunContext[ExecutionContext],
         target: str,
         expression: str,
         type_hints: dict[str, Any] | None = None,
@@ -179,7 +167,7 @@ def ensure_builtin_tools_registered() -> None:
             type_hints=(type_hints or {}),
         )
 
-    def nh_json_dumps(run_context: RunContext[ToolContext], value: object) -> str:
+    def nh_json_dumps(run_context: RunContext[ExecutionContext], value: object) -> str:
         _ = run_context
         try:
             return json.dumps(value, default=repr)
@@ -306,28 +294,7 @@ def call_scope() -> Iterator[None]:
         _call_scope_stack_var.reset(token)
 
 
-@contextmanager
-def tool_context_scope(tool_context: ToolContext) -> Iterator[None]:
-    current = _tool_context_stack_var.get()
-    token = _tool_context_stack_var.set([*current, tool_context])
-    try:
-        yield
-    finally:
-        _tool_context_stack_var.reset(token)
-
-
-def get_tool_context_stack() -> tuple[ToolContext, ...]:
-    return tuple(_tool_context_stack_var.get())
-
-
-def get_current_tool_context() -> ToolContext:
-    stack = _tool_context_stack_var.get()
-    if not stack:
-        raise NighthawkError("ToolContext is not set")
-    return stack[-1]
-
-
-def get_visible_tools() -> list[Tool[ToolContext]]:
+def get_visible_tools() -> list[Tool[ExecutionContext]]:
     ensure_builtin_tools_registered()
 
     visible = dict(_visible_tool_definitions())
@@ -356,7 +323,7 @@ def tool(
         if resolved_description is None:
             resolved_description = inner.__doc__
 
-        tool_object: Tool[ToolContext] = Tool(
+        tool_object: Tool[ExecutionContext] = Tool(
             inner,
             name=tool_name,
             description=resolved_description,
@@ -377,6 +344,6 @@ def reset_global_tools_for_tests() -> None:
     _global_tool_definitions.clear()
 
 
-def require_tool_signature(_run_context: RunContext[ToolContext], /) -> None:
+def require_tool_signature(_run_context: RunContext[ExecutionContext], /) -> None:
     _ = _run_context
     raise NotImplementedError

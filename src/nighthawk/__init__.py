@@ -4,9 +4,9 @@ from .api import (
     environment,
     environment_override,
     fn,
-    get_current_tool_context,
+    get_current_execution_context,
     get_environment,
-    get_tool_context_stack,
+    get_execution_context_stack,
     tool,
 )
 
@@ -16,8 +16,8 @@ __all__ = [
     "environment",
     "environment_override",
     "fn",
-    "get_current_tool_context",
+    "get_current_execution_context",
     "get_environment",
-    "get_tool_context_stack",
+    "get_execution_context_stack",
     "tool",
 ]
