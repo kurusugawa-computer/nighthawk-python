@@ -161,6 +161,10 @@ To reduce black-box behavior, Nighthawk includes a locals summary in the prompt.
 
 Locals summary:
 
+- In the current implementation, the prompt includes a merged locals view derived from:
+  - the current Python caller frame locals
+  - the current Natural evaluation locals (`ToolContext.context_locals`), including values created via `nh_assign`
+  - for nested Natural execution, the outer Natural evaluation locals are merged into the inner evaluation locals before Python locals are overlaid
 - The summary may walk up the call stack.
 - The summary is built by concatenating per-frame summaries until a maximum total length is reached (for example 10000 characters).
 
@@ -227,8 +231,11 @@ Write tool:
 Target grammar:
 
 - Local target: `<name>`
-  - `<name>` must be a simple identifier.
-  - `<name>` is restricted to the allowlist derived from `<:name>` bindings (writable bindings) in the current Natural block.
+  - `<name>` must be a simple ASCII identifier.
+  - Reserved local targets are rejected:
+    - `memory`
+    - any name starting with `__`
+  - `<name>` is not restricted to `<:name>` bindings. The `<:name>` binding list controls only which values are committed back into Python locals at Natural block boundaries.
 
 - Memory target: `memory.<field>`
   - `<field>` must be a top-level memory field name (a simple identifier).

@@ -12,14 +12,14 @@ from pydantic import BaseModel, TypeAdapter
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
-from .core import ToolEvaluationError, ToolRegistrationError, ToolValidationError
+from .core import NighthawkError, ToolEvaluationError, ToolRegistrationError, ToolValidationError
 
 
 @dataclass
 class ToolContext:
     context_globals: dict[str, object]
     context_locals: dict[str, object]
-    allowed_binding_targets: set[str]
+    binding_commit_targets: set[str]
     memory: BaseModel | None
 
 
@@ -38,8 +38,16 @@ def assign_tool(tool_context: ToolContext, target: str, expression: str, *, type
 
     if target.startswith("<") and target.endswith(">"):
         name = target[1:-1]
-        if name not in tool_context.allowed_binding_targets:
-            return {"ok": False, "error": f"Target not allowed: {name}"}
+        try:
+            name.encode("ascii")
+        except UnicodeEncodeError:
+            return {"ok": False, "error": f"Local target must be ASCII: {name!r}"}
+
+        if not name.isidentifier():
+            return {"ok": False, "error": f"Invalid local target: {name!r}"}
+
+        if name == "memory" or name.startswith("__"):
+            return {"ok": False, "error": f"Reserved local target: {name!r}"}
 
         hinted = type_hints.get(name)
         if hinted is not None:
@@ -114,6 +122,12 @@ _call_scope_stack_var: ContextVar[list[dict[str, ToolDefinition]]] = ContextVar(
     default=[],
 )
 
+
+_tool_context_stack_var: ContextVar[list[ToolContext]] = ContextVar(
+    "nighthawk_tool_context_stack",
+    default=[],
+)
+
 _VALID_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -143,7 +157,7 @@ def ensure_builtin_tools_registered() -> None:
         value = _eval_expression(run_context.deps, expression)
         import pydoc
 
-        return pydoc.render_doc(value, renderer=pydoc.plaintext)
+        return pydoc.render_doc(value)
 
     def nh_eval(run_context: RunContext[ToolContext], expression: str) -> str:
         value = _eval_expression(run_context.deps, expression)
@@ -206,7 +220,7 @@ def ensure_builtin_tools_registered() -> None:
                 nh_assign,
                 name="nh_assign",
                 metadata=metadata,
-                description=("Assign a computed value into a writable binding (<name>) or into memory.<field>. Bindings are restricted to the allowlist derived from <:name> bindings in the current Natural block."),
+                description=("Assign a computed value into a local target (<name>) or into memory.<field>. Local targets are any ASCII identifier except reserved names (memory and names starting with '__')."),
             ),
         ),
         ToolDefinition(
@@ -290,6 +304,27 @@ def call_scope() -> Iterator[None]:
         yield
     finally:
         _call_scope_stack_var.reset(token)
+
+
+@contextmanager
+def tool_context_scope(tool_context: ToolContext) -> Iterator[None]:
+    current = _tool_context_stack_var.get()
+    token = _tool_context_stack_var.set([*current, tool_context])
+    try:
+        yield
+    finally:
+        _tool_context_stack_var.reset(token)
+
+
+def get_tool_context_stack() -> tuple[ToolContext, ...]:
+    return tuple(_tool_context_stack_var.get())
+
+
+def get_current_tool_context() -> ToolContext:
+    stack = _tool_context_stack_var.get()
+    if not stack:
+        raise NighthawkError("ToolContext is not set")
+    return stack[-1]
 
 
 def get_visible_tools() -> list[Tool[ToolContext]]:
