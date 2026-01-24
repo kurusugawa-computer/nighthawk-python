@@ -23,19 +23,14 @@ def test_environment_replace_and_getter(tmp_path: Path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     memory = FakeMemoryV1()
 
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
         environment = nh.get_environment()
@@ -57,19 +52,14 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     memory = FakeMemory()
 
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=root1,
-            natural_backend="stub",
         )
     ):
         assert nh.get_environment().workspace_root == root1.resolve()
@@ -87,19 +77,14 @@ def test_environment_override_configuration_replaces_memory(tmp_path: Path):
     configuration_2 = nh.Configuration(
         model="openai:gpt-5-nano",
     )
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration_1)
-
     memory1 = FakeMemoryV1()
 
     with nh.environment(
         nh.Environment(
             configuration=configuration_1,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory1,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
         memory_in_context = nh.get_environment().memory

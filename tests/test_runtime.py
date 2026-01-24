@@ -23,17 +23,12 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -56,17 +51,12 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -87,17 +77,12 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -119,17 +104,12 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -154,17 +134,12 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -189,17 +164,12 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -221,17 +191,12 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
         model="openai:gpt-5-nano",
     )
     memory = RuntimeMemory()
-    from nighthawk.llm import make_agent
-
-    agent = make_agent(configuration)
-
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
-            natural_backend="stub",
         )
     ):
 
@@ -285,7 +250,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
     with nh.environment(
         nh.Environment(
             configuration=configuration,
-            agent=agent,
+            natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )

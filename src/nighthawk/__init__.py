@@ -9,10 +9,13 @@ from .api import (
     get_execution_context_stack,
     tool,
 )
+from .executors import AgentExecutor, StubExecutor
 
 __all__ = [
+    "AgentExecutor",
     "Configuration",
     "Environment",
+    "StubExecutor",
     "environment",
     "environment_override",
     "fn",
