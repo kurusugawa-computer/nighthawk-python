@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from .context import ExecutionContext
-from .core import Configuration
+from .environment import NaturalExecutionEnvironment
 
 
 class NaturalEffect(BaseModel, extra="forbid"):
@@ -27,11 +27,11 @@ class NaturalFinal(BaseModel, extra="forbid"):
 type NaturalAgent = Agent[ExecutionContext, NaturalFinal]
 
 
-def make_agent(configuration: Configuration) -> NaturalAgent:
+def make_agent(environment: NaturalExecutionEnvironment) -> NaturalAgent:
     agent: NaturalAgent = Agent(
-        model=configuration.model,
+        model=environment.natural_execution_configuration.model,
         output_type=NaturalFinal,
         deps_type=ExecutionContext,
-        system_prompt=configuration.prompts.natural_block_execution_system_prompt_template,
+        system_prompt=(environment.natural_execution_configuration.prompts.natural_execution_system_prompt_template),
     )
     return agent

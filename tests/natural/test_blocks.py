@@ -1,6 +1,6 @@
 import textwrap
 
-from nighthawk.dsl import find_natural_blocks
+from nighthawk.natural.blocks import find_natural_blocks
 
 
 def test_docstring_natural_block_detected_and_bindings_extracted():

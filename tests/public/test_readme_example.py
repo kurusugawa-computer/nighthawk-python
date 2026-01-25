@@ -9,12 +9,14 @@ class FakeMemory(BaseModel):
 
 def test_readme_quick_example_style(tmp_path):
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = FakeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,

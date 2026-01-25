@@ -8,8 +8,9 @@ from typing import cast
 
 from pydantic import BaseModel, TypeAdapter
 
+from ..errors import NaturalExecutionError
 from .context import ExecutionContext, get_execution_context_stack
-from .core import Configuration, Environment, NaturalExecutionError, get_environment
+from .environment import NaturalExecutionEnvironment
 from .llm import NaturalFinal
 
 
@@ -40,15 +41,11 @@ def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
 
 @dataclass
 class Runtime:
-    configuration: Configuration
-    memory: BaseModel | None
+    environment: NaturalExecutionEnvironment
 
     @classmethod
-    def from_environment(cls, environment: Environment) -> "Runtime":
-        return cls(
-            configuration=environment.configuration,
-            memory=environment.memory,
-        )
+    def from_environment(cls, environment: NaturalExecutionEnvironment) -> "Runtime":
+        return cls(environment=environment)
 
     def _parse_and_coerce_return_value(self, value_json: str | None, return_annotation: object) -> object:
         if value_json is None:
@@ -65,7 +62,7 @@ class Runtime:
         except Exception as e:
             raise NaturalExecutionError(f"Return value validation failed: {e}") from e
 
-    def run_block(
+    def run_natural_block(
         self,
         natural_program: str,
         binding_names: list[str],
@@ -88,22 +85,21 @@ class Runtime:
 
         execution_locals.update(python_locals)
 
-        if self.memory is not None:
-            execution_locals["memory"] = self.memory
+        if self.environment.memory is not None:
+            execution_locals["memory"] = self.environment.memory
 
         binding_commit_targets = set(binding_names)
         execution_context = ExecutionContext(
             globals=execution_globals,
             locals=execution_locals,
             binding_commit_targets=binding_commit_targets,
-            memory=self.memory,
+            memory=self.environment.memory,
         )
 
         final: object
         effect_value: object | None = None
 
-        environment = get_environment()
-        final, bindings = environment.natural_executor.run_natural_block(
+        final, bindings = self.environment.natural_executor.run_natural_block(
             processed_natural_program=processed,
             execution_context=execution_context,
             binding_names=binding_names,

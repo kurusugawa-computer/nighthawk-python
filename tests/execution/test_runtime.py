@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.core import NaturalExecutionError
+from nighthawk.errors import NaturalExecutionError
 
 
 class RuntimeMemory(BaseModel):
@@ -20,12 +20,14 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -48,12 +50,14 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -74,12 +78,14 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -101,12 +107,14 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -131,12 +139,14 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -161,12 +171,14 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -188,12 +200,14 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
@@ -221,7 +235,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
-            from nighthawk.llm import NaturalEffect, NaturalFinal
+            from nighthawk.execution.llm import NaturalEffect, NaturalFinal
             from nighthawk.tools import assign_tool
 
             assert deps is not None
@@ -242,14 +256,16 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             )
 
     configuration = nh.Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
     memory = RuntimeMemory()
     agent = FakeAgent()
 
     with nh.environment(
-        nh.Environment(
-            configuration=configuration,
+        nh.NaturalExecutionEnvironment(
+            natural_execution_configuration=configuration.natural_execution_configuration,
             natural_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,

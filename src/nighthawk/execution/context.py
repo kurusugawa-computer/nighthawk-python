@@ -7,7 +7,7 @@ from typing import Iterator
 
 from pydantic import BaseModel
 
-from .core import NighthawkError
+from ..errors import NighthawkError
 
 
 @dataclass
