@@ -31,9 +31,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 - `Id` = Identifier
 - `DSL` = Domain Specific Language
-
-### Allowed abbreviations
-
+- `LLM` = Large Language Model
 - Loop indices: `i`, `j`, `k` (e.g., `for i in range(n): ...`).
 
 ## Context and orientation
@@ -84,6 +82,9 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 - Auto-fix lint issues:
   - `uv run ruff check --fix .`
+
+- Run type checks:
+  - `uv run pyright`
 
 - Run the full test suite:
   - `uv run pytest`

@@ -13,13 +13,27 @@ References:
 - This repo contains the library implementation, tests, and design docs.
 - Targets OpenAI only (via `pydantic-ai-slim[openai]`).
 - Default model: `gpt-5.2`.
-- Configuration is provided via `NIGHTHAWK_*` environment variables.
+- Configuration is provided by constructing a `Configuration` and wiring a `NaturalExecutionEnvironment` explicitly (see `docs/design.md`).
 - Supported Python version: 3.14+ (by design).
 
 ## Documentation
 
 - Design spec: `docs/design.md`
 - Roadmap: `docs/roadmap.md`
+
+## Code layout
+
+- Library code: `src/nighthawk/`
+  - `configuration.py`: configuration and prompt templates
+  - `execution/`: runtime execution (environment, context, runtime, executors, LLM integration)
+  - `natural/`: Natural block parsing and AST transformation
+  - `tools/`: tool registry, provided tools, and assignment helpers
+- Tests: `tests/`
+  - `public/`: public API behavior (`import nighthawk as nh`)
+  - `execution/`: runtime behavior
+  - `natural/`: Natural parsing and transform behavior
+  - `tools/`: tool registry and tool behavior
+  - `integration/`: optional integration tests (guarded by `NIGHTHAWK_RUN_INTEGRATION_TESTS=1`)
 
 ## Safety model
 

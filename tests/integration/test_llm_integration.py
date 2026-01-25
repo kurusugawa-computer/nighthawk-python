@@ -7,14 +7,34 @@ def test_agent_import_and_construction_and_run():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
-    from nighthawk.context import ExecutionContext
-    from nighthawk.core import Configuration
-    from nighthawk.llm import make_agent
+    from pathlib import Path
+
+    from pydantic import BaseModel
+
+    from nighthawk.configuration import Configuration, NaturalExecutionConfiguration
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.execution.llm import make_agent
 
     configuration = Configuration(
-        model="openai:gpt-5-nano",
+        natural_execution_configuration=NaturalExecutionConfiguration(
+            model="openai:gpt-5-nano",
+        ),
     )
-    agent = make_agent(configuration)
+
+    from nighthawk.execution.environment import NaturalExecutionEnvironment
+    from nighthawk.execution.executors import StubExecutor
+
+    class FakeMemory(BaseModel):
+        pass
+
+    environment = NaturalExecutionEnvironment(
+        natural_execution_configuration=configuration.natural_execution_configuration,
+        natural_executor=StubExecutor(),
+        memory=FakeMemory(),
+        workspace_root=Path("."),
+    )
+
+    agent = make_agent(environment)
 
     system_prompts = agent._system_prompts  # type: ignore[attr-defined]
     assert any("Nighthawk Natural block" in str(p) for p in system_prompts)

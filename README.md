@@ -92,7 +92,7 @@ def calculate_average(numbers):
 Target list: `[1, "2", "three", "cuatro", "五"]`
 ````
 
-### 3 Hybrid nesting (Natural -> Python -> Natural -> ...)
+### 3 Hybrid nesting (Natural block -> Python -> Natural block -> ...)
 
 Allow nested alternation between natural language and code.
 

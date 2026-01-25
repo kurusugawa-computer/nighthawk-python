@@ -80,12 +80,13 @@ Alignment update (implemented as of 2026-01-22):
 ### 5.2. Configuration
 
 - `Configuration`
-  - `model`: OpenAI model name.
-  - `tokenizer_encoding`: a tokenizer encoding identifier string used for future strict token counting. Default: `o200k_base`.
-  - `prompts`: prompt templates used for Natural block execution.
-    - `natural_block_execution_system_prompt_template`: system prompt template that defines the Natural execution protocol.
-    - `natural_block_execution_user_prompt_template`: full user prompt template including section delimiters.
-  - `execution.context_limits`: limits for rendering dynamic context into the prompt.
+  - `natural_execution_configuration`: configuration for Natural execution.
+    - `model`: OpenAI model name.
+    - `tokenizer_encoding`: a tokenizer encoding identifier string used for future strict token counting. Default: `o200k_base`.
+    - `prompts`: prompt templates used for Natural execution.
+      - `natural_execution_system_prompt_template`: system prompt template that defines the Natural execution protocol.
+      - `natural_execution_user_prompt_template`: full user prompt template including section delimiters.
+    - `context_limits`: limits for rendering dynamic context into the prompt.
 
 Notes:
 
@@ -192,7 +193,7 @@ Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 User-defined tools:
 
 - The host defines tools using the `@nighthawk.tool` decorator.
-- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.context.ExecutionContext]` as their first parameter.
+- Tool functions must accept `run_context: pydantic_ai.RunContext[nighthawk.execution.context.ExecutionContext]` as their first parameter.
 
 Tool scopes:
 
@@ -207,11 +208,11 @@ Name conflicts:
 - Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
 - If a tool name conflicts with a currently visible tool (built-ins + global + environment + call), registration fails unless `overwrite=True` is explicitly provided.
 
-Built-in tools:
+Provided tools (built-in):
 
-- Built-in tools are always available by default.
-- Built-in tools are provided with names prefixed by `nh_` to reduce collisions.
-- Built-ins can be overwritten only if `overwrite=True` is provided.
+- Provided tools are always available by default.
+- Provided tools are exposed with names prefixed by `nh_` to reduce collisions.
+- Provided tools can be overwritten only if `overwrite=True` is provided.
 
 Tools operate against `context_locals` and a limited `context_globals`.
 
@@ -311,18 +312,19 @@ Nighthawk uses an implicit environment (dynamic scoping) carried via `contextvar
 
 The environment is required for Natural execution and contains:
 
-- `configuration` (required)
+- `natural_execution_configuration` (required): Natural execution configuration.
 - `workspace_root` (required): base directory for include resolution.
 - `natural_executor` (required): a runner strategy object responsible for executing Natural blocks.
 - `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the environment.
 
 API:
 
-- `nighthawk.environment(environment: Environment)`
+- `nighthawk.environment(environment: NaturalExecutionEnvironment)`
   - Replace/bootstrap. Can be used even when no environment is currently set.
 - `nighthawk.environment_override(...)`
+  - Note: `environment_override` requires an existing environment (it cannot bootstrap a new one).
   - Overlay. Requires an existing environment. Only specified fields are overridden for the duration of the `with`.
-- `nighthawk.get_environment() -> Environment`
+- `nighthawk.get_environment() -> NaturalExecutionEnvironment`
   - Get the current environment. Raises if unset.
 
 Example:
@@ -331,7 +333,9 @@ Example:
 import nighthawk as nh
 from pydantic import BaseModel
 
-cfg = nh.Configuration(model="gpt-5.2")
+cfg = nh.Configuration(
+    natural_execution_configuration=nh.NaturalExecutionConfiguration(model="gpt-5.2"),
+)
 
 class Memory(BaseModel):
     pass
@@ -340,8 +344,8 @@ memory = Memory()
 agent = ...
 
 with nh.environment(
-    nh.Environment(
-        configuration=cfg,
+    nh.NaturalExecutionEnvironment(
+        natural_execution_configuration=cfg.natural_execution_configuration,
         workspace_root="/path/to/workspace",
         natural_executor=nh.AgentExecutor(agent=agent),
         memory=memory,

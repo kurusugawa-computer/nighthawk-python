@@ -8,9 +8,9 @@ from typing import Any, Protocol
 from pydantic import BaseModel
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
 from .llm import NaturalFinal
-from .tools import get_visible_tools
 
 
 class NaturalAgent(Protocol):
@@ -47,11 +47,11 @@ def _should_mask_name(name: str, *, name_substrings_to_mask: tuple[str, ...]) ->
 
 
 def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, str]:
-    from .core import get_environment
+    from .environment import get_environment
 
-    configuration = get_environment().configuration
-    context_limits = configuration.execution.context_limits
-    redaction = configuration.execution.context_redaction
+    configuration = get_environment().natural_execution_configuration
+    context_limits = configuration.context_limits
+    redaction = configuration.context_redaction
 
     value_max_chars = _approx_max_chars_from_tokens(context_limits.value_max_tokens)
     section_max_chars = _approx_max_chars_from_tokens(context_limits.locals_max_tokens)
@@ -102,11 +102,11 @@ def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, st
 
 
 def _render_memory_section(execution_context: ExecutionContext) -> str:
-    from .core import get_environment
+    from .environment import get_environment
 
-    configuration = get_environment().configuration
-    context_limits = configuration.execution.context_limits
-    redaction = configuration.execution.context_redaction
+    configuration = get_environment().natural_execution_configuration
+    context_limits = configuration.context_limits
+    redaction = configuration.context_redaction
 
     memory = execution_context.memory
     if memory is None:
@@ -143,10 +143,10 @@ def _render_memory_section(execution_context: ExecutionContext) -> str:
 
 
 def build_user_prompt(*, processed_natural_program: str, execution_context: ExecutionContext) -> str:
-    from .core import get_environment
+    from .environment import get_environment
 
-    configuration = get_environment().configuration
-    template_text = configuration.prompts.natural_block_execution_user_prompt_template
+    configuration = get_environment().natural_execution_configuration
+    template_text = configuration.prompts.natural_execution_user_prompt_template
 
     locals_text, locals_digest_text = _render_locals_section(execution_context)
     memory_text = _render_memory_section(execution_context)
@@ -173,7 +173,7 @@ class StubExecutor:
         _ = execution_context
         _ = is_in_loop
 
-        from .core import NaturalExecutionError
+        from ..errors import NaturalExecutionError
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:
@@ -223,7 +223,7 @@ class AgentExecutor:
     ) -> tuple[NaturalFinal, dict[str, object]]:
         from typing import Literal
 
-        from .core import NaturalExecutionError
+        from ..errors import NaturalExecutionError
 
         user_prompt = build_user_prompt(
             processed_natural_program=processed_natural_program,
