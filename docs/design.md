@@ -8,7 +8,7 @@ This document currently includes both implemented behavior and intended near-ter
 
 Decisions for the next implementation steps:
 
-- Configuration: adopt the current implementation shape (minimal Configuration) and move expansion items to docs/roadmap.md.
+- Configuration: expand Configuration to include prompt templates and context rendering limits (implemented 2026-01-25).
 - Tool eval return shape: adopt the current implementation (nh_eval returns JSON text).
 - Template preprocessing: design target is to evaluate templates using the caller frame's Python locals and globals. Nighthawk does not provide built-in template helpers; hosts can bind functions (for example include) into the caller frame environment.
 - Environment: natural_executor and memory are required by the environment API.
@@ -80,12 +80,17 @@ Alignment update (implemented as of 2026-01-22):
 ### 5.2. Configuration
 
 - `Configuration`
-  - OpenAI model name.
+  - `model`: OpenAI model name.
+  - `tokenizer_encoding`: a tokenizer encoding identifier string used for future strict token counting. Default: `o200k_base`.
+  - `prompts`: prompt templates used for Natural block execution.
+    - `natural_block_execution_system_prompt_template`: system prompt template that defines the Natural execution protocol.
+    - `natural_block_execution_user_prompt_template`: full user prompt template including section delimiters.
+  - `execution.context_limits`: limits for rendering dynamic context into the prompt.
 
 Notes:
 
-- Nighthawk intentionally keeps Configuration minimal in the current implementation.
-- Configuration expansion ideas (environment variable support, tool enablement flags, template context controls, locals/memory summary options) are tracked in docs/roadmap.md.
+- Context limits are expressed as `*_max_tokens` but are approximate in v1. v1 enforces these using a character budget derived from `max_chars = max_tokens * 4`.
+  This is a rough proxy and may under-estimate token usage for JSON-heavy, symbol-heavy, or non-English text.
 
 ## 6. Natural block detection
 

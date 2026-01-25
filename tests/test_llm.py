@@ -16,6 +16,9 @@ def test_agent_import_and_construction_and_run():
     )
     agent = make_agent(configuration)
 
+    system_prompts = agent._system_prompts  # type: ignore[attr-defined]
+    assert any("Nighthawk Natural block" in str(p) for p in system_prompts)
+
     tool_context = ExecutionContext(
         globals={"__builtins__": __builtins__},
         locals={},
