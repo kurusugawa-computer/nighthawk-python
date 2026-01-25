@@ -32,5 +32,6 @@ def make_agent(configuration: Configuration) -> NaturalAgent:
         model=configuration.model,
         output_type=NaturalFinal,
         deps_type=ExecutionContext,
+        system_prompt=configuration.prompts.natural_block_execution_system_prompt_template,
     )
     return agent

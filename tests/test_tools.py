@@ -223,7 +223,7 @@ def test_assign_tool_validates_only_when_type_hints_present():
     assert execution_context.locals["count"] == 2
 
 
-def test_locals_summary_is_prefixed_in_agent_backend_prompt(tmp_path):
+def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
     configuration = nh.Configuration(
         model="openai:gpt-5-nano",
     )
@@ -267,8 +267,19 @@ def test_locals_summary_is_prefixed_in_agent_backend_prompt(tmp_path):
 
     assert len(agent.seen_prompts) == 1
     prompt = agent.seen_prompts[0]
-    assert "[nighthawk.locals_summary]" in prompt
+    assert "<<<NH:PROGRAM>>>" in prompt
+    assert "<<<NH:END_PROGRAM>>>" in prompt
+    assert "<<<NH:LOCALS>>>" in prompt
+    assert "<<<NH:END_LOCALS>>>" in prompt
+    assert "<<<NH:MEMORY>>>" in prompt
+    assert "<<<NH:END_MEMORY>>>" in prompt
+    assert "Say hi." in prompt
     assert "x = 10" in prompt
+    locals_section = prompt.split("<<<NH:LOCALS>>>\n", 1)[1].split("\n<<<NH:END_LOCALS>>>", 1)[0]
+    assert "memory =" not in locals_section
+
+    memory_section = prompt.split("<<<NH:MEMORY>>>\n", 1)[1].split("\n<<<NH:END_MEMORY>>>", 1)[0]
+    assert memory_section.strip() != ""
 
 
 def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
