@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.errors import NaturalExecutionError
+from nighthawk.errors import ExecutionError
 
 
 class RuntimeMemory(BaseModel):
@@ -20,15 +20,15 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -38,7 +38,7 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
         def f(x: int):
             """natural
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
             result = 0
             return result
@@ -50,15 +50,15 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -67,7 +67,7 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"natural_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "bindings": {{}}}}
             """
             return 0
 
@@ -78,15 +78,15 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -95,11 +95,11 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"natural_final": {{"effect": {{"type": "return", "value_json": "\\\"not an int\\\""}}, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": {{"type": "return", "value_json": "\\\"not an int\\\""}}, "error": null}}, "bindings": {{}}}}
             """
             return 0
 
-        with pytest.raises(NaturalExecutionError):
+        with pytest.raises(ExecutionError):
             f()
 
 
@@ -107,15 +107,15 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -127,7 +127,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
             for i in range(5):
                 total += 1
                 """natural
-                {{"natural_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+                {{"execution_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -139,15 +139,15 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -159,7 +159,7 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
             for i in range(5):
                 total += 1
                 """natural
-                {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+                {{"execution_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -171,15 +171,15 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -188,11 +188,11 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"natural_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
             """
             return 1
 
-        with pytest.raises(NaturalExecutionError):
+        with pytest.raises(ExecutionError):
             f()
 
 
@@ -200,15 +200,15 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = RuntimeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -219,7 +219,7 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
             result = 0
             """natural
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x * 2}}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x * 2}}}}}
             """
             return result
 
@@ -235,7 +235,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
-            from nighthawk.execution.llm import NaturalEffect, NaturalFinal
+            from nighthawk.execution.llm import ExecutionEffect, ExecutionFinal
             from nighthawk.tools import assign_tool
 
             assert deps is not None
@@ -249,14 +249,14 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             assert execution_context.locals["result"] == 11
 
             return FakeRunResult(
-                NaturalFinal(
-                    effect=NaturalEffect(type="return", value_json="11"),
+                ExecutionFinal(
+                    effect=ExecutionEffect(type="return", value_json="11"),
                     error=None,
                 )
             )
 
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
@@ -264,9 +264,9 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
     agent = FakeAgent()
 
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.AgentExecutor(agent=agent),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -276,7 +276,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
         def f(x: int):
             """natural
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
             result = 0
             return result

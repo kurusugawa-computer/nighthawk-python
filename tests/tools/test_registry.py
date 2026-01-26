@@ -47,7 +47,7 @@ def test_tool_name_conflict_allows_overwrite_true():
 
 def test_tool_defined_in_call_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
@@ -59,18 +59,18 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import NaturalFinal
+            from nighthawk.execution.llm import ExecutionFinal
 
-            return FakeRunResult(NaturalFinal(effect=None, error=None))
+            return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
 
     from nighthawk.tools import get_visible_tools
 
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.AgentExecutor(agent=agent),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -83,7 +83,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
                 return "ok"
 
             """natural
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
             """
 
         f()
@@ -95,7 +95,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
 def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
@@ -110,20 +110,20 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import NaturalFinal
+            from nighthawk.execution.llm import ExecutionFinal
 
             assert toolsets is not None
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
 
-            return FakeRunResult(NaturalFinal(effect=None, error=None))
+            return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
 
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.AgentExecutor(agent=agent),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -132,7 +132,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
         @nh.fn
         def f() -> None:
             """natural
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
             """
 
             @nh.tool(name="test_late_global", overwrite=True)
@@ -140,7 +140,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
                 return "late"
 
             """natural
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
             """
 
         f()
@@ -229,7 +229,7 @@ def test_assign_tool_validates_only_when_type_hints_present():
 
 def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
@@ -244,18 +244,18 @@ def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
             self.seen_prompts: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import NaturalFinal
+            from nighthawk.execution.llm import ExecutionFinal
 
             self.seen_prompts.append(user_prompt)
             assert deps is not None
-            return FakeRunResult(NaturalFinal(effect=None, error=None))
+            return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
 
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.AgentExecutor(agent=agent),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -290,7 +290,7 @@ def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
 
 def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
@@ -305,22 +305,22 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import NaturalFinal
+            from nighthawk.execution.llm import ExecutionFinal
 
             assert toolsets is not None
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
 
-            return FakeRunResult(NaturalFinal(effect=None, error=None))
+            return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
 
     from nighthawk.tools import get_visible_tools
 
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.AgentExecutor(agent=agent),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -351,7 +351,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
 
 def test_environment_override_tool_scope_does_not_leak(tmp_path):
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
@@ -363,18 +363,18 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import NaturalFinal
+            from nighthawk.execution.llm import ExecutionFinal
 
-            return FakeRunResult(NaturalFinal(effect=None, error=None))
+            return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
 
     from nighthawk.tools import get_visible_tools
 
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.AgentExecutor(agent=agent),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.AgentExecutor(agent=agent),
             memory=memory,
             workspace_root=tmp_path,
         )

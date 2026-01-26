@@ -46,7 +46,7 @@ Note: This roadmap is intentionally exploratory. It may include items unrelated 
 ### Environment
 
 - Provide an API for an implicit environment (dynamic scoping) that can be set by host Python code.
-- Workspace root is used for workspace tools and include resolution. Set it by entering an environment, for example: `with nighthawk.environment(nighthawk.NaturalExecutionEnvironment(natural_execution_configuration=cfg.natural_execution_configuration, workspace_root=..., natural_executor=..., memory=...)):`.
+- Workspace root is used for workspace tools and include resolution. Set it by entering an environment, for example: `with nighthawk.environment(nighthawk.ExecutionEnvironment(execution_configuration=cfg.execution_configuration, workspace_root=..., execution_executor=..., memory=...)):`.
 - Use the workspace root for include resolution and any workspace tools.
 
 ### CLI (deprioritized)

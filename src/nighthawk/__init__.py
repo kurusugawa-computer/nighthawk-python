@@ -5,23 +5,23 @@ import textwrap
 from functools import wraps
 from typing import Any, Callable, TypeVar, cast
 
-from .configuration import Configuration, NaturalExecutionConfiguration
+from .configuration import Configuration, ExecutionConfiguration
 from .execution.context import get_current_execution_context, get_execution_context_stack
 from .execution.environment import (
-    NaturalExecutionEnvironment,
+    ExecutionEnvironment,
     environment,
     environment_override,
     get_environment,
 )
 from .execution.executors import AgentExecutor, StubExecutor
-from .execution.runtime import Runtime
+from .execution.orchestrator import Orchestrator
 from .natural.transform import transform_function_source
 from .tools import call_scope, tool
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class _RuntimeProxy:
+class _OrchestratorProxy:
     def run_natural_block(
         self,
         natural_program: str,
@@ -35,8 +35,8 @@ class _RuntimeProxy:
         caller_frame = frame.f_back
 
         current_environment = get_environment()
-        runtime = Runtime.from_environment(current_environment)
-        return runtime.run_natural_block(
+        orchestrator = Orchestrator.from_environment(current_environment)
+        return orchestrator.run_natural_block(
             natural_program,
             output_names,
             return_annotation,
@@ -68,7 +68,7 @@ def fn(func: F | None = None) -> F:
     code = compile(transformed_source, filename, "exec")
 
     globals_namespace: dict[str, object] = dict(func.__globals__)
-    globals_namespace["__nighthawk_runtime__"] = _RuntimeProxy()
+    globals_namespace["__nighthawk_orchestrator__"] = _OrchestratorProxy()
 
     module_namespace: dict[str, object] = {}
     exec(code, globals_namespace, module_namespace)
@@ -88,8 +88,8 @@ def fn(func: F | None = None) -> F:
 __all__ = [
     "AgentExecutor",
     "Configuration",
-    "NaturalExecutionConfiguration",
-    "NaturalExecutionEnvironment",
+    "ExecutionConfiguration",
+    "ExecutionEnvironment",
     "StubExecutor",
     "environment",
     "environment_override",
