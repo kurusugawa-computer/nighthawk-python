@@ -9,15 +9,15 @@ class FakeMemory(BaseModel):
 
 def test_readme_quick_example_style(tmp_path):
     configuration = nh.Configuration(
-        natural_execution_configuration=nh.NaturalExecutionConfiguration(
+        execution_configuration=nh.ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
     memory = FakeMemory()
     with nh.environment(
-        nh.NaturalExecutionEnvironment(
-            natural_execution_configuration=configuration.natural_execution_configuration,
-            natural_executor=nh.StubExecutor(),
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=nh.StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -28,7 +28,7 @@ def test_readme_quick_example_style(tmp_path):
             """natural
             <numbers>
             <:result>
-            {{"natural_final": {{"effect": null, "error": null}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
             """
             return result  # type: ignore  # noqa: F821
 

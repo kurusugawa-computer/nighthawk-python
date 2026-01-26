@@ -11,25 +11,25 @@ def test_agent_import_and_construction_and_run():
 
     from pydantic import BaseModel
 
-    from nighthawk.configuration import Configuration, NaturalExecutionConfiguration
+    from nighthawk.configuration import Configuration, ExecutionConfiguration
     from nighthawk.execution.context import ExecutionContext
     from nighthawk.execution.llm import make_agent
 
     configuration = Configuration(
-        natural_execution_configuration=NaturalExecutionConfiguration(
+        execution_configuration=ExecutionConfiguration(
             model="openai:gpt-5-nano",
         ),
     )
 
-    from nighthawk.execution.environment import NaturalExecutionEnvironment
+    from nighthawk.execution.environment import ExecutionEnvironment
     from nighthawk.execution.executors import StubExecutor
 
     class FakeMemory(BaseModel):
         pass
 
-    environment = NaturalExecutionEnvironment(
-        natural_execution_configuration=configuration.natural_execution_configuration,
-        natural_executor=StubExecutor(),
+    environment = ExecutionEnvironment(
+        execution_configuration=configuration.execution_configuration,
+        execution_executor=StubExecutor(),
         memory=FakeMemory(),
         workspace_root=Path("."),
     )

@@ -11,8 +11,8 @@ Decisions for the next implementation steps:
 - Configuration: expand Configuration to include prompt templates and context rendering limits (implemented 2026-01-25).
 - Tool eval return shape: adopt the current implementation (nh_eval returns JSON text).
 - Template preprocessing: design target is to evaluate templates using the caller frame's Python locals and globals. Nighthawk does not provide built-in template helpers; hosts can bind functions (for example include) into the caller frame environment.
-- Environment: natural_executor and memory are required by the environment API.
-- Stub backend contract: adopt the current implementation shape (stub reads a JSON envelope containing `natural_final` and `bindings`).
+- Environment: execution_executor and memory are required by the environment API.
+- Stub backend contract: adopt the current implementation shape (stub reads a JSON envelope containing `execution_final` and `bindings`).
 - Decorator: keep design at a high level; avoid describing compilation mechanics in detail.
 
 Known gaps (implementation differs from this document as of 2026-01-22):
@@ -20,13 +20,13 @@ Known gaps (implementation differs from this document as of 2026-01-22):
 - Locals summary and memory summary are specified (Section 8.2) but not yet implemented.
 - The nh_assign tool's diagnostic return object is specified (Section 8.3) but the current implementation returns a reduced shape.
 - Compile-time type extraction for `<:name>` bindings is specified (Section 7) but not yet connected end-to-end.
-- The runtime state-layer contract is specified (Section 8.1), but the current implementation does not yet fully match the commit and prompt-context behavior described here.
+- The orchestrator state-layer contract is specified (Section 8.1), but the current implementation does not yet fully match the commit and prompt-context behavior described here.
 
 Alignment update (implemented as of 2026-01-22):
 
 - The final JSON contract and control-flow effects (Section 8.4 and Section 9) are now implemented end-to-end, including:
-  - strict `NaturalFinal` parsing in agent mode
-  - stub mode support for a JSON envelope carrying `natural_final` and `bindings`
+  - strict `ExecutionFinal` parsing in agent mode
+  - stub mode support for a JSON envelope carrying `execution_final` and `bindings`
   - `return` effect `value_json` parsing plus return-type validation/coercion
   - loop-only enforcement for `break` and `continue`
 
@@ -80,12 +80,12 @@ Alignment update (implemented as of 2026-01-22):
 ### 5.2. Configuration
 
 - `Configuration`
-  - `natural_execution_configuration`: configuration for Natural execution.
+  - `execution_configuration`: configuration for execution.
     - `model`: OpenAI model name.
     - `tokenizer_encoding`: a tokenizer encoding identifier string used for future strict token counting. Default: `o200k_base`.
-    - `prompts`: prompt templates used for Natural execution.
-      - `natural_execution_system_prompt_template`: system prompt template that defines the Natural execution protocol.
-      - `natural_execution_user_prompt_template`: full user prompt template including section delimiters.
+    - `prompts`: prompt templates used for execution.
+      - `execution_system_prompt_template`: system prompt template that defines the execution protocol.
+      - `execution_user_prompt_template`: full user prompt template including section delimiters.
     - `context_limits`: limits for rendering dynamic context into the prompt.
 
 Notes:
@@ -136,7 +136,7 @@ Type note:
 - Local variable annotations are not generally available at runtime. Nighthawk is expected to extract type information for `<:name>` bindings from the function source AST at compile time.
 - If no type annotation is found, the type is treated as `Any`.
 
-## 8. Runtime model
+## 8. Orchestrator model
 
 ### 8.1. State layers: python locals, context locals, memory
 
@@ -150,9 +150,9 @@ Nighthawk uses multiple state layers.
 2) Context locals (`context_locals`)
 
 - `context_locals` is a mapping used as the locals environment for expression evaluation.
-- It is initialized from the current Python locals at the start of each Natural execution.
-- During a Natural execution, the LLM can update `context_locals` via tools (Section 8.3).
-- At the end of the Natural execution, values for `<:name>` bindings (writable bindings) are committed from `context_locals[name]` into Python locals.
+- It is initialized from the current Python locals at the start of each execution.
+- During a execution, the LLM can update `context_locals` via tools (Section 8.3).
+- At the end of the execution, values for `<:name>` bindings (writable bindings) are committed from `context_locals[name]` into Python locals.
 
 3) Memory
 
@@ -170,7 +170,7 @@ Locals summary:
 - In the current implementation, the prompt includes a merged locals view derived from:
   - the current Python caller frame locals
   - the current Natural evaluation locals (`ExecutionContext.locals`), including values created via `nh_assign`
-  - for nested Natural execution, the outer Natural evaluation locals are merged into the inner evaluation locals before Python locals are overlaid
+  - for nested execution, the outer Natural evaluation locals are merged into the inner evaluation locals before Python locals are overlaid
 - The summary may walk up the call stack.
 - The summary is built by concatenating per-frame summaries until a maximum total length is reached (for example 10000 characters).
 
@@ -268,9 +268,9 @@ The tool returns a diagnostic object (JSON) describing:
 - validation details
 - error details if it failed
 
-### 8.4. Natural execution contract (final JSON)
+### 8.4. execution contract (final JSON)
 
-At the end of each Natural execution, the LLM returns a final JSON object.
+At the end of each execution, the LLM returns a final JSON object.
 
 - `effect`: optional object
   - Control-flow effect requested by the Natural block.
@@ -298,33 +298,33 @@ Notes:
 
 ## 9. Return value
 
-In the simplest docstring pattern, the Python function body returns a variable that is updated by the Natural execution:
+In the simplest docstring pattern, the Python function body returns a variable that is updated by the execution:
 
 - `return result`
 
-The host commits output values for `<:name>` bindings into Python locals at the end of the Natural execution.
+The host commits output values for `<:name>` bindings into Python locals at the end of the execution.
 
-If a Natural execution requests `effect.type == "return"`, the runtime returns the validated return value immediately.
+If an execution requests `effect.type == "return"`, the orchestrator returns the validated return value immediately.
 
 ## 10. Environment
 
 Nighthawk uses an implicit environment (dynamic scoping) carried via `contextvars.ContextVar`.
 
-The environment is required for Natural execution and contains:
+The environment is required for execution and contains:
 
-- `natural_execution_configuration` (required): Natural execution configuration.
+- `execution_configuration` (required): execution configuration.
 - `workspace_root` (required): base directory for include resolution.
-- `natural_executor` (required): a runner strategy object responsible for executing Natural blocks.
+- `execution_executor` (required): a runner strategy object responsible for executing Natural blocks.
 - `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the environment.
 
 API:
 
-- `nighthawk.environment(environment: NaturalExecutionEnvironment)`
+- `nighthawk.environment(environment: ExecutionEnvironment)`
   - Replace/bootstrap. Can be used even when no environment is currently set.
 - `nighthawk.environment_override(...)`
   - Note: `environment_override` requires an existing environment (it cannot bootstrap a new one).
   - Overlay. Requires an existing environment. Only specified fields are overridden for the duration of the `with`.
-- `nighthawk.get_environment() -> NaturalExecutionEnvironment`
+- `nighthawk.get_environment() -> ExecutionEnvironment`
   - Get the current environment. Raises if unset.
 
 Example:
@@ -334,7 +334,7 @@ import nighthawk as nh
 from pydantic import BaseModel
 
 cfg = nh.Configuration(
-    natural_execution_configuration=nh.NaturalExecutionConfiguration(model="gpt-5.2"),
+    execution_configuration=nh.ExecutionConfiguration(model="gpt-5.2"),
 )
 
 class Memory(BaseModel):
@@ -344,10 +344,10 @@ memory = Memory()
 agent = ...
 
 with nh.environment(
-    nh.NaturalExecutionEnvironment(
-        natural_execution_configuration=cfg.natural_execution_configuration,
+    nh.ExecutionEnvironment(
+        execution_configuration=cfg.execution_configuration,
         workspace_root="/path/to/workspace",
-        natural_executor=nh.AgentExecutor(agent=agent),
+        execution_executor=nh.AgentExecutor(agent=agent),
         memory=memory,
     )
 ):

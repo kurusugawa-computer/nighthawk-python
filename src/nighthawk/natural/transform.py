@@ -127,7 +127,7 @@ def build_runtime_call_and_assignments(
     envelope_variable = ast.Name(id="__nh_envelope__", ctx=ast.Store())
     call_expression = ast.Call(
         func=ast.Attribute(
-            value=ast.Name(id="__nighthawk_runtime__", ctx=ast.Load()),
+            value=ast.Name(id="__nighthawk_orchestrator__", ctx=ast.Load()),
             attr="run_natural_block",
             ctx=ast.Load(),
         ),
@@ -181,7 +181,7 @@ def build_runtime_call_and_assignments(
             targets=[ast.Name(id="__nh_final__", ctx=ast.Store())],
             value=ast.Subscript(
                 value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                slice=ast.Constant("natural_final"),
+                slice=ast.Constant("execution_final"),
                 ctx=ast.Load(),
             ),
         )

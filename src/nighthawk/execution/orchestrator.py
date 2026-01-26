@@ -8,10 +8,10 @@ from typing import cast
 
 from pydantic import BaseModel, TypeAdapter
 
-from ..errors import NaturalExecutionError
+from ..errors import ExecutionError
 from .context import ExecutionContext, get_execution_context_stack
-from .environment import NaturalExecutionEnvironment
-from .llm import NaturalFinal
+from .environment import ExecutionEnvironment
+from .llm import ExecutionFinal
 
 
 def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
@@ -23,13 +23,13 @@ def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
     try:
         template_object = eval("t" + repr(text), {"__builtins__": __builtins__}, template_locals)
     except Exception as e:
-        raise NaturalExecutionError(f"Template evaluation failed: {e}") from e
+        raise ExecutionError(f"Template evaluation failed: {e}") from e
 
     try:
         strings = template_object.strings
         values = template_object.values
     except Exception as e:
-        raise NaturalExecutionError(f"Unexpected template object: {e}") from e
+        raise ExecutionError(f"Unexpected template object: {e}") from e
 
     out: list[str] = []
     for i, s in enumerate(strings):
@@ -40,11 +40,11 @@ def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
 
 
 @dataclass
-class Runtime:
-    environment: NaturalExecutionEnvironment
+class Orchestrator:
+    environment: ExecutionEnvironment
 
     @classmethod
-    def from_environment(cls, environment: NaturalExecutionEnvironment) -> "Runtime":
+    def from_environment(cls, environment: ExecutionEnvironment) -> "Orchestrator":
         return cls(environment=environment)
 
     def _parse_and_coerce_return_value(self, value_json: str | None, return_annotation: object) -> object:
@@ -54,13 +54,13 @@ class Runtime:
             try:
                 parsed = json.loads(value_json)
             except json.JSONDecodeError as e:
-                raise NaturalExecutionError(f"Invalid return value_json: {e}") from e
+                raise ExecutionError(f"Invalid return value_json: {e}") from e
 
         try:
             adapted = TypeAdapter(return_annotation)
             return adapted.validate_python(parsed)
         except Exception as e:
-            raise NaturalExecutionError(f"Return value validation failed: {e}") from e
+            raise ExecutionError(f"Return value validation failed: {e}") from e
 
     def run_natural_block(
         self,
@@ -99,7 +99,7 @@ class Runtime:
         final: object
         effect_value: object | None = None
 
-        final, bindings = self.environment.natural_executor.run_natural_block(
+        final, bindings = self.environment.execution_executor.run_natural_block(
             processed_natural_program=processed,
             execution_context=execution_context,
             binding_names=binding_names,
@@ -107,26 +107,26 @@ class Runtime:
         )
 
         final_typed = final
-        if not isinstance(final_typed, NaturalFinal):
+        if not isinstance(final_typed, ExecutionFinal):
             if isinstance(final_typed, BaseModel):
-                final_typed = NaturalFinal.model_validate(final_typed.model_dump())
+                final_typed = ExecutionFinal.model_validate(final_typed.model_dump())
             else:
-                final_typed = NaturalFinal.model_validate(final_typed)
+                final_typed = ExecutionFinal.model_validate(final_typed)
 
-        if not isinstance(final_typed, NaturalFinal):
-            raise NaturalExecutionError("Natural execution produced unexpected final type")
+        if not isinstance(final_typed, ExecutionFinal):
+            raise ExecutionError("Execution produced unexpected final type")
 
-        final_typed_natural = cast(NaturalFinal, final_typed)
+        final_typed_execution = cast(ExecutionFinal, final_typed)
 
-        effect = final_typed_natural.effect
+        effect = final_typed_execution.effect
         if effect is not None:
             if effect.type in ("break", "continue") and not is_in_loop:
-                raise NaturalExecutionError(f"Effect '{effect.type}' is only allowed inside loops")
+                raise ExecutionError(f"Effect '{effect.type}' is only allowed inside loops")
             if effect.type == "return":
                 effect_value = self._parse_and_coerce_return_value(effect.value_json, return_annotation)
 
         return {
-            "natural_final": final_typed,
+            "execution_final": final_typed,
             "bindings": bindings,
             "effect_value": effect_value,
         }
@@ -135,5 +135,5 @@ class Runtime:
 def get_caller_frame() -> FrameType:
     frame = inspect.currentframe()
     if frame is None or frame.f_back is None:
-        raise NaturalExecutionError("No caller frame")
+        raise ExecutionError("No caller frame")
     return frame.f_back

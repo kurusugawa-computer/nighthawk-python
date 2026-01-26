@@ -9,7 +9,7 @@ class NaturalParseError(NighthawkError):
     pass
 
 
-class NaturalExecutionError(NighthawkError):
+class ExecutionError(NighthawkError):
     pass
 
 

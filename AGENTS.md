@@ -24,7 +24,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
   - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
   - If existing code violates these naming rules, ask the user how to proceed before doing broad renames across a file or the codebase.
 - Type aliases: Prefer PEP 695 `type` aliases when introducing new type aliases.
-- When the user requests "radical" changes, prioritize extensive, global, disruptive, or thorough edits to the entire codebase and documentation over minimal fixes.
+- When the user requests "radical" changes, prioritize extensive, global, disruptive, and thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
 
 ## Glossary

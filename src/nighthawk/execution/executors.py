@@ -10,15 +10,15 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
-from .llm import NaturalFinal
+from .llm import ExecutionFinal
 
 
-class NaturalAgent(Protocol):
+class ExecutionAgent(Protocol):
     def run_sync(self, user_prompt: str, /, *, deps: Any = None, toolsets: Any = None, output_type: Any = None, **kwargs: Any) -> Any:
         raise NotImplementedError
 
 
-class NaturalExecutor(Protocol):
+class ExecutionExecutor(Protocol):
     def run_natural_block(
         self,
         *,
@@ -26,7 +26,7 @@ class NaturalExecutor(Protocol):
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
-    ) -> tuple[NaturalFinal, dict[str, object]]:
+    ) -> tuple[ExecutionFinal, dict[str, object]]:
         raise NotImplementedError
 
 
@@ -49,7 +49,7 @@ def _should_mask_name(name: str, *, name_substrings_to_mask: tuple[str, ...]) ->
 def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, str]:
     from .environment import get_environment
 
-    configuration = get_environment().natural_execution_configuration
+    configuration = get_environment().execution_configuration
     context_limits = configuration.context_limits
     redaction = configuration.context_redaction
 
@@ -104,7 +104,7 @@ def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, st
 def _render_memory_section(execution_context: ExecutionContext) -> str:
     from .environment import get_environment
 
-    configuration = get_environment().natural_execution_configuration
+    configuration = get_environment().execution_configuration
     context_limits = configuration.context_limits
     redaction = configuration.context_redaction
 
@@ -145,8 +145,8 @@ def _render_memory_section(execution_context: ExecutionContext) -> str:
 def build_user_prompt(*, processed_natural_program: str, execution_context: ExecutionContext) -> str:
     from .environment import get_environment
 
-    configuration = get_environment().natural_execution_configuration
-    template_text = configuration.prompts.natural_execution_user_prompt_template
+    configuration = get_environment().execution_configuration
+    template_text = configuration.prompts.execution_user_prompt_template
 
     locals_text, locals_digest_text = _render_locals_section(execution_context)
     memory_text = _render_memory_section(execution_context)
@@ -169,49 +169,49 @@ class StubExecutor:
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
-    ) -> tuple[NaturalFinal, dict[str, object]]:
+    ) -> tuple[ExecutionFinal, dict[str, object]]:
         _ = execution_context
         _ = is_in_loop
 
-        from ..errors import NaturalExecutionError
+        from ..errors import ExecutionError
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:
-            raise NaturalExecutionError("Natural execution expected JSON object in stub mode")
+            raise ExecutionError("Execution expected JSON object in stub mode")
 
         try:
             data = json.loads(processed_natural_program[json_start:])
         except json.JSONDecodeError as e:
-            raise NaturalExecutionError(f"Natural execution expected JSON (stub mode): {e}") from e
+            raise ExecutionError(f"Execution expected JSON (stub mode): {e}") from e
 
         if not isinstance(data, dict):
-            raise NaturalExecutionError("Natural execution expected JSON object (stub mode)")
+            raise ExecutionError("Execution expected JSON object (stub mode)")
 
-        if "natural_final" not in data:
-            raise NaturalExecutionError("Stub Natural execution expected 'natural_final' in envelope")
+        if "execution_final" not in data:
+            raise ExecutionError("Stub execution expected 'execution_final' in envelope")
         if "bindings" not in data:
-            raise NaturalExecutionError("Stub Natural execution expected 'bindings' in envelope")
+            raise ExecutionError("Stub execution expected 'bindings' in envelope")
 
         try:
-            natural_final = NaturalFinal.model_validate(data["natural_final"])
+            execution_final = ExecutionFinal.model_validate(data["execution_final"])
         except Exception as e:
-            raise NaturalExecutionError(f"Stub Natural execution has invalid natural_final: {e}") from e
+            raise ExecutionError(f"Stub execution has invalid execution_final: {e}") from e
 
         bindings_object = data["bindings"]
         if not isinstance(bindings_object, dict):
-            raise NaturalExecutionError("Stub Natural execution expected 'bindings' to be an object")
+            raise ExecutionError("Stub execution expected 'bindings' to be an object")
 
         bindings: dict[str, object] = {}
         for name in binding_names:
             if name in bindings_object:
                 bindings[name] = bindings_object[name]
 
-        return natural_final, bindings
+        return execution_final, bindings
 
 
 @dataclass(frozen=True)
 class AgentExecutor:
-    agent: NaturalAgent
+    agent: ExecutionAgent
 
     def run_natural_block(
         self,
@@ -220,10 +220,10 @@ class AgentExecutor:
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
-    ) -> tuple[NaturalFinal, dict[str, object]]:
+    ) -> tuple[ExecutionFinal, dict[str, object]]:
         from typing import Literal
 
-        from ..errors import NaturalExecutionError
+        from ..errors import ExecutionError
 
         user_prompt = build_user_prompt(
             processed_natural_program=processed_natural_program,
@@ -233,19 +233,19 @@ class AgentExecutor:
         tools = get_visible_tools()
         toolset = FunctionToolset(tools)
 
-        output_type: object = NaturalFinal
+        output_type: object = ExecutionFinal
         should_normalize_final = False
         if not is_in_loop:
 
-            class NaturalEffectNoLoop(BaseModel, extra="forbid"):
+            class ExecutionEffectNoLoop(BaseModel, extra="forbid"):
                 type: Literal["return"]
                 value_json: str | None = None
 
-            class NaturalFinalNoLoop(BaseModel, extra="forbid"):
-                effect: NaturalEffectNoLoop | None = None
+            class ExecutionFinalNoLoop(BaseModel, extra="forbid"):
+                effect: ExecutionEffectNoLoop | None = None
                 error: object | None = None
 
-            output_type = NaturalFinalNoLoop
+            output_type = ExecutionFinalNoLoop
             should_normalize_final = True
 
         with execution_context_scope(execution_context):
@@ -261,21 +261,21 @@ class AgentExecutor:
         error = getattr(final, "error", None)
         if error is not None:
             message = getattr(error, "message", str(error))
-            raise NaturalExecutionError(f"Natural execution failed: {message}")
+            raise ExecutionError(f"Execution failed: {message}")
 
         if should_normalize_final:
             if isinstance(final, BaseModel):
-                final = NaturalFinal.model_validate(final.model_dump())
+                final = ExecutionFinal.model_validate(final.model_dump())
             else:
-                final = NaturalFinal.model_validate(final)
+                final = ExecutionFinal.model_validate(final)
 
         try:
             if isinstance(final, BaseModel):
-                final = NaturalFinal.model_validate(final.model_dump())
+                final = ExecutionFinal.model_validate(final.model_dump())
             else:
-                final = NaturalFinal.model_validate(final)
+                final = ExecutionFinal.model_validate(final)
         except Exception as e:
-            raise NaturalExecutionError(f"Natural execution produced unexpected final type: {e}") from e
+            raise ExecutionError(f"Execution produced unexpected final type: {e}") from e
 
         bindings: dict[str, object] = {}
         for name in binding_names:

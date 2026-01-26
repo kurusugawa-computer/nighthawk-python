@@ -6,32 +6,32 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from .context import ExecutionContext
-from .environment import NaturalExecutionEnvironment
+from .environment import ExecutionEnvironment
 
 
-class NaturalEffect(BaseModel, extra="forbid"):
+class ExecutionEffect(BaseModel, extra="forbid"):
     type: Literal["continue", "break", "return"]
     value_json: str | None = None
 
 
-class NaturalError(BaseModel, extra="forbid"):
+class ExecutionErrorDetail(BaseModel, extra="forbid"):
     message: str
     type: str | None = None
 
 
-class NaturalFinal(BaseModel, extra="forbid"):
-    effect: NaturalEffect | None = None
-    error: NaturalError | None = None
+class ExecutionFinal(BaseModel, extra="forbid"):
+    effect: ExecutionEffect | None = None
+    error: ExecutionErrorDetail | None = None
 
 
-type NaturalAgent = Agent[ExecutionContext, NaturalFinal]
+type ExecutionAgent = Agent[ExecutionContext, ExecutionFinal]
 
 
-def make_agent(environment: NaturalExecutionEnvironment) -> NaturalAgent:
-    agent: NaturalAgent = Agent(
-        model=environment.natural_execution_configuration.model,
-        output_type=NaturalFinal,
+def make_agent(environment: ExecutionEnvironment) -> ExecutionAgent:
+    agent: ExecutionAgent = Agent(
+        model=environment.execution_configuration.model,
+        output_type=ExecutionFinal,
         deps_type=ExecutionContext,
-        system_prompt=(environment.natural_execution_configuration.prompts.natural_execution_system_prompt_template),
+        system_prompt=(environment.execution_configuration.prompts.execution_system_prompt_template),
     )
     return agent

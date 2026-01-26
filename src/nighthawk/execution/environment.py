@@ -8,28 +8,28 @@ from typing import TYPE_CHECKING, Iterator
 
 from pydantic import BaseModel
 
-from ..configuration import NaturalExecutionConfiguration
+from ..configuration import ExecutionConfiguration
 from ..errors import NighthawkError
 
 if TYPE_CHECKING:
-    from .executors import NaturalExecutor
+    from .executors import ExecutionExecutor
 
 
 @dataclass(frozen=True)
-class NaturalExecutionEnvironment:
-    natural_execution_configuration: NaturalExecutionConfiguration
-    natural_executor: NaturalExecutor
+class ExecutionEnvironment:
+    execution_configuration: ExecutionConfiguration
+    execution_executor: ExecutionExecutor
     memory: BaseModel
     workspace_root: Path
 
 
-_environment_var: ContextVar[NaturalExecutionEnvironment | None] = ContextVar(
+_environment_var: ContextVar[ExecutionEnvironment | None] = ContextVar(
     "nighthawk_environment",
     default=None,
 )
 
 
-def get_environment() -> NaturalExecutionEnvironment:
+def get_environment() -> ExecutionEnvironment:
     environment_value = _environment_var.get()
     if environment_value is None:
         raise NighthawkError("Environment is not set")
@@ -37,7 +37,7 @@ def get_environment() -> NaturalExecutionEnvironment:
 
 
 @contextmanager
-def environment(environment_value: NaturalExecutionEnvironment) -> Iterator[None]:
+def environment(environment_value: ExecutionEnvironment) -> Iterator[None]:
     resolved = replace(
         environment_value,
         workspace_root=Path(environment_value.workspace_root).expanduser().resolve(),
@@ -57,23 +57,23 @@ def environment(environment_value: NaturalExecutionEnvironment) -> Iterator[None
 def environment_override(
     *,
     workspace_root: str | Path | None = None,
-    natural_execution_configuration: NaturalExecutionConfiguration | None = None,
-    natural_executor: NaturalExecutor | None = None,
+    execution_configuration: ExecutionConfiguration | None = None,
+    execution_executor: ExecutionExecutor | None = None,
     memory: BaseModel | None = None,
-) -> Iterator[NaturalExecutionEnvironment]:
+) -> Iterator[ExecutionEnvironment]:
     current = get_environment()
 
     next_environment = current
 
-    if natural_execution_configuration is not None:
-        next_environment = replace(next_environment, natural_execution_configuration=natural_execution_configuration)
+    if execution_configuration is not None:
+        next_environment = replace(next_environment, execution_configuration=execution_configuration)
 
     if workspace_root is not None:
         resolved_root = Path(workspace_root).expanduser().resolve()  # type: ignore[arg-type]
         next_environment = replace(next_environment, workspace_root=resolved_root)
 
-    if natural_executor is not None:
-        next_environment = replace(next_environment, natural_executor=natural_executor)
+    if execution_executor is not None:
+        next_environment = replace(next_environment, execution_executor=execution_executor)
 
     if memory is not None:
         next_environment = replace(next_environment, memory=memory)  # type: ignore[arg-type]
