@@ -46,15 +46,15 @@ model_list:
     litellm_params:
       model: openai/gpt-5.2
       api_key: os.environ/OPENAI_API_KEY
-  - model_name: claude-opus-4-5-20251101
+  - model_name: claude-opus-*
     litellm_params:
       model: openai/gpt-5.2
       api_key: os.environ/OPENAI_API_KEY
-  - model_name: claude-sonnet-4-5-20250929
+  - model_name: claude-sonnet-*
     litellm_params:
       model: openai/gpt-5.2
       api_key: os.environ/OPENAI_API_KEY
-  - model_name: claude-haiku-4-5-20251001
+  - model_name: claude-haiku-*
     litellm_params:
       model: openai/gpt-5-mini
       api_key: os.environ/OPENAI_API_KEY

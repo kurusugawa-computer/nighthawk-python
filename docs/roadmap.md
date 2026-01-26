@@ -1,103 +1,67 @@
 # Nighthawk roadmap
 
-Note: This roadmap is intentionally exploratory. It may include items unrelated to the current implementation, and it may contain uncertain or speculative ideas.
+This roadmap is intentionally future-facing.
 
-## Planned items
+- It describes ideas and desired directions.
+- It avoids implementation details.
+- It should not restate what is already implemented today.
 
-### Configuration (future)
+## Planned themes
 
-- Environment variable support (for example `NIGHTHAWK_*`).
-- Optional tool enablement flags.
-- Optional memory model type selection via configuration.
-- Template evaluation context controls.
-- Locals summary options (max length, max frames, value summarization rules).
-- Memory summary options (max length, value summarization rules).
+### Prompt context: locals digest (future)
 
-### Security and sandboxing
+Introduce an optional "locals digest": a very short, high-signal summary of the current evaluation locals.
 
-- Sandboxing for workspace tools (expression evaluation in particular).
+Motivation:
+
+- Reduce prompt size while keeping the most important state salient.
+- Provide a stable place for hosts to inject their own summarization strategy.
+
+Non-goals:
+
+- This is not a security feature.
+- This is not a substitute for structured memory.
+
+### Prompt context improvements (future)
+
+- More explicit control over what appears in prompt context.
+- Better structured rendering for common Python values.
+- Clearer contracts for truncation and prioritization when context budgets are exceeded.
+
+### Template preprocessing controls (future)
+
+- Make it easier for hosts to limit what templates can access.
+- Provide safer conventions for include helpers (path allowlists, traversal protection).
+
+### Security and sandboxing (future)
+
+- Sandboxing for expression evaluation.
 - Restricting template preprocessing evaluation.
-- Path allowlists and traversal protection for include functions.
-- Expand the evaluation environment safely over time (currently keeps `context_globals` minimal).
+- Path allowlists and traversal protection for include helpers.
 
-### Persistence
+### Persistence (future)
 
 - Persisting memory across processes (file-based snapshotting, etc.).
 - Persisting or reconstructing workspace objects (likely partial only).
-
-### Hybrid nesting beyond docstrings
-
-- Executing workflows that embed Python code fences inside natural language documents (a broader hybrid beyond docstrings).
 
 ### Environment propagation (future)
 
 - Propagate environment across tool execution boundaries when tools run in different threads or processes.
 - Define an explicit serialization/propagation mechanism for environment for multi-process execution.
 
-### Skills-style packaging
+### Skills-style packaging (future)
 
 - A directory structure similar to Claude Skills (SKILL.md, REFERENCE.md, scripts/).
-- Document a minimal "Skills" packaging convention for Nighthawk and how it relates to the reverse-Nightjar approach.
+- Document a minimal "Skills" packaging convention for Nighthawk.
 
-### Provider support
+### Provider support (future)
 
 - Support multiple LLM providers beyond OpenAI.
 
-### Environment
-
-- Provide an API for an implicit environment (dynamic scoping) that can be set by host Python code.
-- Workspace root is used for workspace tools and include resolution. Set it by entering an environment, for example: `with nighthawk.environment(nighthawk.ExecutionEnvironment(execution_configuration=cfg.execution_configuration, workspace_root=..., execution_executor=..., memory=...)):`.
-- Use the workspace root for include resolution and any workspace tools.
-
-### CLI (deprioritized)
-
-- A `nighthawk` CLI may be added later, but the preferred approach is that users choose their own Python entry point.
-
-### Implementation consistency
+### Implementation consistency (future)
 
 - Unify Natural DSL binding extraction into a single source of truth.
-  - Today, bindings are extracted in multiple places (AST transform and Natural block parsing).
-  - Target: one binding parser used for both output allowlists and any compile-time type extraction.
-
-### Better Natural DSL
-
-- Dotted-path bindings (e.g., `<user.name>`).
-- Richer binding contracts and typed bindings per binding.
-- Memory patch protocols (diff/patch rather than full replacement).
-- Dotted assignment targets (e.g., `x.y.z`) beyond the current `assign` target grammar.
-
-## Follow-ups
-
-### LLM <-> interpreter interface
-
-The current implementation intentionally keeps a permissive, minimal interface.
-
-As follow-ups, consider alternatives that reduce cost and tighten semantics:
-
-- Patch/diff updates for memory.
-- More explicit, typed boundaries between LLM output, tool-local state, and interpreter-visible variables.
-
-### Include functions (templating)
-
-In `docs/design.md`, template preprocessing is described as evaluating templates in the caller frame environment. Hosts may choose to bind helper functions (for example `include(path)`) into the caller frame locals or globals under a trusted-input threat model.
-
-In future, we expect include helpers to be domain-specific and to resolve paths relative to well-defined locations in the workspace, for example:
-
-- `include_knowledge(path)`
-- `include_skill(path)`
-
-These are expected to enforce appropriate allowlists and traversal protections.
-
-### Memory model shape
-
-The "example" `MemoryModel` fields described in the design doc are examples.
-
-In practice, the memory schema influences the LLM's mental model, so we expect iterative changes based on:
-
-- domain knowledge
-- prompt iteration
-- analysis of LLM behavior
-
+- Strengthen typed binding behavior and reduce duplication across compilation and execution.
 
 ## Open questions
 
