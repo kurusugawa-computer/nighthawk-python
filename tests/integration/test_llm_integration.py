@@ -3,6 +3,18 @@ import os
 import pytest
 
 
+def test_simple():
+    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+        pytest.skip("Integration tests are disabled")
+
+    from pydantic_ai import Agent
+    from pydantic_ai.models.openai import OpenAIResponsesModelSettings
+
+    agent = Agent("openai-responses:gpt-5-nano", instructions="Be concise, reply with one sentence.", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"))
+    result = agent.run_sync('Where does "hello world" come from?')
+    print(result.output)
+
+
 def test_agent_import_and_construction_and_run():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
@@ -61,7 +73,11 @@ def test_natural_block_evaluate_order():
 
     from pathlib import Path
 
+    import logfire
     from pydantic import BaseModel
+
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_pydantic_ai()
 
     import nighthawk as nh
     import nighthawk.execution.executors as execution_executors

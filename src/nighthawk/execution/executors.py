@@ -15,7 +15,7 @@ from .context import ExecutionContext, execution_context_scope
 from .llm import ExecutionFinal
 
 
-class ExecutionAgentProtocol(Protocol):
+class ExecutionAgent(Protocol):
     def run_sync(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
@@ -28,12 +28,13 @@ class ExecutionExecutor(Protocol):
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
+        allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         raise NotImplementedError
 
 
 def make_agent_executor(execution_configuration: ExecutionConfiguration) -> "AgentExecutor":
-    agent: ExecutionAgentProtocol = Agent(
+    agent: ExecutionAgent = Agent(
         model=execution_configuration.model,
         output_type=ExecutionFinal,
         deps_type=ExecutionContext,
@@ -173,7 +174,7 @@ def build_user_prompt(*, processed_natural_program: str, execution_context: Exec
 
 @dataclass(frozen=True)
 class AgentExecutor:
-    agent: ExecutionAgentProtocol
+    agent: ExecutionAgent
 
     def run_natural_block(
         self,
@@ -182,6 +183,7 @@ class AgentExecutor:
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
+        allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         from typing import Literal
 
@@ -195,9 +197,20 @@ class AgentExecutor:
         tools = get_visible_tools()
         toolset = FunctionToolset(tools)
 
-        output_type: object = ExecutionFinal
+        output_type: object
         should_normalize_final = False
-        if not is_in_loop:
+
+        if allowed_effect_types == ():
+
+            class ExecutionFinalNoEffects(BaseModel, extra="forbid"):
+                effect: None = None
+                error: object | None = None
+
+            output_type = ExecutionFinalNoEffects
+            should_normalize_final = True
+        elif not is_in_loop:
+            if allowed_effect_types != ("return",):
+                raise ExecutionError("Internal error: when is_in_loop is false, allowed_effect_types must be () or ('return',)")
 
             class ExecutionEffectNoLoop(BaseModel, extra="forbid"):
                 type: Literal["return"]
@@ -208,6 +221,19 @@ class AgentExecutor:
                 error: object | None = None
 
             output_type = ExecutionFinalNoLoop
+            should_normalize_final = True
+        else:
+            literal = Literal[allowed_effect_types]
+
+            class ExecutionEffectWithAllowedSet(BaseModel, extra="forbid"):
+                type: literal  # type: ignore[valid-type]
+                value_json: str | None = None
+
+            class ExecutionFinalWithAllowedSet(BaseModel, extra="forbid"):
+                effect: ExecutionEffectWithAllowedSet | None = None
+                error: object | None = None
+
+            output_type = ExecutionFinalWithAllowedSet
             should_normalize_final = True
 
         with execution_context_scope(execution_context):

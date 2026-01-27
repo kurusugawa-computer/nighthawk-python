@@ -6,12 +6,75 @@ from dataclasses import dataclass
 from types import FrameType
 from typing import cast
 
+import yaml
 from pydantic import BaseModel, TypeAdapter
 
 from ..errors import ExecutionError
 from .context import ExecutionContext, get_execution_context_stack
 from .environment import ExecutionEnvironment
 from .llm import ExecutionFinal
+
+_EFFECT_TYPES = ("return", "break", "continue")
+
+
+def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tuple[str, ...]]:
+    lines = processed_natural_program.splitlines(keepends=True)
+    if not lines:
+        return processed_natural_program, ()
+
+    first_line = lines[0]
+    if first_line.strip() != "---":
+        return processed_natural_program, ()
+
+    first_line_left_stripped = first_line.lstrip(" \t")
+    indent_prefix = first_line[: len(first_line) - len(first_line_left_stripped)]
+
+    closing_index: int | None = None
+    for i, line in enumerate(lines[1:], start=1):
+        if line == f"{indent_prefix}---\n" or line == f"{indent_prefix}---":
+            closing_index = i
+            break
+
+    if closing_index is None:
+        raise ExecutionError("Frontmatter is missing closing '---' delimiter")
+
+    yaml_text = "".join(lines[1:closing_index])
+    if yaml_text.strip() == "":
+        raise ExecutionError("Frontmatter must not be empty")
+
+    try:
+        loaded = yaml.safe_load(yaml_text)
+    except Exception as e:
+        raise ExecutionError(f"Frontmatter YAML parsing failed: {e}") from e
+
+    if not isinstance(loaded, dict):
+        raise ExecutionError("Frontmatter YAML must be a mapping")
+
+    allowed_keys = {"deny"}
+    unknown_keys = set(loaded.keys()) - allowed_keys
+    if unknown_keys:
+        unknown_key_list = ", ".join(sorted(str(k) for k in unknown_keys))
+        raise ExecutionError(f"Unknown frontmatter keys: {unknown_key_list}")
+
+    if "deny" not in loaded:
+        raise ExecutionError("Frontmatter must include 'deny'")
+
+    deny_value = loaded["deny"]
+    if not isinstance(deny_value, list) or not all(isinstance(item, str) for item in deny_value):
+        raise ExecutionError("Frontmatter 'deny' must be a YAML sequence of strings")
+
+    if len(deny_value) == 0:
+        raise ExecutionError("Frontmatter 'deny' must not be empty")
+
+    denied: list[str] = []
+    for item in deny_value:
+        if item not in _EFFECT_TYPES:
+            raise ExecutionError(f"Unknown denied effect: {item}")
+        if item not in denied:
+            denied.append(item)
+
+    instructions_without_frontmatter = "".join(lines[closing_index + 1 :])
+    return instructions_without_frontmatter, tuple(denied)
 
 
 def evaluate_template(text: str, template_globals: dict[str, object], template_locals: dict[str, object]) -> str:
@@ -79,7 +142,20 @@ class Orchestrator:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
-        processed = evaluate_template(natural_program, python_globals, python_locals)
+        processed_with_frontmatter = evaluate_template(natural_program, python_globals, python_locals)
+
+        processed_without_frontmatter, denied_effect_types = _split_frontmatter_or_none(processed_with_frontmatter)
+
+        if denied_effect_types == ():
+            processed_without_frontmatter = processed_with_frontmatter
+
+        processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
+
+        base_allowed_effect_types = ["return"]
+        if is_in_loop:
+            base_allowed_effect_types.extend(["break", "continue"])
+
+        allowed_effect_types = tuple(effect_type for effect_type in base_allowed_effect_types if effect_type not in denied_effect_types)
 
         execution_globals: dict[str, object] = {"__builtins__": __builtins__}
 
@@ -107,10 +183,11 @@ class Orchestrator:
         effect_value: object | None = None
 
         final, bindings = self.environment.execution_executor.run_natural_block(
-            processed_natural_program=processed,
+            processed_natural_program=processed_without_frontmatter,
             execution_context=execution_context,
             binding_names=binding_names,
             is_in_loop=is_in_loop,
+            allowed_effect_types=allowed_effect_types,
         )
 
         final_typed = final
@@ -127,8 +204,10 @@ class Orchestrator:
 
         effect = final_typed_execution.effect
         if effect is not None:
-            if effect.type in ("break", "continue") and not is_in_loop:
-                raise ExecutionError(f"Effect '{effect.type}' is only allowed inside loops")
+            if effect.type not in allowed_effect_types:
+                deny_message = f"Effect '{effect.type}' is not allowed for this Natural block. Allowed effects: {allowed_effect_types}"
+                raise ExecutionError(deny_message)
+
             if effect.type == "return":
                 effect_value = self._parse_and_coerce_return_value(effect.value_json, return_annotation)
 
