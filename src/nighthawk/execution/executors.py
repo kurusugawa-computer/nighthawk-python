@@ -6,15 +6,17 @@ from string import Template
 from typing import Any, Protocol
 
 from pydantic import BaseModel
+from pydantic_ai import Agent
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..configuration import ExecutionConfiguration
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
 from .llm import ExecutionFinal
 
 
-class ExecutionAgent(Protocol):
-    def run_sync(self, user_prompt: str, /, *, deps: Any = None, toolsets: Any = None, output_type: Any = None, **kwargs: Any) -> Any:
+class ExecutionAgentProtocol(Protocol):
+    def run_sync(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
 
@@ -28,6 +30,16 @@ class ExecutionExecutor(Protocol):
         is_in_loop: bool,
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         raise NotImplementedError
+
+
+def make_agent_executor(execution_configuration: ExecutionConfiguration) -> "AgentExecutor":
+    agent: ExecutionAgentProtocol = Agent(
+        model=execution_configuration.model,
+        output_type=ExecutionFinal,
+        deps_type=ExecutionContext,
+        system_prompt=execution_configuration.prompts.execution_system_prompt_template,
+    )
+    return AgentExecutor(agent)
 
 
 def _approx_max_chars_from_tokens(max_tokens: int) -> int:
@@ -160,57 +172,8 @@ def build_user_prompt(*, processed_natural_program: str, execution_context: Exec
 
 
 @dataclass(frozen=True)
-class StubExecutor:
-    def run_natural_block(
-        self,
-        *,
-        processed_natural_program: str,
-        execution_context: ExecutionContext,
-        binding_names: list[str],
-        is_in_loop: bool,
-    ) -> tuple[ExecutionFinal, dict[str, object]]:
-        _ = execution_context
-        _ = is_in_loop
-
-        from ..errors import ExecutionError
-
-        json_start = processed_natural_program.find("{")
-        if json_start == -1:
-            raise ExecutionError("Execution expected JSON object in stub mode")
-
-        try:
-            data = json.loads(processed_natural_program[json_start:])
-        except json.JSONDecodeError as e:
-            raise ExecutionError(f"Execution expected JSON (stub mode): {e}") from e
-
-        if not isinstance(data, dict):
-            raise ExecutionError("Execution expected JSON object (stub mode)")
-
-        if "execution_final" not in data:
-            raise ExecutionError("Stub execution expected 'execution_final' in envelope")
-        if "bindings" not in data:
-            raise ExecutionError("Stub execution expected 'bindings' in envelope")
-
-        try:
-            execution_final = ExecutionFinal.model_validate(data["execution_final"])
-        except Exception as e:
-            raise ExecutionError(f"Stub execution has invalid execution_final: {e}") from e
-
-        bindings_object = data["bindings"]
-        if not isinstance(bindings_object, dict):
-            raise ExecutionError("Stub execution expected 'bindings' to be an object")
-
-        bindings: dict[str, object] = {}
-        for name in binding_names:
-            if name in bindings_object:
-                bindings[name] = bindings_object[name]
-
-        return execution_final, bindings
-
-
-@dataclass(frozen=True)
 class AgentExecutor:
-    agent: ExecutionAgent
+    agent: ExecutionAgentProtocol
 
     def run_natural_block(
         self,

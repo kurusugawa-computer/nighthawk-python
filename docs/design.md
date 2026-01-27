@@ -301,16 +301,18 @@ Notes:
 - Python locals are committed at Natural block boundaries based on `<:name>` bindings.
 - Memory is updated via tools during reasoning and is not returned in the final JSON.
 
-### 8.5. Stub backend contract
+### 8.5. Stub executor (test-only)
 
-In stub mode, Nighthawk does not call an LLM. Instead, it reads an execution envelope from the Natural program text.
+Nighthawk previously supported a "stub backend" as a library feature. This has been removed.
+
+For tests, this repo includes a test-only `StubExecutor` under `tests/execution/stub_executor.py`. It does not call an LLM. Instead, it reads an execution envelope from the Natural program text.
 
 - Parsing rule: inside the Natural block text, stub mode finds the first `{` character and parses the substring starting there as a JSON object.
 - The JSON object must be an envelope with:
   - `execution_final`: an object matching the ExecutionFinal schema
   - `bindings`: an object mapping names to values
-- Stub mode returns `execution_final` from the envelope.
-- Stub mode returns a bindings object filtered to include only names present in the `<:name>` binding list for that Natural block.
+- The stub executor returns `execution_final` from the envelope.
+- The stub executor returns a bindings object filtered to include only names present in the `<:name>` binding list for that Natural block.
 
 ## 9. Return value
 

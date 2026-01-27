@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 import nighthawk as nh
+from tests.execution.stub_executor import StubExecutor
 
 
 class FakeMemory(BaseModel):
@@ -15,7 +16,7 @@ def test_readme_quick_example_style(tmp_path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )

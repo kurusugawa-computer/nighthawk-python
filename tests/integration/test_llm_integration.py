@@ -13,14 +13,14 @@ def test_agent_import_and_construction_and_run():
 
     from nighthawk.configuration import Configuration, ExecutionConfiguration
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.llm import make_agent
+    from nighthawk.execution.executors import make_agent_executor
 
     configuration = Configuration(
         execution_configuration=ExecutionConfiguration(),
     )
 
     from nighthawk.execution.environment import ExecutionEnvironment
-    from nighthawk.execution.executors import StubExecutor
+    from tests.execution.stub_executor import StubExecutor
 
     class FakeMemory(BaseModel):
         pass
@@ -32,7 +32,8 @@ def test_agent_import_and_construction_and_run():
         workspace_root=Path("."),
     )
 
-    agent = make_agent(environment)
+    agent_executor = make_agent_executor(environment.execution_configuration)
+    agent = agent_executor.agent
 
     system_prompts = agent._system_prompts  # type: ignore[attr-defined]
     assert any("Nighthawk Natural block" in str(p) for p in system_prompts)
@@ -52,3 +53,41 @@ def test_agent_import_and_construction_and_run():
     assert result.output.effect is not None
     assert result.output.effect.type in ("continue", "break", "return")
     assert result.output.error is None
+
+
+def test_natural_block_evaluate_order():
+    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+        pytest.skip("Integration tests are disabled")
+
+    from pathlib import Path
+
+    from pydantic import BaseModel
+
+    import nighthawk as nh
+    import nighthawk.execution.executors as execution_executors
+
+    class FakeMemory(BaseModel):
+        pass
+
+    execution_configuration = nh.ExecutionConfiguration()
+    execution_executor = execution_executors.make_agent_executor(execution_configuration)
+
+    environment = nh.ExecutionEnvironment(
+        execution_configuration=execution_configuration,
+        execution_executor=execution_executor,
+        memory=FakeMemory(),
+        workspace_root=Path("."),
+    )
+
+    with nh.environment(environment):
+
+        @nh.fn
+        def test_function() -> int:
+            v = 10
+            """natural
+            Compute <:v> plus 5 and store.
+            """
+            return v
+
+        result = test_function()
+        assert result == 15

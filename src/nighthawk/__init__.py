@@ -13,7 +13,7 @@ from .execution.environment import (
     environment_override,
     get_environment,
 )
-from .execution.executors import AgentExecutor, StubExecutor
+from .execution.executors import AgentExecutor
 from .execution.orchestrator import Orchestrator
 from .natural.transform import transform_function_source
 from .tools import call_scope, tool
@@ -92,7 +92,6 @@ __all__ = [
     "Configuration",
     "ExecutionConfiguration",
     "ExecutionEnvironment",
-    "StubExecutor",
     "environment",
     "environment_override",
     "fn",

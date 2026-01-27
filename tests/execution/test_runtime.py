@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
+from tests.execution.stub_executor import StubExecutor
 
 
 class RuntimeMemory(BaseModel):
@@ -30,7 +31,7 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -58,7 +59,7 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -84,7 +85,7 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -111,7 +112,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -141,7 +142,7 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -171,7 +172,7 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -198,7 +199,7 @@ def test_template_preprocessing_can_access_module_globals(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -226,7 +227,7 @@ def test_template_preprocessing_locals_shadow_globals(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -256,7 +257,7 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
