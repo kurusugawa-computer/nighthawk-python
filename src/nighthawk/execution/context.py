@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterator
 
 from pydantic import BaseModel
@@ -12,10 +12,11 @@ from ..errors import NighthawkError
 
 @dataclass
 class ExecutionContext:
-    globals: dict[str, object]
-    locals: dict[str, object]
+    execution_globals: dict[str, object]
+    execution_locals: dict[str, object]
     binding_commit_targets: set[str]
     memory: BaseModel | None
+    binding_name_to_type: dict[str, object] = field(default_factory=dict)
 
 
 _execution_context_stack_var: ContextVar[list[ExecutionContext]] = ContextVar(

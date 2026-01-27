@@ -47,9 +47,7 @@ def test_tool_name_conflict_allows_overwrite_true():
 
 def test_tool_defined_in_call_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
 
@@ -95,9 +93,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
 def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
 
@@ -176,15 +172,15 @@ def test_assign_tool_allows_non_binding_local_target():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
-        globals={"__builtins__": __builtins__},
-        locals={},
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={},
         binding_commit_targets=set(),
         memory=None,
     )
 
-    result = assign_tool(execution_context, "<now>", "123", type_hints={})
+    result = assign_tool(execution_context, "now", "123")
     assert result["ok"] is True
-    assert execution_context.locals["now"] == 123
+    assert execution_context.execution_locals["now"] == 123
 
 
 def test_assign_tool_rejects_reserved_local_targets():
@@ -192,46 +188,124 @@ def test_assign_tool_rejects_reserved_local_targets():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
-        globals={"__builtins__": __builtins__},
-        locals={},
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={},
         binding_commit_targets=set(),
         memory=None,
     )
 
-    result_memory = assign_tool(execution_context, "<memory>", "123", type_hints={})
+    result_memory = assign_tool(execution_context, "memory", "123")
     assert result_memory["ok"] is False
-    assert "memory" not in execution_context.locals
+    assert "memory" not in execution_context.execution_locals
 
-    result_private = assign_tool(execution_context, "<__private>", "123", type_hints={})
+    result_private = assign_tool(execution_context, "__private", "123")
     assert result_private["ok"] is False
-    assert "__private" not in execution_context.locals
+    assert "__private" not in execution_context.execution_locals
 
 
-def test_assign_tool_validates_only_when_type_hints_present():
+def test_assign_tool_validates_only_when_type_information_present():
     from nighthawk.execution.context import ExecutionContext
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
-        globals={"__builtins__": __builtins__},
-        locals={},
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={},
         binding_commit_targets=set(),
         memory=None,
     )
 
-    result_no_hint = assign_tool(execution_context, "<count>", "'1'", type_hints={})
-    assert result_no_hint["ok"] is True
-    assert execution_context.locals["count"] == "1"
+    result_no_type = assign_tool(execution_context, "count", "'1'")
+    assert result_no_type["ok"] is True
+    assert execution_context.execution_locals["count"] == "1"
 
-    result_with_hint = assign_tool(execution_context, "<count>", "'2'", type_hints={"count": int})
-    assert result_with_hint["ok"] is True
-    assert execution_context.locals["count"] == 2
+    execution_context.binding_name_to_type["count"] = int
+
+    result_with_type = assign_tool(execution_context, "count", "'2'")
+    assert result_with_type["ok"] is True
+    assert execution_context.execution_locals["count"] == 2
+
+
+def test_assign_tool_rejects_dunder_segments():
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.tools import assign_tool
+
+    execution_context = ExecutionContext(
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={"x": object()},
+        binding_commit_targets=set(),
+        memory=None,
+    )
+
+    result = assign_tool(execution_context, "x.__class__", "123")
+    assert result["ok"] is False
+
+
+def test_assign_tool_is_atomic_on_traversal_failure():
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.tools import assign_tool
+
+    class Root:
+        pass
+
+    root = Root()
+    execution_context = ExecutionContext(
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={"root": root},
+        binding_commit_targets=set(),
+        memory=None,
+    )
+
+    result = assign_tool(execution_context, "root.child.value", "123")
+    assert result["ok"] is False
+    assert not hasattr(root, "child")
+
+
+def test_assign_tool_is_atomic_on_validation_failure_and_never_raises():
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.tools import assign_tool
+
+    execution_context = ExecutionContext(
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={"count": 1},
+        binding_commit_targets=set(),
+        memory=None,
+        binding_name_to_type={"count": int},
+    )
+
+    result = assign_tool(execution_context, "count", "'not an int'")
+    assert result["ok"] is False
+    assert execution_context.execution_locals["count"] == 1
+
+
+def test_assign_tool_validates_memory_fields_and_is_atomic():
+    from pydantic import BaseModel
+
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.tools import assign_tool
+
+    class Memory(BaseModel):
+        n: int = 1
+
+    memory = Memory(n=1)
+    execution_context = ExecutionContext(
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={},
+        binding_commit_targets=set(),
+        memory=memory,
+    )
+
+    ok_result = assign_tool(execution_context, "memory.n", "'2'")
+    assert ok_result["ok"] is True
+    assert memory.n == 2
+
+    bad_result = assign_tool(execution_context, "memory.n", "'not an int'")
+    assert bad_result["ok"] is False
+    assert memory.n == 2
 
 
 def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
 
@@ -290,9 +364,7 @@ def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
 
 def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
 
@@ -351,9 +423,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
 
 def test_environment_override_tool_scope_does_not_leak(tmp_path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
 

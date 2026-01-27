@@ -22,6 +22,14 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
   - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
   - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
+  - Map/Dict naming: For mapping-shaped values, use `(adjective + "_")* + key + "_to_" + value`.
+    - Do not pluralize `value` just because the container is a mapping.
+    - If the value is actually a collection, name it explicitly (for example `_list`, `_set`, `_tuple`).
+    - Existing code that violates this rule may be left as-is until the next time that area is edited; fix naming opportunistically when you touch it.
+    - Examples:
+      - `binding_name_to_type` (binding name -> type object)
+      - `binding_name_to_field_name_to_value` (nested mapping: binding name -> field name -> value)
+      - `binding_types_dict_expression` (a dict-literal expression used to construct a mapping)
   - If existing code violates these naming rules, ask the user how to proceed before doing broad renames across a file or the codebase.
 - Type aliases: Prefer PEP 695 `type` aliases when introducing new type aliases.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, and thorough edits to the entire codebase and documentation over minimal fixes.
@@ -43,7 +51,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - `docs/`: Product/design documentation.
   - `docs/README.md`: User-facing overview.
   - `docs/design.md`: Design specification.
-  - `docs/roadmap.md`: Non implemented items.
+  - `docs/roadmap.md`: Not implemented items.
 - `.agent/`: Agent artifacts.
   - `.agent/execplans/`: ExecPlans (only when explicitly requested).
   - `.agent/PLANS.md`: The ExecPlan format and requirements.

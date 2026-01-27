@@ -42,13 +42,11 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         run_context: RunContext[ExecutionContext],
         target: str,
         expression: str,
-        type_hints: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return assign_tool(
             run_context.deps,
             target,
             expression,
-            type_hints=(type_hints or {}),
         )
 
     def nh_json_dumps(run_context: RunContext[ExecutionContext], value: object) -> str:
@@ -92,7 +90,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                 nh_assign,
                 name="nh_assign",
                 metadata=metadata,
-                description=("Assign a computed value into a local target (<name>) or into memory.<field>. Local targets are any ASCII identifier except reserved names (memory and names starting with '__')."),
+                description=("Assign a computed value to a target in the form name(.field)*. The root name 'memory' is reserved (use memory.<field>...), and any segment starting with '__' is forbidden. The tool returns a diagnostic object and never raises."),
             ),
         ),
         ProvidedToolDefinition(
