@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from .context import ExecutionContext
-from .environment import ExecutionEnvironment
 
 
 class ExecutionEffect(BaseModel, extra="forbid"):
@@ -25,13 +24,3 @@ class ExecutionFinal(BaseModel, extra="forbid"):
 
 
 type ExecutionAgent = Agent[ExecutionContext, ExecutionFinal]
-
-
-def make_agent(environment: ExecutionEnvironment) -> ExecutionAgent:
-    agent: ExecutionAgent = Agent(
-        model=environment.execution_configuration.model,
-        output_type=ExecutionFinal,
-        deps_type=ExecutionContext,
-        system_prompt=(environment.execution_configuration.prompts.execution_system_prompt_template),
-    )
-    return agent

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import NighthawkError
+from tests.execution.stub_executor import StubExecutor
 
 
 class FakeMemory(BaseModel):
@@ -28,7 +29,7 @@ def test_environment_replace_and_getter(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=tmp_path,
         )
@@ -57,7 +58,7 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory,
             workspace_root=root1,
         )
@@ -82,7 +83,7 @@ def test_environment_override_configuration_replaces_memory(tmp_path: Path):
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration_1.execution_configuration,
-            execution_executor=nh.StubExecutor(),
+            execution_executor=StubExecutor(),
             memory=memory1,
             workspace_root=tmp_path,
         )

@@ -11,6 +11,8 @@ from pydantic_ai.tools import Tool
 from ..execution.context import ExecutionContext
 from .assignment import assign_tool, eval_expression
 
+type JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
+
 
 @dataclass(frozen=True)
 class ProvidedToolDefinition:
@@ -49,7 +51,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
             expression,
         )
 
-    def nh_json_dumps(run_context: RunContext[ExecutionContext], value: object) -> str:
+    def nh_json_dumps(run_context: RunContext[ExecutionContext], value: JsonValue) -> str:
         _ = run_context
         try:
             return json.dumps(value, default=repr)
