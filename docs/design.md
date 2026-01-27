@@ -44,8 +44,8 @@ This file intentionally does not maintain a persistent divergence ledger.
 ## 3. Hard constraints
 
 - Python 3.14+ (template preprocessing uses Python 3.14 template strings).
-- Default model: `openai:gpt-5-nano`.
-- Recommended model for quality: `openai:gpt-5.2`.
+- Default model: `openai-responses:gpt-5-nano`.
+- Recommended model for quality: `openai-responses:gpt-5.2`.
 - LLM provider: OpenAI only, integrated via `pydantic-ai-slim[openai]`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
@@ -60,6 +60,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Locals summary: a bounded text rendering of selected values from `execution_locals`, included in the LLM prompt.
 - Memory: a structured state model (Pydantic `BaseModel`) stored and validated by the host.
 - Control-flow effect: a request to the Python interpreter to run `continue`, `break`, or `return`.
+- Frontmatter: optional YAML metadata at the start of a Natural program, delimited by `---` lines.
 
 ## 5. User-facing API
 
@@ -76,8 +77,8 @@ This file intentionally does not maintain a persistent divergence ledger.
   - `execution_configuration`: configuration for execution.
 
 - `ExecutionConfiguration`
-  - `model`: Model identifier in `provider:model` format. Default: `openai:gpt-5-nano`.
-    - Examples: `openai:gpt-5.2`, `openai:gpt-5-nano`.
+  - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
+    - Examples: `openai-responses:gpt-5.2`, `openai-responses:gpt-5-nano`.
   - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. Default: `o200k_base`.
   - `prompts`: prompt templates used for execution.
     - `execution_system_prompt_template`: system prompt template that defines the execution protocol.
@@ -300,6 +301,40 @@ Notes:
 - `break` and `continue` effects are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
 - Python locals are committed at Natural block boundaries based on `<:name>` bindings.
 - Memory is updated via tools during reasoning and is not returned in the final JSON.
+
+Frontmatter (optional):
+
+A Natural program may start with YAML frontmatter. Frontmatter is recognized only if it is the first non-empty content of the program (it must start on the first line of the Natural program with `---`).
+
+Syntax:
+
+- The frontmatter begins with a line containing only `---`.
+- It ends with the next line containing only `---`.
+- The YAML content between the delimiters must be a mapping.
+
+Directive: `deny`
+
+- `deny` is required when frontmatter is present.
+- `deny` must be a YAML sequence of strings.
+- Unknown keys are errors.
+- Unknown effect names are errors.
+
+Allowed effect names in `deny` are:
+
+- `return`
+- `break`
+- `continue`
+
+Semantics:
+
+- Default allowed effects for a Natural block are:
+  - `return` (always)
+  - plus `break` and `continue` only if the block is syntactically inside a Python loop.
+- If frontmatter denies an effect, and the model returns that effect, the host raises an `ExecutionError`.
+
+Implementation note:
+
+- Frontmatter is stripped from the program text before it is placed into the model-facing prompt.
 
 ### 8.5. Stub executor (test-only)
 

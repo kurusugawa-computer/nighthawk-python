@@ -101,7 +101,7 @@ def _validate_model_identifier(model: str) -> None:
 
 @dataclass(frozen=True)
 class ExecutionConfiguration:
-    model: str = "openai:gpt-5-nano"
+    model: str = "openai-responses:gpt-5-nano"
 
     def __post_init__(self) -> None:
         _validate_model_identifier(self.model)

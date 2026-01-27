@@ -39,11 +39,12 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
 
         @nh.fn
         def f(x: int):
+            _ = x
+            result = 0
             """natural
             <:result>
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
-            result = 0
             return result
 
         assert f(10) == 11
@@ -121,7 +122,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
         @nh.fn
         def f() -> int:
             total = 0
-            for i in range(5):
+            for _ in range(5):
                 total += 1
                 """natural
                 {{"execution_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
@@ -151,7 +152,7 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
         @nh.fn
         def f() -> int:
             total = 0
-            for i in range(5):
+            for _ in range(5):
                 total += 1
                 """natural
                 {{"execution_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
@@ -217,6 +218,70 @@ def test_template_preprocessing_can_access_module_globals(tmp_path: Path):
         assert f() == 7
 
 
+def test_frontmatter_deny_return_rejects_return_effect(tmp_path: Path):
+    create_workspace_directories(tmp_path)
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=StubExecutor(),
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f() -> int:
+            """natural
+            ---
+            deny:
+              - return
+            ---
+            {{"execution_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "bindings": {{}}}}
+            """
+            return 0
+
+        with pytest.raises(ExecutionError, match="not allowed"):
+            f()
+
+
+def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
+    create_workspace_directories(tmp_path)
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=StubExecutor(),
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f(x: int):
+            """natural
+            ---
+            deny:
+              - return
+            ---
+            <:result>
+            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
+            """
+            _ = x
+            result = 0
+            return result
+
+        assert f(10) == 11
+
+
 def test_template_preprocessing_locals_shadow_globals(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
@@ -247,6 +312,41 @@ def test_template_preprocessing_locals_shadow_globals(tmp_path: Path):
         assert f() == 2
 
 
+def test_frontmatter_deny_continue_in_loop_rejects_continue_effect(tmp_path: Path):
+    create_workspace_directories(tmp_path)
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=StubExecutor(),
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f() -> int:
+            total = 0
+            for _ in range(5):
+                total += 1
+                """natural
+                ---
+                deny:
+                  - continue
+                ---
+                {{"execution_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+                """
+                total += 100
+            return total
+
+        with pytest.raises(ExecutionError, match="not allowed"):
+            f()
+
+
 def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
@@ -265,11 +365,12 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
 
         @nh.fn
         def f(x: int):
-            result = 0
             """natural
             <:result>
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x * 2}}}}}
             """
+            _ = x
+            result = 0
             return result
 
         assert f(6) == 12
@@ -289,6 +390,7 @@ def test_compile_time_type_information_is_available_to_assign_tool(tmp_path: Pat
 
             assert deps is not None
             _ = user_prompt
+            _ = kwargs
 
             assign_result = assign_tool(deps, "count", "'2'")
             assert assign_result["ok"] is True
@@ -389,6 +491,8 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             from nighthawk.tools import assign_tool
 
             assert deps is not None
+            _ = user_prompt
+            _ = kwargs
             assign_tool(deps, "result", "x + 1")
 
             # Prove that a normal Python function can read ExecutionContext via ContextVar
@@ -426,6 +530,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             <:result>
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
+            _ = x
             result = 0
             return result
 

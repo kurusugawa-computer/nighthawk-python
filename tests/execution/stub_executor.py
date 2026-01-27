@@ -29,9 +29,11 @@ class StubExecutor:
         execution_context: object,
         binding_names: list[str],
         is_in_loop: bool,
+        allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         _ = execution_context
         _ = is_in_loop
+        _ = allowed_effect_types
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:

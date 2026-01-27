@@ -111,21 +111,21 @@ def test_environment_override_requires_existing_environment(tmp_path: Path):
 
 def test_execution_configuration_model_default_applies():
     configuration = nh.ExecutionConfiguration()
-    assert configuration.model == "openai:gpt-5-nano"
+    assert configuration.model == "openai-responses:gpt-5-nano"
 
 
 def test_execution_configuration_model_requires_provider_model_format():
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model="openai")
+        nh.ExecutionConfiguration(model="openai-responses")
 
     with pytest.raises(ValueError, match="provider:model"):
         nh.ExecutionConfiguration(model=":gpt-5-nano")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model="openai:")
+        nh.ExecutionConfiguration(model="openai-responses:")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model="openai:gpt-5-nano:extra")
+        nh.ExecutionConfiguration(model="openai-responses:gpt-5-nano:extra")
 
 
 def test_decorated_function_requires_environment():

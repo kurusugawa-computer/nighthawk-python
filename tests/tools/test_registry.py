@@ -59,6 +59,9 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
             from nighthawk.execution.llm import ExecutionFinal
 
+            _ = user_prompt
+            _ = deps
+            _ = kwargs
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
@@ -78,6 +81,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
         def f() -> None:
             @nh.tool(name="test_call_scoped")
             def test_call_scoped(run_context) -> str:  # type: ignore[no-untyped-def]
+                _ = run_context
                 return "ok"
 
             """natural
@@ -108,6 +112,9 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
             from nighthawk.execution.llm import ExecutionFinal
 
+            _ = user_prompt
+            _ = deps
+            _ = kwargs
             assert toolsets is not None
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
@@ -133,6 +140,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
 
             @nh.tool(name="test_late_global", overwrite=True)
             def test_late_global(run_context) -> str:  # type: ignore[no-untyped-def]
+                _ = run_context
                 return "late"
 
             """natural
@@ -322,6 +330,7 @@ def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
 
             self.seen_prompts.append(user_prompt)
             assert deps is not None
+            _ = kwargs
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
@@ -379,6 +388,9 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
             from nighthawk.execution.llm import ExecutionFinal
 
+            _ = user_prompt
+            _ = deps
+            _ = kwargs
             assert toolsets is not None
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
@@ -402,6 +414,8 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
         def test_environment_scoped(run_context) -> str:  # type: ignore[no-untyped-def]
             _ = run_context
             return "ok"
+
+        _ = test_environment_scoped
 
         @nh.fn
         def f() -> None:
@@ -435,6 +449,9 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
             from nighthawk.execution.llm import ExecutionFinal
 
+            _ = user_prompt
+            _ = deps
+            _ = kwargs
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
     agent = FakeAgent()
@@ -455,6 +472,8 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
             _ = run_context
             return "outer"
 
+        _ = test_env_outer
+
         names_outer = {t.name for t in get_visible_tools()}
         assert "test_env_outer" in names_outer
         assert "test_env_inner" not in names_outer
@@ -465,6 +484,8 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
             def test_env_inner(run_context) -> str:  # type: ignore[no-untyped-def]
                 _ = run_context
                 return "inner"
+
+            _ = test_env_inner
 
             names_inner = {t.name for t in get_visible_tools()}
             assert "test_env_outer" in names_inner

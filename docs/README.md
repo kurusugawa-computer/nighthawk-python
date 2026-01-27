@@ -12,8 +12,8 @@ References:
 
 - This repo contains the library implementation, tests, and design docs.
 - Targets OpenAI only (via `pydantic-ai-slim[openai]`).
-- Default model: `openai:gpt-5-nano`.
-- Recommended model: `openai:gpt-5.2`.
+- Default model: `openai-responses:gpt-5-nano`.
+- Recommended model: `openai-responses:gpt-5.2`.
 - Supported Python version: 3.14+ (by design).
 
 ## Documentation
