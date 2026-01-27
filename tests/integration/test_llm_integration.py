@@ -16,9 +16,7 @@ def test_agent_import_and_construction_and_run():
     from nighthawk.execution.llm import make_agent
 
     configuration = Configuration(
-        execution_configuration=ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=ExecutionConfiguration(),
     )
 
     from nighthawk.execution.environment import ExecutionEnvironment
@@ -40,8 +38,8 @@ def test_agent_import_and_construction_and_run():
     assert any("Nighthawk Natural block" in str(p) for p in system_prompts)
 
     tool_context = ExecutionContext(
-        globals={"__builtins__": __builtins__},
-        locals={},
+        execution_globals={"__builtins__": __builtins__},
+        execution_locals={},
         binding_commit_targets=set(),
         memory=None,
     )

@@ -26,6 +26,7 @@ class _OrchestratorProxy:
         self,
         natural_program: str,
         output_names: list[str],
+        binding_name_to_type: dict[str, object],
         return_annotation: object,
         is_in_loop: bool,
     ) -> dict[str, object]:
@@ -39,6 +40,7 @@ class _OrchestratorProxy:
         return orchestrator.run_natural_block(
             natural_program,
             output_names,
+            binding_name_to_type,
             return_annotation,
             is_in_loop,
             caller_frame=caller_frame,

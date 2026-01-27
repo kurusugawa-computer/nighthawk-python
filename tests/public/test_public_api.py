@@ -21,9 +21,7 @@ class FakeMemoryV2(BaseModel):
 
 def test_environment_replace_and_getter(tmp_path: Path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemoryV1()
 
@@ -52,9 +50,7 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
     root2.mkdir()
 
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
 
@@ -76,14 +72,10 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
 
 def test_environment_override_configuration_replaces_memory(tmp_path: Path):
     configuration_1 = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     configuration_2 = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory1 = FakeMemoryV1()
 
@@ -116,6 +108,25 @@ def test_environment_override_requires_existing_environment(tmp_path: Path):
             pass
 
 
+def test_execution_configuration_model_default_applies():
+    configuration = nh.ExecutionConfiguration()
+    assert configuration.model == "openai:gpt-5-nano"
+
+
+def test_execution_configuration_model_requires_provider_model_format():
+    with pytest.raises(ValueError, match="provider:model"):
+        nh.ExecutionConfiguration(model="openai")
+
+    with pytest.raises(ValueError, match="provider:model"):
+        nh.ExecutionConfiguration(model=":gpt-5-nano")
+
+    with pytest.raises(ValueError, match="provider:model"):
+        nh.ExecutionConfiguration(model="openai:")
+
+    with pytest.raises(ValueError, match="provider:model"):
+        nh.ExecutionConfiguration(model="openai:gpt-5-nano:extra")
+
+
 def test_decorated_function_requires_environment():
     @nh.fn
     def f(x: int):
@@ -124,6 +135,7 @@ def test_decorated_function_requires_environment():
         {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
         """
         result = 0
+        _ = x
         return result
 
     with pytest.raises(NighthawkError):

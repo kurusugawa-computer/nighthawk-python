@@ -14,14 +14,18 @@ from .environment import ExecutionEnvironment
 from .llm import ExecutionFinal
 
 
-def evaluate_template(text: str, template_locals: dict[str, object]) -> str:
+def evaluate_template(text: str, template_globals: dict[str, object], template_locals: dict[str, object]) -> str:
     """Evaluate a Python 3.14 template string from trusted input.
 
     This intentionally allows function execution inside templates under the trusted-input model.
     """
 
+    globals_for_eval = dict(template_globals)
+    if "__builtins__" not in globals_for_eval:
+        globals_for_eval["__builtins__"] = __builtins__
+
     try:
-        template_object = eval("t" + repr(text), {"__builtins__": __builtins__}, template_locals)
+        template_object = eval("t" + repr(text), globals_for_eval, template_locals)
     except Exception as e:
         raise ExecutionError(f"Template evaluation failed: {e}") from e
 
@@ -66,14 +70,16 @@ class Orchestrator:
         self,
         natural_program: str,
         binding_names: list[str],
+        binding_name_to_type: dict[str, object],
         return_annotation: object,
         is_in_loop: bool,
         *,
         caller_frame: FrameType,
     ) -> dict[str, object]:
         python_locals = caller_frame.f_locals
+        python_globals = caller_frame.f_globals
 
-        processed = evaluate_template(natural_program, python_locals)
+        processed = evaluate_template(natural_program, python_globals, python_locals)
 
         execution_globals: dict[str, object] = {"__builtins__": __builtins__}
 
@@ -81,7 +87,7 @@ class Orchestrator:
 
         execution_context_stack = get_execution_context_stack()
         if execution_context_stack:
-            execution_locals.update(execution_context_stack[-1].locals)
+            execution_locals.update(execution_context_stack[-1].execution_locals)
 
         execution_locals.update(python_locals)
 
@@ -90,10 +96,11 @@ class Orchestrator:
 
         binding_commit_targets = set(binding_names)
         execution_context = ExecutionContext(
-            globals=execution_globals,
-            locals=execution_locals,
+            execution_globals=execution_globals,
+            execution_locals=execution_locals,
             binding_commit_targets=binding_commit_targets,
             memory=self.environment.memory,
+            binding_name_to_type=binding_name_to_type,
         )
 
         final: object

@@ -46,7 +46,7 @@ def _should_mask_name(name: str, *, name_substrings_to_mask: tuple[str, ...]) ->
     return any(substring in lowered for substring in name_substrings_to_mask)
 
 
-def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, str]:
+def _render_locals_section(execution_context: ExecutionContext) -> str:
     from .environment import get_environment
 
     configuration = get_environment().execution_configuration
@@ -63,7 +63,7 @@ def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, st
     shown_items = 0
 
     eligible_names: list[str] = []
-    for name in sorted(execution_context.locals.keys()):
+    for name in sorted(execution_context.execution_locals.keys()):
         if name.startswith("__"):
             continue
         if name == "memory":
@@ -80,7 +80,7 @@ def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, st
             rendered = f"{name} = {redaction.masked_value_marker}"
         else:
             try:
-                value = execution_context.locals[name]
+                value = execution_context.execution_locals[name]
             except Exception:
                 continue
             rendered_value = _summarize_for_prompt(value, max_chars=value_max_chars)
@@ -98,7 +98,7 @@ def _render_locals_section(execution_context: ExecutionContext) -> tuple[str, st
     if truncated:
         lines.append("...<truncated>")
 
-    return "\n".join(lines), ""  # digest is empty in v1
+    return "\n".join(lines)
 
 
 def _render_memory_section(execution_context: ExecutionContext) -> str:
@@ -148,13 +148,12 @@ def build_user_prompt(*, processed_natural_program: str, execution_context: Exec
     configuration = get_environment().execution_configuration
     template_text = configuration.prompts.execution_user_prompt_template
 
-    locals_text, locals_digest_text = _render_locals_section(execution_context)
+    locals_text = _render_locals_section(execution_context)
     memory_text = _render_memory_section(execution_context)
 
     template = Template(template_text)
     return template.substitute(
         program=processed_natural_program,
-        locals_digest=locals_digest_text,
         locals=locals_text,
         memory=memory_text,
     )
@@ -279,7 +278,7 @@ class AgentExecutor:
 
         bindings: dict[str, object] = {}
         for name in binding_names:
-            if name in execution_context.locals:
-                bindings[name] = execution_context.locals[name]
+            if name in execution_context.execution_locals:
+                bindings[name] = execution_context.execution_locals[name]
 
         return final, bindings

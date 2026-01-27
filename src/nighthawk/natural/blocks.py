@@ -20,23 +20,13 @@ class NaturalBlock:
 
 
 def is_natural_sentinel(text: str) -> bool:
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines) and lines[i] == "":
-        i += 1
-    if i >= len(lines):
-        return False
-    return lines[i] == "natural"
+    return text.startswith("natural\n")
 
 
 def extract_program(text: str) -> str:
     if not is_natural_sentinel(text):
         raise NaturalParseError("Missing natural sentinel")
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines) and lines[i] == "":
-        i += 1
-    return "\n".join(lines[i + 1 :])
+    return text.removeprefix("natural\n")
 
 
 def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:

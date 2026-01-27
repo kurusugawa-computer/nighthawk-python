@@ -9,9 +9,7 @@ class FakeMemory(BaseModel):
 
 def test_readme_quick_example_style(tmp_path):
     configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(
-            model="openai:gpt-5-nano",
-        ),
+        execution_configuration=nh.ExecutionConfiguration(),
     )
     memory = FakeMemory()
     with nh.environment(

@@ -10,10 +10,12 @@ class NaturalTransformer(ast.NodeTransformer):
     def __init__(self) -> None:
         super().__init__()
         self._return_annotation_stack: list[ast.expr | None] = []
+        self._binding_name_to_type_expression_stack: list[dict[str, ast.expr]] = []
         self._loop_depth = 0
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
         self._return_annotation_stack.append(node.returns)
+        self._binding_name_to_type_expression_stack.append(self._collect_binding_name_to_type_expression(node))
         saved_loop_depth = self._loop_depth
         self._loop_depth = 0
         try:
@@ -25,9 +27,11 @@ class NaturalTransformer(ast.NodeTransformer):
                         program = extract_program(doc)
                         _input_bindings, output_bindings = extract_bindings(program)
                         return_annotation = self._current_return_annotation_expression()
+                        binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                         injected = build_runtime_call_and_assignments(
                             program,
                             output_bindings,
+                            binding_types_dict_expression,
                             return_annotation,
                             is_in_loop=self._loop_depth > 0,
                         )
@@ -65,6 +69,7 @@ class NaturalTransformer(ast.NodeTransformer):
             node = self.generic_visit(node)  # type: ignore[assignment]
             return node
         finally:
+            self._binding_name_to_type_expression_stack.pop()
             self._return_annotation_stack.pop()
             self._loop_depth = saved_loop_depth
 
@@ -98,10 +103,12 @@ class NaturalTransformer(ast.NodeTransformer):
                 program = extract_program(text)
                 _input_bindings, output_bindings = extract_bindings(program)
                 return_annotation = self._current_return_annotation_expression()
+                binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                 is_in_loop = self._loop_depth > 0
                 statements = build_runtime_call_and_assignments(
                     program,
                     output_bindings,
+                    binding_types_dict_expression,
                     return_annotation,
                     is_in_loop=is_in_loop,
                 )
@@ -116,10 +123,46 @@ class NaturalTransformer(ast.NodeTransformer):
             return ast.Name(id="object", ctx=ast.Load())
         return annotation
 
+    def _collect_binding_name_to_type_expression(self, node: ast.FunctionDef) -> dict[str, ast.expr]:
+        binding_name_to_type_expression: dict[str, ast.expr] = {}
+
+        for argument in [
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        ]:
+            if argument.annotation is not None:
+                binding_name_to_type_expression[argument.arg] = argument.annotation
+
+        for statement in node.body:
+            if isinstance(statement, ast.AnnAssign):
+                target = statement.target
+                if isinstance(target, ast.Name):
+                    binding_name_to_type_expression[target.id] = statement.annotation
+
+        return binding_name_to_type_expression
+
+    def _current_binding_types_dict_expression(self, binding_names: tuple[str, ...]) -> ast.expr:
+        if not binding_names:
+            return ast.Dict(keys=[], values=[])
+
+        binding_name_to_type_expression: dict[str, ast.expr] = {}
+        if self._binding_name_to_type_expression_stack:
+            binding_name_to_type_expression = self._binding_name_to_type_expression_stack[-1]
+
+        keys: list[ast.expr | None] = []
+        values: list[ast.expr] = []
+        for name in binding_names:
+            keys.append(ast.Constant(name))
+            values.append(binding_name_to_type_expression.get(name, ast.Name(id="object", ctx=ast.Load())))
+
+        return ast.Dict(keys=keys, values=values)
+
 
 def build_runtime_call_and_assignments(
     program: str,
     binding_names: tuple[str, ...],
+    binding_types_dict_expression: ast.expr,
     return_annotation: ast.expr,
     *,
     is_in_loop: bool,
@@ -134,6 +177,7 @@ def build_runtime_call_and_assignments(
         args=[
             ast.Constant(program),
             ast.List(elts=[ast.Constant(name) for name in binding_names], ctx=ast.Load()),
+            binding_types_dict_expression,
             return_annotation,
             ast.Constant(is_in_loop),
         ],

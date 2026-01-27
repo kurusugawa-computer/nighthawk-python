@@ -12,13 +12,14 @@ References:
 
 - This repo contains the library implementation, tests, and design docs.
 - Targets OpenAI only (via `pydantic-ai-slim[openai]`).
-- Default model: `gpt-5.2`.
+- Default model: `openai:gpt-5-nano`.
+- Recommended model: `openai:gpt-5.2`.
 - Supported Python version: 3.14+ (by design).
 
 ## Documentation
 
 - Design spec (canonical): `docs/design.md`
-  - If the implementation differs from the spec, the difference must be recorded in `docs/design.md` under `Known gaps`.
+  - The implementation in `src/nighthawk/` is expected to match the spec.
 - Roadmap (future only): `docs/roadmap.md`
 
 ## Safety model
@@ -29,7 +30,7 @@ Do not feed user-generated content (web forms, chat logs, CLI input, database te
 
 ## Quick example (concept)
 
-This is the intended style. See `docs/design.md` for the specification and `Known gaps` for any implementation mismatches.
+This is the intended style. See `docs/design.md` for the specification.
 
 ```py
 import nighthawk as nh
