@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import json
 from dataclasses import dataclass
 from types import FrameType
 from typing import cast
@@ -12,9 +11,7 @@ from pydantic import BaseModel, TypeAdapter
 from ..errors import ExecutionError
 from .context import ExecutionContext, get_execution_context_stack
 from .environment import ExecutionEnvironment
-from .llm import ExecutionFinal
-
-_EFFECT_TYPES = ("return", "break", "continue")
+from .llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
 
 def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tuple[str, ...]]:
@@ -68,7 +65,7 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
 
     denied: list[str] = []
     for item in deny_value:
-        if item not in _EFFECT_TYPES:
+        if item not in EXECUTION_EFFECT_TYPES:
             raise ExecutionError(f"Unknown denied effect: {item}")
         if item not in denied:
             denied.append(item)
@@ -114,20 +111,57 @@ class Orchestrator:
     def from_environment(cls, environment: ExecutionEnvironment) -> "Orchestrator":
         return cls(environment=environment)
 
-    def _parse_and_coerce_return_value(self, value_json: str | None, return_annotation: object) -> object:
-        if value_json is None:
-            parsed = None
-        else:
-            try:
-                parsed = json.loads(value_json)
-            except json.JSONDecodeError as e:
-                raise ExecutionError(f"Invalid return value_json: {e}") from e
-
+    def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
         try:
             adapted = TypeAdapter(return_annotation)
-            return adapted.validate_python(parsed)
+            return adapted.validate_python(value)
         except Exception as e:
             raise ExecutionError(f"Return value validation failed: {e}") from e
+
+    def _resolve_reference_path(self, execution_context: ExecutionContext, source_path: str) -> object:
+        parts = source_path.split(".")
+        if any(part == "" for part in parts):
+            raise ExecutionError(f"Invalid source_path: {source_path!r}")
+
+        for part in parts:
+            try:
+                part.encode("ascii")
+            except UnicodeEncodeError:
+                raise ExecutionError(f"Invalid source_path segment (non-ASCII): {part!r}")
+            if not part.isidentifier():
+                raise ExecutionError(f"Invalid source_path segment (not identifier): {part!r}")
+            if part.startswith("__"):
+                raise ExecutionError(f"Invalid source_path segment (dunder): {part!r}")
+
+        root_name = parts[0]
+        if root_name == "memory":
+            if execution_context.memory is None:
+                raise ExecutionError("Memory is not enabled")
+            current: object = execution_context.memory
+            remaining = parts[1:]
+        else:
+            if root_name not in execution_context.execution_locals:
+                raise ExecutionError(f"Unknown root name in source_path: {root_name}")
+            current = execution_context.execution_locals[root_name]
+            remaining = parts[1:]
+
+        for part in remaining:
+            try:
+                current = getattr(current, part)
+                continue
+            except Exception:
+                pass
+
+            if isinstance(current, dict):
+                try:
+                    current = current[part]
+                    continue
+                except Exception:
+                    pass
+
+            raise ExecutionError(f"Failed to resolve source_path segment {part!r} in {source_path!r}")
+
+        return current
 
     def run_natural_block(
         self,
@@ -190,6 +224,8 @@ class Orchestrator:
             allowed_effect_types=allowed_effect_types,
         )
 
+        execution_context.execution_locals.update(bindings)
+
         final_typed = final
         if not isinstance(final_typed, ExecutionFinal):
             if isinstance(final_typed, BaseModel):
@@ -209,7 +245,11 @@ class Orchestrator:
                 raise ExecutionError(deny_message)
 
             if effect.type == "return":
-                effect_value = self._parse_and_coerce_return_value(effect.value_json, return_annotation)
+                if effect.source_path is None:
+                    effect_value = self._parse_and_coerce_return_value(None, return_annotation)
+                else:
+                    resolved = self._resolve_reference_path(execution_context, effect.source_path)
+                    effect_value = self._parse_and_coerce_return_value(resolved, return_annotation)
 
         return {
             "execution_final": final_typed,

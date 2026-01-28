@@ -50,7 +50,7 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
         assert f(10) == 11
 
 
-def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
+def test_stub_return_effect_returns_value_from_source_path(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
@@ -69,14 +69,16 @@ def test_stub_return_effect_parses_and_coerces_value_json(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"execution_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "bindings": {{}}}}
+            <:result>
+            {{"execution_final": {{"effect": {{"type": "return", "source_path": "result"}}, "error": null}}, "bindings": {{"result": 11}}}}
             """
-            return 0
+            result = 0
+            return result
 
         assert f() == 11
 
 
-def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
+def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
@@ -95,7 +97,36 @@ def test_stub_return_effect_invalid_value_json_raises(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"execution_final": {{"effect": {{"type": "return", "value_json": "\\\"not an int\\\""}}, "error": null}}, "bindings": {{}}}}
+            <:result>
+            {{"execution_final": {{"effect": {{"type": "return", "source_path": "result"}}, "error": null}}, "bindings": {{"result": "not an int"}}}}
+            """
+            result = 0
+            return result
+
+        with pytest.raises(ExecutionError):
+            f()
+
+
+def test_stub_return_effect_invalid_source_path_raises(tmp_path: Path):
+    create_workspace_directories(tmp_path)
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=StubExecutor(),
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f() -> int:
+            """natural
+            {{"execution_final": {{"effect": {{"type": "return", "source_path": "missing"}}, "error": null}}, "bindings": {{}}}}
             """
             return 0
 
@@ -125,7 +156,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
             for _ in range(5):
                 total += 1
                 """natural
-                {{"execution_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+                {{"execution_final": {{"effect": {{"type": "continue", "source_path": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -155,7 +186,7 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
             for _ in range(5):
                 total += 1
                 """natural
-                {{"execution_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+                {{"execution_final": {{"effect": {{"type": "break", "source_path": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -182,7 +213,7 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {{"execution_final": {{"effect": {{"type": "break", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": {{"type": "break", "source_path": null}}, "error": null}}, "bindings": {{}}}}
             """
             return 1
 
@@ -241,7 +272,7 @@ def test_frontmatter_deny_return_rejects_return_effect(tmp_path: Path):
             deny:
               - return
             ---
-            {{"execution_final": {{"effect": {{"type": "return", "value_json": "11"}}, "error": null}}, "bindings": {{}}}}
+            {{"execution_final": {{"effect": {{"type": "return", "source_path": null}}, "error": null}}, "bindings": {{}}}}
             """
             return 0
 
@@ -338,7 +369,7 @@ def test_frontmatter_deny_continue_in_loop_rejects_continue_effect(tmp_path: Pat
                 deny:
                   - continue
                 ---
-                {{"execution_final": {{"effect": {{"type": "continue", "value_json": null}}, "error": null}}, "bindings": {{}}}}
+                {{"execution_final": {{"effect": {{"type": "continue", "source_path": null}}, "error": null}}, "bindings": {{}}}}
                 """
                 total += 100
             return total
@@ -504,7 +535,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
 
             return FakeRunResult(
                 ExecutionFinal(
-                    effect=ExecutionEffect(type="return", value_json="11"),
+                    effect=ExecutionEffect(type="return", source_path="result"),
                     error=None,
                 )
             )

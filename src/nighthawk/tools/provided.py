@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import builtins
-import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,9 +8,7 @@ from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 from ..execution.context import ExecutionContext
-from .assignment import assign_tool, eval_expression
-
-type JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
+from .assignment import assign_tool, eval_expression, serialize_value_to_json_text
 
 
 @dataclass(frozen=True)
@@ -35,28 +32,18 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
 
     def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> str:
         value = eval_expression(run_context.deps, expression)
-        try:
-            return json.dumps(value, default=repr)
-        except Exception:
-            return json.dumps(repr(value))
+        return serialize_value_to_json_text(value)
 
     def nh_assign(
         run_context: RunContext[ExecutionContext],
-        target: str,
+        target_path: str,
         expression: str,
     ) -> dict[str, Any]:
         return assign_tool(
             run_context.deps,
-            target,
+            target_path,
             expression,
         )
-
-    def nh_json_dumps(run_context: RunContext[ExecutionContext], value: JsonValue) -> str:
-        _ = run_context
-        try:
-            return json.dumps(value, default=repr)
-        except Exception:
-            return json.dumps(repr(value))
 
     return [
         ProvidedToolDefinition(
@@ -93,15 +80,6 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                 name="nh_assign",
                 metadata=metadata,
                 description=("Assign a computed value to a target in the form name(.field)*. The root name 'memory' is reserved (use memory.<field>...), and any segment starting with '__' is forbidden. The tool returns a diagnostic object and never raises."),
-            ),
-        ),
-        ProvidedToolDefinition(
-            name="nh_json_dumps",
-            tool=Tool(
-                nh_json_dumps,
-                name="nh_json_dumps",
-                metadata=metadata,
-                description=("Serialize a Python value to JSON text using json.dumps(value, default=repr). This is a pure helper and does not access the interpreter context."),
             ),
         ),
     ]
