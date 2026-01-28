@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 
 from nighthawk.errors import ExecutionError
-from nighthawk.execution.llm import ExecutionFinal
+from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class StubExecutor:
         execution_context: object,
         binding_names: list[str],
         is_in_loop: bool,
-        allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+        allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         _ = execution_context
         _ = is_in_loop

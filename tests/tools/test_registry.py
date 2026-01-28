@@ -163,7 +163,6 @@ def test_builtin_tools_are_always_visible():
     assert "nh_help" in names
     assert "nh_eval" in names
     assert "nh_assign" in names
-    assert "nh_json_dumps" in names
 
 
 def test_builtin_tool_name_conflict_requires_overwrite():

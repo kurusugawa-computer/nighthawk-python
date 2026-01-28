@@ -16,6 +16,7 @@ class ExecutionContext:
     execution_locals: dict[str, object]
     binding_commit_targets: set[str]
     memory: BaseModel | None
+    execution_locals_revision: int = 0
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
 
 

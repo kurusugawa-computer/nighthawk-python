@@ -228,11 +228,11 @@ Read tools:
 
 Write tool:
 
-- `nh_assign(target: str, expression: str) -> object`
+- `nh_assign(target_path: str, expression: str) -> object`
 
 Target grammar:
 
-- `target := name ("." field)*`
+- `target_path := name ("." field)*`
 - `name` and `field` are ASCII Python identifiers.
 
 Reserved targets:
@@ -244,12 +244,12 @@ Reserved targets:
 Semantics of `nh_assign`:
 
 - Evaluate `expression` as a Python expression using `execution_globals` and `execution_locals`.
-- If `target` is a bare `name`:
+- If `target_path` is a bare `name`:
   - Assign into `execution_locals[name]`.
   - Validation:
     - If extracted type information is available for the corresponding `<:name>` binding, validate/coerce to that type.
     - Otherwise, assign without validation.
-- If `target` is dotted (`name.field...`):
+- If `target_path` is dotted (`name.field...`):
   - Resolve the root object from `execution_locals[name]`.
   - Traverse attributes for each intermediate segment.
   - Assign using attribute assignment on the final segment.
@@ -282,10 +282,14 @@ At the end of each execution, the LLM returns a final JSON object.
   - Control-flow effect requested by the Natural block.
   - Keys:
     - `type`: string, one of `continue`, `break`, `return`
-    - `value_json`: optional string
-      - If `type` is `return`, this may be provided as a JSON text representing the function return value.
-      - The host parses `value_json` using `json.loads` and validates/coerces the resulting Python value to the function's return type annotation.
-      - If `value_json` is omitted or `null`, the return value is treated as `None`.
+    - `source_path`: optional string
+
+Implementation note:
+
+- The canonical set of effect type strings is defined in `src/nighthawk/execution/llm.py` (see `EXECUTION_EFFECT_TYPES`). Other execution modules should refer to that definition rather than repeating string tuples.
+      - If `type` is `return`, this may be provided as a dotted reference path into the execution environment (locals and memory).
+      - The host resolves `source_path` against execution locals/memory, then validates/coerces the resolved Python value to the function's return type annotation.
+      - If `source_path` is omitted or `null`, the return value is treated as `None`.
 
 If execution fails, the LLM returns:
 

@@ -12,7 +12,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 from ..configuration import ExecutionConfiguration
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
-from .llm import ExecutionFinal
+from .llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
 
 class ExecutionAgent(Protocol):
@@ -28,7 +28,7 @@ class ExecutionExecutor(Protocol):
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
-        allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+        allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         raise NotImplementedError
 
@@ -183,7 +183,7 @@ class AgentExecutor:
         execution_context: ExecutionContext,
         binding_names: list[str],
         is_in_loop: bool,
-        allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+        allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         from typing import Literal
 
@@ -214,7 +214,7 @@ class AgentExecutor:
 
             class ExecutionEffectNoLoop(BaseModel, extra="forbid"):
                 type: Literal["return"]
-                value_json: str | None = None
+                source_path: str | None = None
 
             class ExecutionFinalNoLoop(BaseModel, extra="forbid"):
                 effect: ExecutionEffectNoLoop | None = None
@@ -227,7 +227,7 @@ class AgentExecutor:
 
             class ExecutionEffectWithAllowedSet(BaseModel, extra="forbid"):
                 type: literal  # type: ignore[valid-type]
-                value_json: str | None = None
+                source_path: str | None = None
 
             class ExecutionFinalWithAllowedSet(BaseModel, extra="forbid"):
                 effect: ExecutionEffectWithAllowedSet | None = None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
@@ -22,10 +23,31 @@ def summarize(value: object) -> str:
     return text
 
 
-def _error(target: str, error_type: str, message: str) -> dict[str, Any]:
+def serialize_value_to_json_text(
+    value: object,
+    *,
+    sort_keys: bool = True,
+    ensure_ascii: bool = False,
+) -> str:
+    try:
+        return json.dumps(
+            value,
+            default=repr,
+            sort_keys=sort_keys,
+            ensure_ascii=ensure_ascii,
+        )
+    except Exception:
+        return json.dumps(
+            repr(value),
+            sort_keys=sort_keys,
+            ensure_ascii=ensure_ascii,
+        )
+
+
+def _error(target_path: str, error_type: str, message: str) -> dict[str, Any]:
     return {
         "ok": False,
-        "target": target,
+        "target_path": target_path,
         "error": {
             "type": error_type,
             "message": message,
@@ -33,11 +55,11 @@ def _error(target: str, error_type: str, message: str) -> dict[str, Any]:
     }
 
 
-def _parse_target(target: str) -> tuple[str, ...] | None:
-    if not target:
+def _parse_target_path(target_path: str) -> tuple[str, ...] | None:
+    if not target_path:
         return None
 
-    parts = target.split(".")
+    parts = target_path.split(".")
     if any(part == "" for part in parts):
         return None
 
@@ -69,13 +91,13 @@ def _get_pydantic_field_type(model: BaseModel, field_name: str) -> object | None
 
 def assign_tool(
     execution_context: ExecutionContext,
-    target: str,
+    target_path: str,
     expression: str,
 ) -> dict[str, Any]:
-    """Assign a computed value to a dotted target.
+    """Assign a computed value to a dotted target_path.
 
     Target grammar:
-    - target := name ("." field)*
+    - target_path := name ("." field)*
 
     Notes:
     - Assigning to the root name "memory" is forbidden.
@@ -84,17 +106,17 @@ def assign_tool(
     - The operation is atomic: on any failure, no updates are performed.
     """
 
-    parsed_target = _parse_target(target)
-    if parsed_target is None:
-        return _error(target, "parse", "Invalid target; expected name(.field)* with ASCII identifiers")
+    parsed_target_path = _parse_target_path(target_path)
+    if parsed_target_path is None:
+        return _error(target_path, "parse", "Invalid target_path; expected name(.field)* with ASCII identifiers")
 
     try:
         value = eval_expression(execution_context, expression)
     except Exception as e:
-        return _error(target, "evaluation", str(e))
+        return _error(target_path, "evaluation", str(e))
 
-    if len(parsed_target) == 1:
-        name = parsed_target[0]
+    if len(parsed_target_path) == 1:
+        name = parsed_target_path[0]
         expected_type = execution_context.binding_name_to_type.get(name)
 
         if expected_type is not None:
@@ -102,25 +124,31 @@ def assign_tool(
                 adapted = TypeAdapter(expected_type)
                 value = adapted.validate_python(value)
             except Exception as e:
-                return _error(target, "validation", str(e))
+                return _error(target_path, "validation", str(e))
 
         execution_context.execution_locals[name] = value
+        execution_context.execution_locals_revision += 1
+
+        value_json_text = serialize_value_to_json_text(value)
         return {
             "ok": True,
-            "target": target,
-            "value": summarize(value),
+            "target_path": target_path,
+            "value_summary": summarize(value),
+            "value_json_text": value_json_text,
+            "execution_locals_revision": execution_context.execution_locals_revision,
+            "local_name_to_value_json_text": {name: value_json_text},
         }
 
-    root_name = parsed_target[0]
-    attribute_path = parsed_target[1:]
+    root_name = parsed_target_path[0]
+    attribute_path = parsed_target_path[1:]
 
     if root_name == "memory":
         if execution_context.memory is None:
-            return _error(target, "memory", "Memory is not enabled")
+            return _error(target_path, "memory", "Memory is not enabled")
         root_object: object = execution_context.memory
     else:
         if root_name not in execution_context.execution_locals:
-            return _error(target, "traversal", f"Unknown root name: {root_name}")
+            return _error(target_path, "traversal", f"Unknown root name: {root_name}")
         root_object = execution_context.execution_locals[root_name]
 
     current_object = root_object
@@ -128,7 +156,7 @@ def assign_tool(
         try:
             current_object = getattr(current_object, attribute)
         except Exception as e:
-            return _error(target, "traversal", f"Failed to resolve attribute {attribute!r}: {e}")
+            return _error(target_path, "traversal", f"Failed to resolve attribute {attribute!r}: {e}")
 
     final_attribute = attribute_path[-1]
 
@@ -136,22 +164,35 @@ def assign_tool(
     if isinstance(current_object, BaseModel):
         expected_type = _get_pydantic_field_type(current_object, final_attribute)
         if expected_type is None:
-            return _error(target, "validation", f"Unknown field on {type(current_object).__name__}: {final_attribute}")
+            return _error(
+                target_path,
+                "validation",
+                f"Unknown field on {type(current_object).__name__}: {final_attribute}",
+            )
 
     if expected_type is not None:
         try:
             adapted = TypeAdapter(expected_type)
             value = adapted.validate_python(value)
         except Exception as e:
-            return _error(target, "validation", str(e))
+            return _error(target_path, "validation", str(e))
 
     try:
         setattr(current_object, final_attribute, value)
     except Exception as e:
-        return _error(target, "traversal", f"Failed to set attribute {final_attribute!r}: {e}")
+        return _error(target_path, "traversal", f"Failed to set attribute {final_attribute!r}: {e}")
 
-    return {
+    execution_context.execution_locals_revision += 1
+
+    result: dict[str, Any] = {
         "ok": True,
-        "target": target,
-        "value": summarize(value),
+        "target_path": target_path,
+        "value_summary": summarize(value),
+        "value_json_text": serialize_value_to_json_text(value),
+        "execution_locals_revision": execution_context.execution_locals_revision,
     }
+
+    if root_name == "memory":
+        result["memory_attribute_path_to_value_json_text"] = {".".join(attribute_path): result["value_json_text"]}
+
+    return result

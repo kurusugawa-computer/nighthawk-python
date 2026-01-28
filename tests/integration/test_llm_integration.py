@@ -26,6 +26,7 @@ def test_agent_import_and_construction_and_run():
     from nighthawk.configuration import Configuration, ExecutionConfiguration
     from nighthawk.execution.context import ExecutionContext
     from nighthawk.execution.executors import make_agent_executor
+    from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES
 
     configuration = Configuration(
         execution_configuration=ExecutionConfiguration(),
@@ -58,12 +59,12 @@ def test_agent_import_and_construction_and_run():
     )
 
     result = agent.run_sync(
-        'Return exactly this JSON object and nothing else: {"effect": {"type": "continue", "value_json": null}, "error": null}',
+        'Return exactly this JSON object and nothing else: {"effect": {"type": "continue", "source_path": null}, "error": null}',
         deps=tool_context,
     )
 
     assert result.output.effect is not None
-    assert result.output.effect.type in ("continue", "break", "return")
+    assert result.output.effect.type in EXECUTION_EFFECT_TYPES
     assert result.output.error is None
 
 
