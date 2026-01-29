@@ -210,6 +210,7 @@ class Orchestrator:
             execution_locals=execution_locals,
             binding_commit_targets=binding_commit_targets,
             memory=self.environment.memory,
+            context_limits=self.environment.execution_configuration.context_limits,
             binding_name_to_type=binding_name_to_type,
         )
 

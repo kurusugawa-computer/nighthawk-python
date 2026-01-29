@@ -10,7 +10,11 @@ def test_simple():
     from pydantic_ai import Agent
     from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
-    agent = Agent("openai-responses:gpt-5-nano", instructions="Be concise, reply with one sentence.", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"))
+    agent = Agent(
+        "openai-responses:gpt-5-nano",
+        instructions="Be concise, reply with one sentence.",
+        model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+    )
     result = agent.run_sync('Where does "hello world" come from?')
     print(result.output)
 
@@ -28,9 +32,7 @@ def test_agent_import_and_construction_and_run():
     from nighthawk.execution.executors import make_agent_executor
     from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES
 
-    configuration = Configuration(
-        execution_configuration=ExecutionConfiguration(),
-    )
+    configuration = Configuration(execution_configuration=ExecutionConfiguration())
 
     from nighthawk.execution.environment import ExecutionEnvironment
     from tests.execution.stub_executor import StubExecutor
@@ -45,7 +47,12 @@ def test_agent_import_and_construction_and_run():
         workspace_root=Path("."),
     )
 
-    agent_executor = make_agent_executor(environment.execution_configuration)
+    from pydantic_ai.models.openai import OpenAIResponsesModelSettings
+
+    agent_executor = make_agent_executor(
+        environment.execution_configuration,
+        model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+    )
     agent = agent_executor.agent
 
     system_prompts = agent._system_prompts  # type: ignore[attr-defined]
@@ -56,6 +63,7 @@ def test_agent_import_and_construction_and_run():
         execution_locals={},
         binding_commit_targets=set(),
         memory=None,
+        context_limits=environment.execution_configuration.context_limits,
     )
 
     result = agent.run_sync(
@@ -86,8 +94,13 @@ def test_natural_block_evaluate_order():
     class FakeMemory(BaseModel):
         pass
 
+    from pydantic_ai.models.openai import OpenAIResponsesModelSettings
+
     execution_configuration = nh.ExecutionConfiguration()
-    execution_executor = execution_executors.make_agent_executor(execution_configuration)
+    execution_executor = execution_executors.make_agent_executor(
+        execution_configuration,
+        model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+    )
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,

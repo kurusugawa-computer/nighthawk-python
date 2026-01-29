@@ -33,12 +33,16 @@ class ExecutionExecutor(Protocol):
         raise NotImplementedError
 
 
-def make_agent_executor(execution_configuration: ExecutionConfiguration) -> "AgentExecutor":
+def make_agent_executor(
+    execution_configuration: ExecutionConfiguration,
+    **agent_constructor_keyword_arguments: Any,
+) -> "AgentExecutor":
     agent: ExecutionAgent = Agent(
         model=execution_configuration.model,
         output_type=ExecutionFinal,
         deps_type=ExecutionContext,
         system_prompt=execution_configuration.prompts.execution_system_prompt_template,
+        **agent_constructor_keyword_arguments,
     )
     return AgentExecutor(agent)
 

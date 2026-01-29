@@ -425,6 +425,7 @@ def test_compile_time_type_information_is_available_to_assign_tool(tmp_path: Pat
 
             assign_result = assign_tool(deps, "count", "'2'")
             assert assign_result["ok"] is True
+            assert assign_result["updates"] == [{"path": "count", "value_json_text": "2"}]
             assert deps.execution_locals["count"] == 2
 
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
@@ -474,6 +475,7 @@ def test_dotted_mutation_is_independent_of_commit_selection(tmp_path: Path):
 
             assign_result = assign_tool(deps, "obj.field", "123")
             assert assign_result["ok"] is True
+            assert assign_result["updates"] == [{"path": "obj.field", "value_json_text": "123"}]
 
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
