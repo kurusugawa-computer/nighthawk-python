@@ -16,13 +16,6 @@ def eval_expression(execution_context: ExecutionContext, expression: str) -> obj
         raise ToolEvaluationError(str(e)) from e
 
 
-def summarize(value: object) -> str:
-    text = repr(value)
-    if len(text) > 200:
-        return text[:200] + "..."
-    return text
-
-
 def serialize_value_to_json_text(
     value: object,
     *,
@@ -44,10 +37,17 @@ def serialize_value_to_json_text(
         )
 
 
-def _error(target_path: str, error_type: str, message: str) -> dict[str, Any]:
+def _error(
+    *,
+    execution_locals_revision: int,
+    target_path: str,
+    error_type: str,
+    message: str,
+) -> dict[str, Any]:
     return {
         "ok": False,
         "target_path": target_path,
+        "execution_locals_revision": execution_locals_revision,
         "error": {
             "type": error_type,
             "message": message,
@@ -108,12 +108,22 @@ def assign_tool(
 
     parsed_target_path = _parse_target_path(target_path)
     if parsed_target_path is None:
-        return _error(target_path, "parse", "Invalid target_path; expected name(.field)* with ASCII identifiers")
+        return _error(
+            execution_locals_revision=execution_context.execution_locals_revision,
+            target_path=target_path,
+            error_type="parse",
+            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
+        )
 
     try:
         value = eval_expression(execution_context, expression)
     except Exception as e:
-        return _error(target_path, "evaluation", str(e))
+        return _error(
+            execution_locals_revision=execution_context.execution_locals_revision,
+            target_path=target_path,
+            error_type="evaluation",
+            message=str(e),
+        )
 
     if len(parsed_target_path) == 1:
         name = parsed_target_path[0]
@@ -124,19 +134,30 @@ def assign_tool(
                 adapted = TypeAdapter(expected_type)
                 value = adapted.validate_python(value)
             except Exception as e:
-                return _error(target_path, "validation", str(e))
+                return _error(
+                    execution_locals_revision=execution_context.execution_locals_revision,
+                    target_path=target_path,
+                    error_type="validation",
+                    message=str(e),
+                )
 
         execution_context.execution_locals[name] = value
         execution_context.execution_locals_revision += 1
 
+        update: dict[str, Any] = {"path": target_path}
+
         value_json_text = serialize_value_to_json_text(value)
+        value_max_chars = execution_context.context_limits.value_max_tokens * 4
+        if len(value_json_text) <= value_max_chars:
+            update["value_json_text"] = value_json_text
+        else:
+            update["snipped_chars"] = len(value_json_text) - value_max_chars
+
         return {
             "ok": True,
             "target_path": target_path,
-            "value_summary": summarize(value),
-            "value_json_text": value_json_text,
             "execution_locals_revision": execution_context.execution_locals_revision,
-            "local_name_to_value_json_text": {name: value_json_text},
+            "updates": [update],
         }
 
     root_name = parsed_target_path[0]
@@ -144,11 +165,21 @@ def assign_tool(
 
     if root_name == "memory":
         if execution_context.memory is None:
-            return _error(target_path, "memory", "Memory is not enabled")
+            return _error(
+                execution_locals_revision=execution_context.execution_locals_revision,
+                target_path=target_path,
+                error_type="memory",
+                message="Memory is not enabled",
+            )
         root_object: object = execution_context.memory
     else:
         if root_name not in execution_context.execution_locals:
-            return _error(target_path, "traversal", f"Unknown root name: {root_name}")
+            return _error(
+                execution_locals_revision=execution_context.execution_locals_revision,
+                target_path=target_path,
+                error_type="traversal",
+                message=f"Unknown root name: {root_name}",
+            )
         root_object = execution_context.execution_locals[root_name]
 
     current_object = root_object
@@ -156,7 +187,12 @@ def assign_tool(
         try:
             current_object = getattr(current_object, attribute)
         except Exception as e:
-            return _error(target_path, "traversal", f"Failed to resolve attribute {attribute!r}: {e}")
+            return _error(
+                execution_locals_revision=execution_context.execution_locals_revision,
+                target_path=target_path,
+                error_type="traversal",
+                message=f"Failed to resolve attribute {attribute!r}: {e}",
+            )
 
     final_attribute = attribute_path[-1]
 
@@ -165,9 +201,10 @@ def assign_tool(
         expected_type = _get_pydantic_field_type(current_object, final_attribute)
         if expected_type is None:
             return _error(
-                target_path,
-                "validation",
-                f"Unknown field on {type(current_object).__name__}: {final_attribute}",
+                execution_locals_revision=execution_context.execution_locals_revision,
+                target_path=target_path,
+                error_type="validation",
+                message=f"Unknown field on {type(current_object).__name__}: {final_attribute}",
             )
 
     if expected_type is not None:
@@ -175,24 +212,37 @@ def assign_tool(
             adapted = TypeAdapter(expected_type)
             value = adapted.validate_python(value)
         except Exception as e:
-            return _error(target_path, "validation", str(e))
+            return _error(
+                execution_locals_revision=execution_context.execution_locals_revision,
+                target_path=target_path,
+                error_type="validation",
+                message=str(e),
+            )
 
     try:
         setattr(current_object, final_attribute, value)
     except Exception as e:
-        return _error(target_path, "traversal", f"Failed to set attribute {final_attribute!r}: {e}")
+        return _error(
+            execution_locals_revision=execution_context.execution_locals_revision,
+            target_path=target_path,
+            error_type="traversal",
+            message=f"Failed to set attribute {final_attribute!r}: {e}",
+        )
 
     execution_context.execution_locals_revision += 1
 
-    result: dict[str, Any] = {
+    update: dict[str, Any] = {"path": target_path}
+
+    value_json_text = serialize_value_to_json_text(value)
+    value_max_chars = execution_context.context_limits.value_max_tokens * 4
+    if len(value_json_text) <= value_max_chars:
+        update["value_json_text"] = value_json_text
+    else:
+        update["snipped_chars"] = len(value_json_text) - value_max_chars
+
+    return {
         "ok": True,
         "target_path": target_path,
-        "value_summary": summarize(value),
-        "value_json_text": serialize_value_to_json_text(value),
         "execution_locals_revision": execution_context.execution_locals_revision,
+        "updates": [update],
     }
-
-    if root_name == "memory":
-        result["memory_attribute_path_to_value_json_text"] = {".".join(attribute_path): result["value_json_text"]}
-
-    return result

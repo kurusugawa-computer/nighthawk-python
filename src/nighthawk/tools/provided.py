@@ -79,7 +79,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                 nh_assign,
                 name="nh_assign",
                 metadata=metadata,
-                description=("Assign a computed value to a target in the form name(.field)*. The root name 'memory' is reserved (use memory.<field>...), and any segment starting with '__' is forbidden. The tool returns a diagnostic object and never raises."),
+                description=("Assign a computed value to a target in the form name(.field)*. The tool returns a diagnostic object with an `updates` list on success and never raises."),
             ),
         ),
     ]

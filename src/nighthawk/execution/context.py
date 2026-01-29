@@ -7,6 +7,7 @@ from typing import Iterator
 
 from pydantic import BaseModel
 
+from ..configuration import ExecutionContextLimits
 from ..errors import NighthawkError
 
 
@@ -16,6 +17,7 @@ class ExecutionContext:
     execution_locals: dict[str, object]
     binding_commit_targets: set[str]
     memory: BaseModel | None
+    context_limits: ExecutionContextLimits
     execution_locals_revision: int = 0
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
 
