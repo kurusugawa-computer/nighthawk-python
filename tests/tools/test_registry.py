@@ -179,11 +179,12 @@ def test_assign_tool_allows_non_binding_local_target():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_allows_non_binding_local_target",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=nh.ExecutionConfiguration().context_limits,
     )
 
     result = assign_tool(execution_context, "now", "123")
@@ -198,11 +199,12 @@ def test_assign_tool_rejects_reserved_local_targets():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_rejects_reserved_local_targets",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=nh.ExecutionConfiguration().context_limits,
     )
 
     original_revision = execution_context.execution_locals_revision
@@ -237,11 +239,12 @@ def test_assign_tool_validates_only_when_type_information_present():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_validates_only_when_type_information_present",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=nh.ExecutionConfiguration().context_limits,
     )
 
     result_no_type = assign_tool(execution_context, "count", "'1'")
@@ -264,11 +267,12 @@ def test_assign_tool_rejects_dunder_segments():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_rejects_dunder_segments",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={"x": object()},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=nh.ExecutionConfiguration().context_limits,
     )
 
     original_revision = execution_context.execution_locals_revision
@@ -294,11 +298,12 @@ def test_assign_tool_is_atomic_on_traversal_failure():
 
     root = Root()
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_is_atomic_on_traversal_failure",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={"root": root},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=nh.ExecutionConfiguration().context_limits,
     )
 
     original_revision = execution_context.execution_locals_revision
@@ -315,11 +320,12 @@ def test_assign_tool_is_atomic_on_validation_failure_and_never_raises():
     from nighthawk.tools import assign_tool
 
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_is_atomic_on_validation_failure_and_never_raises",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={"count": 1},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=nh.ExecutionConfiguration().context_limits,
         binding_name_to_type={"count": int},
     )
 
@@ -343,11 +349,12 @@ def test_assign_tool_validates_memory_fields_and_is_atomic():
 
     memory = Memory(n=1)
     execution_context = ExecutionContext(
+        execution_id="test_assign_tool_validates_memory_fields_and_is_atomic",
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
         memory=memory,
-        context_limits=nh.ExecutionConfiguration().context_limits,
     )
 
     ok_result = assign_tool(execution_context, "memory.n", "'2'")

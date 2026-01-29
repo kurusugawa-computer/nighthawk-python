@@ -147,7 +147,7 @@ def assign_tool(
         update: dict[str, Any] = {"path": target_path}
 
         value_json_text = serialize_value_to_json_text(value)
-        value_max_chars = execution_context.context_limits.value_max_tokens * 4
+        value_max_chars = execution_context.execution_configuration.context_limits.value_max_tokens * 4
         if len(value_json_text) <= value_max_chars:
             update["value_json_text"] = value_json_text
         else:
@@ -234,7 +234,7 @@ def assign_tool(
     update: dict[str, Any] = {"path": target_path}
 
     value_json_text = serialize_value_to_json_text(value)
-    value_max_chars = execution_context.context_limits.value_max_tokens * 4
+    value_max_chars = execution_context.execution_configuration.context_limits.value_max_tokens * 4
     if len(value_json_text) <= value_max_chars:
         update["value_json_text"] = value_json_text
     else:

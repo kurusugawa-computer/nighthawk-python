@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,65 @@ SHADOWED_NUMBER = 1
 def create_workspace_directories(workspace_root: Path) -> None:
     (workspace_root / "docs").mkdir()
     (workspace_root / "tests").mkdir()
+
+
+def test_execution_id_is_unique_within_environment_lifetime(tmp_path: Path):
+    create_workspace_directories(tmp_path)
+
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
+
+    @dataclass
+    class RecordingExecutor:
+        seen_execution_ids: list[str] = field(default_factory=list)
+
+        def run_natural_block(
+            self,
+            *,
+            processed_natural_program: str,
+            execution_context: ExecutionContext,
+            binding_names: list[str],
+            is_in_loop: bool,
+            allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
+        ) -> tuple[ExecutionFinal, dict[str, object]]:
+            _ = processed_natural_program
+            _ = binding_names
+            _ = is_in_loop
+            _ = allowed_effect_types
+
+            self.seen_execution_ids.append(execution_context.execution_id)
+            return ExecutionFinal(effect=None, error=None), {}
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+    recording_executor = RecordingExecutor()
+
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=recording_executor,
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f() -> None:
+            """natural
+            Block one.
+            """
+
+            """natural
+            Block two.
+            """
+
+        f()
+        f()
+
+    assert len(recording_executor.seen_execution_ids) == 4
+    assert len(set(recording_executor.seen_execution_ids)) == 4
 
 
 def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):

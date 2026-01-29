@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import uuid
 from dataclasses import dataclass
 from types import FrameType
 from typing import cast
@@ -206,11 +207,12 @@ class Orchestrator:
 
         binding_commit_targets = set(binding_names)
         execution_context = ExecutionContext(
+            execution_id=str(uuid.uuid4()),
+            execution_configuration=self.environment.execution_configuration,
             execution_globals=execution_globals,
             execution_locals=execution_locals,
             binding_commit_targets=binding_commit_targets,
             memory=self.environment.memory,
-            context_limits=self.environment.execution_configuration.context_limits,
             binding_name_to_type=binding_name_to_type,
         )
 
