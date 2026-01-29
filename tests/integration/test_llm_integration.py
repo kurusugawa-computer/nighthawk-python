@@ -59,11 +59,12 @@ def test_agent_import_and_construction_and_run():
     assert any("Nighthawk Natural block" in str(p) for p in system_prompts)
 
     tool_context = ExecutionContext(
+        execution_id="test_agent_import_and_construction_and_run",
+        execution_configuration=environment.execution_configuration,
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
         memory=None,
-        context_limits=environment.execution_configuration.context_limits,
     )
 
     result = agent.run_sync(

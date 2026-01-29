@@ -64,11 +64,9 @@ def _should_mask_name(name: str, *, name_substrings_to_mask: tuple[str, ...]) ->
 
 
 def _render_locals_section(execution_context: ExecutionContext) -> str:
-    from .environment import get_environment
-
-    configuration = get_environment().execution_configuration
-    context_limits = configuration.context_limits
-    redaction = configuration.context_redaction
+    execution_configuration = execution_context.execution_configuration
+    context_limits = execution_configuration.context_limits
+    redaction = execution_configuration.context_redaction
 
     value_max_chars = _approx_max_chars_from_tokens(context_limits.value_max_tokens)
     section_max_chars = _approx_max_chars_from_tokens(context_limits.locals_max_tokens)
@@ -119,11 +117,9 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
 
 
 def _render_memory_section(execution_context: ExecutionContext) -> str:
-    from .environment import get_environment
-
-    configuration = get_environment().execution_configuration
-    context_limits = configuration.context_limits
-    redaction = configuration.context_redaction
+    execution_configuration = execution_context.execution_configuration
+    context_limits = execution_configuration.context_limits
+    redaction = execution_configuration.context_redaction
 
     memory = execution_context.memory
     if memory is None:
@@ -160,10 +156,8 @@ def _render_memory_section(execution_context: ExecutionContext) -> str:
 
 
 def build_user_prompt(*, processed_natural_program: str, execution_context: ExecutionContext) -> str:
-    from .environment import get_environment
-
-    configuration = get_environment().execution_configuration
-    template_text = configuration.prompts.execution_user_prompt_template
+    execution_configuration = execution_context.execution_configuration
+    template_text = execution_configuration.prompts.execution_user_prompt_template
 
     locals_text = _render_locals_section(execution_context)
     memory_text = _render_memory_section(execution_context)

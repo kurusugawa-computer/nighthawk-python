@@ -57,6 +57,9 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Python globals (`python_globals`): the Python module globals for the compiled function.
 - Execution locals (`execution_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
 - Execution globals (`execution_globals`): a limited globals mapping used as the execution environment for LLM expressions.
+- ExecutionContext: a mutable, per-Natural-block object passed to tools and executors.
+  - Required fields include `execution_id` (unique at least within an `ExecutionEnvironment` lifetime) and `execution_configuration`.
+  - Model selection is sourced only from `execution_configuration.model`; `ExecutionContext` does not carry a separate `model` field.
 - Locals summary: a bounded text rendering of selected values from `execution_locals`, included in the LLM prompt.
 - Memory: a structured state model (Pydantic `BaseModel`) stored and validated by the host.
 - Control-flow effect: a request to the Python interpreter to run `continue`, `break`, or `return`.
