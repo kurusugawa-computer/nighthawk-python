@@ -1,6 +1,20 @@
 import os
+from pathlib import Path
 
+import logfire
 import pytest
+from pydantic import BaseModel
+from pydantic_ai.models.openai import OpenAIResponsesModelSettings
+
+import nighthawk as nh
+import nighthawk.execution.executors
+
+logfire.configure(send_to_logfire="if-token-present")
+logfire.instrument_pydantic_ai()
+
+
+class FakeMemory(BaseModel):
+    pass
 
 
 def test_simple():
@@ -23,33 +37,18 @@ def test_agent_import_and_construction_and_run():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
-    from pathlib import Path
-
-    from pydantic import BaseModel
-
-    from nighthawk.configuration import Configuration, ExecutionConfiguration
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.executors import make_agent_executor
     from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES
-
-    configuration = Configuration(execution_configuration=ExecutionConfiguration())
-
-    from nighthawk.execution.environment import ExecutionEnvironment
     from tests.execution.stub_executor import StubExecutor
 
-    class FakeMemory(BaseModel):
-        pass
-
-    environment = ExecutionEnvironment(
-        execution_configuration=configuration.execution_configuration,
+    environment = nh.ExecutionEnvironment(
+        execution_configuration=nh.ExecutionConfiguration(),
         execution_executor=StubExecutor(),
         memory=FakeMemory(),
         workspace_root=Path("."),
     )
 
-    from pydantic_ai.models.openai import OpenAIResponsesModelSettings
-
-    agent_executor = make_agent_executor(
+    agent_executor = nighthawk.execution.executors.make_agent_executor(
         environment.execution_configuration,
         model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
     )
@@ -81,24 +80,8 @@ def test_natural_block_evaluate_order():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
-    from pathlib import Path
-
-    import logfire
-    from pydantic import BaseModel
-
-    logfire.configure(send_to_logfire="if-token-present")
-    logfire.instrument_pydantic_ai()
-
-    import nighthawk as nh
-    import nighthawk.execution.executors as execution_executors
-
-    class FakeMemory(BaseModel):
-        pass
-
-    from pydantic_ai.models.openai import OpenAIResponsesModelSettings
-
     execution_configuration = nh.ExecutionConfiguration()
-    execution_executor = execution_executors.make_agent_executor(
+    execution_executor = nighthawk.execution.executors.make_agent_executor(
         execution_configuration,
         model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
     )
@@ -116,9 +99,38 @@ def test_natural_block_evaluate_order():
         def test_function() -> int:
             v = 10
             """natural
-            Compute <:v> plus 5 and store.
+            <:v> += 5
             """
             return v
 
         result = test_function()
         assert result == 15
+
+
+def test_condition():
+    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+        pytest.skip("Integration tests are disabled")
+
+    environment = nh.ExecutionEnvironment(
+        execution_configuration=nh.ExecutionConfiguration(),
+        execution_executor=nighthawk.execution.executors.make_agent_executor(
+            nh.ExecutionConfiguration(),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+        ),
+        memory=FakeMemory(),
+        workspace_root=Path("."),
+    )
+    with nh.environment(environment):
+
+        @nh.fn
+        def test_function(v: int) -> int:
+            v += 1
+            """natural
+            if <v> >= 10 then return 11
+            else <:v> = <v> + 5
+            """
+            v += 1
+            return v
+
+        assert test_function(9) == 11
+        assert test_function(1) == 8

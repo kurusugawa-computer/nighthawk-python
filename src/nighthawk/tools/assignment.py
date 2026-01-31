@@ -142,6 +142,7 @@ def assign_tool(
                 )
 
         execution_context.execution_locals[name] = value
+        execution_context.assigned_binding_names.add(name)
         execution_context.execution_locals_revision += 1
 
         update: dict[str, Any] = {"path": target_path}

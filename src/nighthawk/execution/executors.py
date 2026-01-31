@@ -265,7 +265,7 @@ class AgentExecutor:
 
         bindings: dict[str, object] = {}
         for name in binding_names:
-            if name in execution_context.execution_locals:
+            if name in execution_context.assigned_binding_names:
                 bindings[name] = execution_context.execution_locals[name]
 
         return final, bindings

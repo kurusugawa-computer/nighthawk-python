@@ -25,11 +25,12 @@ class NaturalTransformer(ast.NodeTransformer):
                     doc = first_statement.value.value
                     if is_natural_sentinel(doc):
                         program = extract_program(doc)
-                        _input_bindings, output_bindings = extract_bindings(program)
+                        input_bindings, output_bindings = extract_bindings(program)
                         return_annotation = self._current_return_annotation_expression()
                         binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                         injected = build_runtime_call_and_assignments(
                             program,
+                            input_bindings,
                             output_bindings,
                             binding_types_dict_expression,
                             return_annotation,
@@ -37,34 +38,7 @@ class NaturalTransformer(ast.NodeTransformer):
                         )
 
                         body_without_docstring = node.body[1:]
-
-                        if output_bindings:
-                            assigned: set[str] = set()
-
-                            def note_assigned(statement: ast.stmt) -> None:
-                                if isinstance(statement, ast.Assign):
-                                    for target in statement.targets:
-                                        if isinstance(target, ast.Name):
-                                            assigned.add(target.id)
-                                elif isinstance(statement, ast.AnnAssign):
-                                    target = statement.target
-                                    if isinstance(target, ast.Name):
-                                        assigned.add(target.id)
-                                elif isinstance(statement, ast.AugAssign):
-                                    target = statement.target
-                                    if isinstance(target, ast.Name):
-                                        assigned.add(target.id)
-
-                            insert_at = 0
-                            for i, statement in enumerate(body_without_docstring):
-                                note_assigned(statement)
-                                if set(output_bindings).issubset(assigned):
-                                    insert_at = i + 1
-                                    break
-
-                            node.body = body_without_docstring[:insert_at] + injected + body_without_docstring[insert_at:]
-                        else:
-                            node.body = injected + body_without_docstring
+                        node.body = injected + body_without_docstring
 
             node = self.generic_visit(node)  # type: ignore[assignment]
             return node
@@ -101,12 +75,13 @@ class NaturalTransformer(ast.NodeTransformer):
             text = value.value
             if is_natural_sentinel(text):
                 program = extract_program(text)
-                _input_bindings, output_bindings = extract_bindings(program)
+                input_bindings, output_bindings = extract_bindings(program)
                 return_annotation = self._current_return_annotation_expression()
                 binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                 is_in_loop = self._loop_depth > 0
                 statements = build_runtime_call_and_assignments(
                     program,
+                    input_bindings,
                     output_bindings,
                     binding_types_dict_expression,
                     return_annotation,
@@ -161,7 +136,8 @@ class NaturalTransformer(ast.NodeTransformer):
 
 def build_runtime_call_and_assignments(
     program: str,
-    binding_names: tuple[str, ...],
+    input_binding_names: tuple[str, ...],
+    output_binding_names: tuple[str, ...],
     binding_types_dict_expression: ast.expr,
     return_annotation: ast.expr,
     *,
@@ -176,7 +152,8 @@ def build_runtime_call_and_assignments(
         ),
         args=[
             ast.Constant(program),
-            ast.List(elts=[ast.Constant(name) for name in binding_names], ctx=ast.Load()),
+            ast.List(elts=[ast.Constant(name) for name in input_binding_names], ctx=ast.Load()),
+            ast.List(elts=[ast.Constant(name) for name in output_binding_names], ctx=ast.Load()),
             binding_types_dict_expression,
             return_annotation,
             ast.Constant(is_in_loop),
@@ -198,7 +175,7 @@ def build_runtime_call_and_assignments(
         )
     )
 
-    for name in binding_names:
+    for name in output_binding_names:
         assigns.append(
             ast.If(
                 test=ast.Compare(
