@@ -339,6 +339,40 @@ def test_frontmatter_deny_return_rejects_return_effect(tmp_path: Path):
             f()
 
 
+def test_frontmatter_deny_return_recognizes_leading_blank_lines(tmp_path: Path):
+    create_workspace_directories(tmp_path)
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=StubExecutor(),
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def f() -> int:
+            result = 0
+            """natural
+
+            ---
+            deny:
+              - return
+            ---
+            <:result>
+            {{"execution_final": {{"effect": {{"type": "return", "source_path": "result"}}, "error": null}}, "bindings": {{"result": 11}}}}
+            """
+            return result
+
+        with pytest.raises(ExecutionError, match="not allowed"):
+            f()
+
+
 def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
