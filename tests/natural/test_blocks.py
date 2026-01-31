@@ -19,6 +19,7 @@ def test_docstring_natural_block_detected_and_bindings_extracted():
     assert b.kind == "docstring"
     assert b.input_bindings == ("numbers",)
     assert b.bindings == ("result",)
+    assert b.text.splitlines()[0] == "Consider <numbers> and compute <:result>."
 
 
 def test_inline_natural_block_detected():
@@ -36,6 +37,7 @@ def test_inline_natural_block_detected():
     assert len(blocks) == 1
     assert blocks[0].kind == "inline"
     assert blocks[0].bindings == ("y",)
+    assert blocks[0].text.splitlines()[0] == "Make <:y> be 1."
 
 
 def test_natural_sentinel_rejects_leading_blank_line_docstring():
@@ -101,3 +103,4 @@ def test_natural_inline_parentheses_do_not_matter():
     assert len(blocks) == 1
     assert blocks[0].kind == "inline"
     assert blocks[0].bindings == ("y",)
+    assert blocks[0].text.splitlines()[0] == "Make <:y> be 1."

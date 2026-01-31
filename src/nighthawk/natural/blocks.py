@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+import textwrap
 from dataclasses import dataclass
 
 from ..errors import NaturalParseError
@@ -26,7 +27,8 @@ def is_natural_sentinel(text: str) -> bool:
 def extract_program(text: str) -> str:
     if not is_natural_sentinel(text):
         raise NaturalParseError("Missing natural sentinel")
-    return text.removeprefix("natural\n")
+    program = text.removeprefix("natural\n")
+    return textwrap.dedent(program)
 
 
 def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:

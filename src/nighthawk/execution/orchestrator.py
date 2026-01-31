@@ -20,23 +20,30 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
     if not lines:
         return processed_natural_program, ()
 
-    first_line = lines[0]
-    if first_line.strip() != "---":
+    start_index: int | None = None
+    for i, line in enumerate(lines):
+        if line.strip(" \t\r\n") == "":
+            continue
+        start_index = i
+        break
+
+    if start_index is None:
         return processed_natural_program, ()
 
-    first_line_left_stripped = first_line.lstrip(" \t")
-    indent_prefix = first_line[: len(first_line) - len(first_line_left_stripped)]
+    first_line = lines[start_index]
+    if first_line not in ("---\n", "---"):
+        return processed_natural_program, ()
 
     closing_index: int | None = None
-    for i, line in enumerate(lines[1:], start=1):
-        if line == f"{indent_prefix}---\n" or line == f"{indent_prefix}---":
+    for i, line in enumerate(lines[start_index + 1 :], start=start_index + 1):
+        if line in ("---\n", "---"):
             closing_index = i
             break
 
     if closing_index is None:
         raise ExecutionError("Frontmatter is missing closing '---' delimiter")
 
-    yaml_text = "".join(lines[1:closing_index])
+    yaml_text = "".join(lines[start_index + 1 : closing_index])
     if yaml_text.strip() == "":
         raise ExecutionError("Frontmatter must not be empty")
 

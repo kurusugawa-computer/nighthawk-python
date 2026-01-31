@@ -128,7 +128,7 @@ def test_inline_blocks_execute_in_place_and_observe_updated_locals(tmp_path: Pat
 
         f()
 
-    assert recording_executor.seen_programs == ["    First: 1\n    ", "    Second: 2\n    "]
+    assert recording_executor.seen_programs == ["First: 1\n", "Second: 2\n"]
 
 
 def test_missing_input_binding_raises_even_if_template_does_not_reference_it(tmp_path: Path) -> None:

@@ -110,7 +110,12 @@ A function is considered a Natural function when it has a docstring whose underl
 
 - `natural\n`
 
-The remainder of the docstring is the Natural program.
+The Natural program is derived from the docstring by:
+
+1) Removing the leading `natural\n` sentinel prefix.
+2) Normalizing indentation by applying `textwrap.dedent` to the remainder.
+
+This normalization exists because Natural blocks are typically indented inside Python code. It ensures the Natural program text is stable regardless of surrounding Python indentation.
 
 Recommended form:
 
@@ -121,6 +126,8 @@ Recommended form:
 Inside a function body, a standalone string literal expression statement whose underlying string literal begins with:
 
 - `natural\n`
+
+The Natural program is derived using the same rules as a docstring Natural block: remove the `natural\n` prefix, then apply `textwrap.dedent` to the remainder.
 
 Decision (inline shape):
 
@@ -311,7 +318,15 @@ Notes:
 
 Frontmatter (optional):
 
-A Natural program may start with YAML frontmatter. Frontmatter is recognized only if it is the first non-empty content of the program (it must start on the first line of the Natural program with `---`).
+A Natural program may start with YAML frontmatter.
+
+Frontmatter is recognized only if the first non-empty line of the Natural program is `---`.
+
+Notes:
+
+- Frontmatter parsing occurs after template preprocessing.
+- The frontmatter delimiter lines must contain only `---` (no indentation, no trailing whitespace).
+- Leading blank lines before frontmatter are ignored and are not included in the program text passed to the model.
 
 Syntax:
 
