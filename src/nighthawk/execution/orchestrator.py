@@ -167,7 +167,8 @@ class Orchestrator:
     def run_natural_block(
         self,
         natural_program: str,
-        binding_names: list[str],
+        input_binding_names: list[str],
+        output_binding_names: list[str],
         binding_name_to_type: dict[str, object],
         return_annotation: object,
         is_in_loop: bool,
@@ -205,7 +206,18 @@ class Orchestrator:
         if self.environment.memory is not None:
             execution_locals["memory"] = self.environment.memory
 
-        binding_commit_targets = set(binding_names)
+        binding_commit_targets = set(output_binding_names)
+        resolved_input_binding_name_to_value: dict[str, object] = {}
+        for binding_name in input_binding_names:
+            if binding_name in python_locals:
+                resolved_input_binding_name_to_value[binding_name] = python_locals[binding_name]
+            elif binding_name in python_globals:
+                resolved_input_binding_name_to_value[binding_name] = python_globals[binding_name]
+            else:
+                raise ExecutionError(f"Unknown input binding name at runtime: {binding_name}")
+
+        execution_locals.update(resolved_input_binding_name_to_value)
+
         execution_context = ExecutionContext(
             execution_id=str(uuid.uuid4()),
             execution_configuration=self.environment.execution_configuration,
@@ -222,12 +234,16 @@ class Orchestrator:
         final, bindings = self.environment.execution_executor.run_natural_block(
             processed_natural_program=processed_without_frontmatter,
             execution_context=execution_context,
-            binding_names=binding_names,
+            binding_names=output_binding_names,
             is_in_loop=is_in_loop,
             allowed_effect_types=allowed_effect_types,
         )
 
+        input_bindings = dict(resolved_input_binding_name_to_value)
+
         execution_context.execution_locals.update(bindings)
+
+        caller_frame.f_locals.update(bindings)
 
         final_typed = final
         if not isinstance(final_typed, ExecutionFinal):
@@ -256,6 +272,7 @@ class Orchestrator:
 
         return {
             "execution_final": final_typed,
+            "input_bindings": dict(input_bindings),
             "bindings": bindings,
             "effect_value": effect_value,
         }

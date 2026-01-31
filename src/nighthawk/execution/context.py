@@ -24,6 +24,7 @@ class ExecutionContext:
     memory: BaseModel | None
 
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
+    assigned_binding_names: set[str] = field(default_factory=set)
     execution_locals_revision: int = 0
 
 

@@ -25,7 +25,8 @@ class _OrchestratorProxy:
     def run_natural_block(
         self,
         natural_program: str,
-        output_names: list[str],
+        input_binding_names: list[str],
+        output_binding_names: list[str],
         binding_name_to_type: dict[str, object],
         return_annotation: object,
         is_in_loop: bool,
@@ -39,7 +40,8 @@ class _OrchestratorProxy:
         orchestrator = Orchestrator.from_environment(current_environment)
         return orchestrator.run_natural_block(
             natural_program,
-            output_names,
+            input_binding_names,
+            output_binding_names,
             binding_name_to_type,
             return_annotation,
             is_in_loop,

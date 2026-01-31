@@ -303,8 +303,7 @@ def test_template_preprocessing_can_access_module_globals(tmp_path: Path):
             <:result>
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {GLOBAL_NUMBER}}}}}
             """
-            result = 0
-            return result
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert f() == 7
 
@@ -367,8 +366,7 @@ def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
             """
             _ = x
-            result = 0
-            return result
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert f(10) == 11
 
@@ -456,12 +454,12 @@ def test_fn_updates_output_binding_via_inline_natural_block(tmp_path: Path):
 
         @nh.fn
         def f(x: int):
+            _ = x
+            result = 0
             """natural
             <:result>
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x * 2}}}}}
             """
-            _ = x
-            result = 0
             return result
 
         assert f(6) == 12
@@ -507,11 +505,11 @@ def test_compile_time_type_information_is_available_to_assign_tool(tmp_path: Pat
 
         @nh.fn
         def f() -> int:
+            count: int = 0
             """natural
             <:count>
             Set count.
             """
-            count: int = 0
             return count
 
         assert f() == 2
