@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import textwrap
 from functools import wraps
 from typing import Any, Callable, TypeVar, cast
 
 from .configuration import Configuration, ExecutionConfiguration
-from .execution.context import get_current_execution_context, get_execution_context_stack
+from .execution.context import (
+    get_current_execution_context,
+    get_execution_context_stack,
+    python_name_scope,
+)
 from .execution.environment import (
     ExecutionEnvironment,
     environment,
@@ -15,6 +20,7 @@ from .execution.environment import (
 )
 from .execution.executors import AgentExecutor
 from .execution.orchestrator import Orchestrator
+from .natural.blocks import find_natural_blocks
 from .natural.transform import transform_function_source
 from .tools import call_scope, tool
 
@@ -57,14 +63,56 @@ def fn(func: F | None = None) -> F:
     source = textwrap.dedent("".join(lines))
 
     try:
-        mod = __import__("ast").parse(source)
-        for node in mod.body:
-            if isinstance(node, __import__("ast").FunctionDef) and node.name == func.__name__:
+        module = ast.parse(source)
+        for node in module.body:
+            if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
                 node.decorator_list = []
-                source = __import__("ast").unparse(mod)
+                source = ast.unparse(module)
                 break
     except Exception:
         pass
+
+    def extract_template_interpolation_name_set(program_text: str) -> set[str]:
+        try:
+            parsed = ast.parse("t" + repr(program_text), mode="eval")
+        except SyntaxError:
+            return set()
+
+        template_string = getattr(parsed, "body", None)
+        values = getattr(template_string, "values", None)
+        if not isinstance(values, list):
+            return set()
+
+        names: set[str] = set()
+
+        class Visitor(ast.NodeVisitor):
+            def visit_Name(self, node: ast.Name) -> None:  # noqa: N802
+                names.add(node.id)
+
+        visitor = Visitor()
+        for value in values:
+            if isinstance(value, ast.Interpolation):
+                visitor.visit(value.value)
+
+        return names
+
+    capture_name_set: set[str] = set()
+    try:
+        for block in find_natural_blocks(source):
+            capture_name_set.update(block.input_bindings)
+            capture_name_set.update(block.bindings)
+            capture_name_set.update(extract_template_interpolation_name_set(block.text))
+    except Exception:
+        capture_name_set = set()
+
+    definition_frame = inspect.currentframe()
+    name_to_value: dict[str, object] = {}
+    if definition_frame is not None and definition_frame.f_back is not None:
+        caller_frame = definition_frame.f_back
+        if caller_frame.f_code.co_name != "<module>":
+            for name in capture_name_set:
+                if name in caller_frame.f_locals:
+                    name_to_value[name] = caller_frame.f_locals[name]
 
     transformed_source = transform_function_source(source)
 
@@ -84,6 +132,9 @@ def fn(func: F | None = None) -> F:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         with call_scope():
+            if name_to_value:
+                with python_name_scope(name_to_value):
+                    return transformed(*args, **kwargs)
             return transformed(*args, **kwargs)
 
     return cast(F, wrapper)  # type: ignore[return-value]

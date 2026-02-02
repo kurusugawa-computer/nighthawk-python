@@ -7,7 +7,6 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.errors import ExecutionError
 from nighthawk.execution.context import ExecutionContext
 from nighthawk.execution.llm import ExecutionFinal
 
@@ -69,7 +68,7 @@ def test_docstring_block_executes_first_and_template_name_is_undefined(tmp_path:
             result = 0
             return result
 
-        with pytest.raises(ExecutionError, match="Template evaluation failed"):
+        with pytest.raises(UnboundLocalError, match="later_value"):
             f()
 
 
@@ -174,7 +173,7 @@ def test_missing_input_binding_raises_even_if_template_does_not_reference_it(tmp
             Hello.
             """
 
-        with pytest.raises(ExecutionError, match="Unknown input binding name"):
+        with pytest.raises(NameError, match="missing"):
             f()
 
 

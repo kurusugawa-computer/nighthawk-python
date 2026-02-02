@@ -435,6 +435,182 @@ def test_template_preprocessing_locals_shadow_globals(tmp_path: Path):
         assert f() == 2
 
 
+def test_template_preprocessing_can_access_enclosing_scope(tmp_path: Path) -> None:
+    create_workspace_directories(tmp_path)
+
+    from nighthawk.execution.llm import ExecutionFinal
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+
+    @dataclass
+    class RecordingExecutor:
+        seen_programs: list[str] = field(default_factory=list)
+
+        def run_natural_block(
+            self,
+            *,
+            processed_natural_program: str,
+            execution_context: object,
+            binding_names: list[str],
+            is_in_loop: bool,
+            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+        ) -> tuple[ExecutionFinal, dict[str, object]]:
+            _ = execution_context
+            _ = binding_names
+            _ = is_in_loop
+            _ = allowed_effect_types
+
+            self.seen_programs.append(processed_natural_program)
+            return ExecutionFinal(effect=None, error=None), {}
+
+    recording_executor = RecordingExecutor()
+
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=recording_executor,
+            memory=RuntimeMemory(),
+            workspace_root=tmp_path,
+        )
+    ):
+
+        def factory() -> object:
+            def helper(n: int) -> str:
+                return f"ok:{n}"
+
+            @nh.fn
+            def f() -> None:
+                """natural
+                {helper(3)}
+                """
+
+            return f
+
+        f = factory()
+        f()  # type: ignore[operator]
+
+    assert recording_executor.seen_programs == ["ok:3\n"]
+
+
+def test_enclosing_scope_capture_is_isolated_between_factories(tmp_path: Path) -> None:
+    create_workspace_directories(tmp_path)
+
+    from nighthawk.execution.llm import ExecutionFinal
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+
+    @dataclass
+    class RecordingExecutor:
+        seen_programs: list[str] = field(default_factory=list)
+
+        def run_natural_block(
+            self,
+            *,
+            processed_natural_program: str,
+            execution_context: object,
+            binding_names: list[str],
+            is_in_loop: bool,
+            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+        ) -> tuple[ExecutionFinal, dict[str, object]]:
+            _ = execution_context
+            _ = binding_names
+            _ = is_in_loop
+            _ = allowed_effect_types
+
+            self.seen_programs.append(processed_natural_program)
+            return ExecutionFinal(effect=None, error=None), {}
+
+    recording_executor = RecordingExecutor()
+
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=recording_executor,
+            memory=RuntimeMemory(),
+            workspace_root=tmp_path,
+        )
+    ):
+
+        def factory(n: int) -> object:
+            def helper() -> str:
+                return f"value:{n}"
+
+            _ = helper
+
+            @nh.fn
+            def f() -> None:
+                """natural
+                {helper()}
+                """
+
+            return f
+
+        f1 = factory(1)
+        f2 = factory(2)
+        f1()  # type: ignore[operator]
+        f2()  # type: ignore[operator]
+
+    assert recording_executor.seen_programs == ["value:1\n", "value:2\n"]
+
+
+def test_input_binding_can_resolve_enclosing_scope_name(tmp_path: Path) -> None:
+    create_workspace_directories(tmp_path)
+
+    from nighthawk.execution.context import ExecutionContext
+    from nighthawk.execution.llm import ExecutionFinal
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+
+    @dataclass
+    class AssertingExecutor:
+        def run_natural_block(
+            self,
+            *,
+            processed_natural_program: str,
+            execution_context: ExecutionContext,
+            binding_names: list[str],
+            is_in_loop: bool,
+            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+        ) -> tuple[ExecutionFinal, dict[str, object]]:
+            _ = processed_natural_program
+            _ = binding_names
+            _ = is_in_loop
+            _ = allowed_effect_types
+
+            assert execution_context.execution_locals["x"] == 123
+            return ExecutionFinal(effect=None, error=None), {}
+
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=AssertingExecutor(),
+            memory=RuntimeMemory(),
+            workspace_root=tmp_path,
+        )
+    ):
+
+        def factory(x: int) -> object:
+            _ = x
+
+            @nh.fn
+            def f() -> None:
+                """natural
+                <x>
+                Hello.
+                """
+
+            return f
+
+        f = factory(123)
+        f()  # type: ignore[operator]
+
+
 def test_frontmatter_deny_continue_in_loop_rejects_continue_effect(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
