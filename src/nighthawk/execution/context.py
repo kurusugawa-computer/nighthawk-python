@@ -33,6 +33,11 @@ _execution_context_stack_var: ContextVar[list[ExecutionContext]] = ContextVar(
     default=[],
 )
 
+_python_name_scope_stack_var: ContextVar[list[dict[str, object]]] = ContextVar(
+    "nighthawk_python_name_scope_stack",
+    default=[],
+)
+
 
 @contextmanager
 def execution_context_scope(execution_context: ExecutionContext) -> Iterator[None]:
@@ -44,8 +49,22 @@ def execution_context_scope(execution_context: ExecutionContext) -> Iterator[Non
         _execution_context_stack_var.reset(token)
 
 
+@contextmanager
+def python_name_scope(name_to_value: dict[str, object]) -> Iterator[None]:
+    current = _python_name_scope_stack_var.get()
+    token = _python_name_scope_stack_var.set([*current, dict(name_to_value)])
+    try:
+        yield
+    finally:
+        _python_name_scope_stack_var.reset(token)
+
+
 def get_execution_context_stack() -> tuple[ExecutionContext, ...]:
     return tuple(_execution_context_stack_var.get())
+
+
+def get_python_name_scope_stack() -> tuple[dict[str, object], ...]:
+    return tuple(_python_name_scope_stack_var.get())
 
 
 def get_current_execution_context() -> ExecutionContext:

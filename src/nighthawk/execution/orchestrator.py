@@ -10,7 +10,7 @@ import yaml
 from pydantic import BaseModel, TypeAdapter
 
 from ..errors import ExecutionError
-from .context import ExecutionContext, get_execution_context_stack
+from .context import ExecutionContext, get_execution_context_stack, get_python_name_scope_stack
 from .environment import ExecutionEnvironment
 from .llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
@@ -82,20 +82,68 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
     return instructions_without_frontmatter, tuple(denied)
 
 
-def evaluate_template(text: str, template_globals: dict[str, object], template_locals: dict[str, object]) -> str:
+class _TemplateLocalsProxy(dict[str, object]):
+    def __init__(
+        self,
+        *,
+        python_locals: dict[str, object],
+        python_name_scope_stack: tuple[dict[str, object], ...],
+        local_variable_name_set: set[str],
+        free_variable_name_set: set[str],
+    ) -> None:
+        super().__init__()
+        self._python_locals = python_locals
+        self._python_name_scope_stack = python_name_scope_stack
+        self._local_variable_name_set = local_variable_name_set
+        self._free_variable_name_set = free_variable_name_set
+
+    def __getitem__(self, name: str) -> object:
+        if name in self._python_locals:
+            return self._python_locals[name]
+
+        if name in self._local_variable_name_set:
+            raise UnboundLocalError(f"cannot access local variable {name!r} where it is not associated with a value")
+
+        if name in self._free_variable_name_set:
+            error = NameError(f"cannot access free variable {name!r} where it is not associated with a value in enclosing scope")
+            error.name = name
+            raise error
+
+        for scope in reversed(self._python_name_scope_stack):
+            if name in scope:
+                return scope[name]
+
+        raise KeyError(name)
+
+
+def evaluate_template(text: str, *, caller_frame: FrameType) -> str:
     """Evaluate a Python 3.14 template string from trusted input.
 
     This intentionally allows function execution inside templates under the trusted-input model.
+
+    Name resolution follows LEGB (locals, enclosing, globals, builtins), and exceptions are
+    surfaced as the original Python exception types where feasible.
     """
 
-    globals_for_eval = dict(template_globals)
+    python_locals = caller_frame.f_locals
+    python_globals = caller_frame.f_globals
+
+    local_variable_name_set = set(caller_frame.f_code.co_varnames)
+    local_variable_name_set.update(caller_frame.f_code.co_cellvars)
+    free_variable_name_set = set(caller_frame.f_code.co_freevars)
+
+    template_locals: dict[str, object] = _TemplateLocalsProxy(
+        python_locals=python_locals,
+        python_name_scope_stack=get_python_name_scope_stack(),
+        local_variable_name_set=local_variable_name_set,
+        free_variable_name_set=free_variable_name_set,
+    )
+
+    globals_for_eval = dict(python_globals)
     if "__builtins__" not in globals_for_eval:
         globals_for_eval["__builtins__"] = __builtins__
 
-    try:
-        template_object = eval("t" + repr(text), globals_for_eval, template_locals)
-    except Exception as e:
-        raise ExecutionError(f"Template evaluation failed: {e}") from e
+    template_object = eval("t" + repr(text), globals_for_eval, template_locals)
 
     try:
         strings = template_object.strings
@@ -185,7 +233,7 @@ class Orchestrator:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
-        processed_with_frontmatter = evaluate_template(natural_program, python_globals, python_locals)
+        processed_with_frontmatter = evaluate_template(natural_program, caller_frame=caller_frame)
 
         processed_without_frontmatter, denied_effect_types = _split_frontmatter_or_none(processed_with_frontmatter)
 
@@ -214,14 +262,47 @@ class Orchestrator:
             execution_locals["memory"] = self.environment.memory
 
         binding_commit_targets = set(output_binding_names)
+
+        local_variable_name_set = set(caller_frame.f_code.co_varnames)
+        local_variable_name_set.update(caller_frame.f_code.co_cellvars)
+        free_variable_name_set = set(caller_frame.f_code.co_freevars)
+
+        python_name_scope_stack = get_python_name_scope_stack()
+
+        python_builtins = python_globals.get("__builtins__", __builtins__)
+
+        def resolve_input_binding_value(binding_name: str) -> object:
+            if binding_name in python_locals:
+                return python_locals[binding_name]
+
+            if binding_name in local_variable_name_set:
+                raise UnboundLocalError(f"cannot access local variable {binding_name!r} where it is not associated with a value")
+
+            if binding_name in free_variable_name_set:
+                error = NameError(f"cannot access free variable {binding_name!r} where it is not associated with a value in enclosing scope")
+                error.name = binding_name
+                raise error
+
+            for scope in reversed(python_name_scope_stack):
+                if binding_name in scope:
+                    return scope[binding_name]
+
+            if binding_name in python_globals:
+                return python_globals[binding_name]
+
+            if isinstance(python_builtins, dict) and binding_name in python_builtins:
+                return python_builtins[binding_name]
+
+            if hasattr(python_builtins, binding_name):
+                return getattr(python_builtins, binding_name)
+
+            error = NameError(f"name {binding_name!r} is not defined")
+            error.name = binding_name
+            raise error
+
         resolved_input_binding_name_to_value: dict[str, object] = {}
         for binding_name in input_binding_names:
-            if binding_name in python_locals:
-                resolved_input_binding_name_to_value[binding_name] = python_locals[binding_name]
-            elif binding_name in python_globals:
-                resolved_input_binding_name_to_value[binding_name] = python_globals[binding_name]
-            else:
-                raise ExecutionError(f"Unknown input binding name at runtime: {binding_name}")
+            resolved_input_binding_name_to_value[binding_name] = resolve_input_binding_value(binding_name)
 
         execution_locals.update(resolved_input_binding_name_to_value)
 
@@ -249,8 +330,6 @@ class Orchestrator:
         input_bindings = dict(resolved_input_binding_name_to_value)
 
         execution_context.execution_locals.update(bindings)
-
-        caller_frame.f_locals.update(bindings)
 
         final_typed = final
         if not isinstance(final_typed, ExecutionFinal):
