@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..claude_agent_sdk_model import ClaudeAgentSdkModel
 from ..configuration import ExecutionConfiguration
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
@@ -37,8 +38,14 @@ def make_agent_executor(
     execution_configuration: ExecutionConfiguration,
     **agent_constructor_keyword_arguments: Any,
 ) -> "AgentExecutor":
+    model = execution_configuration.model
+    if model.startswith("claude-agent-sdk:"):
+        if model != "claude-agent-sdk:outside":
+            raise ValueError("Only claude-agent-sdk:outside is supported")
+        model = ClaudeAgentSdkModel()
+
     agent: ExecutionAgent = Agent(
-        model=execution_configuration.model,
+        model=model,
         output_type=ExecutionFinal,
         deps_type=ExecutionContext,
         system_prompt=execution_configuration.prompts.execution_system_prompt_template,
