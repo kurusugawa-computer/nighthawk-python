@@ -20,6 +20,8 @@ class FakeMemory(BaseModel):
 def test_simple():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
+    if os.getenv("OPENAI_API_KEY") is None:
+        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
     from pydantic_ai import Agent
     from pydantic_ai.models.openai import OpenAIResponsesModelSettings
@@ -36,6 +38,8 @@ def test_simple():
 def test_agent_import_and_construction_and_run():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
+    if os.getenv("OPENAI_API_KEY") is None:
+        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
     from nighthawk.execution.context import ExecutionContext
     from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES
@@ -79,6 +83,8 @@ def test_agent_import_and_construction_and_run():
 def test_natural_block_evaluate_order():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
+    if os.getenv("OPENAI_API_KEY") is None:
+        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
     execution_configuration = nh.ExecutionConfiguration()
     execution_executor = nighthawk.execution.executors.make_agent_executor(
@@ -110,6 +116,8 @@ def test_natural_block_evaluate_order():
 def test_condition():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
+    if os.getenv("OPENAI_API_KEY") is None:
+        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=nh.ExecutionConfiguration(),
