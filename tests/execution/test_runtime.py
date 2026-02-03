@@ -17,6 +17,11 @@ GLOBAL_NUMBER = 7
 SHADOWED_NUMBER = 1
 
 
+def global_import_file(file_path: Path | str) -> str:
+    _ = file_path
+    return '{"execution_final": {"effect": null, "error": null}, "bindings": {"result": 20}}'
+
+
 def create_workspace_directories(workspace_root: Path) -> None:
     (workspace_root / "docs").mkdir()
     (workspace_root / "tests").mkdir()
@@ -492,6 +497,46 @@ def test_template_preprocessing_can_access_enclosing_scope(tmp_path: Path) -> No
         f()  # type: ignore[operator]
 
     assert recording_executor.seen_programs == ["ok:3\n"]
+
+
+def test_template_preprocessing_can_call_local_and_global_helpers(tmp_path: Path) -> None:
+    create_workspace_directories(tmp_path)
+
+    configuration = nh.Configuration(
+        execution_configuration=nh.ExecutionConfiguration(),
+    )
+    memory = RuntimeMemory()
+
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=configuration.execution_configuration,
+            execution_executor=StubExecutor(),
+            memory=memory,
+            workspace_root=tmp_path,
+        )
+    ):
+
+        @nh.fn
+        def function_under_test() -> int:
+            def local_import_file(file_path: Path | str) -> str:
+                _ = file_path
+                return '{"execution_final": {"effect": null, "error": null}, "bindings": {"result": 10}}'
+
+            result = 0
+
+            """natural
+            <:result>
+            {local_import_file("ignored.md")}
+            """
+
+            """natural
+            <:result>
+            {global_import_file("ignored.md")}
+            """
+
+            return result
+
+        assert function_under_test() == 20
 
 
 def test_enclosing_scope_capture_is_isolated_between_factories(tmp_path: Path) -> None:
