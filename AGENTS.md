@@ -4,9 +4,9 @@ This file provides repository-specific guidance for coding agents and human cont
 
 ## NON-NEGOTIABLE REQUIREMENTS
 
-- Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans).
+- Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans, Ideal State documents).
 - When listing questions, confirmations, or proposed decisions for the user, assign a short stable Id to each item so the user can respond inline.
-  - Required format: `Q-FOO-01` (questions), `C-FOO-01` (confirmations), `P-FOO-01` (proposals). For follow-ups, append a suffix like `Q-FOO-01A`.
+  - Required format: `Q-KEBAB-001` (questions), `C-KEBAB-001` (confirmations), `P-KEBAB-001` (proposals). For follow-ups, append a suffix like `Q-KEBAB-001A`.
   - Each item must be answerable on its own and must include its Id in the text.
 
 ## ExecPlans
@@ -14,7 +14,7 @@ This file provides repository-specific guidance for coding agents and human cont
 Only create an ExecPlan when author instruction explicitly requests it. If an ExecPlan is not explicitly requested, do not use ExecPlan files, even for large or risky changes.
 When an ExecPlan is explicitly requested, author it following `.agent/PLANS.md` before you touch code.
 Treat the ExecPlan as both an executable specification and a transparency artifact: keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` updated as work proceeds.
-Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>.md` (ASCII only, lowercase, hyphen-separated).
+Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<kebab>.md` (ASCII only, lowercase, hyphen-separated).
 
 ## Design principles
 

@@ -1,44 +1,88 @@
 ---
 name: radical-chat
-description: Guides a radical, workspace-wide design alignment session that produces or updates an Ideal State document (invariants).
-disable-model-invocation: true
+description: Guides a radical, workspace-wide design alignment session that produces and continuously refines an Ideal State document (invariants).
 argument-hint: "@<ideal-path> concept:|naming:|procedure:|layout: <topic>"
 ---
 
 # Radical chat
 
-This Skill is a thinking and alignment guide. It is intentionally radical: once invoked, prioritize global coherence across the workspace over incremental adaptation.
+This Skill is a thinking and alignment guide. It is intentionally radical: prioritize workspace-wide coherence over incremental adaptation and over the current repository state.
+
+This Skill is also intentionally artifact-forward: create the Ideal State document early and keep it updated as the session progresses.
 
 ## Definitions
 
 - Radical chat: A design alignment session that prioritizes workspace-wide coherence over incremental adaptation.
-- Ideal State document: The durable shared artifact produced or updated by radical chat. Its normative content is invariants.
+- Ideal State document: The durable shared artifact produced and edited during radical chat. Its normative content is invariants.
 - Invariant: A normative constraint that should ideally always hold. It is not required to match the current repository state.
-- Confirmed invariant: An invariant that is both (a) explicitly confirmed in the session and (b) justified from repository materials.
+- Invariant Id: A stable identifier for an invariant inside a single Ideal State document.
+  - Format: `I-<NNN>` or `I-<NNN><SUFFIX>`
+  - `<NNN>` is a 3-digit number (001-999).
+  - `<SUFFIX>` is one or more uppercase ASCII letters used for insertion, like spreadsheet columns: `A`..`Z`, then `AA`, `AB`, etc.
+  - Invariant Id uniqueness is scoped to the current Ideal State document. Collisions across different Ideal State documents are allowed.
 - Repository materials: Code, tests, and documentation in this repository.
-- Open question: A claim that cannot be justified from repository materials and therefore must not be recorded as a confirmed invariant.
-- Ideal Slug: The string used inside invariant Ids. It is either explicitly recorded in the Ideal State document as `Ideal Slug: <IDEAL-SLUG>`, or derived from the file basename rule below.
+  - Repository materials are NON-NORMATIVE inputs by default.
+  - They MUST NOT be treated as authority or grounding for invariants.
+  - They MAY be used to (a) draft initial proposals, (b) detect conflicts with the current codebase, and (c) check coherence among invariants and existing conventions.
+  - Exception: If the user explicitly authorizes using some repository material as a constraint for this session, record that authorization as a Decision, and express the constraint as invariants (not as "because the repo says so").
+- Confirmed invariant: An invariant that is explicitly confirmed in the session by the user.
+  - Confirmation is a human decision, not a repository-derived fact.
+- Open question: A claim that is not yet resolved by an explicit user decision.
+  - Open questions are allowed to remain if the user ends the session, but the assistant MUST keep them visible and actionable.
+- Decision log entry: A traceability record that supports invariants. It MUST NOT introduce new norms. Decisions exist to explain and support invariants.
 
-## Session rules
+## Session rules (radical and persistent)
 
-1. Coherence is a hard constraint. Prefer workspace-wide coherence over local optimization.
+1. Coherence is a hard constraint.
+   - Prefer workspace-wide coherence over local optimization.
+   - Prefer symmetry, unification, and regularity.
+
 2. The Ideal State document's normative content is invariants only.
    - It may include Open questions and a Decision log for traceability.
-   - It must not include implementation steps, gap analysis, roadmaps, migration plans, or task lists.
-3. Be radical: maximize regularity, symmetry, and unification. Do not let the current implementation constrain the ideal.
-4. Propose invariants freely, but only record confirmed invariants when they are justified from repository materials and explicitly confirmed.
-5. If grounding is not available, keep the claim as an open question (even if it seems like a good idea).
-6. Every invariant MUST have an invariant Id using this format:
-   - `I-<IDEAL-SLUG>-###: <statement>`
-   - `<IDEAL-SLUG>` defaults to the Ideal State document basename (without extension) uppercased.
-   - If the basename is generic or ambiguous (for example `ideal.md`, `index.md`, `readme.md`), ask the user for the Ideal Slug to use and record it in the document as `Ideal Slug: <IDEAL-SLUG>`.
-   - `radical-chat` MUST NOT derive the slug from directory names, prefixes like `ideal-`, or any other metadata. Use only the explicit `Ideal Slug` line or the basename rule above.
-7. Use stable Ids so the user can respond inline:
-   - Proposals: P-SLUG-001
-   - Questions: Q-SLUG-001
-   - Confirmations: C-SLUG-001
-   - Decisions (for decision logs): D-SLUG-001
-   - Follow-ups: append suffixes (for example, Q-SLUG-001A).
+   - It MUST NOT include implementation steps, gap analysis, roadmaps, migration plans, or task lists.
+
+3. Be radical: do not let the current implementation constrain the ideal.
+
+4. Anti-drag discipline (repository is not authority):
+   - Propose invariants freely.
+   - Confirmed invariants require explicit user confirmation.
+   - Repository materials are inputs for drafting and coherence checks only; they MUST NOT be used to "prove" or "justify" invariants.
+   - Exception: If the user explicitly authorizes treating specific repository materials as constraints, record that authorization as a Decision and express the constraints as invariants.
+
+5. Open questions are persistent and not blocking:
+   - If open questions remain, you MUST surface them regularly and ask for resolution.
+   - You MUST NOT block progress by default.
+   - The user may end the chat session at any time; if they do, you MUST provide a "handoff" summary of remaining open questions and the next confirmations needed to resolve them.
+   - If the user defers a question, record the deferral explicitly in Open questions (with a reason).
+
+6. Decisions support invariants (non-normative):
+   - Every Decision log entry MUST explicitly reference which invariant(s) it supports.
+   - A Decision log entry MUST NOT create new requirements. Requirements belong only in invariants.
+   - If a Decision would introduce a new requirement, write that requirement as an invariant and make the Decision support it.
+
+7. Early artifact creation and active editing (Ideal State document only):
+   - Create the Ideal State document as early as possible (after selecting an ideal-path).
+   - Prefer frequent small edits while chatting, because the user often reads the file.
+   - Ask for one-time "standing permission" to keep editing the Ideal State document during the session. If permission is not granted, show a proposed patch instead of editing.
+
+8. Invariant edits trigger global review:
+   - Whenever any invariant is added, updated, or deleted, you MUST re-scan and re-evaluate ALL other invariants for coherence and conflicts.
+   - If conflicts appear, either (a) propose synchronized edits, or (b) convert the disputed area into open questions until resolved.
+
+9. Invariant Id rules:
+   - Every invariant MUST have an invariant Id using this format: `I-<NNN>: <statement>` (or with an insertion suffix: `I-<NNN><SUFFIX>: <statement>`).
+   - Renumbering existing invariants is forbidden. Treat Ids as stable anchors.
+   - Default rule for new invariants is append-only (next available `I-<NNN>`).
+   - Use insertion suffixes only when you must insert between existing invariants.
+     - Example: insert between `I-042` and `I-043` as `I-042A`.
+     - Further inserts: `I-042B`, ..., `I-042Z`, then `I-042AA`, `I-042AB`, etc.
+
+10. Stable Ids for inline responses:
+   - Proposals: `P-KEBAB-001`
+   - Questions: `Q-KEBAB-001`
+   - Confirmations: `C-KEBAB-001`
+   - Decisions (for decision logs): `D-KEBAB-001`
+   - Follow-ups: append suffixes (for example, `Q-KEBAB-001A`).
 
 ## Arguments
 
@@ -52,23 +96,45 @@ Preferred convention:
   - `naming:` naming rules and vocabulary
   - `procedure:` process and decision structure
   - `layout:` directory or module layout structure
+- `<topic>`: the topic statement.
 
-If arguments omit `@<ideal-path>`, ask the user for a target file path before proposing edits.
-If the dimension tag is missing or multiple dimension tags are provided, ask the user which one to use.
+### First-run assumption: `<topic>` only
 
-## Output contract
+This Skill assumes the first invocation may provide only `<topic>`.
 
-1. Restate the topic and scope.
-2. Propose the Ideal State as invariants (not steps). Every invariant uses an invariant Id (`I-...`).
-3. List open questions (Q-...) and confirmations (C-...).
-4. Once resolved, and only if the user explicitly asks, apply edits to the Ideal State document.
+If arguments omit `@<ideal-path>`:
+
+1. Propose 1-3 ideal-path candidates.
+   - Default recommendation: `docs/ideal/<topic-kebab>.md`
+2. Ask the user to choose one path (or provide another).
+3. Create the file early (skeleton), once the path is chosen and editing permission is granted.
+
+If the dimension tag is missing or multiple dimension tags are provided, ask the user which single dimension to use.
+
+## Output contract (every turn)
+
+Each assistant response MUST include:
+
+1. Restate the topic and scope (and the chosen dimension).
+2. Show proposed invariants (I-...) and/or proposed invariant edits (add/update/delete).
+3. List open questions (Q-...) and confirmations (C-...) needed to confirm the next set of invariants.
+   - If questions are deferred, mark them explicitly as deferred and keep them visible without blocking progress.
+   - Each open question MUST include at least one concrete decision option, plus the confirmation(s) needed to convert it into invariant edits.
+4. Decision support (D-...) only when it helps justify or explain invariants.
+   - Each decision MUST reference supported invariants and MUST NOT introduce new norms.
+5. If an Ideal State document path is known:
+   - If standing permission exists: apply edits immediately and keep the document updated.
+   - If not: show a proposed patch/diff for the document.
+
+6. Optional closure pass (only if the user asks to finalize):
+   - If the user requests closure/finalization, you MUST attempt to drive Open questions to Decisions and confirmations.
+   - You MUST still allow the user to end the session at any time; if they stop before closure is complete, provide a handoff summary.
 
 ## Ideal State document structure
 
 When writing or updating the Ideal State document, use these sections:
 
 - Purpose
-- Ideal Slug (optional; only when basename is generic or ambiguous)
 - Definitions
 - Invariants
   - Concept invariants
@@ -81,15 +147,23 @@ When writing or updating the Ideal State document, use these sections:
 
 ## Examples
 
-### Example input
+### Example input (full form)
 
     /radical-chat @docs/ideal/execution.md concept: execution context
 
-### Example expected output shape
+### Example input (first run, topic only)
 
-- P-TASK-001: Draft Ideal State invariants for `docs/ideal/execution.md` under the `concept` dimension.
-- I-EXECUTION-0001: Execution Context is a defined term and must not have synonyms in code or docs.
-- Q-TERM-001: Which files currently define execution terminology that the Ideal State must reconcile?
-- C-TERM-001: Confirm we will treat "Execution Context" as a single defined term and forbid synonyms in code and docs.
+    /radical-chat execution context
 
-(After Q/C are resolved and the user explicitly asks to edit, update the file.)
+### Example expected output shape (first run)
+
+- P-EXECUTION-001: Propose ideal-path `docs/ideal/execution-context.md` and default dimension `concept` unless you choose otherwise.
+- Q-EXECUTION-001: Which ideal-path should we use for the Ideal State document?
+- Q-EXECUTION-002: Which dimension should we use (concept, naming, procedure, layout)?
+- C-EXECUTION-001: Confirm standing permission for me to create and continuously edit the Ideal State document during this session.
+- I-001: Execution context is a defined term and must not have synonyms in code or docs.
+- Q-EXECUTION-003: Which conceptual alternatives for "execution context" should the Ideal State choose between (list options, even if tentative)?
+- C-EXECUTION-002: Confirm which alternative to adopt (or confirm a new alternative).
+- D-EXECUTION-001: Record the chosen alternative as decision support for I-001 (and any new invariants needed).
+
+(After the user confirms permission and resolves or defers the necessary questions, create/update the Ideal State document and keep it in sync. If the user ends the session with open questions remaining, provide a handoff summary.)

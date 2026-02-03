@@ -8,7 +8,7 @@
 - Observability and auditability
 - Guidelines
 - Milestones
-- Traceability overlay (invariant Id references)
+- Invariant status overlay (status file)
 - Living plans and design decisions
 - Prototyping milestones and parallel implementations
 - Skeleton of a good RadicalPlan
@@ -28,6 +28,12 @@ RadicalPlans are also a transparency artifact. Assume a human will read the Radi
 - Every RadicalPlan must enable a complete novice to implement the feature end-to-end without prior knowledge of this repository.
 - Every RadicalPlan must produce a demonstrably working behavior, not merely code changes to "meet a definition".
 - Every RadicalPlan must define every term of art in plain language or do not use it.
+
+Additional non-negotiable constraints for plans derived from Ideal State documents:
+
+- The RadicalPlan file MUST NOT include any Ideal State invariant Ids (no `I-...` anywhere).
+- The RadicalPlan file MUST NOT include the ideal-path.
+- Invariant status (Unplanned/In progress/Done) MUST be tracked in a sibling status file (see "Invariant status overlay").
 
 Purpose and intent come first. Begin by explaining, in a few sentences, why the work matters from a user's perspective: what someone can do after this change that they could not do before, and how to see it working. Then guide the reader through the exact steps to achieve that outcome, including what to edit, what to run, and what they should observe.
 
@@ -79,12 +85,36 @@ Milestones are narrative, not bureaucracy. If you break the work into milestones
 
 Each milestone must be independently verifiable and incrementally implement the overall goal of the plan.
 
-## Traceability overlay (invariant Id references)
+## Invariant status overlay (status file)
 
-If the RadicalPlan exists to realize an Ideal State document:
+If a RadicalPlan exists to realize an Ideal State document, invariant status MUST be tracked in a sibling status file.
 
-- Every Progress checkbox item MUST reference at least one invariant Id (I-...).
-- If the plan uses milestones, every milestone MUST include a line `Anchored invariants: I-...` referencing at least one invariant Id.
+Naming:
+
+- If the plan file is named `<ideal-basename>-plan-YYYYMMDD-<kebab>.md`, the status file MUST be named `<ideal-basename>-status.md` in the same directory.
+
+Format:
+
+- The status file is Markdown.
+- It MUST contain exactly these two sections (spelling and heading level must match):
+  - `## In progress`
+  - `## Done`
+- Each section contains a Markdown list of invariant Ids (from the Ideal State document) and optional short labels.
+- Unplanned is implicit: any invariant Id present in the Ideal State document but not listed under `## In progress` or `## Done` is Unplanned.
+
+Evidence requirement:
+
+- Every invariant listed under `## Done` MUST include evidence.
+- Evidence MUST be on the same list item line using the substring `Evidence:`.
+- Evidence should be short and concrete (test name, command transcript pointer, or file path plus the observation).
+
+Example status item shapes:
+
+- In progress:
+  - `- I-006: Model selection is sourced from configuration.`
+
+- Done:
+  - `- I-004: Execution ids are unique within the environment lifetime. Evidence: tests/execution/test_runtime.py::test_execution_id_is_unique passes.`
 
 ## Living plans and design decisions
 
