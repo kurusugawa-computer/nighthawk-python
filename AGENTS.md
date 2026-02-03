@@ -5,6 +5,7 @@ This file provides repository-specific guidance for coding agents and human cont
 ## NON-NEGOTIABLE REQUIREMENTS
 
 - Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans, Ideal State documents).
+- In chat sessions, communicate in Japanese; when writing to files, use English; internal reasoning may use any language.
 - When listing questions, confirmations, or proposed decisions for the user, assign a short stable Id to each item so the user can respond inline.
   - Required format: `Q-KEBAB-001` (questions), `C-KEBAB-001` (confirmations), `P-KEBAB-001` (proposals). For follow-ups, append a suffix like `Q-KEBAB-001A`.
   - Each item must be answerable on its own and must include its Id in the text.
@@ -40,6 +41,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<kebab
 - `Id` = Identifier
 - `DSL` = Domain Specific Language
 - `LLM` = Large Language Model
+- `NH` / `nh` = Nighthawk
 - Loop indices: `i`, `j`, `k` (e.g., `for i in range(n): ...`).
 
 ## Context and orientation
