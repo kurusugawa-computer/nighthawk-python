@@ -1,4 +1,7 @@
 {
+  "env": {
+    "ENABLE_LSP_TOOL": "1"
+  },
   "permissions": {
     "allow": [
       "WebSearch",
@@ -10,6 +13,5 @@
   },
   "enabledPlugins": {
     "pyright-lsp@claude-plugins-official": true
-  },
-  "env": { "ENABLE_LSP_TOOL": "1" }
+  }
 }

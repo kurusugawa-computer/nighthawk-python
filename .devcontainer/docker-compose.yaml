@@ -1,0 +1,15 @@
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/python:2-3.14-bookworm
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+
+  litellm:
+    build:
+      context: .
+      dockerfile: Dockerfile.litellm
+    env_file:
+      - ../.env
+    volumes:
+      - ./litellm-config.yaml:/litellm-config.yaml:ro
