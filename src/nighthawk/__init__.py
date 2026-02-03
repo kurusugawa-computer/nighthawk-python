@@ -10,6 +10,7 @@ from .configuration import Configuration, ExecutionConfiguration
 from .execution.context import (
     get_current_execution_context,
     get_execution_context_stack,
+    python_cell_scope,
     python_name_scope,
 )
 from .execution.environment import (
@@ -114,20 +115,88 @@ def fn(func: F | None = None) -> F:
                 if name in caller_frame.f_locals:
                     name_to_value[name] = caller_frame.f_locals[name]
 
-    transformed_source = transform_function_source(source)
+    captured_name_tuple = tuple(sorted(capture_name_set))
+
+    transformed_source = transform_function_source(source, captured_name_tuple=captured_name_tuple)
+
+    def build_transformed_factory_source(*, transformed_module_source: str) -> str:
+        transformed_module = ast.parse(transformed_module_source)
+
+        transformed_function_def: ast.FunctionDef | None = None
+        for node in transformed_module.body:
+            if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
+                transformed_function_def = node
+                break
+
+        if transformed_function_def is None:
+            raise RuntimeError("Transformed function not found in transformed module source")
+
+        captured_value_name = "__nh_captured_values__"
+        factory_name = "__nh_factory__"
+
+        factory_body: list[ast.stmt] = []
+        for name in sorted(name_to_value.keys()):
+            factory_body.append(
+                ast.Assign(
+                    targets=[ast.Name(id=name, ctx=ast.Store())],
+                    value=ast.Subscript(
+                        value=ast.Name(id=captured_value_name, ctx=ast.Load()),
+                        slice=ast.Constant(name),
+                        ctx=ast.Load(),
+                    ),
+                )
+            )
+
+        factory_body.append(transformed_function_def)
+        factory_body.append(ast.Return(value=ast.Name(id=func.__name__, ctx=ast.Load())))
+
+        factory_function_def = ast.FunctionDef(
+            name=factory_name,
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[ast.arg(arg=captured_value_name)],
+                kwonlyargs=[],
+                kw_defaults=[],
+                defaults=[],
+            ),
+            body=factory_body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+
+        factory_module = ast.Module(body=[factory_function_def], type_ignores=[])
+        ast.fix_missing_locations(factory_module)
+        return ast.unparse(factory_module)
 
     filename = inspect.getsourcefile(func) or "<nighthawk>"
-    code = compile(transformed_source, filename, "exec")
+
+    factory_source = build_transformed_factory_source(transformed_module_source=transformed_source)
+    code = compile(factory_source, filename, "exec")
 
     globals_namespace: dict[str, object] = dict(func.__globals__)
     globals_namespace["__nighthawk_orchestrator__"] = _OrchestratorProxy()
+    globals_namespace["__nh_python_cell_scope__"] = python_cell_scope
 
     module_namespace: dict[str, object] = {}
     exec(code, globals_namespace, module_namespace)
 
-    transformed = module_namespace.get(func.__name__)
+    factory = module_namespace.get("__nh_factory__")
+    if not callable(factory):
+        raise RuntimeError("Transformed factory not found after compilation")
+
+    transformed = factory(name_to_value)
     if not callable(transformed):
-        raise RuntimeError("Transformed function not found after compilation")
+        raise RuntimeError("Transformed function not found after factory execution")
+
+    if set(getattr(transformed, "__code__").co_freevars) != set(name_to_value.keys()):
+        raise RuntimeError(
+            "Transformed function freevars do not match captured names. "
+            f"freevars={getattr(transformed, '__code__').co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}"
+        )
+
+    if getattr(transformed, "__closure__") is None and name_to_value:
+        raise RuntimeError("Transformed function closure is missing for captured names")
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
