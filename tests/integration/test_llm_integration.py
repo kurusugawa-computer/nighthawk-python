@@ -142,3 +142,40 @@ def test_condition():
 
         assert test_function(9) == 11
         assert test_function(1) == 8
+
+
+def test_readme_hybrid_nesting_normalize_then_call_python_helper():
+    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+        pytest.skip("Integration tests are disabled")
+    if os.getenv("OPENAI_API_KEY") is None:
+        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
+
+    python_average_call_argument_list: list[list[float]] = []
+
+    def python_average(numbers: list[float]) -> float:
+        python_average_call_argument_list.append(numbers)
+        return sum(numbers) / len(numbers)
+
+    environment = nh.ExecutionEnvironment(
+        execution_configuration=nh.ExecutionConfiguration(),
+        execution_executor=nighthawk.execution.executors.make_agent_executor(
+            nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+        ),
+        memory=FakeMemory(),
+        workspace_root=Path("."),
+    )
+    with nh.environment(environment):
+
+        @nh.fn
+        def calculate_average(numbers: list[object]) -> float:
+            """natural
+            Normalize <numbers> into python number list (e.g., [1, 2, ...]).
+            Then compute <:result> by calling <python_average>.
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert calculate_average([1, "2", "three", "cuatro", "五"]) == 3.0
+
+    assert python_average_call_argument_list
+    assert python_average_call_argument_list[-1] == [1, 2, 3, 4, 5]

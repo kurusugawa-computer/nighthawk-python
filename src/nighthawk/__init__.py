@@ -190,10 +190,7 @@ def fn(func: F | None = None) -> F:
         raise RuntimeError("Transformed function not found after factory execution")
 
     if set(getattr(transformed, "__code__").co_freevars) != set(name_to_value.keys()):
-        raise RuntimeError(
-            "Transformed function freevars do not match captured names. "
-            f"freevars={getattr(transformed, '__code__').co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}"
-        )
+        raise RuntimeError(f"Transformed function freevars do not match captured names. freevars={getattr(transformed, '__code__').co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}")
 
     if getattr(transformed, "__closure__") is None and name_to_value:
         raise RuntimeError("Transformed function closure is missing for captured names")
