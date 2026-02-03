@@ -3,14 +3,19 @@ from __future__ import annotations
 import inspect
 import uuid
 from dataclasses import dataclass
-from types import FrameType
+from types import CellType, FrameType
 from typing import cast
 
 import yaml
 from pydantic import BaseModel, TypeAdapter
 
 from ..errors import ExecutionError
-from .context import ExecutionContext, get_execution_context_stack, get_python_name_scope_stack
+from .context import (
+    ExecutionContext,
+    get_execution_context_stack,
+    get_python_cell_scope_stack,
+    get_python_name_scope_stack,
+)
 from .environment import ExecutionEnvironment
 from .llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
@@ -87,12 +92,14 @@ class _TemplateLocalsProxy(dict[str, object]):
         self,
         *,
         python_locals: dict[str, object],
+        python_cell_scope_stack: tuple[dict[str, CellType], ...],
         python_name_scope_stack: tuple[dict[str, object], ...],
         local_variable_name_set: set[str],
         free_variable_name_set: set[str],
     ) -> None:
         super().__init__()
         self._python_locals = python_locals
+        self._python_cell_scope_stack = python_cell_scope_stack
         self._python_name_scope_stack = python_name_scope_stack
         self._local_variable_name_set = local_variable_name_set
         self._free_variable_name_set = free_variable_name_set
@@ -100,6 +107,15 @@ class _TemplateLocalsProxy(dict[str, object]):
     def __getitem__(self, name: str) -> object:
         if name in self._python_locals:
             return self._python_locals[name]
+
+        for scope in reversed(self._python_cell_scope_stack):
+            if name not in scope:
+                continue
+            cell = scope[name]
+            try:
+                return cell.cell_contents
+            except ValueError:
+                break
 
         if name in self._local_variable_name_set:
             raise UnboundLocalError(f"cannot access local variable {name!r} where it is not associated with a value")
@@ -134,6 +150,7 @@ def evaluate_template(text: str, *, caller_frame: FrameType) -> str:
 
     template_locals: dict[str, object] = _TemplateLocalsProxy(
         python_locals=python_locals,
+        python_cell_scope_stack=get_python_cell_scope_stack(),
         python_name_scope_stack=get_python_name_scope_stack(),
         local_variable_name_set=local_variable_name_set,
         free_variable_name_set=free_variable_name_set,
@@ -267,6 +284,7 @@ class Orchestrator:
         local_variable_name_set.update(caller_frame.f_code.co_cellvars)
         free_variable_name_set = set(caller_frame.f_code.co_freevars)
 
+        python_cell_scope_stack = get_python_cell_scope_stack()
         python_name_scope_stack = get_python_name_scope_stack()
 
         python_builtins = python_globals.get("__builtins__", __builtins__)
@@ -274,6 +292,15 @@ class Orchestrator:
         def resolve_input_binding_value(binding_name: str) -> object:
             if binding_name in python_locals:
                 return python_locals[binding_name]
+
+            for scope in reversed(python_cell_scope_stack):
+                if binding_name not in scope:
+                    continue
+                cell = scope[binding_name]
+                try:
+                    return cell.cell_contents
+                except ValueError:
+                    break
 
             if binding_name in local_variable_name_set:
                 raise UnboundLocalError(f"cannot access local variable {binding_name!r} where it is not associated with a value")

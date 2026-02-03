@@ -147,6 +147,11 @@ The Natural program may contain bindings with angle brackets:
 - `<name>`: input binding. The current Python value of `name` is made available to the LLM.
 - `<:name>`: writable binding. The LLM may update the value of `name`.
 
+Resolution note:
+
+- Input binding reads resolve names using Python lexical rules (LEGB: locals, enclosing, globals, builtins).
+- If a name is missing or unbound, the error is surfaced as a Python exception type where feasible (for example `NameError`, `UnboundLocalError`).
+
 Constraints:
 
 - `name` is a simple identifier (no dotted paths).
@@ -411,7 +416,8 @@ Natural programs may reference external markdown or compose prompts. Nighthawk s
 - The template evaluation environment is the caller frame's Python environment:
   - `python_locals`: the caller frame locals.
   - `python_globals`: the caller frame globals.
-  - Name resolution follows Python rules (locals shadow globals).
+  - Name resolution follows Python lexical rules (LEGB: locals, enclosing, globals, builtins).
+  - Errors are surfaced as the original Python exception types where feasible (for example `UnboundLocalError`, `NameError`).
 - Nighthawk does not provide built-in template helper functions.
   - If hosts want helpers (for example `include(path)`), they should bind them into the caller frame locals or globals.
 

@@ -7,8 +7,9 @@ from .blocks import extract_bindings, extract_program, is_natural_sentinel
 
 
 class NaturalTransformer(ast.NodeTransformer):
-    def __init__(self) -> None:
+    def __init__(self, *, captured_name_tuple: tuple[str, ...]) -> None:
         super().__init__()
+        self._captured_name_tuple = captured_name_tuple
         self._return_annotation_stack: list[ast.expr | None] = []
         self._binding_name_to_type_expression_stack: list[dict[str, ast.expr]] = []
         self._loop_depth = 0
@@ -41,6 +42,83 @@ class NaturalTransformer(ast.NodeTransformer):
                         node.body = injected + body_without_docstring
 
             node = self.generic_visit(node)  # type: ignore[assignment]
+
+            if self._captured_name_tuple:
+                anchor_name = "__nh_cell_anchor__"
+                name_to_cell_name = "__nh_name_to_cell__"
+
+                anchor_body: list[ast.stmt] = [
+                    ast.Return(
+                        value=ast.Tuple(
+                            elts=[ast.Name(id=name, ctx=ast.Load()) for name in self._captured_name_tuple],
+                            ctx=ast.Load(),
+                        )
+                    )
+                ]
+
+                anchor_function = ast.FunctionDef(
+                    name=anchor_name,
+                    args=ast.arguments(
+                        posonlyargs=[],
+                        args=[],
+                        kwonlyargs=[],
+                        kw_defaults=[],
+                        defaults=[],
+                    ),
+                    body=anchor_body,
+                    decorator_list=[],
+                    returns=None,
+                    type_comment=None,
+                )
+
+                freevars_expression = ast.Attribute(
+                    value=ast.Attribute(value=ast.Name(id=anchor_name, ctx=ast.Load()), attr="__code__", ctx=ast.Load()),
+                    attr="co_freevars",
+                    ctx=ast.Load(),
+                )
+
+                closure_expression = ast.BoolOp(
+                    op=ast.Or(),
+                    values=[
+                        ast.Attribute(value=ast.Name(id=anchor_name, ctx=ast.Load()), attr="__closure__", ctx=ast.Load()),
+                        ast.Tuple(elts=[], ctx=ast.Load()),
+                    ],
+                )
+
+                name_to_cell_value = ast.Call(
+                    func=ast.Name(id="dict", ctx=ast.Load()),
+                    args=[
+                        ast.Call(
+                            func=ast.Name(id="zip", ctx=ast.Load()),
+                            args=[freevars_expression, closure_expression],
+                            keywords=[],
+                        )
+                    ],
+                    keywords=[],
+                )
+
+                name_to_cell_assign = ast.Assign(
+                    targets=[ast.Name(id=name_to_cell_name, ctx=ast.Store())],
+                    value=name_to_cell_value,
+                )
+
+                with_statement = ast.With(
+                    items=[
+                        ast.withitem(
+                            context_expr=ast.Call(
+                                func=ast.Name(id="__nh_python_cell_scope__", ctx=ast.Load()),
+                                args=[ast.Name(id=name_to_cell_name, ctx=ast.Load())],
+                                keywords=[],
+                            ),
+                            optional_vars=None,
+                        )
+                    ],
+                    body=node.body,
+                    type_comment=None,
+                )
+
+                node.body = [anchor_function, name_to_cell_assign, with_statement]
+
             return node
         finally:
             self._binding_name_to_type_expression_stack.pop()
@@ -68,7 +146,7 @@ class NaturalTransformer(ast.NodeTransformer):
         finally:
             self._loop_depth -= 1
 
-    def visit_Expr(self, node: ast.Expr) -> ast.AST:
+    def visit_Expr(self, node: ast.Expr) -> ast.AST | list[ast.stmt]:
         self.generic_visit(node)
         value = node.value
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
@@ -290,7 +368,7 @@ def build_runtime_call_and_assignments(
     return assigns
 
 
-def transform_function_source(func_source: str) -> str:
+def transform_function_source(func_source: str, *, captured_name_tuple: tuple[str, ...] = ()) -> str:
     """Return a rewritten module source with Natural blocks rewritten."""
 
     try:
@@ -298,7 +376,7 @@ def transform_function_source(func_source: str) -> str:
     except SyntaxError as e:
         raise NaturalParseError(str(e)) from e
 
-    module = NaturalTransformer().visit(module)  # type: ignore[assignment]
+    module = NaturalTransformer(captured_name_tuple=captured_name_tuple).visit(module)  # type: ignore[assignment]
     ast.fix_missing_locations(module)
 
     try:
