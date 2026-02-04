@@ -27,9 +27,9 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
-from .execution.environment import get_environment
-from .tools import get_visible_tools
-from .tools.assignment import serialize_value_to_json_text
+from ..execution.environment import get_environment
+from ..tools import get_visible_tools
+from ..tools.assignment import serialize_value_to_json_text
 
 
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):

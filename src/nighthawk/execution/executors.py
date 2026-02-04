@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..claude_agent_sdk_model import ClaudeAgentSdkModel
+from ..backends.claude_agent_sdk import ClaudeAgentSdkModel
 from ..configuration import ExecutionConfiguration
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
