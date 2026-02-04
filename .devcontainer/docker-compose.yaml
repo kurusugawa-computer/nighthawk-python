@@ -1,6 +1,6 @@
 services:
   devcontainer:
-    image: mcr.microsoft.com/devcontainers/python:2-3.14-bookworm
+    image: mcr.microsoft.com/devcontainers/python:2-3.13-bookworm
     volumes:
       - ..:/workspace:cached
     command: sleep infinity
