@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import ast
+import re
 
 from ..errors import NaturalParseError
 from .blocks import extract_bindings, extract_program, is_natural_sentinel
+
+_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER = "\x00"
 
 
 class NaturalTransformer(ast.NodeTransformer):
@@ -30,7 +33,7 @@ class NaturalTransformer(ast.NodeTransformer):
                         return_annotation = self._current_return_annotation_expression()
                         binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                         injected = build_runtime_call_and_assignments(
-                            program,
+                            ast.Constant(program),
                             input_bindings,
                             output_bindings,
                             binding_types_dict_expression,
@@ -149,6 +152,7 @@ class NaturalTransformer(ast.NodeTransformer):
     def visit_Expr(self, node: ast.Expr) -> ast.AST | list[ast.stmt]:
         self.generic_visit(node)
         value = node.value
+
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             text = value.value
             if is_natural_sentinel(text):
@@ -158,7 +162,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                 is_in_loop = self._loop_depth > 0
                 statements = build_runtime_call_and_assignments(
-                    program,
+                    ast.Constant(program),
                     input_bindings,
                     output_bindings,
                     binding_types_dict_expression,
@@ -166,6 +170,33 @@ class NaturalTransformer(ast.NodeTransformer):
                     is_in_loop=is_in_loop,
                 )
                 return [ast.copy_location(statement, node) for statement in statements]  # type: ignore[return-value]
+
+        if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
+            _validate_joined_string_bindings_do_not_span_formatted_values(value)
+            return_annotation = self._current_return_annotation_expression()
+            is_in_loop = self._loop_depth > 0
+
+            scan_text = _joined_string_scan_text(value, formatted_value_placeholder="")
+            program = extract_program(scan_text)
+            input_bindings, output_bindings = extract_bindings(program)
+            binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
+
+            extracted_program_call = ast.Call(
+                func=ast.Name(id="__nh_extract_program__", ctx=ast.Load()),
+                args=[value],
+                keywords=[],
+            )
+
+            statements = build_runtime_call_and_assignments(
+                extracted_program_call,
+                input_bindings,
+                output_bindings,
+                binding_types_dict_expression,
+                return_annotation,
+                is_in_loop=is_in_loop,
+            )
+            return [ast.copy_location(statement, node) for statement in statements]  # type: ignore[return-value]
+
         return node
 
     def _current_return_annotation_expression(self) -> ast.expr:
@@ -212,8 +243,44 @@ class NaturalTransformer(ast.NodeTransformer):
         return ast.Dict(keys=keys, values=values)
 
 
+def _joined_string_first_literal_or_none(joined_string: ast.JoinedStr) -> str | None:
+    if not joined_string.values:
+        return None
+    first = joined_string.values[0]
+    if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+        return None
+    return first.value
+
+
+def _joined_string_is_natural_sentinel(joined_string: ast.JoinedStr) -> bool:
+    first_literal = _joined_string_first_literal_or_none(joined_string)
+    if first_literal is None:
+        return False
+    return is_natural_sentinel(first_literal)
+
+
+def _joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_placeholder: str) -> str:
+    parts: list[str] = []
+    for part in joined_string.values:
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            parts.append(part.value)
+        else:
+            parts.append(formatted_value_placeholder)
+    return "".join(parts)
+
+
+def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string: ast.JoinedStr) -> None:
+    boundary_marked_text = _joined_string_scan_text(
+        joined_string,
+        formatted_value_placeholder=_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
+    )
+
+    if re.search(r"<[^>]*" + _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
+        raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
+
+
 def build_runtime_call_and_assignments(
-    program: str,
+    natural_program_expression: ast.expr,
     input_binding_names: tuple[str, ...],
     output_binding_names: tuple[str, ...],
     binding_types_dict_expression: ast.expr,
@@ -229,7 +296,7 @@ def build_runtime_call_and_assignments(
             ctx=ast.Load(),
         ),
         args=[
-            ast.Constant(program),
+            natural_program_expression,
             ast.List(elts=[ast.Constant(name) for name in input_binding_names], ctx=ast.Load()),
             ast.List(elts=[ast.Constant(name) for name in output_binding_names], ctx=ast.Load()),
             binding_types_dict_expression,

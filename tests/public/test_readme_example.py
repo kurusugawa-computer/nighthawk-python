@@ -24,7 +24,7 @@ def test_readme_quick_example_style(tmp_path):
 
         @nh.fn
         def calculate_average(numbers: list[int]):
-            """natural
+            f"""natural
             <numbers>
             <:result>
             {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}

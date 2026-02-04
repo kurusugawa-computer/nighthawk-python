@@ -23,7 +23,7 @@ def create_workspace_directories(workspace_root: Path) -> None:
     (workspace_root / "tests").mkdir()
 
 
-def test_docstring_block_executes_first_and_template_name_is_undefined(tmp_path: Path) -> None:
+def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
@@ -60,8 +60,9 @@ def test_docstring_block_executes_first_and_template_name_is_undefined(tmp_path:
         @nh.fn
         def f() -> int:
             """natural
+            <later_value>
             <:result>
-            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {later_value}}}}}
+            {"execution_final": {"effect": null, "error": null}, "bindings": {"result": 0}}
             """
             later_value = 123
             _ = later_value
@@ -72,65 +73,7 @@ def test_docstring_block_executes_first_and_template_name_is_undefined(tmp_path:
             f()
 
 
-def test_inline_blocks_execute_in_place_and_observe_updated_locals(tmp_path: Path) -> None:
-    create_workspace_directories(tmp_path)
-
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
-    )
-
-    class RecordingExecutor:
-        def __init__(self) -> None:
-            self.seen_programs: list[str] = []
-
-        def run_natural_block(
-            self,
-            *,
-            processed_natural_program: str,
-            execution_context: "ExecutionContext",
-            binding_names: list[str],
-            is_in_loop: bool,
-            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
-        ) -> tuple[ExecutionFinal, dict[str, object]]:
-            from nighthawk.execution.llm import ExecutionFinal
-
-            _ = execution_context
-            _ = binding_names
-            _ = is_in_loop
-            _ = allowed_effect_types
-
-            self.seen_programs.append(processed_natural_program)
-            return ExecutionFinal(effect=None, error=None), {}
-
-    recording_executor = RecordingExecutor()
-
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=recording_executor,
-            memory=RuntimeMemory(),
-            workspace_root=tmp_path,
-        )
-    ):
-
-        @nh.fn
-        def f() -> None:
-            x = 1
-            """natural
-            First: {x}
-            """
-            x = 2
-            _ = x
-            """natural
-            Second: {x}
-            """
-
-        f()
-
-    assert recording_executor.seen_programs == ["First: 1\n", "Second: 2\n"]
-
-
-def test_missing_input_binding_raises_even_if_template_does_not_reference_it(tmp_path: Path) -> None:
+def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
