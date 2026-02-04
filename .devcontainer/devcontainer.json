@@ -1,13 +1,14 @@
 {
-	"name": "Python 3.14 with Claude Code CLI",
+	"name": "Python 3.13 with Claude Code CLI",
 	"dockerComposeFile": "docker-compose.yaml",
 	"service": "devcontainer",
 	"workspaceFolder": "/workspace",
 	"shutdownAction": "stopCompose",
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
+		"ghcr.io/devcontainers/features/node:1": {}
 	},
-	"postCreateCommand": "pip install --no-cache-dir uv && curl -fsSL https://claude.ai/install.sh | bash",
+	"postCreateCommand": "npm install -g pyright && pip install --no-cache-dir uv && curl -fsSL https://claude.ai/install.sh | bash",
 	"remoteEnv": {
 		"ANTHROPIC_BASE_URL": "http://litellm:4000",
 		"ANTHROPIC_AUTH_TOKEN": "sk-dummy"
@@ -15,7 +16,8 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"charliermarsh.ruff"
+				"charliermarsh.ruff",
+				"Anthropic.claude-code"
 			]
 		}
 	}
