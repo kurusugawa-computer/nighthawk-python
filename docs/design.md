@@ -43,7 +43,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 ## 3. Hard constraints
 
-- Python 3.14+ (template preprocessing uses Python 3.14 template strings).
+- Python 3.14+.
 - Default model: `openai-responses:gpt-5-nano`.
 - Recommended model for quality: `openai-responses:gpt-5.2`.
 - LLM provider: OpenAI only, integrated via `pydantic-ai-slim[openai]`.
@@ -123,15 +123,25 @@ Recommended form:
 
 2) Inline Natural blocks
 
-Inside a function body, a standalone string literal expression statement whose underlying string literal begins with:
+Inside a function body, a standalone expression statement whose AST is syntactically a string literal begins with:
 
 - `natural\n`
 
-The Natural program is derived using the same rules as a docstring Natural block: remove the `natural\n` prefix, then apply `textwrap.dedent` to the remainder.
+The expression value must be either:
+
+- A plain string literal, or
+- An f-string literal
+
+The Natural program is derived at runtime using the same rules as a docstring Natural block: remove the `natural\n` prefix, then apply `textwrap.dedent` to the remainder.
+
+Docstring note:
+
+- A docstring Natural block is always a plain string literal.
+- Even if an f-string is the first statement in a function body, it is not a docstring, and it is treated as an inline Natural block.
 
 Decision (inline shape):
 
-- The inline Natural block is defined by the AST shape "expression statement containing a string literal".
+- The inline Natural block is defined by the AST shape "expression statement containing a string literal (including f-strings)".
 - Parentheses do not matter.
 
 Sentinel rules (both docstring and inline):
@@ -329,7 +339,7 @@ Frontmatter is recognized only if the first non-empty line of the Natural progra
 
 Notes:
 
-- Frontmatter parsing occurs after template preprocessing.
+- Frontmatter parsing occurs after Natural program rendering (sentinel removal + dedent, and f-string evaluation when the author opted in via an inline f-string Natural block).
 - The frontmatter delimiter lines must contain only `---` (no indentation, no trailing whitespace).
 - Leading blank lines before frontmatter are ignored and are not included in the program text passed to the model.
 
@@ -404,31 +414,28 @@ API:
 - `nighthawk.get_environment() -> ExecutionEnvironment`
   - Get the current environment. Raises if unset.
 
-## 11. Template preprocessing (runtime)
+## 11. Interpolation (opt-in, f-strings only)
 
 ### 11.1. Rationale
 
-Natural programs may reference external markdown or compose prompts. Nighthawk supports this by preprocessing the Natural block at runtime.
+Natural blocks often need to embed computed values (for example, paths or JSON envelopes in tests). To keep rendering predictable and explicit, Nighthawk supports interpolation only when the author opts in using Python f-string syntax.
 
 ### 11.2. Mechanism
 
-- The Natural block is evaluated as a Python 3.14 template string at runtime (function call time).
-- The template evaluation environment is the caller frame's Python environment:
-  - `python_locals`: the caller frame locals.
-  - `python_globals`: the caller frame globals.
-  - Name resolution follows Python lexical rules (LEGB: locals, enclosing, globals, builtins).
-  - Errors are surfaced as the original Python exception types where feasible (for example `UnboundLocalError`, `NameError`).
-- Nighthawk does not provide built-in template helper functions.
-  - If hosts want helpers (for example `include(path)`), they should bind them into the caller frame locals or globals.
+- Docstring Natural blocks are always literal. They are never interpolated.
+- Interpolated Natural blocks are inline f-string Natural blocks (standalone f-string expression statements).
+- Interpolation follows standard Python f-string semantics.
+  - Expression evaluation rules are those of Python.
+  - Brace escaping uses `{{` and `}}` in the f-string source to produce literal `{` and `}` in the rendered text.
 
 Note:
 
-- Template preprocessing is distinct from the `nh_eval` tool. Template evaluation uses the caller frame environment, while the `nh_eval` tool uses `execution_globals` and `execution_locals`.
+- This interpolation mechanism is distinct from the `nh_eval` tool. f-string evaluation runs in the normal Python execution context, while `nh_eval` evaluates expressions inside the Natural execution environment (`execution_globals` + `execution_locals`).
 
 Decision:
 
-- Template preprocessing may execute arbitrary functions.
-- This is acceptable only under the trusted-input threat model.
+- Any Python expression is permitted inside f-string `{...}` segments under the trusted-input model.
+- There is no implicit placeholder replacement or template preprocessing step for Natural blocks.
 
 ## 12. Memory model (example shape)
 

@@ -40,6 +40,35 @@ def test_inline_natural_block_detected():
     assert blocks[0].text.splitlines()[0] == "Make <:y> be 1."
 
 
+def test_inline_fstring_natural_block_detected_and_bindings_extracted():
+    src = textwrap.dedent(
+        '''
+        def f(x):
+            f"""natural
+            Set <:y> to {x + 1}.
+            """
+            return y
+        '''
+    )
+    blocks = find_natural_blocks(src)
+    assert len(blocks) == 1
+    assert blocks[0].kind == "inline"
+    assert blocks[0].input_bindings == ()
+    assert blocks[0].bindings == ("y",)
+
+
+def test_inline_ast_shape_must_be_literal_or_fstring():
+    src = textwrap.dedent(
+        """
+        def f(x):
+            ("natural\\nMake <:y> be 1.\\n").format(x=x)
+            return y
+        """
+    )
+    blocks = find_natural_blocks(src)
+    assert blocks == ()
+
+
 def test_natural_sentinel_rejects_leading_blank_line_docstring():
     src = textwrap.dedent(
         '''

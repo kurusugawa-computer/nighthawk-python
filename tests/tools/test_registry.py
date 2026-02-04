@@ -85,7 +85,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
                 return "ok"
 
             """natural
-            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
+            {"execution_final": {"effect": null, "error": null}, "bindings": {}}
             """
 
         f()
@@ -135,7 +135,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
         @nh.fn
         def f() -> None:
             """natural
-            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
+            {"execution_final": {"effect": null, "error": null}, "bindings": {}}
             """
 
             @nh.tool(name="test_late_global", overwrite=True)
@@ -144,7 +144,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
                 return "late"
 
             """natural
-            {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{}}}}
+            {"execution_final": {"effect": null, "error": null}, "bindings": {}}
             """
 
         f()
@@ -372,7 +372,7 @@ def test_assign_tool_validates_memory_fields_and_is_atomic():
     assert memory.n == 2
 
 
-def test_prompt_template_sections_are_present_in_agent_backend_prompt(tmp_path):
+def test_agent_backend_prompt_sections_are_present(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )

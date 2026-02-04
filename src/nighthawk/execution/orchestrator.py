@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import uuid
 from dataclasses import dataclass
-from types import CellType, FrameType
+from types import FrameType
 from typing import cast
 
 import yaml
@@ -46,11 +46,11 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
             break
 
     if closing_index is None:
-        raise ExecutionError("Frontmatter is missing closing '---' delimiter")
+        return processed_natural_program, ()
 
     yaml_text = "".join(lines[start_index + 1 : closing_index])
     if yaml_text.strip() == "":
-        raise ExecutionError("Frontmatter must not be empty")
+        return processed_natural_program, ()
 
     try:
         loaded = yaml.safe_load(yaml_text)
@@ -85,95 +85,6 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
 
     instructions_without_frontmatter = "".join(lines[closing_index + 1 :])
     return instructions_without_frontmatter, tuple(denied)
-
-
-class _TemplateLocalsProxy(dict[str, object]):
-    def __init__(
-        self,
-        *,
-        python_locals: dict[str, object],
-        python_cell_scope_stack: tuple[dict[str, CellType], ...],
-        python_name_scope_stack: tuple[dict[str, object], ...],
-        local_variable_name_set: set[str],
-        free_variable_name_set: set[str],
-    ) -> None:
-        super().__init__()
-        self._python_locals = python_locals
-        self._python_cell_scope_stack = python_cell_scope_stack
-        self._python_name_scope_stack = python_name_scope_stack
-        self._local_variable_name_set = local_variable_name_set
-        self._free_variable_name_set = free_variable_name_set
-
-    def __getitem__(self, name: str) -> object:
-        if name in self._python_locals:
-            return self._python_locals[name]
-
-        for scope in reversed(self._python_cell_scope_stack):
-            if name not in scope:
-                continue
-            cell = scope[name]
-            try:
-                return cell.cell_contents
-            except ValueError:
-                break
-
-        if name in self._local_variable_name_set:
-            raise UnboundLocalError(f"cannot access local variable {name!r} where it is not associated with a value")
-
-        if name in self._free_variable_name_set:
-            error = NameError(f"cannot access free variable {name!r} where it is not associated with a value in enclosing scope")
-            error.name = name
-            raise error
-
-        for scope in reversed(self._python_name_scope_stack):
-            if name in scope:
-                return scope[name]
-
-        raise KeyError(name)
-
-
-def evaluate_template(text: str, *, caller_frame: FrameType) -> str:
-    """Evaluate a Python 3.14 template string from trusted input.
-
-    This intentionally allows function execution inside templates under the trusted-input model.
-
-    Name resolution follows LEGB (locals, enclosing, globals, builtins), and exceptions are
-    surfaced as the original Python exception types where feasible.
-    """
-
-    python_locals = caller_frame.f_locals
-    python_globals = caller_frame.f_globals
-
-    local_variable_name_set = set(caller_frame.f_code.co_varnames)
-    local_variable_name_set.update(caller_frame.f_code.co_cellvars)
-    free_variable_name_set = set(caller_frame.f_code.co_freevars)
-
-    template_locals: dict[str, object] = _TemplateLocalsProxy(
-        python_locals=python_locals,
-        python_cell_scope_stack=get_python_cell_scope_stack(),
-        python_name_scope_stack=get_python_name_scope_stack(),
-        local_variable_name_set=local_variable_name_set,
-        free_variable_name_set=free_variable_name_set,
-    )
-
-    globals_for_eval = dict(python_globals)
-    if "__builtins__" not in globals_for_eval:
-        globals_for_eval["__builtins__"] = __builtins__
-
-    template_object = eval("t" + repr(text), globals_for_eval, template_locals)
-
-    try:
-        strings = template_object.strings
-        values = template_object.values
-    except Exception as e:
-        raise ExecutionError(f"Unexpected template object: {e}") from e
-
-    out: list[str] = []
-    for i, s in enumerate(strings):
-        out.append(s)
-        if i < len(values):
-            out.append(str(values[i]))
-    return "".join(out)
 
 
 @dataclass
@@ -250,13 +161,7 @@ class Orchestrator:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
-        processed_with_frontmatter = evaluate_template(natural_program, caller_frame=caller_frame)
-
-        processed_without_frontmatter, denied_effect_types = _split_frontmatter_or_none(processed_with_frontmatter)
-
-        if denied_effect_types == ():
-            processed_without_frontmatter = processed_with_frontmatter
-
+        processed_without_frontmatter, denied_effect_types = _split_frontmatter_or_none(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
 
         base_allowed_effect_types = ["return"]

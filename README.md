@@ -86,7 +86,7 @@ Bindings:
 
 Output bindings control which values are committed back into Python locals at Natural block boundaries.
 
-Note: Natural blocks are treated as a Python 3.14 template string before execution. Any template interpolation runs in Python under the trusted-input model. To write a literal `{` / `}` in Natural text, write `{{` / `}}`.
+Note: Natural blocks are literal by default. Interpolation is opt-in via inline f-string Natural blocks only (standalone f-string expression statements). Docstring Natural blocks are always literal. For interpolated (f-string) inline blocks, brace escaping follows Python f-string rules: write `{{` / `}}` in the f-string source to produce literal `{` / `}`.
 
 ## Workflow styles (hardness vs flexibility)
 
@@ -172,7 +172,7 @@ calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
 
 This project assumes the Natural DSL source and any imported markdown are trusted, repository-managed assets.
 
-Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into template preprocessing or include helpers.
+Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into Natural blocks or any host-side interpolation helpers you define.
 
 ## References
 

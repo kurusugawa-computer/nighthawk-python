@@ -73,15 +73,18 @@ def fn(func: F | None = None) -> F:
     except Exception:
         pass
 
-    def extract_template_interpolation_name_set(program_text: str) -> set[str]:
+    def extract_inline_fstring_name_set(func_source: str, *, function_name: str) -> set[str]:
         try:
-            parsed = ast.parse("t" + repr(program_text), mode="eval")
+            module = ast.parse(func_source)
         except SyntaxError:
             return set()
 
-        template_string = getattr(parsed, "body", None)
-        values = getattr(template_string, "values", None)
-        if not isinstance(values, list):
+        function_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+        for node in module.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+                function_def = node
+                break
+        if function_def is None:
             return set()
 
         names: set[str] = set()
@@ -91,9 +94,23 @@ def fn(func: F | None = None) -> F:
                 names.add(node.id)
 
         visitor = Visitor()
-        for value in values:
-            if isinstance(value, ast.Interpolation):
-                visitor.visit(value.value)
+
+        for statement in function_def.body:
+            if not isinstance(statement, ast.Expr):
+                continue
+            value = statement.value
+            if not isinstance(value, ast.JoinedStr):
+                continue
+
+            first_part: ast.expr | None = value.values[0] if value.values else None
+            if not isinstance(first_part, ast.Constant) or not isinstance(first_part.value, str):
+                continue
+            if not first_part.value.startswith("natural\n"):
+                continue
+
+            for part in value.values:
+                if isinstance(part, ast.FormattedValue):
+                    visitor.visit(part.value)
 
         return names
 
@@ -102,7 +119,8 @@ def fn(func: F | None = None) -> F:
         for block in find_natural_blocks(source):
             capture_name_set.update(block.input_bindings)
             capture_name_set.update(block.bindings)
-            capture_name_set.update(extract_template_interpolation_name_set(block.text))
+
+        capture_name_set.update(extract_inline_fstring_name_set(source, function_name=func.__name__))
     except Exception:
         capture_name_set = set()
 
@@ -176,6 +194,9 @@ def fn(func: F | None = None) -> F:
 
     globals_namespace: dict[str, object] = dict(func.__globals__)
     globals_namespace["__nighthawk_orchestrator__"] = _OrchestratorProxy()
+    from .natural.blocks import extract_program as _nh_extract_program
+
+    globals_namespace["__nh_extract_program__"] = _nh_extract_program
     globals_namespace["__nh_python_cell_scope__"] = python_cell_scope
 
     module_namespace: dict[str, object] = {}

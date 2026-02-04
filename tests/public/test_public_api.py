@@ -131,13 +131,11 @@ def test_execution_configuration_model_requires_provider_model_format():
 def test_decorated_function_requires_environment():
     @nh.fn
     def f(x: int):
-        """natural
+        f"""natural
         <:result>
         {{"execution_final": {{"effect": null, "error": null}}, "bindings": {{"result": {x + 1}}}}}
         """
-        result = 0
-        _ = x
-        return result
+        return result  # type: ignore # noqa: F821
 
     with pytest.raises(NighthawkError):
         f(1)
