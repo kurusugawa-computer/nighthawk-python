@@ -11,7 +11,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.function import FunctionToolset
 
 import nighthawk as nh
-from nighthawk.backends.codex_cli import CodexCliModel, _parse_codex_jsonl_lines
+from nighthawk.backends.codex import CodexModel, _parse_codex_jsonl_lines
 from nighthawk.execution.context import ExecutionContext
 from nighthawk.tools import get_visible_tools
 
@@ -76,7 +76,7 @@ def _write_executable_codex_cli_stub(*, directory: Path) -> Path:
 
     NOTE: This is a contract test stub, not a real codex-cli integration.
 
-    The stub emulates the minimal behavior needed by CodexCliModel:
+    The stub emulates the minimal behavior needed by CodexModel:
     - Reads stdin (prompt text)
     - Extracts MCP server URL and enabled tool allowlist from --config arguments
     - Connects to the MCP server via Streamable HTTP
@@ -86,7 +86,11 @@ def _write_executable_codex_cli_stub(*, directory: Path) -> Path:
 
     stub_path = directory / "codex-cli-stub"
 
-    stub_code = "#!" + sys.executable + "\n" + """from __future__ import annotations
+    stub_code = (
+        "#!"
+        + sys.executable
+        + "\n"
+        + """from __future__ import annotations
 
 import json
 import sys
@@ -189,18 +193,19 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 """
+    )
 
     stub_path.write_text(stub_code, encoding="utf-8")
     stub_path.chmod(0o755)
     return stub_path
 
 
-def test_codex_cli_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
+def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     from pydantic import BaseModel
 
     codex_executable = _write_executable_codex_cli_stub(directory=tmp_path)
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex-cli:outside")
+    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
 
     class StubExecutor:
         def run_natural_block(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -241,7 +246,7 @@ def test_codex_cli_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
         toolset = FunctionToolset(tools)
 
         agent = Agent(
-            model=CodexCliModel(),
+            model=CodexModel(),
             deps_type=ExecutionContext,
             output_type=str,
         )

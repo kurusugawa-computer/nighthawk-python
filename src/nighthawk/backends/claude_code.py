@@ -117,8 +117,8 @@ def _build_json_schema_output_format(model_request_parameters: ModelRequestParam
     return {"type": "json_schema", "schema": schema}
 
 
-class ClaudeAgentSdkModel(Model):
-    def __init__(self) -> None:
+class ClaudeCodeModel(Model):
+    def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
             profile=ModelProfile(
                 supports_tools=True,
@@ -129,11 +129,11 @@ class ClaudeAgentSdkModel(Model):
                 supported_builtin_tools=frozenset([AbstractBuiltinTool]),
             )
         )
-        _ = self
+        self._model_name = model_name
 
     @property
     def model_name(self) -> str:
-        return "claude-agent-sdk:outside"
+        return f"claude-code:{self._model_name or 'default'}"
 
     @property
     def system(self) -> str:
@@ -221,6 +221,7 @@ class ClaudeAgentSdkModel(Model):
             system_prompt=system_prompt_text,
             mcp_servers={"nighthawk": sdk_server},
             permission_mode=claude_agent_sdk_model_settings.get("permission_mode", "default"),
+            model=self._model_name,
             cwd=working_directory,
             setting_sources=[],
             max_turns=50,
@@ -263,7 +264,7 @@ class ClaudeAgentSdkModel(Model):
             output_text = json.dumps(structured_output, ensure_ascii=False)
 
         provider_details: dict[str, Any] = {
-            "claude_agent_sdk": {
+            "claude_code": {
                 "session_id": result_message.session_id,
                 "usage": result_message.usage,
             }
@@ -273,7 +274,7 @@ class ClaudeAgentSdkModel(Model):
             parts=[TextPart(content=output_text)],
             usage=RequestUsage(),
             model_name=assistant_model_name or self.model_name,
-            provider_name="claude-agent-sdk",
+            provider_name="claude-code",
             provider_details=provider_details,
         )
 

@@ -9,8 +9,6 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..backends.claude_agent_sdk import ClaudeAgentSdkModel
-from ..backends.codex_cli import CodexCliModel
 from ..configuration import ExecutionConfiguration
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
@@ -40,17 +38,19 @@ def make_agent_executor(
     **agent_constructor_keyword_arguments: Any,
 ) -> "AgentExecutor":
     model_identifier = execution_configuration.model
+    provider, provider_model_name = model_identifier.split(":", 1)
 
-    if model_identifier.startswith("claude-agent-sdk:"):
-        if model_identifier != "claude-agent-sdk:outside":
-            raise ValueError("Only claude-agent-sdk:outside is supported")
-        model: object = ClaudeAgentSdkModel()
-    elif model_identifier.startswith("codex-cli:"):
-        if model_identifier != "codex-cli:outside":
-            raise ValueError("Only codex-cli:outside is supported")
-        model = CodexCliModel()
-    else:
-        model = model_identifier
+    match provider:
+        case "claude-code":
+            from ..backends.claude_code import ClaudeCodeModel
+
+            model = ClaudeCodeModel(model_name=provider_model_name if provider_model_name != "default" else None)
+        case "codex":
+            from ..backends.codex import CodexModel
+
+            model = CodexModel(model_name=provider_model_name if provider_model_name != "default" else None)
+        case _:
+            model = model_identifier
 
     agent: ExecutionAgent = Agent(
         model=model,

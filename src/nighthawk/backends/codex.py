@@ -8,6 +8,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -29,7 +30,8 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models import Model, ModelRequestParameters
-from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.profiles import InlineDefsJsonSchemaTransformer, ModelProfile
+from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.function import FunctionToolset
@@ -40,6 +42,20 @@ from starlette.routing import Route
 from ..execution.environment import get_environment
 from ..tools import get_visible_tools
 from ..tools.assignment import serialize_value_to_json_text
+
+
+class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
+    def __init__(self, schema: dict[str, Any], *, strict: bool | None = None):
+        schema = InlineDefsJsonSchemaTransformer(schema, strict=strict).walk()
+        super().__init__(schema, strict=strict)
+
+    def transform(self, schema: dict[str, Any]) -> dict[str, Any]:
+        if not schema:
+            schema = {"type": "object"}
+        elif "properties" in schema and "type" not in schema:
+            schema = dict(schema)
+            schema["type"] = "object"
+        return super().transform(schema)
 
 
 class CodexCliModelSettings(TypedDict, total=False):
@@ -322,107 +338,6 @@ def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
     }
 
 
-def _strict_json_schema_for_codex(json_schema: dict[str, Any]) -> dict[str, Any]:
-    """Make a best-effort strict schema compatible with Codex/OpenAI JSON Schema constraints.
-
-    In practice, Codex/OpenAI require that for object schemas:
-    - `required` must list all keys in `properties`
-    - `additionalProperties` must be supplied and false
-
-    Codex/OpenAI also appear to reject `$ref`, so we inline local `#/$defs/...` references.
-
-    This function implements the minimum needed for the schemas Nighthawk emits.
-    """
-
-    copied_schema = json.loads(json.dumps(json_schema))
-
-    definition_name_to_schema: dict[str, Any] = {}
-    root_definitions = copied_schema.get("$defs")
-    if isinstance(root_definitions, dict):
-        definition_name_to_schema = root_definitions
-
-    def resolve_local_reference(reference: str) -> dict[str, Any] | None:
-        prefix = "#/$defs/"
-        if not reference.startswith(prefix):
-            return None
-
-        definition_name = reference.removeprefix(prefix)
-        resolved = definition_name_to_schema.get(definition_name)
-        if isinstance(resolved, dict):
-            return resolved
-        return None
-
-    def strictify(schema: object) -> object:
-        if isinstance(schema, dict):
-            if not schema:
-                return {"type": "object", "additionalProperties": False}
-
-            reference_value = schema.get("$ref")
-            if isinstance(reference_value, str):
-                resolved = resolve_local_reference(reference_value)
-                if resolved is not None:
-                    merged = dict(resolved)
-                    for key, value in schema.items():
-                        if key != "$ref":
-                            merged[key] = value
-                    return strictify(merged)
-
-            schema.pop("$defs", None)
-
-            if "properties" in schema and "type" not in schema:
-                schema["type"] = "object"
-
-            any_of = schema.get("anyOf")
-            if isinstance(any_of, list):
-                schema["anyOf"] = [strictify(item) for item in any_of]
-
-            schema_type = schema.get("type")
-
-            if schema_type == "object":
-                properties = schema.get("properties")
-                if isinstance(properties, dict):
-                    schema["properties"] = {key: strictify(value) for key, value in properties.items()}
-                    schema["required"] = sorted(str(k) for k in properties.keys())
-                else:
-                    schema["required"] = []
-
-                schema["additionalProperties"] = False
-
-            elif schema_type == "array":
-                items = schema.get("items")
-                if items is not None:
-                    schema["items"] = strictify(items)
-
-            for key, value in tuple(schema.items()):
-                if key in ("properties", "required", "anyOf", "items"):
-                    continue
-                schema[key] = strictify(value)
-
-            return schema
-
-        if isinstance(schema, list):
-            return [strictify(i) for i in schema]
-
-        return schema
-
-    copied_schema.pop("$defs", None)
-    return strictify(copied_schema)  # type: ignore[return-value]
-
-
-def _validate_structured_output(output_text: str, *, json_schema: dict[str, Any]) -> None:
-    try:
-        output_object = json.loads(output_text)
-    except Exception as exception:
-        raise UnexpectedModelBehavior("Codex CLI returned non-JSON output for structured output request") from exception
-
-    try:
-        import jsonschema
-
-        jsonschema.validate(instance=output_object, schema=json_schema)
-    except Exception as exception:
-        raise UnexpectedModelBehavior("Codex CLI returned JSON that does not match the requested schema") from exception
-
-
 @asynccontextmanager
 async def _mcp_tool_server_if_needed(
     *,
@@ -448,8 +363,8 @@ async def _mcp_tool_server_if_needed(
         await server.stop()
 
 
-class CodexCliModel(Model):
-    def __init__(self) -> None:
+class CodexModel(Model):
+    def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
             profile=ModelProfile(
                 supports_tools=True,
@@ -458,13 +373,14 @@ class CodexCliModel(Model):
                 supports_image_output=False,
                 default_structured_output_mode="native",
                 supported_builtin_tools=frozenset([AbstractBuiltinTool]),
+                json_schema_transformer=_CodexJsonSchemaTransformer,
             )
         )
-        _ = self
+        self._model_name = model_name
 
     @property
     def model_name(self) -> str:
-        return "codex-cli:outside"
+        return f"codex:{self._model_name or 'default'}"
 
     @property
     def system(self) -> str:
@@ -476,9 +392,14 @@ class CodexCliModel(Model):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
+        if model_request_parameters.output_object is not None:
+            model_request_parameters = replace(
+                model_request_parameters,
+                output_object=replace(model_request_parameters.output_object, strict=True),
+            )
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 
-        output_schema_directory: Path | None = None
+        output_schema_file: tempfile._TemporaryFileWrapper | None = None
 
         try:
             if model_request_parameters.builtin_tools:
@@ -517,29 +438,23 @@ class CodexCliModel(Model):
             tool_name_to_tool_definition = {name: tool_definition for name, tool_definition in model_request_parameters.tool_defs.items() if name in allowed_tool_names}
             tool_name_to_handler = {name: tool_name_to_handler[name] for name in allowed_tool_names}
 
-            output_schema_file_path: Path | None = None
-
             output_object = model_request_parameters.output_object
             if output_object is None:
                 output_json_schema = None
             else:
                 output_json_schema = dict(output_object.json_schema)
-                if output_object.name:
-                    output_json_schema["title"] = output_object.name
-                if output_object.description:
-                    output_json_schema["description"] = output_object.description
-
-                output_json_schema = _strict_json_schema_for_codex(output_json_schema)
-
-                output_schema_directory = Path(tempfile.mkdtemp(prefix="nighthawk-codex-output-schema-"))
-                output_schema_file_path = output_schema_directory / "schema.json"
-                output_schema_file_path.write_text(json.dumps(output_json_schema), encoding="utf-8")
-
+                output_schema_file = tempfile.NamedTemporaryFile(mode="wt", encoding="utf-8", prefix="nighthawk-codex-output-schema-", suffix=".json")
+                output_schema_file.write(json.dumps(output_json_schema))
+                output_schema_file.flush()
             async with _mcp_tool_server_if_needed(
                 tool_name_to_tool_definition=tool_name_to_tool_definition,
                 tool_name_to_handler=tool_name_to_handler,
             ) as mcp_server_url:
                 configuration_overrides: dict[str, object] = {}
+
+                if self._model_name is not None:
+                    configuration_overrides["model"] = self._model_name
+
                 if mcp_server_url is not None:
                     configuration_overrides["mcp_servers.nighthawk.url"] = mcp_server_url
                     configuration_overrides["mcp_servers.nighthawk.enabled_tools"] = list(allowed_tool_names)
@@ -552,8 +467,8 @@ class CodexCliModel(Model):
                 ]
                 codex_cli_arguments.extend(_build_codex_cli_config_arguments(configuration_overrides))
 
-                if output_schema_file_path is not None:
-                    codex_cli_arguments.extend(["--output-schema", str(output_schema_file_path)])
+                if output_schema_file is not None:
+                    codex_cli_arguments.extend(["--output-schema", output_schema_file.name])
 
                 try:
                     working_directory = get_environment().workspace_root
@@ -603,11 +518,9 @@ class CodexCliModel(Model):
                 turn_outcome = _parse_codex_jsonl_lines(jsonl_lines)
 
                 output_text = turn_outcome["output_text"]
-                if output_json_schema is not None:
-                    _validate_structured_output(output_text, json_schema=output_json_schema)
 
                 provider_details: dict[str, Any] = {
-                    "codex_cli": {
+                    "codex": {
                         "thread_id": turn_outcome["thread_id"],
                     }
                 }
@@ -616,7 +529,7 @@ class CodexCliModel(Model):
                     parts=[TextPart(content=output_text)],
                     usage=turn_outcome["usage"],
                     model_name=self.model_name,
-                    provider_name="codex-cli",
+                    provider_name="codex",
                     provider_details=provider_details,
                 )
         except (UserError, UnexpectedModelBehavior, ValueError):
@@ -624,11 +537,9 @@ class CodexCliModel(Model):
         except Exception as exception:
             raise UnexpectedModelBehavior("Codex CLI backend failed") from exception
         finally:
-            if output_schema_directory is not None:
+            if output_schema_file is not None:
                 try:
-                    for child in output_schema_directory.iterdir():
-                        child.unlink(missing_ok=True)
-                    output_schema_directory.rmdir()
+                    output_schema_file.close()
                 except Exception:
                     pass
 
