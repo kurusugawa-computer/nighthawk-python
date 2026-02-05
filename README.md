@@ -62,7 +62,6 @@ Model identifiers:
 - `ExecutionConfiguration(model=...)` uses `provider:model`.
 - For `claude-code` and `codex`, you can use `:default` to use the backend/provider default model.
   - Examples: `claude-code:default`, `codex:default`.
-- `:outside` is not supported.
 
 ## What Nighthawk is trying to prove
 
