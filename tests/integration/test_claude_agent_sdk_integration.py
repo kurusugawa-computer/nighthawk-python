@@ -12,7 +12,7 @@ class FakeMemory(BaseModel):
     pass
 
 
-def test_claude_agent_sdk_natural_block_uses_tool(tmp_path: Path):
+def test_claude_agent_sdk_natural_block_uses_tool(tmp_path: Path) -> None:
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
