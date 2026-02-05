@@ -11,10 +11,11 @@ References:
 ## Status
 
 - This repo contains the library implementation, tests, and design docs.
-- Targets OpenAI only (via `pydantic-ai-slim[openai]`).
 - Default model: `openai-responses:gpt-5-nano`.
 - Recommended model: `openai-responses:gpt-5.2`.
-- Supported Python version: 3.14+ (by design).
+- Supported Python version: 3.13+ (by design).
+- Optional backends (extras): `openai`, `vertexai`, `claude-code`, `codex`.
+- Model identifiers are `provider:model`. For `claude-code` and `codex`, `:default` uses the backend/provider default model (no explicit model selection is passed).
 
 ## Documentation
 

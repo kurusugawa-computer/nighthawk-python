@@ -43,10 +43,10 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 ## 3. Hard constraints
 
-- Python 3.14+.
+- Python 3.13+.
 - Default model: `openai-responses:gpt-5-nano`.
 - Recommended model for quality: `openai-responses:gpt-5.2`.
-- LLM provider: OpenAI only, integrated via `pydantic-ai-slim[openai]`.
+- Optional backends are installed via extras: `openai`, `vertexai`, `claude-code`, `codex`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
 ## 4. Terminology
@@ -82,6 +82,9 @@ This file intentionally does not maintain a persistent divergence ledger.
 - `ExecutionConfiguration`
   - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
     - Examples: `openai-responses:gpt-5.2`, `openai-responses:gpt-5-nano`.
+    - Special cases:
+      - `claude-code:default` and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
+      - `provider:outside` is invalid.
   - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. Default: `o200k_base`.
   - `prompts`: prompt templates used for execution.
     - `execution_system_prompt_template`: system prompt template that defines the execution protocol.
