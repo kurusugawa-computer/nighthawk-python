@@ -7,7 +7,7 @@ This file provides repository-specific guidance for coding agents and human cont
 - Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans, Ideal State documents).
 - In chat sessions, communicate in Japanese; when writing to files, use English; internal reasoning may use any language.
 - When listing questions, confirmations, or proposed decisions for the user, assign a short stable Id to each item so the user can respond inline.
-  - Required format: `Q-KEBAB-001` (questions), `C-KEBAB-001` (confirmations), `P-KEBAB-001` (proposals). For follow-ups, append a suffix like `Q-KEBAB-001A`.
+  - Required format: `Q-SLUG-001` (questions), `C-SLUG-001` (confirmations), `P-SLUG-001` (proposals). For follow-ups, append a suffix like `Q-KEBAB-001A`.
   - Each item must be answerable on its own and must include its Id in the text.
 
 ## ExecPlans
@@ -15,7 +15,7 @@ This file provides repository-specific guidance for coding agents and human cont
 Only create an ExecPlan when author instruction explicitly requests it. If an ExecPlan is not explicitly requested, do not use ExecPlan files, even for large or risky changes.
 When an ExecPlan is explicitly requested, author it following `.agent/PLANS.md` before you touch code.
 Treat the ExecPlan as both an executable specification and a transparency artifact: keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` updated as work proceeds.
-Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<kebab>.md` (ASCII only, lowercase, hyphen-separated).
+Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>.md` (ASCII only, lowercase, hyphen-separated).
 
 ## Design principles
 
@@ -57,12 +57,12 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<kebab
 - `.agent/`: Agent artifacts.
   - `.agent/execplans/`: ExecPlans (only when explicitly requested).
   - `.agent/PLANS.md`: The ExecPlan format and requirements.
-- `.devcontainer/`: Devcontainer definition (Python 3.14 base image).
+- `.devcontainer/`: Devcontainer definition (Python base image).
 - `pyproject.toml`, `uv.lock`: Project metadata and locked dependencies.
 
 ### What this repo is
 
-- A Python 3.14+ library that embeds a small "Natural" DSL inside Python functions and executes it using an LLM (via `pydantic-ai-slim[openai]`).
+- A Python 3.13+ library that embeds a small "Natural" DSL inside Python functions and executes it using an LLM (provider dependencies are installed via extras).
 - There is no CLI entry point currently.
 
 ### Safety model (MVP)
@@ -74,7 +74,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<kebab
 
 ### Tooling
 
-- Python: 3.14+.
+- Python: 3.13+.
 - Dependency management: `uv`.
 - Tests: `pytest`.
 - When performing code analysis (type errors, symbol navigation, call graph understanding), prefer LSP-based tooling first.
@@ -115,5 +115,6 @@ If you see an `uv` warning about hardlinking (common in containers / cross-files
 ### Environment variables
 
 - `OPENAI_API_KEY`: Required for any OpenAI integration.
+- `CODEX_API_KEY`: Required for any Codex integration.
 - `NIGHTHAWK_MODEL`: Model name override (defaults to `gpt-5.2`).
 - `NIGHTHAWK_RUN_INTEGRATION_TESTS=1`: Enables integration tests (otherwise skipped).

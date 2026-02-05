@@ -1,6 +1,8 @@
 services:
   devcontainer:
-    image: mcr.microsoft.com/devcontainers/python:2-3.13-bookworm
+    build:
+      context: .
+      dockerfile: Dockerfile.devcontainer
     volumes:
       - ..:/workspace:cached
     command: sleep infinity
