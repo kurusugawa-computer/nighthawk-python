@@ -8,7 +8,7 @@
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
 		"ghcr.io/devcontainers/features/node:1": {}
 	},
-	"postCreateCommand": "npm install -g pyright && pip install --no-cache-dir uv && curl -fsSL https://claude.ai/install.sh | bash",
+	"postCreateCommand": "npm install -g pyright @openai/codex && pip install --no-cache-dir uv",
 	"remoteEnv": {
 		"ANTHROPIC_BASE_URL": "http://litellm:4000",
 		"ANTHROPIC_AUTH_TOKEN": "sk-dummy"
