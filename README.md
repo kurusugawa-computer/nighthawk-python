@@ -29,7 +29,7 @@ Prereqs:
 
 - git
 - uv
-- Python 3.14+
+- Python 3.13+
 
 Run:
 
@@ -48,10 +48,21 @@ NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q tests/integration/test_llm_in
 
 Constraints / defaults (current implementation):
 
-- Supported Python version: 3.14+ (by design).
-- Primary LLM provider: OpenAI via `pydantic-ai-slim[openai]`.
+- Supported Python version: 3.13+ (by design).
 - Default model: `openai-responses:gpt-5-nano`.
 - Recommended model (quality): `openai-responses:gpt-5.2`.
+- Optional backends (extras):
+  - `openai`: `pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
+  - `vertexai`: `pip install "nighthawk[vertexai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
+  - `claude-code`: `pip install "nighthawk[claude-code] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
+  - `codex`: `pip install "nighthawk[codex] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
+
+Model identifiers:
+
+- `ExecutionConfiguration(model=...)` uses `provider:model`.
+- For `claude-code` and `codex`, you can use `:default` to use the backend/provider default model.
+  - Examples: `claude-code:default`, `codex:default`.
+- `:outside` is not supported.
 
 ## What Nighthawk is trying to prove
 
