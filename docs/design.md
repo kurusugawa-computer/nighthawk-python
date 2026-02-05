@@ -84,7 +84,6 @@ This file intentionally does not maintain a persistent divergence ledger.
     - Examples: `openai-responses:gpt-5.2`, `openai-responses:gpt-5-nano`.
     - Special cases:
       - `claude-code:default` and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-      - `provider:outside` is invalid.
   - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. Default: `o200k_base`.
   - `prompts`: prompt templates used for execution.
     - `execution_system_prompt_template`: system prompt template that defines the execution protocol.

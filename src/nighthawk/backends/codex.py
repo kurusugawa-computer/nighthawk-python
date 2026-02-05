@@ -9,39 +9,21 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from pathlib import Path
 from typing import Any, TypedDict
 
-import uvicorn
-from mcp.server.fastmcp.server import StreamableHTTPASGIApp
-from mcp.server.lowlevel.server import Server as McpLowLevelServer
-from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from pydantic_ai import RunContext
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    RetryPromptPart,
-    SystemPromptPart,
-    TextPart,
-    ToolReturnPart,
-    UserPromptPart,
-)
-from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.profiles import InlineDefsJsonSchemaTransformer, ModelProfile
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RequestUsage
-from starlette.applications import Starlette
-from starlette.routing import Route
 
 from ..execution.environment import get_environment
 from ..tools import get_visible_tools
-from ..tools.assignment import serialize_value_to_json_text
+from . import BackendModelBase
 
 
 class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
@@ -93,38 +75,6 @@ def _get_codex_cli_model_settings(model_settings: ModelSettings | None) -> Codex
     }
 
 
-def _find_most_recent_model_request(messages: list[ModelMessage]) -> ModelRequest:
-    for message in reversed(messages):
-        if isinstance(message, ModelRequest):
-            return message
-    raise UnexpectedModelBehavior("No ModelRequest found in message history")
-
-
-def _collect_system_prompt_text(model_request: ModelRequest) -> str:
-    parts: list[str] = []
-    for part in model_request.parts:
-        if isinstance(part, SystemPromptPart):
-            if part.content:
-                parts.append(part.content)
-    return "\n\n".join(parts)
-
-
-def _collect_user_prompt_text(model_request: ModelRequest) -> str:
-    parts: list[str] = []
-    for part in model_request.parts:
-        if isinstance(part, UserPromptPart):
-            if isinstance(part.content, str):
-                parts.append(part.content)
-            else:
-                raise UserError("Codex CLI backend does not support non-text user prompts")
-        elif isinstance(part, RetryPromptPart):
-            parts.append(part.model_response())
-        elif isinstance(part, ToolReturnPart):
-            raise UserError("Codex CLI backend does not support tool-return parts")
-
-    return "\n\n".join(p for p in parts if p)
-
-
 class _CodexTurnOutcome(TypedDict):
     output_text: str
     thread_id: str | None
@@ -164,7 +114,7 @@ class _McpToolServer:
         self._tool_name_to_tool_definition = tool_name_to_tool_definition
         self._tool_name_to_handler = tool_name_to_handler
 
-        self._server: uvicorn.Server | None = None
+        self._server: Any | None = None
         self._server_thread: threading.Thread | None = None
         self._listening_socket: socket.socket | None = None
         self._url: str | None = None
@@ -178,6 +128,13 @@ class _McpToolServer:
     def start(self) -> None:
         if self._server_thread is not None:
             raise RuntimeError("MCP tool server is already started")
+
+        import uvicorn
+        from mcp.server.fastmcp.server import StreamableHTTPASGIApp
+        from mcp.server.lowlevel.server import Server as McpLowLevelServer
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+        from starlette.applications import Starlette
+        from starlette.routing import Route
 
         mcp_server = McpLowLevelServer("nighthawk")
 
@@ -363,9 +320,10 @@ async def _mcp_tool_server_if_needed(
         await server.stop()
 
 
-class CodexModel(Model):
+class CodexModel(BackendModelBase):
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
+            backend_label="Codex CLI backend",
             profile=ModelProfile(
                 supports_tools=True,
                 supports_json_schema_output=True,
@@ -374,7 +332,7 @@ class CodexModel(Model):
                 default_structured_output_mode="native",
                 supported_builtin_tools=frozenset([AbstractBuiltinTool]),
                 json_schema_transformer=_CodexJsonSchemaTransformer,
-            )
+            ),
         )
         self._model_name = model_name
 
@@ -402,49 +360,28 @@ class CodexModel(Model):
         output_schema_file: tempfile._TemporaryFileWrapper | None = None
 
         try:
-            if model_request_parameters.builtin_tools:
-                raise UserError("Codex CLI backend does not support builtin tools")
-
-            if model_request_parameters.allow_image_output:
-                raise UserError("Codex CLI backend does not support image output")
-
-            most_recent_request = _find_most_recent_model_request(messages)
-
-            system_prompt_text = _collect_system_prompt_text(most_recent_request)
-
-            instructions = self._get_instructions(messages, model_request_parameters)
-            if instructions:
-                if system_prompt_text:
-                    system_prompt_text = "\n\n".join([system_prompt_text, instructions])
-                else:
-                    system_prompt_text = instructions
-
-            user_prompt_text = _collect_user_prompt_text(most_recent_request)
-            if user_prompt_text.strip() == "":
-                raise UserError("Codex CLI backend requires a non-empty user prompt")
+            _most_recent_request, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
+                messages=messages,
+                model_request_parameters=model_request_parameters,
+            )
 
             prompt_parts = [p for p in [system_prompt_text, user_prompt_text] if p]
             prompt_text = "\n\n".join(prompt_parts)
 
             codex_cli_model_settings = _get_codex_cli_model_settings(model_settings)
 
-            tool_name_to_handler, available_tool_names = await self._build_tool_name_to_handler(model_request_parameters)
-            allowed_tool_names = self._resolve_allowed_tool_names(
-                model_request_parameters,
-                codex_cli_model_settings=codex_cli_model_settings,
-                available_tool_names=available_tool_names,
+            tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
+                model_request_parameters=model_request_parameters,
+                configured_allowed_tool_names=codex_cli_model_settings.get("allowed_tool_names"),
+                visible_tools=get_visible_tools(),
             )
-
-            tool_name_to_tool_definition = {name: tool_definition for name, tool_definition in model_request_parameters.tool_defs.items() if name in allowed_tool_names}
-            tool_name_to_handler = {name: tool_name_to_handler[name] for name in allowed_tool_names}
 
             output_object = model_request_parameters.output_object
             if output_object is None:
-                output_json_schema = None
+                output_schema_file = None
             else:
-                output_json_schema = dict(output_object.json_schema)
                 output_schema_file = tempfile.NamedTemporaryFile(mode="wt", encoding="utf-8", prefix="nighthawk-codex-output-schema-", suffix=".json")
-                output_schema_file.write(json.dumps(output_json_schema))
+                output_schema_file.write(json.dumps(dict(output_object.json_schema)))
                 output_schema_file.flush()
             async with _mcp_tool_server_if_needed(
                 tool_name_to_tool_definition=tool_name_to_tool_definition,
@@ -542,62 +479,3 @@ class CodexModel(Model):
                     output_schema_file.close()
                 except Exception:
                     pass
-
-    def _resolve_allowed_tool_names(
-        self,
-        model_request_parameters: ModelRequestParameters,
-        *,
-        codex_cli_model_settings: CodexCliModelSettings,
-        available_tool_names: tuple[str, ...],
-    ) -> tuple[str, ...]:
-        configured_allowlist = codex_cli_model_settings.get("allowed_tool_names")
-        if configured_allowlist is None:
-            return tuple(name for name in (tool_def.name for tool_def in model_request_parameters.function_tools) if name in available_tool_names)
-
-        unknown = [name for name in configured_allowlist if name not in available_tool_names]
-        if unknown:
-            unknown_list = ", ".join(repr(name) for name in unknown)
-            raise ValueError(f"Configured allowed_tool_names includes unknown tools: {unknown_list}")
-
-        return configured_allowlist
-
-    async def _build_tool_name_to_handler(
-        self,
-        model_request_parameters: ModelRequestParameters,
-    ) -> tuple[dict[str, Callable[[dict[str, Any]], Awaitable[str]]], tuple[str, ...]]:
-        current_run_context = _get_current_run_context_or_none()
-        if current_run_context is None:
-            raise UnexpectedModelBehavior("Codex CLI backend requires a Pydantic AI RunContext")
-
-        visible_tools = get_visible_tools()
-        toolset = FunctionToolset(visible_tools)
-        toolset_tools = await toolset.get_tools(current_run_context)
-
-        tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]] = {}
-
-        function_tool_names = {tool_def.name for tool_def in model_request_parameters.function_tools}
-
-        for tool_name, tool in toolset_tools.items():
-            if tool_name not in function_tool_names:
-                continue
-
-            async def handler(
-                arguments: dict[str, Any],
-                *,
-                tool_name: str = tool_name,
-                tool: Any = tool,
-                run_context: RunContext[Any] = current_run_context,
-            ) -> str:
-                validated_arguments = tool.args_validator.validate_python(arguments)
-                result = await tool.toolset.call_tool(tool_name, validated_arguments, run_context, tool)
-                return serialize_value_to_json_text(result)
-
-            tool_name_to_handler[tool_name] = handler
-
-        return tool_name_to_handler, tuple(tool_name_to_handler.keys())
-
-
-def _get_current_run_context_or_none() -> RunContext[Any] | None:
-    from pydantic_ai._run_context import get_current_run_context
-
-    return get_current_run_context()

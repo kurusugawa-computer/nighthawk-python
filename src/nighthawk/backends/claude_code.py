@@ -2,34 +2,24 @@ from __future__ import annotations
 
 import json
 import textwrap
-import uuid
-from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
-from claude_agent_sdk import ClaudeAgentOptions, SdkMcpTool, create_sdk_mcp_server
-from claude_agent_sdk import query as claude_agent_sdk_query
-from claude_agent_sdk.types import AssistantMessage, PermissionMode, ResultMessage
-from pydantic_ai import RunContext
+if TYPE_CHECKING:
+    from claude_agent_sdk.types import PermissionMode
+else:
+    PermissionMode = str  # type: ignore[assignment]
+
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    RetryPromptPart,
-    SystemPromptPart,
-    TextPart,
-    ToolReturnPart,
-    UserPromptPart,
-)
-from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..execution.environment import get_environment
 from ..tools import get_visible_tools
-from ..tools.assignment import serialize_value_to_json_text
+from . import BackendModelBase, ToolHandler
 
 
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):
@@ -38,7 +28,7 @@ class ClaudeAgentSdkModelSettings(TypedDict, total=False):
 
 
 def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeAgentSdkModelSettings:
-    default_settings: ClaudeAgentSdkModelSettings = {"permission_mode": "default"}
+    default_settings: ClaudeAgentSdkModelSettings = {"permission_mode": "default", "allowed_tool_names": None}
     if model_settings is None:
         return default_settings
 
@@ -65,44 +55,6 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
     }
 
 
-def _find_most_recent_model_request(messages: list[ModelMessage]) -> ModelRequest:
-    for message in reversed(messages):
-        if isinstance(message, ModelRequest):
-            return message
-    raise UnexpectedModelBehavior("No ModelRequest found in message history")
-
-
-def _collect_system_prompt_text(model_request: ModelRequest) -> str:
-    parts: list[str] = []
-    for part in model_request.parts:
-        if isinstance(part, SystemPromptPart):
-            if part.content:
-                parts.append(part.content)
-    return "\n\n".join(parts)
-
-
-def _collect_user_prompt_text(model_request: ModelRequest) -> str:
-    parts: list[str] = []
-    for part in model_request.parts:
-        if isinstance(part, UserPromptPart):
-            if isinstance(part.content, str):
-                parts.append(part.content)
-            else:
-                # This backend does not support image/audio/document user content yet.
-                raise UserError("Claude Agent SDK backend does not support non-text user prompts")
-        elif isinstance(part, RetryPromptPart):
-            parts.append(part.model_response())
-        elif isinstance(part, ToolReturnPart):
-            # Fail-closed: tool-return parts indicate Pydantic AI tool loop state, which this backend does not model.
-            raise UserError("Claude Agent SDK backend does not support tool-return parts")
-
-    return "\n\n".join(p for p in parts if p)
-
-
-def _serialize_value_to_json_text(value: object) -> str:
-    return serialize_value_to_json_text(value)
-
-
 def _build_json_schema_output_format(model_request_parameters: ModelRequestParameters) -> dict[str, Any] | None:
     output_object = model_request_parameters.output_object
     if output_object is None:
@@ -117,9 +69,34 @@ def _build_json_schema_output_format(model_request_parameters: ModelRequestParam
     return {"type": "json_schema", "schema": schema}
 
 
-class ClaudeCodeModel(Model):
+def _normalize_claude_agent_sdk_usage_to_request_usage(usage: object) -> RequestUsage:
+    request_usage = RequestUsage()
+    if not isinstance(usage, dict):
+        return request_usage
+
+    input_tokens = usage.get("input_tokens")
+    if isinstance(input_tokens, int):
+        request_usage.input_tokens = input_tokens
+
+    output_tokens = usage.get("output_tokens")
+    if isinstance(output_tokens, int):
+        request_usage.output_tokens = output_tokens
+
+    cache_read_input_tokens = usage.get("cache_read_input_tokens")
+    if isinstance(cache_read_input_tokens, int):
+        request_usage.cache_read_tokens = cache_read_input_tokens
+
+    cache_creation_input_tokens = usage.get("cache_creation_input_tokens")
+    if isinstance(cache_creation_input_tokens, int):
+        request_usage.cache_write_tokens = cache_creation_input_tokens
+
+    return request_usage
+
+
+class ClaudeCodeModel(BackendModelBase):
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
+            backend_label="Claude Agent SDK backend",
             profile=ModelProfile(
                 supports_tools=True,
                 supports_json_schema_output=True,
@@ -127,7 +104,7 @@ class ClaudeCodeModel(Model):
                 supports_image_output=False,
                 default_structured_output_mode="native",
                 supported_builtin_tools=frozenset([AbstractBuiltinTool]),
-            )
+            ),
         )
         self._model_name = model_name
 
@@ -137,7 +114,6 @@ class ClaudeCodeModel(Model):
 
     @property
     def system(self) -> str:
-        # Claude Code ultimately uses Anthropic models.
         return "anthropic"
 
     async def request(
@@ -146,55 +122,46 @@ class ClaudeCodeModel(Model):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
+        from claude_agent_sdk import ClaudeAgentOptions, SdkMcpTool, create_sdk_mcp_server
+        from claude_agent_sdk import query as claude_agent_sdk_query
+        from claude_agent_sdk.types import AssistantMessage, ResultMessage
+
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 
-        if model_request_parameters.builtin_tools:
-            raise UserError("Claude Agent SDK backend does not support builtin tools")
+        _most_recent_request, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
+            messages=messages,
+            model_request_parameters=model_request_parameters,
+        )
 
-        if model_request_parameters.allow_image_output:
-            raise UserError("Claude Agent SDK backend does not support image output")
+        claude_agent_sdk_model_settings = _get_claude_agent_sdk_model_settings(model_settings)
 
-        most_recent_request = _find_most_recent_model_request(messages)
+        tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
+            model_request_parameters=model_request_parameters,
+            configured_allowed_tool_names=claude_agent_sdk_model_settings.get("allowed_tool_names"),
+            visible_tools=get_visible_tools(),
+        )
 
-        system_prompt_text = _collect_system_prompt_text(most_recent_request)
-
-        instructions = self._get_instructions(messages, model_request_parameters)
-        if instructions:
-            if system_prompt_text:
-                system_prompt_text = "\n\n".join([system_prompt_text, instructions])
-            else:
-                system_prompt_text = instructions
-
-        tool_name_to_handler = await self._build_tool_name_to_handler(model_request_parameters)
-
-        mcp_tools: list[SdkMcpTool[Any]] = []
+        mcp_tools: list[Any] = []
         for tool_name, handler in tool_name_to_handler.items():
-            tool_def = model_request_parameters.tool_defs.get(tool_name)
-            if tool_def is None:
+            tool_definition = tool_name_to_tool_definition.get(tool_name)
+            if tool_definition is None:
                 raise UnexpectedModelBehavior(f"Tool definition missing for {tool_name!r}")
 
-            async def wrapped_handler(arguments: dict[str, Any], *, _handler: Callable[[dict[str, Any]], Awaitable[str]] = handler) -> dict[str, Any]:
-                result_text = await _handler(arguments)
+            async def wrapped_handler(arguments: dict[str, Any], *, tool_handler: ToolHandler = handler) -> dict[str, Any]:
+                result_text = await tool_handler(arguments)
                 return {"content": [{"type": "text", "text": result_text}]}
 
             mcp_tools.append(
                 SdkMcpTool(
                     name=tool_name,
-                    description=tool_def.description or "",
-                    input_schema=tool_def.parameters_json_schema,
+                    description=tool_definition.description or "",
+                    input_schema=tool_definition.parameters_json_schema,
                     handler=wrapped_handler,
                 )
             )
 
         sdk_server = create_sdk_mcp_server("nighthawk", tools=mcp_tools)
 
-        claude_agent_sdk_model_settings = _get_claude_agent_sdk_model_settings(model_settings)
-
-        allowed_tool_names = self._resolve_allowed_tool_names(
-            model_request_parameters,
-            claude_agent_sdk_model_settings=claude_agent_sdk_model_settings,
-            available_tool_names=tuple(tool_name_to_handler.keys()),
-        )
         allowed_tools_for_claude = [f"mcp__nighthawk__{tool_name}" for tool_name in allowed_tool_names]
 
         try:
@@ -228,16 +195,10 @@ class ClaudeCodeModel(Model):
             output_format=_build_json_schema_output_format(model_request_parameters),
         )
 
-        user_prompt_text = _collect_user_prompt_text(most_recent_request)
-        if user_prompt_text.strip() == "":
-            raise UserError("Claude Agent SDK backend requires a non-empty user prompt")
-
-        prompt_text = user_prompt_text
-
         assistant_model_name: str | None = None
         result_message: ResultMessage | None = None
 
-        prompt_stream = _single_user_message_stream(prompt_text)
+        prompt_stream = _single_user_message_stream(user_prompt_text)
 
         async for message in claude_agent_sdk_query(prompt=prompt_stream, options=options):
             if isinstance(message, AssistantMessage):
@@ -263,81 +224,21 @@ class ClaudeCodeModel(Model):
         else:
             output_text = json.dumps(structured_output, ensure_ascii=False)
 
+        usage = _normalize_claude_agent_sdk_usage_to_request_usage(result_message.usage)
+
         provider_details: dict[str, Any] = {
             "claude_code": {
                 "session_id": result_message.session_id,
-                "usage": result_message.usage,
             }
         }
 
         return ModelResponse(
             parts=[TextPart(content=output_text)],
-            usage=RequestUsage(),
+            usage=usage,
             model_name=assistant_model_name or self.model_name,
             provider_name="claude-code",
             provider_details=provider_details,
         )
-
-    def _resolve_allowed_tool_names(
-        self,
-        model_request_parameters: ModelRequestParameters,
-        *,
-        claude_agent_sdk_model_settings: ClaudeAgentSdkModelSettings,
-        available_tool_names: tuple[str, ...],
-    ) -> tuple[str, ...]:
-        configured_allowlist = claude_agent_sdk_model_settings.get("allowed_tool_names")
-        if configured_allowlist is None:
-            return tuple(name for name in (tool_def.name for tool_def in model_request_parameters.function_tools) if name in available_tool_names)
-
-        unknown = [name for name in configured_allowlist if name not in available_tool_names]
-        if unknown:
-            unknown_list = ", ".join(repr(name) for name in unknown)
-            raise ValueError(f"Configured allowed_tool_names includes unknown tools: {unknown_list}")
-
-        return configured_allowlist
-
-    async def _build_tool_name_to_handler(
-        self,
-        model_request_parameters: ModelRequestParameters,
-    ) -> dict[str, Callable[[dict[str, Any]], Awaitable[str]]]:
-        current_run_context = _get_current_run_context_or_none()
-        if current_run_context is None:
-            raise UnexpectedModelBehavior("Claude Agent SDK backend requires a Pydantic AI RunContext")
-
-        visible_tools = get_visible_tools()
-        toolset = _build_toolset(visible_tools)
-        toolset_tools = await toolset.get_tools(current_run_context)
-
-        tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]] = {}
-
-        function_tool_names = {tool_def.name for tool_def in model_request_parameters.function_tools}
-
-        for tool_name, tool in toolset_tools.items():
-            if tool_name not in function_tool_names:
-                continue
-
-            async def handler(
-                arguments: dict[str, Any],
-                *,
-                tool_name: str = tool_name,
-                tool: Any = tool,
-                run_context: RunContext[Any] = current_run_context,
-            ) -> str:
-                validated_arguments = tool.args_validator.validate_python(arguments)
-
-                tool_call_id = str(uuid.uuid4())
-                tool_run_context = _replace_run_context_for_tool(
-                    run_context,
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                )
-
-                result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
-                return _serialize_value_to_json_text(result)
-
-            tool_name_to_handler[tool_name] = handler
-
-        return tool_name_to_handler
 
 
 def _single_user_message_stream(prompt_text: str) -> Any:
@@ -350,30 +251,3 @@ def _single_user_message_stream(prompt_text: str) -> Any:
         }
 
     return iterator()
-
-
-def _build_toolset(tools: list[Any]) -> Any:
-    from pydantic_ai.toolsets.function import FunctionToolset
-
-    return FunctionToolset(tools)
-
-
-def _get_current_run_context_or_none() -> RunContext[Any] | None:
-    from pydantic_ai._run_context import get_current_run_context
-
-    return get_current_run_context()
-
-
-def _replace_run_context_for_tool(
-    run_context: RunContext[Any],
-    *,
-    tool_name: str,
-    tool_call_id: str,
-) -> RunContext[Any]:
-    from dataclasses import replace
-
-    return replace(
-        run_context,
-        tool_name=tool_name,
-        tool_call_id=tool_call_id,
-    )
