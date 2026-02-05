@@ -5,7 +5,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 import nighthawk as nh
-from nighthawk.backends.codex_cli import CodexCliModel
+from nighthawk.backends.codex import CodexModel
 from nighthawk.execution.context import ExecutionContext
 from nighthawk.execution.executors import make_agent_executor
 
@@ -29,10 +29,10 @@ def _requires_codex_integration() -> None:
         pytest.skip("Codex CLI integration test requires CODEX_API_KEY")
 
 
-def test_codex_cli_natural_block_uses_tool(tmp_path: Path) -> None:
+def test_codex_natural_block_uses_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex-cli:outside")
+    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
@@ -56,10 +56,10 @@ def test_codex_cli_natural_block_uses_tool(tmp_path: Path) -> None:
         assert test_function() == "2"
 
 
-def test_codex_cli_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
+def test_codex_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex-cli:outside")
+    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
@@ -86,10 +86,10 @@ def test_codex_cli_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
         assert test_function() == 42
 
 
-def test_codex_cli_structured_output_via_output_schema(tmp_path: Path) -> None:
+def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex-cli:outside")
+    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
@@ -99,10 +99,10 @@ def test_codex_cli_structured_output_via_output_schema(tmp_path: Path) -> None:
     )
 
     with nh.environment(environment):
-        model = CodexCliModel()
+        model = CodexModel()
 
         tool_context = ExecutionContext(
-            execution_id="test_codex_cli_structured_output_via_output_schema",
+            execution_id="test_codex_structured_output_via_output_schema",
             execution_configuration=execution_configuration,
             execution_globals={"__builtins__": __builtins__},
             execution_locals={},
@@ -119,7 +119,7 @@ def test_codex_cli_structured_output_via_output_schema(tmp_path: Path) -> None:
         )
 
         result = structured_agent.run_sync(
-            "Return exactly this JSON object and nothing else: {\"answer\": 2}",
+            'Return exactly this JSON object and nothing else: {"answer": 2}',
             deps=tool_context,
         )
 

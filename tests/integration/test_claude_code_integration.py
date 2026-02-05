@@ -12,14 +12,14 @@ class FakeMemory(BaseModel):
     pass
 
 
-def test_claude_agent_sdk_natural_block_uses_tool(tmp_path: Path) -> None:
+def test_claude_code_natural_block_uses_tool(tmp_path: Path) -> None:
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
     if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Agent SDK integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
 
-    execution_configuration = nh.ExecutionConfiguration(model="claude-agent-sdk:outside")
+    execution_configuration = nh.ExecutionConfiguration(model="claude-code:default")
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
