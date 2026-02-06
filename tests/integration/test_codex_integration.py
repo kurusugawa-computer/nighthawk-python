@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel
 from nighthawk.execution.context import ExecutionContext
-from nighthawk.execution.executors import make_agent_executor
 
 
 class FakeMemory(BaseModel):
@@ -36,7 +35,7 @@ def test_codex_natural_block_uses_tool(tmp_path: Path) -> None:
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
-        execution_executor=make_agent_executor(execution_configuration),
+        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
         memory=FakeMemory(),
         workspace_root=tmp_path,
     )
@@ -63,7 +62,7 @@ def test_codex_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
-        execution_executor=make_agent_executor(execution_configuration),
+        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
         memory=FakeMemory(),
         workspace_root=tmp_path,
     )
@@ -93,7 +92,7 @@ def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
-        execution_executor=make_agent_executor(execution_configuration),
+        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
         memory=FakeMemory(),
         workspace_root=tmp_path,
     )

@@ -5,7 +5,6 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.execution.executors import make_agent_executor
 
 
 class FakeMemory(BaseModel):
@@ -23,7 +22,7 @@ def test_claude_code_natural_block_uses_tool(tmp_path: Path) -> None:
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
-        execution_executor=make_agent_executor(execution_configuration),
+        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
         memory=FakeMemory(),
         workspace_root=tmp_path,
     )

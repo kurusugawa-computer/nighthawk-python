@@ -3,9 +3,6 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel
-from pydantic_ai import Agent
-
-from .context import ExecutionContext
 
 EXECUTION_EFFECT_TYPES: tuple[str, ...] = ("return", "break", "continue")
 
@@ -25,6 +22,3 @@ class ExecutionErrorDetail(BaseModel, extra="forbid"):
 class ExecutionFinal(BaseModel, extra="forbid"):
     effect: ExecutionEffect | None = None
     error: ExecutionErrorDetail | None = None
-
-
-type ExecutionAgent = Agent[ExecutionContext, ExecutionFinal]

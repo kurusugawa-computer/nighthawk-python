@@ -16,8 +16,8 @@ from .context import (
     get_python_cell_scope_stack,
     get_python_name_scope_stack,
 )
+from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
 from .environment import ExecutionEnvironment
-from .llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
 
 def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tuple[str, ...]]:

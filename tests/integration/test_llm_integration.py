@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
 import nighthawk as nh
-import nighthawk.execution.executors
 
 logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
@@ -42,7 +41,7 @@ def test_agent_import_and_construction_and_run():
         pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES
+    from nighthawk.execution.contracts import EXECUTION_EFFECT_TYPES
     from tests.execution.stub_executor import StubExecutor
 
     environment = nh.ExecutionEnvironment(
@@ -52,8 +51,8 @@ def test_agent_import_and_construction_and_run():
         workspace_root=Path("."),
     )
 
-    agent_executor = nighthawk.execution.executors.make_agent_executor(
-        environment.execution_configuration,
+    agent_executor = nh.AgentExecutor(
+        execution_configuration=environment.execution_configuration,
         model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
     )
     agent = agent_executor.agent
@@ -87,8 +86,8 @@ def test_natural_block_evaluate_order():
         pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
     execution_configuration = nh.ExecutionConfiguration()
-    execution_executor = nighthawk.execution.executors.make_agent_executor(
-        execution_configuration,
+    execution_executor = nh.AgentExecutor(
+        execution_configuration=execution_configuration,
         model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
     )
 
@@ -121,8 +120,8 @@ def test_condition():
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=nighthawk.execution.executors.make_agent_executor(
-            nh.ExecutionConfiguration(),
+        execution_executor=nh.AgentExecutor(
+            execution_configuration=nh.ExecutionConfiguration(),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
         memory=FakeMemory(),
@@ -158,8 +157,8 @@ def test_readme_hybrid_nesting_normalize_then_call_python_helper():
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=nighthawk.execution.executors.make_agent_executor(
-            nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
+        execution_executor=nh.AgentExecutor(
+            execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
         memory=FakeMemory(),

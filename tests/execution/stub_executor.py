@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 
 from nighthawk.errors import ExecutionError
-from nighthawk.execution.llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
+from nighthawk.execution.contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
 
 @dataclass(frozen=True)
