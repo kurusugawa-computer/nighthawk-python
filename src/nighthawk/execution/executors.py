@@ -6,13 +6,12 @@ from string import Template
 from typing import Any, Protocol
 
 from pydantic import BaseModel
-from pydantic_ai import Agent
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import ExecutionConfiguration
 from ..tools import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
-from .llm import EXECUTION_EFFECT_TYPES, ExecutionFinal
+from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
 
 
 class ExecutionAgent(Protocol):
@@ -31,35 +30,6 @@ class ExecutionExecutor(Protocol):
         allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
     ) -> tuple[ExecutionFinal, dict[str, object]]:
         raise NotImplementedError
-
-
-def make_agent_executor(
-    execution_configuration: ExecutionConfiguration,
-    **agent_constructor_keyword_arguments: Any,
-) -> "AgentExecutor":
-    model_identifier = execution_configuration.model
-    provider, provider_model_name = model_identifier.split(":", 1)
-
-    match provider:
-        case "claude-code":
-            from ..backends.claude_code import ClaudeCodeModel
-
-            model = ClaudeCodeModel(model_name=provider_model_name if provider_model_name != "default" else None)
-        case "codex":
-            from ..backends.codex import CodexModel
-
-            model = CodexModel(model_name=provider_model_name if provider_model_name != "default" else None)
-        case _:
-            model = model_identifier
-
-    agent: ExecutionAgent = Agent(
-        model=model,
-        output_type=ExecutionFinal,
-        deps_type=ExecutionContext,
-        system_prompt=execution_configuration.prompts.execution_system_prompt_template,
-        **agent_constructor_keyword_arguments,
-    )
-    return AgentExecutor(agent)
 
 
 def _approx_max_chars_from_tokens(max_tokens: int) -> int:
@@ -185,9 +155,57 @@ def build_user_prompt(*, processed_natural_program: str, execution_context: Exec
     )
 
 
-@dataclass(frozen=True)
+def _new_agent_executor(
+    execution_configuration: ExecutionConfiguration,
+    agent_constructor_keyword_arguments: dict[str, Any],
+) -> ExecutionAgent:
+    from pydantic_ai import Agent
+
+    model_identifier = execution_configuration.model
+    provider, provider_model_name = model_identifier.split(":", 1)
+
+    match provider:
+        case "claude-code":
+            from ..backends.claude_code import ClaudeCodeModel
+
+            model: object = ClaudeCodeModel(model_name=provider_model_name if provider_model_name != "default" else None)
+        case "codex":
+            from ..backends.codex import CodexModel
+
+            model = CodexModel(model_name=provider_model_name if provider_model_name != "default" else None)
+        case _:
+            model = model_identifier
+
+    return Agent(
+        model=model,
+        output_type=ExecutionFinal,
+        deps_type=ExecutionContext,
+        system_prompt=execution_configuration.prompts.execution_system_prompt_template,
+        **agent_constructor_keyword_arguments,
+    )
+
+
+@dataclass(frozen=True, init=False)
 class AgentExecutor:
     agent: ExecutionAgent
+
+    def __init__(
+        self,
+        *,
+        agent: ExecutionAgent | None = None,
+        execution_configuration: ExecutionConfiguration | None = None,
+        **agent_constructor_keyword_arguments: Any,
+    ) -> None:
+        if agent is not None:
+            if execution_configuration is not None or agent_constructor_keyword_arguments:
+                raise ValueError("When agent is provided, do not also pass execution_configuration or Agent constructor arguments")
+            object.__setattr__(self, "agent", agent)
+            return
+
+        if execution_configuration is None:
+            raise ValueError("AgentExecutor requires either agent=... or execution_configuration=...")
+
+        object.__setattr__(self, "agent", _new_agent_executor(execution_configuration, agent_constructor_keyword_arguments))
 
     def run_natural_block(
         self,

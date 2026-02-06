@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.execution.context import ExecutionContext
-from nighthawk.execution.llm import ExecutionFinal
+from nighthawk.execution.contracts import ExecutionFinal
 
 
 class RuntimeMemory(BaseModel):
@@ -91,7 +91,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
             is_in_loop: bool,
             allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
         ) -> tuple[ExecutionFinal, dict[str, object]]:
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             _ = processed_natural_program
             _ = execution_context
@@ -135,7 +135,7 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
             from nighthawk.tools import assign_tool
 
             assert deps is not None
@@ -181,7 +181,7 @@ def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             assert deps is not None
             _ = user_prompt

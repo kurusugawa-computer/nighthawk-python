@@ -57,7 +57,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             _ = user_prompt
             _ = deps
@@ -110,7 +110,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             _ = user_prompt
             _ = deps
@@ -387,7 +387,7 @@ def test_agent_backend_prompt_sections_are_present(tmp_path):
             self.seen_prompts: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             self.seen_prompts.append(user_prompt)
             assert deps is not None
@@ -447,7 +447,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             _ = user_prompt
             _ = deps
@@ -508,7 +508,7 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
 
             _ = user_prompt
             _ = deps

@@ -32,7 +32,7 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.llm import ExecutionFinal
+    from nighthawk.execution.contracts import ExecutionFinal
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -253,7 +253,7 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
 def test_docstring_natural_block_is_literal_no_implicit_interpolation(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
-    from nighthawk.execution.llm import ExecutionFinal
+    from nighthawk.execution.contracts import ExecutionFinal
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -409,7 +409,7 @@ def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
 def test_inline_fstring_natural_block_can_access_locals(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
-    from nighthawk.execution.llm import ExecutionFinal
+    from nighthawk.execution.contracts import ExecutionFinal
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -505,7 +505,7 @@ def test_inline_fstring_natural_block_can_call_local_and_global_helpers(tmp_path
 def test_enclosing_scope_capture_is_isolated_between_factories(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
-    from nighthawk.execution.llm import ExecutionFinal
+    from nighthawk.execution.contracts import ExecutionFinal
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -569,7 +569,7 @@ def test_input_binding_can_resolve_enclosing_scope_name(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.llm import ExecutionFinal
+    from nighthawk.execution.contracts import ExecutionFinal
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -701,7 +701,7 @@ def test_dotted_mutation_is_independent_of_commit_selection(tmp_path: Path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
-            from nighthawk.execution.llm import ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionFinal
             from nighthawk.tools import assign_tool
 
             assert deps is not None
@@ -755,7 +755,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
-            from nighthawk.execution.llm import ExecutionEffect, ExecutionFinal
+            from nighthawk.execution.contracts import ExecutionEffect, ExecutionFinal
             from nighthawk.tools import assign_tool
 
             assert deps is not None
