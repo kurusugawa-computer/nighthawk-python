@@ -18,7 +18,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..execution.environment import get_environment
-from ..tools import get_visible_tools
+from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
 
 
@@ -148,7 +148,16 @@ class ClaudeCodeModel(BackendModelBase):
                 raise UnexpectedModelBehavior(f"Tool definition missing for {tool_name!r}")
 
             async def wrapped_handler(arguments: dict[str, Any], *, tool_handler: ToolHandler = handler) -> dict[str, Any]:
-                result_text = await tool_handler(arguments)
+                try:
+                    result_text = await tool_handler(arguments)
+                except Exception as exception:
+                    from ..tools.contracts import tool_result_failure_json_text
+
+                    result_text = tool_result_failure_json_text(
+                        kind="internal",
+                        message=str(exception),
+                        guidance="The tool boundary wrapper failed. Retry or report this error.",
+                    )
                 return {"content": [{"type": "text", "text": result_text}]}
 
             mcp_tools.append(

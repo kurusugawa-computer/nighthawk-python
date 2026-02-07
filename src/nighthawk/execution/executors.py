@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import ExecutionConfiguration
-from ..tools import get_visible_tools
+from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
 from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
 

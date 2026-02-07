@@ -136,14 +136,13 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
             from nighthawk.execution.contracts import ExecutionFinal
-            from nighthawk.tools import assign_tool
+            from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
-            assign_result = assign_tool(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
-            assert assign_result["ok"] is True
+            assign_tool(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
 
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
 

@@ -22,7 +22,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
 
 from ..execution.environment import get_environment
-from ..tools import get_visible_tools
+from ..tools.registry import get_visible_tools
 from . import BackendModelBase
 
 
@@ -157,15 +157,29 @@ class _McpToolServer:
                 )
             return tools
 
-        @mcp_server.call_tool(validate_input=True)
+        @mcp_server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
             from mcp import types as mcp_types
 
+            from ..tools.contracts import tool_result_failure_json_text
+
             handler = self._tool_name_to_handler.get(name)
             if handler is None:
-                raise ValueError(f"Unknown tool: {name}")
+                result_text = tool_result_failure_json_text(
+                    kind="resolution",
+                    message=f"Unknown tool: {name}",
+                    guidance="Choose a visible tool name and retry.",
+                )
+                return [mcp_types.TextContent(type="text", text=result_text)]
 
-            result_text = await handler(arguments)
+            try:
+                result_text = await handler(arguments)
+            except Exception as exception:
+                result_text = tool_result_failure_json_text(
+                    kind="internal",
+                    message=str(exception),
+                    guidance="The tool boundary wrapper failed. Retry or report this error.",
+                )
             return [mcp_types.TextContent(type="text", text=result_text)]
 
         session_manager = StreamableHTTPSessionManager(app=mcp_server)

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import builtins
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 from ..execution.context import ExecutionContext
-from .assignment import assign_tool, eval_expression, serialize_value_to_json_text
+from .assignment import assign_tool, eval_expression
+from .contracts import ToolBoundaryFailure
 
 
 @dataclass(frozen=True)
@@ -21,18 +22,26 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     metadata = {"nighthawk.provided": True}
 
     def nh_dir(run_context: RunContext[ExecutionContext], expression: str) -> str:
-        value = eval_expression(run_context.deps, expression)
-        return "\n".join(builtins.dir(value))
+        try:
+            value = eval_expression(run_context.deps, expression)
+            return "\n".join(builtins.dir(value))
+        except Exception as exception:
+            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
     def nh_help(run_context: RunContext[ExecutionContext], expression: str) -> str:
-        value = eval_expression(run_context.deps, expression)
-        import pydoc
+        try:
+            value = eval_expression(run_context.deps, expression)
+            import pydoc
 
-        return pydoc.render_doc(value)
+            return pydoc.render_doc(value)
+        except Exception as exception:
+            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
-    def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> str:
-        value = eval_expression(run_context.deps, expression)
-        return serialize_value_to_json_text(value)
+    def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> object:
+        try:
+            return eval_expression(run_context.deps, expression)
+        except Exception as exception:
+            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
     def nh_assign(
         run_context: RunContext[ExecutionContext],
@@ -48,38 +57,50 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     return [
         ProvidedToolDefinition(
             name="nh_dir",
-            tool=Tool(
-                nh_dir,
-                name="nh_dir",
-                metadata=metadata,
-                description=("List available attributes on the evaluated value. Use this to explore Python objects safely without mutating state."),
+            tool=cast(
+                Tool[ExecutionContext],
+                Tool(
+                    nh_dir,
+                    name="nh_dir",
+                    metadata=metadata,
+                    description=("List available attributes on the evaluated value. Use this to explore Python objects safely without mutating state."),
+                ),
             ),
         ),
         ProvidedToolDefinition(
             name="nh_help",
-            tool=Tool(
-                nh_help,
-                name="nh_help",
-                metadata=metadata,
-                description=("Return Python help() text for the evaluated value. Use this to read documentation for objects available in context."),
+            tool=cast(
+                Tool[ExecutionContext],
+                Tool(
+                    nh_help,
+                    name="nh_help",
+                    metadata=metadata,
+                    description=("Return Python help() text for the evaluated value. Use this to read documentation for objects available in context."),
+                ),
             ),
         ),
         ProvidedToolDefinition(
             name="nh_eval",
-            tool=Tool(
-                nh_eval,
-                name="nh_eval",
-                metadata=metadata,
-                description=("Evaluate a Python expression in the tool evaluation environment and return JSON text. Use this to inspect values; do not use it to mutate state."),
+            tool=cast(
+                Tool[ExecutionContext],
+                Tool(
+                    nh_eval,
+                    name="nh_eval",
+                    metadata=metadata,
+                    description=("Evaluate a Python expression in the tool evaluation environment and return a JSON-serializable value. Use this to inspect values; do not use it to mutate state."),
+                ),
             ),
         ),
         ProvidedToolDefinition(
             name="nh_assign",
-            tool=Tool(
-                nh_assign,
-                name="nh_assign",
-                metadata=metadata,
-                description=("Assign a computed value to a target in the form name(.field)*. The tool returns a diagnostic object with an `updates` list on success and never raises."),
+            tool=cast(
+                Tool[ExecutionContext],
+                Tool(
+                    nh_assign,
+                    name="nh_assign",
+                    metadata=metadata,
+                    description=("Assign a computed value to a target in the form name(.field)*. On success, returns a JSON-serializable payload with an `updates` list; on failure, raises to be converted to the tool boundary envelope."),
+                ),
             ),
         ),
     ]

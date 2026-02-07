@@ -5,7 +5,7 @@ from .execution.context import get_current_execution_context
 from .execution.environment import ExecutionEnvironment, environment, environment_override, get_environment
 from .execution.executors import AgentExecutor
 from .natural.decorator import fn
-from .tools import tool
+from .tools.registry import tool
 
 __all__ = [
     "AgentExecutor",
