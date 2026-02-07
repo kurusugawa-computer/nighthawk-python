@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
@@ -16,7 +16,7 @@ from ..execution.environment import get_environment
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
 
-PermissionMode = str  # type: ignore[assignment]
+PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
 
 
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):

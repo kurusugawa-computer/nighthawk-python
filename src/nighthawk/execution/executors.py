@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from inspect import signature
 from string import Template
 from typing import Any, Protocol
 
@@ -56,11 +58,11 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
     value_max_chars = _approx_max_chars_from_tokens(context_limits.value_max_tokens)
     section_max_chars = _approx_max_chars_from_tokens(context_limits.locals_max_tokens)
 
-    allowed_names = set(redaction.locals_allowlist) if redaction.locals_allowlist else None
-
     lines: list[str] = []
     total_chars = 0
     shown_items = 0
+
+    allowed_names = set(redaction.locals_allowlist) if redaction.locals_allowlist else None
 
     eligible_names: list[str] = []
     for name in sorted(execution_context.execution_locals.keys()):
@@ -71,10 +73,8 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
         eligible_names.append(name)
 
     for name in eligible_names:
-        if shown_items >= context_limits.max_items:
+        if shown_items >= context_limits.locals_max_items:
             break
-
-        type_expression = f"type({name})"
 
         if _should_mask_name(name, name_substrings_to_mask=redaction.name_substrings_to_mask):
             rendered_value = redaction.masked_value_marker
@@ -85,7 +85,10 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
                 continue
             rendered_value = _summarize_for_prompt(value, max_chars=value_max_chars)
 
-        rendered = f"{name}: {type_expression} = {rendered_value}"
+        name_type = eval(f"type({name})", locals=execution_context.execution_locals).__name__
+        if name_type == "function":
+            name_type = str(signature(value))  # type: ignore
+        rendered = f"{name}: {name_type} = {rendered_value}"
 
         rendered_with_newline = rendered + "\n"
         if total_chars + len(rendered_with_newline) > section_max_chars:
@@ -102,18 +105,108 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
     return "\n".join(lines)
 
 
+def _find_reference_tokens(*, text: str) -> tuple[tuple[str, ...], str]:
+    reference_pattern = r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
+
+    unescaped_token_pattern = re.compile(r"(?<!\\)<(" + reference_pattern + r")>")
+    escaped_token_pattern = re.compile(r"\\<(" + reference_pattern + r")>")
+
+    selected_references: list[str] = []
+    for match in unescaped_token_pattern.finditer(text):
+        selected_references.append(match.group(1))
+
+    def unescape(match: re.Match[str]) -> str:
+        return f"<{match.group(1)}>"
+
+    unescaped_text = escaped_token_pattern.sub(unescape, text)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for reference in selected_references:
+        if reference in seen:
+            continue
+        seen.add(reference)
+        ordered.append(reference)
+
+    return tuple(ordered), unescaped_text
+
+
+def _render_globals_section(*, execution_context: ExecutionContext, references_in_appearance_order: tuple[str, ...]) -> str:
+    execution_configuration = execution_context.execution_configuration
+    context_limits = execution_configuration.context_limits
+    redaction = execution_configuration.context_redaction
+
+    value_max_chars = _approx_max_chars_from_tokens(context_limits.value_max_tokens)
+    section_max_chars = _approx_max_chars_from_tokens(context_limits.globals_max_tokens)
+
+    lines: list[str] = []
+    total_chars = 0
+    shown_items = 0
+    limit_reached = False
+
+    selected_top_level_name_set: set[str] = set()
+    for reference_path in references_in_appearance_order:
+        top_level_name = reference_path.split(".", 1)[0]
+        if top_level_name.startswith("__"):
+            continue
+        selected_top_level_name_set.add(top_level_name)
+
+    eligible_top_level_names: list[str] = []
+    for top_level_name in sorted(selected_top_level_name_set):
+        if top_level_name in execution_context.execution_locals:
+            continue
+        if top_level_name not in execution_context.execution_globals:
+            continue
+        eligible_top_level_names.append(top_level_name)
+
+    for top_level_name in eligible_top_level_names:
+        if shown_items >= context_limits.globals_max_items:
+            limit_reached = True
+            break
+
+        value = execution_context.execution_globals[top_level_name]
+
+        if _should_mask_name(top_level_name, name_substrings_to_mask=redaction.name_substrings_to_mask):
+            rendered_value = redaction.masked_value_marker
+        else:
+            rendered_value = _summarize_for_prompt(value, max_chars=value_max_chars)
+
+        name_type = eval(f"type({top_level_name})", globals=execution_context.execution_globals).__name__
+        if name_type == "function":
+            name_type = str(signature(value))  # type: ignore
+        rendered = f"{top_level_name}: {name_type} = {rendered_value}"
+
+        rendered_with_newline = rendered + "\n"
+        if total_chars + len(rendered_with_newline) > section_max_chars:
+            limit_reached = True
+            break
+
+        lines.append(rendered)
+        total_chars += len(rendered_with_newline)
+        shown_items += 1
+
+    if limit_reached:
+        lines.append("...<truncated>")
+
+    return "\n".join(lines)
+
+
 def build_user_prompt(*, processed_natural_program: str, execution_context: ExecutionContext) -> str:
     execution_configuration = execution_context.execution_configuration
     template_text = execution_configuration.prompts.execution_user_prompt_template
 
+    references, program_text = _find_reference_tokens(text=processed_natural_program)
+
     locals_text = _render_locals_section(execution_context)
+    globals_text = _render_globals_section(execution_context=execution_context, references_in_appearance_order=references)
 
     template = Template(template_text)
     environment = get_environment()
 
     prompt_text = template.substitute(
-        program=processed_natural_program,
+        program=program_text,
         locals=locals_text,
+        globals=globals_text,
     )
 
     suffix_fragments = environment.execution_user_prompt_suffix_fragments
@@ -159,12 +252,11 @@ def _new_agent_executor(
         except Exception:
             return None
 
-        system_prompt_fragments = [
-            environment.execution_configuration.prompts.execution_system_prompt_template,
-            *environment.execution_system_prompt_suffix_fragments,
-        ]
+        suffix_fragments = environment.execution_system_prompt_suffix_fragments
+        if not suffix_fragments:
+            return None
 
-        return "\n\n".join(system_prompt_fragments)
+        return "\n\n".join(suffix_fragments)
 
     return agent
 
