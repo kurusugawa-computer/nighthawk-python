@@ -129,18 +129,18 @@ class _McpToolServer:
         if self._server_thread is not None:
             raise RuntimeError("MCP tool server is already started")
 
-        import uvicorn
-        from mcp.server.fastmcp.server import StreamableHTTPASGIApp
-        from mcp.server.lowlevel.server import Server as McpLowLevelServer
-        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-        from starlette.applications import Starlette
-        from starlette.routing import Route
+        import uvicorn  # pyright: ignore[reportMissingImports]
+        from mcp.server.fastmcp.server import StreamableHTTPASGIApp  # pyright: ignore[reportMissingImports]
+        from mcp.server.lowlevel.server import Server as McpLowLevelServer  # pyright: ignore[reportMissingImports]
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager  # pyright: ignore[reportMissingImports]
+        from starlette.applications import Starlette  # pyright: ignore[reportMissingImports]
+        from starlette.routing import Route  # pyright: ignore[reportMissingImports]
 
         mcp_server = McpLowLevelServer("nighthawk")
 
         @mcp_server.list_tools()
         async def list_tools() -> list[Any]:
-            from mcp import types as mcp_types
+            from mcp import types as mcp_types  # pyright: ignore[reportMissingImports]
 
             tools: list[mcp_types.Tool] = []
             for tool_name in sorted(self._tool_name_to_handler.keys()):
@@ -159,7 +159,7 @@ class _McpToolServer:
 
         @mcp_server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
-            from mcp import types as mcp_types
+            from mcp import types as mcp_types  # pyright: ignore[reportMissingImports]
 
             from ..tools.contracts import tool_result_failure_json_text
 

@@ -52,7 +52,6 @@ def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) ->
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=NoopExecutor(),
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -104,7 +103,6 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=NoopExecutor(),
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -150,7 +148,6 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=FakeAgent()),
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -192,7 +189,6 @@ def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=FakeAgent()),
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):

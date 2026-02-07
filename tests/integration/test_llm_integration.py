@@ -3,8 +3,6 @@ from pathlib import Path
 
 import logfire
 import pytest
-from pydantic import BaseModel
-from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
 import nighthawk as nh
 
@@ -12,18 +10,20 @@ logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
 
-class FakeMemory(BaseModel):
-    pass
-
-
-def test_simple():
+def _requires_openai_integration():
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
     if os.getenv("OPENAI_API_KEY") is None:
         pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
+    openai_module = pytest.importorskip("pydantic_ai.models.openai")
+    return openai_module.OpenAIResponsesModelSettings
+
+
+def test_simple():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
     from pydantic_ai import Agent
-    from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
     agent = Agent(
         "openai-responses:gpt-5-nano",
@@ -35,10 +35,7 @@ def test_simple():
 
 
 def test_agent_import_and_construction_and_run():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-    if os.getenv("OPENAI_API_KEY") is None:
-        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
+    OpenAIResponsesModelSettings = _requires_openai_integration()
 
     from nighthawk.execution.context import ExecutionContext
     from nighthawk.execution.contracts import EXECUTION_EFFECT_TYPES
@@ -47,7 +44,6 @@ def test_agent_import_and_construction_and_run():
     environment = nh.ExecutionEnvironment(
         execution_configuration=nh.ExecutionConfiguration(),
         execution_executor=StubExecutor(),
-        memory=FakeMemory(),
         workspace_root=Path("."),
     )
 
@@ -66,7 +62,6 @@ def test_agent_import_and_construction_and_run():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
-        memory=None,
     )
 
     result = agent.run_sync(
@@ -80,10 +75,7 @@ def test_agent_import_and_construction_and_run():
 
 
 def test_natural_block_evaluate_order():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-    if os.getenv("OPENAI_API_KEY") is None:
-        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
+    OpenAIResponsesModelSettings = _requires_openai_integration()
 
     execution_configuration = nh.ExecutionConfiguration()
     execution_executor = nh.AgentExecutor(
@@ -94,7 +86,6 @@ def test_natural_block_evaluate_order():
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
         execution_executor=execution_executor,
-        memory=FakeMemory(),
         workspace_root=Path("."),
     )
 
@@ -113,10 +104,7 @@ def test_natural_block_evaluate_order():
 
 
 def test_condition():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-    if os.getenv("OPENAI_API_KEY") is None:
-        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
+    OpenAIResponsesModelSettings = _requires_openai_integration()
 
     environment = nh.ExecutionEnvironment(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -124,7 +112,6 @@ def test_condition():
             execution_configuration=nh.ExecutionConfiguration(),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
-        memory=FakeMemory(),
         workspace_root=Path("."),
     )
     with nh.environment(environment):
@@ -144,10 +131,7 @@ def test_condition():
 
 
 def test_readme_hybrid_nesting_normalize_then_call_python_helper():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-    if os.getenv("OPENAI_API_KEY") is None:
-        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
+    OpenAIResponsesModelSettings = _requires_openai_integration()
 
     python_average_call_argument_list: list[list[float]] = []
 
@@ -161,7 +145,6 @@ def test_readme_hybrid_nesting_normalize_then_call_python_helper():
             execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
-        memory=FakeMemory(),
         workspace_root=Path("."),
     )
     with nh.environment(environment):

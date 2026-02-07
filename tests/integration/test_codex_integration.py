@@ -9,10 +9,6 @@ from nighthawk.backends.codex import CodexModel
 from nighthawk.execution.context import ExecutionContext
 
 
-class FakeMemory(BaseModel):
-    pass
-
-
 class StructuredOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -36,7 +32,6 @@ def test_codex_natural_block_uses_tool(tmp_path: Path) -> None:
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
         execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
-        memory=FakeMemory(),
         workspace_root=tmp_path,
     )
 
@@ -63,7 +58,6 @@ def test_codex_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
         execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
-        memory=FakeMemory(),
         workspace_root=tmp_path,
     )
 
@@ -93,7 +87,6 @@ def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
         execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
-        memory=FakeMemory(),
         workspace_root=tmp_path,
     )
 
@@ -106,7 +99,6 @@ def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
             execution_globals={"__builtins__": __builtins__},
             execution_locals={},
             binding_commit_targets=set(),
-            memory=None,
         )
 
         from pydantic_ai import Agent

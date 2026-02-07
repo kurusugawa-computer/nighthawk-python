@@ -85,7 +85,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 ### Common commands (run from repo root)
 
 - Install/sync dependencies:
-  - `uv sync`
+  - `uv sync --all-extras --all-groups`
 
 - Format code:
   - `uv run ruff format .`
@@ -105,8 +105,8 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - Run tests quietly:
   - `uv run pytest -q`
 
-- Enable and run integration tests (OpenAI smoke):
-  - `NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q`
+- Enable and run integration tests:
+  - `set -a; source .env; set +a; uv run pytest -q`
 
 - Run python for investigating:
   - `uv run python`

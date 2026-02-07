@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from string import Template
 from typing import Any, Protocol
@@ -12,6 +11,7 @@ from ..configuration import ExecutionConfiguration
 from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
 from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
+from .environment import get_environment
 
 
 class ExecutionAgent(Protocol):
@@ -66,8 +66,6 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
     for name in sorted(execution_context.execution_locals.keys()):
         if name.startswith("__"):
             continue
-        if name == "memory":
-            continue
         if allowed_names is not None and name not in allowed_names:
             continue
         eligible_names.append(name)
@@ -76,15 +74,18 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
         if shown_items >= context_limits.max_items:
             break
 
+        type_expression = f"type({name})"
+
         if _should_mask_name(name, name_substrings_to_mask=redaction.name_substrings_to_mask):
-            rendered = f"{name} = {redaction.masked_value_marker}"
+            rendered_value = redaction.masked_value_marker
         else:
             try:
                 value = execution_context.execution_locals[name]
             except Exception:
                 continue
             rendered_value = _summarize_for_prompt(value, max_chars=value_max_chars)
-            rendered = f"{name} = {rendered_value}"
+
+        rendered = f"{name}: {type_expression} = {rendered_value}"
 
         rendered_with_newline = rendered + "\n"
         if total_chars + len(rendered_with_newline) > section_max_chars:
@@ -101,58 +102,25 @@ def _render_locals_section(execution_context: ExecutionContext) -> str:
     return "\n".join(lines)
 
 
-def _render_memory_section(execution_context: ExecutionContext) -> str:
-    execution_configuration = execution_context.execution_configuration
-    context_limits = execution_configuration.context_limits
-    redaction = execution_configuration.context_redaction
-
-    memory = execution_context.memory
-    if memory is None:
-        return ""
-
-    section_max_chars = _approx_max_chars_from_tokens(context_limits.memory_max_tokens)
-
-    allowed_fields = set(redaction.memory_fields_allowlist) if redaction.memory_fields_allowlist else None
-
-    memory_object: dict[str, object]
-    try:
-        memory_object = dict(memory.model_dump())
-    except Exception:
-        memory_object = {"__type__": type(memory).__name__, "__repr__": repr(memory)}
-
-    masked: dict[str, object] = {}
-    for field_name, field_value in memory_object.items():
-        if allowed_fields is not None and field_name not in allowed_fields:
-            continue
-        if _should_mask_name(field_name, name_substrings_to_mask=redaction.name_substrings_to_mask):
-            masked[field_name] = redaction.masked_value_marker
-        else:
-            masked[field_name] = field_value
-
-    try:
-        memory_json = json.dumps(masked, sort_keys=True, ensure_ascii=False)
-    except Exception:
-        memory_json = json.dumps(repr(masked), ensure_ascii=False)
-
-    if len(memory_json) > section_max_chars:
-        memory_json = memory_json[:section_max_chars] + "...<truncated>"
-
-    return memory_json
-
-
 def build_user_prompt(*, processed_natural_program: str, execution_context: ExecutionContext) -> str:
     execution_configuration = execution_context.execution_configuration
     template_text = execution_configuration.prompts.execution_user_prompt_template
 
     locals_text = _render_locals_section(execution_context)
-    memory_text = _render_memory_section(execution_context)
 
     template = Template(template_text)
-    return template.substitute(
+    environment = get_environment()
+
+    prompt_text = template.substitute(
         program=processed_natural_program,
         locals=locals_text,
-        memory=memory_text,
     )
+
+    suffix_fragments = environment.execution_user_prompt_suffix_fragments
+    if suffix_fragments:
+        return "\n\n".join([prompt_text, *suffix_fragments])
+
+    return prompt_text
 
 
 def _new_agent_executor(
@@ -176,13 +144,29 @@ def _new_agent_executor(
         case _:
             model = model_identifier
 
-    return Agent(
+    agent = Agent(
         model=model,
         output_type=ExecutionFinal,
         deps_type=ExecutionContext,
         system_prompt=execution_configuration.prompts.execution_system_prompt_template,
         **agent_constructor_keyword_arguments,
     )
+
+    @agent.system_prompt(dynamic=True)
+    def _environment_system_prompt() -> str | None:
+        try:
+            environment = get_environment()
+        except Exception:
+            return None
+
+        system_prompt_fragments = [
+            environment.execution_configuration.prompts.execution_system_prompt_template,
+            *environment.execution_system_prompt_suffix_fragments,
+        ]
+
+        return "\n\n".join(system_prompt_fragments)
+
+    return agent
 
 
 @dataclass(frozen=True, init=False)

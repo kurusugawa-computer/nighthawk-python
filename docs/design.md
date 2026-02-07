@@ -32,7 +32,7 @@ This file intentionally does not maintain a persistent divergence ledger.
   - expose a summary of execution locals to the LLM
   - allow the LLM to synchronize intermediate state into an execution locals mapping during reasoning
   - commit selected state back into Python locals at Natural block boundaries
-- Map state into a user-defined Pydantic `BaseModel` ("memory") for recognition alignment and validation.
+- Provide a coherent execution model where all state is ordinary Python values in execution locals, and persistence (if desired) is user-managed via ordinary bindings.
 
 ## 2. Non-goals
 
@@ -61,7 +61,7 @@ This file intentionally does not maintain a persistent divergence ledger.
   - Required fields include `execution_id` (unique at least within an `ExecutionEnvironment` lifetime) and `execution_configuration`.
   - Model selection is sourced only from `execution_configuration.model`; `ExecutionContext` does not carry a separate `model` field.
 - Locals summary: a bounded text rendering of selected values from `execution_locals`, included in the LLM prompt.
-- Memory: a structured state model (Pydantic `BaseModel`) stored and validated by the host.
+- Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Control-flow effect: a request to the Python interpreter to run `continue`, `break`, or `return`.
 - Frontmatter: optional YAML metadata at the start of a Natural program, delimited by `---` lines.
 
@@ -96,9 +96,8 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 - Allowlist behavior:
   - Locals allowlist: if empty, all local names are eligible for inclusion; if non-empty, only listed names are eligible.
-  - Memory fields allowlist: if empty, all memory field names are eligible; if non-empty, only listed field names are eligible.
 - Masking behavior:
-  - If a local name or memory field name matches a configured mask rule (for example a substring match), its value is replaced with a fixed marker.
+  - If a local name matches a configured mask rule (for example a substring match), its value is replaced with a fixed marker.
 - v1 limitation:
   - Redaction is shallow: it applies to which top-level names are shown and whether their values are replaced by a marker. It is not a recursive structured scrubber.
 
@@ -183,7 +182,7 @@ Clarifying note (bindings vs tool targets):
 
 ## 8. Orchestrator model
 
-### 8.1. State layers: python locals, execution locals, memory
+### 8.1. State layers: python locals and execution locals
 
 Nighthawk uses multiple state layers.
 
@@ -198,17 +197,11 @@ Nighthawk uses multiple state layers.
 - It is initialized at the start of each Natural block execution:
   - If nested execution exists, start from the outer execution's `execution_locals` values.
   - Overlay the caller frame's current `python_locals`.
-  - Bind `memory` into `execution_locals`.
 - During execution, the LLM can update `execution_locals` via tools (Section 8.3).
 - At the end of execution, values for `<:name>` bindings are committed into Python locals.
 
-3) Memory
 
-- A user-defined Pydantic `BaseModel` used for recognition alignment.
-- The host owns the memory instance for the duration of the environment.
-- The LLM may update memory during reasoning via tools (Section 8.3).
-
-### 8.2. Prompt context: locals summary and memory summary
+### 8.2. Prompt context: locals summary
 
 To reduce black-box behavior, Nighthawk includes bounded prompt context sections.
 
@@ -218,11 +211,6 @@ Locals summary:
 - Rendering is bounded by `context_limits` (approximate token budgeting) and may truncate.
 - Rendering applies `context_redaction` allowlists and masking rules.
 
-Memory summary:
-
-- The prompt includes a JSON rendering of the current memory state.
-- Rendering is bounded by `context_limits` (approximate token budgeting) and may truncate.
-- Rendering applies `context_redaction` allowlists and masking rules.
 
 ### 8.3. Tools available to the LLM
 
@@ -243,7 +231,7 @@ Decision (execution_globals):
 
 - `execution_globals` includes only `__builtins__`.
 
-The host binds `memory` into `execution_locals`, so expressions can read the current memory state.
+Expressions are evaluated against `execution_globals` + `execution_locals`.
 
 Read tools:
 
@@ -264,8 +252,6 @@ Target grammar:
 
 Reserved targets:
 
-- Assigning to the root name `memory` is disallowed.
-  - `memory.<field>` (and deeper dotted paths) are allowed.
 - Any segment starting with `__` (dunder) is disallowed.
 
 Semantics of `nh_assign`:
@@ -314,8 +300,8 @@ At the end of each execution, the LLM returns a final JSON object.
 Implementation note:
 
 - The canonical set of effect type strings is defined in `src/nighthawk/execution/llm.py` (see `EXECUTION_EFFECT_TYPES`). Other execution modules should refer to that definition rather than repeating string tuples.
-      - If `type` is `return`, this may be provided as a dotted reference path into the execution environment (locals and memory).
-      - The host resolves `source_path` against execution locals/memory, then validates/coerces the resolved Python value to the function's return type annotation.
+      - If `type` is `return`, this may be provided as a dotted reference path into execution locals.
+      - The host resolves `source_path` against execution locals, then validates/coerces the resolved Python value to the function's return type annotation.
       - If `source_path` is omitted or `null`, the return value is treated as `None`.
 
 If execution fails, the LLM returns:
@@ -331,7 +317,6 @@ Notes:
 - Control-flow effects are expressed only via the final JSON `effect`.
 - `break` and `continue` effects are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
 - Python locals are committed at Natural block boundaries based on `<:name>` bindings.
-- Memory is updated via tools during reasoning and is not returned in the final JSON.
 
 Frontmatter (optional):
 
@@ -405,7 +390,7 @@ The environment is required for execution and contains:
 - `execution_configuration` (required): execution configuration.
 - `workspace_root` (required): base directory for include resolution.
 - `execution_executor` (required): a runner strategy object responsible for executing Natural blocks.
-- `memory` (required): a Pydantic `BaseModel` instance owned by the host for the duration of the environment.
+- `execution_system_prompt_suffix_fragments` and `execution_user_prompt_suffix_fragments`: optional sequences of strings appended to the end of the effective system/user prompts for the duration of a scoped override.
 
 API:
 
@@ -413,6 +398,7 @@ API:
   - Replace/bootstrap. Can be used even when no environment is currently set.
 - `nighthawk.environment_override(...)`
   - Overlay. Requires an existing environment. Only specified fields are overridden for the duration of the `with`.
+  - Supports appending prompt suffix fragments for system and user prompts.
 - `nighthawk.get_environment() -> ExecutionEnvironment`
   - Get the current environment. Raises if unset.
 
@@ -439,23 +425,11 @@ Decision:
 - Any Python expression is permitted inside f-string `{...}` segments under the trusted-input model.
 - There is no implicit placeholder replacement or template preprocessing step for Natural blocks.
 
-## 12. Memory model (example shape)
+## 12. Persistence and user-managed state
 
-The user defines a `MemoryModel` as a Pydantic `BaseModel` using shallow types.
+Nighthawk does not define a built-in persistence or memory model.
 
-Example fields:
-
-- `facts: dict[str, str] = {}`
-- `glossary: dict[str, str] = {}`
-- `decisions: list[Decision] = []`
-- `examples: list[Example] = []`
-- `notes: list[str] = []`
-
-Where `Decision` and `Example` are also shallow `BaseModel` types.
-
-Note:
-
-- This is an example, not a fixed requirement.
+If you want a long-lived object, define it yourself and bind it as an ordinary Python value (for example, a module global named `memory`). Because expression evaluation and assignment operate on `execution_locals`, the value bound to `memory` behaves like any other local: it can be read via expressions and mutated via dotted assignment targets.
 
 ## 13. Error handling
 

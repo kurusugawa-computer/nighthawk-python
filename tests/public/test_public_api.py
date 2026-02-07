@@ -12,33 +12,21 @@ class FakeMemory(BaseModel):
     n: int = 0
 
 
-class FakeMemoryV1(BaseModel):
-    n: int = 1
-
-
-class FakeMemoryV2(BaseModel):
-    n: int = 2
-
-
 def test_environment_replace_and_getter(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemoryV1()
 
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
         environment = nh.get_environment()
         assert environment.workspace_root == tmp_path.resolve()
         assert environment.execution_configuration == configuration.execution_configuration
-        assert environment.memory is not None
-        assert isinstance(environment.memory, FakeMemoryV1)
 
     with pytest.raises(NighthawkError):
         nh.get_environment()
@@ -53,13 +41,11 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
 
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=root1,
         )
     ):
@@ -71,36 +57,29 @@ def test_environment_override_workspace_root_nesting(tmp_path: Path):
         assert nh.get_environment().workspace_root == root1.resolve()
 
 
-def test_environment_override_configuration_replaces_memory(tmp_path: Path):
+def test_environment_override_configuration_replaces_configuration(tmp_path: Path):
     configuration_1 = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
     configuration_2 = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+        execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-nano"),
     )
-    memory1 = FakeMemoryV1()
 
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration_1.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory1,
             workspace_root=tmp_path,
         )
     ):
-        memory_in_context = nh.get_environment().memory
-        assert isinstance(memory_in_context, FakeMemoryV1)
+        assert nh.get_environment().execution_configuration == configuration_1.execution_configuration
 
-        memory2 = FakeMemoryV2()
         with nh.environment_override(
             execution_configuration=configuration_2.execution_configuration,
-            memory=memory2,
         ):
-            memory_in_overridden_context = nh.get_environment().memory
-            assert isinstance(memory_in_overridden_context, FakeMemoryV2)
-            assert memory_in_overridden_context is memory2
+            assert nh.get_environment().execution_configuration == configuration_2.execution_configuration
 
-        assert nh.get_environment().memory is memory_in_context
+        assert nh.get_environment().execution_configuration == configuration_1.execution_configuration
 
 
 def test_environment_override_requires_existing_environment(tmp_path: Path):

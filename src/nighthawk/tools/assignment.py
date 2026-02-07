@@ -58,9 +58,6 @@ def _parse_target_path(target_path: str) -> tuple[str, ...] | None:
         if part.startswith("__"):
             return None
 
-    if parts == ["memory"]:
-        return None
-
     return tuple(parts)
 
 
@@ -85,7 +82,6 @@ def assign_tool(
     - target_path := name ("." field)*
 
     Notes:
-    - Assigning to the root name "memory" is forbidden.
     - Any segment starting with "__" is forbidden.
     - On success, returns a JSON-serializable payload with keys `target_path`, `execution_locals_revision`, and `updates`.
     - On failure, raises ToolBoundaryFailure.
@@ -138,20 +134,12 @@ def assign_tool(
     root_name = parsed_target_path[0]
     attribute_path = parsed_target_path[1:]
 
-    if root_name == "memory":
-        if execution_context.memory is None:
-            _raise_execution(
-                message="Memory is not enabled",
-                guidance="Enable memory or assign to a non-memory target, then retry.",
-            )
-        root_object: object = execution_context.memory
-    else:
-        if root_name not in execution_context.execution_locals:
-            _raise_resolution(
-                message=f"Unknown root name: {root_name}",
-                guidance="Fix the target path so the referenced root name exists, then retry.",
-            )
-        root_object = execution_context.execution_locals[root_name]
+    if root_name not in execution_context.execution_locals:
+        _raise_resolution(
+            message=f"Unknown root name: {root_name}",
+            guidance="Fix the target path so the referenced root name exists, then retry.",
+        )
+    root_object = execution_context.execution_locals[root_name]
 
     current_object = root_object
     for attribute in attribute_path[:-1]:

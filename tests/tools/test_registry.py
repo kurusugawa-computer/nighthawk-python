@@ -49,7 +49,6 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -72,7 +71,6 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -99,7 +97,6 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -127,7 +124,6 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -184,7 +180,6 @@ def test_assign_tool_allows_non_binding_local_target():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
-        memory=None,
     )
 
     result = assign_tool(execution_context, "now", "123")
@@ -203,16 +198,14 @@ def test_assign_tool_rejects_reserved_local_targets():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
-        memory=None,
     )
 
     from nighthawk.tools.contracts import ToolBoundaryFailure
 
-    with pytest.raises(ToolBoundaryFailure) as error_memory:
-        assign_tool(execution_context, "memory", "123")
-    assert error_memory.value.kind == "invalid_input"
-    assert "Invalid target_path" in str(error_memory.value)
-    assert "memory" not in execution_context.execution_locals
+    result = assign_tool(execution_context, "memory", "123")
+    assert result["target_path"] == "memory"
+    assert result["updates"] == [{"path": "memory", "value": 123}]
+    assert execution_context.execution_locals["memory"] == 123
 
     with pytest.raises(ToolBoundaryFailure) as error_private:
         assign_tool(execution_context, "__private", "123")
@@ -231,7 +224,6 @@ def test_assign_tool_validates_only_when_type_information_present():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={},
         binding_commit_targets=set(),
-        memory=None,
     )
 
     result_no_type = assign_tool(execution_context, "count", "'1'")
@@ -257,7 +249,6 @@ def test_assign_tool_rejects_dunder_segments():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={"x": object()},
         binding_commit_targets=set(),
-        memory=None,
     )
 
     from nighthawk.tools.contracts import ToolBoundaryFailure
@@ -282,7 +273,6 @@ def test_assign_tool_is_atomic_on_traversal_failure():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={"root": root},
         binding_commit_targets=set(),
-        memory=None,
     )
 
     original_revision = execution_context.execution_locals_revision
@@ -306,7 +296,6 @@ def test_assign_tool_is_atomic_on_validation_failure():
         execution_globals={"__builtins__": __builtins__},
         execution_locals={"count": 1},
         binding_commit_targets=set(),
-        memory=None,
         binding_name_to_type={"count": int},
     )
 
@@ -321,46 +310,44 @@ def test_assign_tool_is_atomic_on_validation_failure():
     assert execution_context.execution_locals["count"] == 1
 
 
-def test_assign_tool_validates_memory_fields_and_is_atomic():
+def test_assign_tool_validates_pydantic_fields_and_is_atomic():
     from pydantic import BaseModel
 
     from nighthawk.execution.context import ExecutionContext
     from nighthawk.tools.assignment import assign_tool
 
-    class Memory(BaseModel):
+    class Model(BaseModel):
         n: int = 1
 
-    memory = Memory(n=1)
+    model = Model(n=1)
     execution_context = ExecutionContext(
-        execution_id="test_assign_tool_validates_memory_fields_and_is_atomic",
+        execution_id="test_assign_tool_validates_pydantic_fields_and_is_atomic",
         execution_configuration=nh.ExecutionConfiguration(),
         execution_globals={"__builtins__": __builtins__},
-        execution_locals={},
+        execution_locals={"model": model},
         binding_commit_targets=set(),
-        memory=memory,
     )
 
-    ok_result = assign_tool(execution_context, "memory.n", "'2'")
-    assert ok_result["target_path"] == "memory.n"
-    assert ok_result["updates"] == [{"path": "memory.n", "value": 2}]
-    assert memory.n == 2
+    ok_result = assign_tool(execution_context, "model.n", "'2'")
+    assert ok_result["target_path"] == "model.n"
+    assert ok_result["updates"] == [{"path": "model.n", "value": 2}]
+    assert model.n == 2
 
     original_revision = execution_context.execution_locals_revision
 
     from nighthawk.tools.contracts import ToolBoundaryFailure
 
-    with pytest.raises(ToolBoundaryFailure) as error_memory_validation:
-        assign_tool(execution_context, "memory.n", "'not an int'")
-    assert error_memory_validation.value.kind == "invalid_input"
+    with pytest.raises(ToolBoundaryFailure) as error_validation:
+        assign_tool(execution_context, "model.n", "'not an int'")
+    assert error_validation.value.kind == "invalid_input"
     assert execution_context.execution_locals_revision == original_revision
-    assert memory.n == 2
+    assert model.n == 2
 
 
 def test_agent_backend_prompt_sections_are_present(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -384,7 +371,6 @@ def test_agent_backend_prompt_sections_are_present(tmp_path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -405,22 +391,17 @@ def test_agent_backend_prompt_sections_are_present(tmp_path):
     assert "<<<NH:END_PROGRAM>>>" in prompt
     assert "<<<NH:LOCALS>>>" in prompt
     assert "<<<NH:END_LOCALS>>>" in prompt
-    assert "<<<NH:MEMORY>>>" in prompt
-    assert "<<<NH:END_MEMORY>>>" in prompt
     assert "Say hi." in prompt
-    assert "x = 10" in prompt
+    assert "x: type(x) = 10" in prompt
     locals_section = prompt.split("<<<NH:LOCALS>>>\n", 1)[1].split("\n<<<NH:END_LOCALS>>>", 1)[0]
-    assert "memory =" not in locals_section
-
-    memory_section = prompt.split("<<<NH:MEMORY>>>\n", 1)[1].split("\n<<<NH:END_MEMORY>>>", 1)[0]
-    assert memory_section.strip() != ""
+    assert "memory" not in locals_section
+    assert "x: type(x) = 10" in locals_section
 
 
 def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -450,7 +431,6 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -484,7 +464,6 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -507,7 +486,6 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):

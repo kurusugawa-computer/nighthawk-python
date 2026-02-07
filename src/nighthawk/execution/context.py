@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 from types import CellType
 from typing import Iterator
 
-from pydantic import BaseModel
-
 from ..configuration import ExecutionConfiguration
 from ..errors import NighthawkError
 
@@ -22,7 +20,7 @@ class ExecutionContext:
 
     binding_commit_targets: set[str]
 
-    memory: BaseModel | None
+    # Ordinary user-provided binding (for example a global named "memory") may exist in execution_locals.
 
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)
