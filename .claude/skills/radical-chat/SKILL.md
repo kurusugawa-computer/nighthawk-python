@@ -1,18 +1,19 @@
 ---
 name: radical-chat
-description: Guides a radical, workspace-wide design alignment session that produces and continuously refines an Ideal State document (invariants).
-argument-hint: "@<ideal-path> concept:|naming:|procedure:|layout: <topic>"
+description: Guides a radical, repository-wide design alignment session that produces and continuously refines an Ideal State document (invariants).
+metadata:
+  argument_hint: "@<ideal-path> <topic>"
 ---
 
 # Radical chat
 
-This Skill is a thinking and alignment guide. It is intentionally radical: prioritize workspace-wide coherence over incremental adaptation and over the current repository state.
+This Skill is a thinking and alignment guide. It is intentionally radical: prioritize repository-wide coherence over incremental adaptation and over the current repository state.
 
 This Skill is also intentionally artifact-forward: create the Ideal State document early and keep it updated as the session progresses.
 
 ## Definitions
 
-- Radical chat: A design alignment session that prioritizes workspace-wide coherence over incremental adaptation.
+- Radical chat: A design alignment session that prioritizes repository-wide coherence over incremental adaptation.
 - Ideal State document: The durable shared artifact produced and edited during radical chat. Its normative content is invariants.
 - Invariant: A normative constraint that should ideally always hold. It is not required to match the current repository state.
 - Invariant Id: A stable identifier for an invariant inside a single Ideal State document.
@@ -34,7 +35,7 @@ This Skill is also intentionally artifact-forward: create the Ideal State docume
 ## Session rules (radical and persistent)
 
 1. Coherence is a hard constraint.
-   - Prefer workspace-wide coherence over local optimization.
+   - Prefer repository-wide coherence over local optimization.
    - Prefer symmetry, unification, and regularity.
 
 2. The Ideal State document's normative content is invariants only.
@@ -66,7 +67,7 @@ This Skill is also intentionally artifact-forward: create the Ideal State docume
    - Ask for one-time "standing permission" to keep editing the Ideal State document during the session. If permission is not granted, show a proposed patch instead of editing.
 
 8. Invariant edits trigger global review:
-   - Whenever any invariant is added, updated, or deleted, you MUST re-scan and re-evaluate ALL other invariants for coherence and conflicts.
+   - Whenever any invariant is added, updated, or deleted, you MUST re-scan and re-evaluate ALL other invariants in the current Ideal State document for coherence and conflicts.
    - If conflicts appear, either (a) propose synchronized edits, or (b) convert the disputed area into open questions until resolved.
 
 9. Invariant Id rules:
@@ -84,6 +85,11 @@ This Skill is also intentionally artifact-forward: create the Ideal State docume
    - Decisions (for decision logs): `D-KEBAB-001`
    - Follow-ups: append suffixes (for example, `Q-KEBAB-001A`).
 
+11. Ideal State document isolation:
+   - The assistant MUST only read or operate on the Ideal State document explicitly provided via `@<ideal-path>`.
+   - The assistant MUST NOT enumerate, open, compare, or reference any other Ideal State documents.
+   - Exception: If the user explicitly instructs referencing another Ideal State document, the assistant may do so only for the explicitly specified path(s).
+
 ## Arguments
 
 Treat `$ARGUMENTS` as a topic statement.
@@ -91,11 +97,6 @@ Treat `$ARGUMENTS` as a topic statement.
 Preferred convention:
 
 - `@<ideal-path>`: path to the Ideal State document to write or update.
-- Exactly one primary dimension tag:
-  - `concept:` conceptual structure and definitions
-  - `naming:` naming rules and vocabulary
-  - `procedure:` process and decision structure
-  - `layout:` directory or module layout structure
 - `<topic>`: the topic statement.
 
 ### First-run assumption: `<topic>` only
@@ -105,22 +106,20 @@ This Skill assumes the first invocation may provide only `<topic>`.
 If arguments omit `@<ideal-path>`:
 
 1. Propose 1-3 ideal-path candidates.
-   - Default recommendation: `docs/ideal/<topic-kebab>.md`
+   - Default recommendation: `.agent/ideal/<topic-kebab>.md`
 2. Ask the user to choose one path (or provide another).
 3. Create the file early (skeleton), once the path is chosen and editing permission is granted.
-
-If the dimension tag is missing or multiple dimension tags are provided, ask the user which single dimension to use.
 
 ## Output contract (every turn)
 
 Each assistant response MUST include:
 
-1. Restate the topic and scope (and the chosen dimension).
+1. Restate the topic and scope.
 2. Show proposed invariants (I-...) and/or proposed invariant edits (add/update/delete).
 3. List open questions (Q-...) and confirmations (C-...) needed to confirm the next set of invariants.
    - If questions are deferred, mark them explicitly as deferred and keep them visible without blocking progress.
    - Each open question MUST include at least one concrete decision option, plus the confirmation(s) needed to convert it into invariant edits.
-4. Decision support (D-...) only when it helps justify or explain invariants.
+4. Decision support (D-...) only when it helps explain invariants.
    - Each decision MUST reference supported invariants and MUST NOT introduce new norms.
 5. If an Ideal State document path is known:
    - If standing permission exists: apply edits immediately and keep the document updated.
@@ -137,10 +136,6 @@ When writing or updating the Ideal State document, use these sections:
 - Purpose
 - Definitions
 - Invariants
-  - Concept invariants
-  - Naming invariants
-  - Procedure invariants
-  - Layout invariants
 - Non-goals
 - Open questions
 - Decision log
@@ -149,7 +144,7 @@ When writing or updating the Ideal State document, use these sections:
 
 ### Example input (full form)
 
-    /radical-chat @docs/ideal/execution.md concept: execution context
+    /radical-chat @.agent/ideal/execution.md execution context
 
 ### Example input (first run, topic only)
 
@@ -157,12 +152,11 @@ When writing or updating the Ideal State document, use these sections:
 
 ### Example expected output shape (first run)
 
-- P-EXECUTION-001: Propose ideal-path `docs/ideal/execution-context.md` and default dimension `concept` unless you choose otherwise.
+- P-EXECUTION-001: Propose ideal-path `.agent/ideal/execution-context.md` unless you choose otherwise.
 - Q-EXECUTION-001: Which ideal-path should we use for the Ideal State document?
-- Q-EXECUTION-002: Which dimension should we use (concept, naming, procedure, layout)?
 - C-EXECUTION-001: Confirm standing permission for me to create and continuously edit the Ideal State document during this session.
 - I-001: Execution context is a defined term and must not have synonyms in code or docs.
-- Q-EXECUTION-003: Which conceptual alternatives for "execution context" should the Ideal State choose between (list options, even if tentative)?
+- Q-EXECUTION-002: Which conceptual alternatives for "execution context" should the Ideal State choose between (list options, even if tentative)?
 - C-EXECUTION-002: Confirm which alternative to adopt (or confirm a new alternative).
 - D-EXECUTION-001: Record the chosen alternative as decision support for I-001 (and any new invariants needed).
 
