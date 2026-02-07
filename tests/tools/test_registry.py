@@ -17,7 +17,7 @@ def test_tool_registers_globally_without_environment():
         return f"hello, {target}"
 
     # It should be visible even outside runtime context.
-    from nighthawk.tools import get_visible_tools
+    from nighthawk.tools.registry import get_visible_tools
 
     names = [t.name for t in get_visible_tools()]
     assert "test_global" in names
@@ -66,7 +66,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
     agent = FakeAgent()
 
-    from nighthawk.tools import get_visible_tools
+    from nighthawk.tools.registry import get_visible_tools
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -155,7 +155,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
 
 
 def test_builtin_tools_are_always_visible():
-    from nighthawk.tools import get_visible_tools
+    from nighthawk.tools.registry import get_visible_tools
 
     names = {t.name for t in get_visible_tools()}
 
@@ -176,7 +176,7 @@ def test_builtin_tool_name_conflict_requires_overwrite():
 
 def test_assign_tool_allows_non_binding_local_target():
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     execution_context = ExecutionContext(
         execution_id="test_assign_tool_allows_non_binding_local_target",
@@ -188,15 +188,14 @@ def test_assign_tool_allows_non_binding_local_target():
     )
 
     result = assign_tool(execution_context, "now", "123")
-    assert result["ok"] is True
     assert result["target_path"] == "now"
-    assert result["updates"] == [{"path": "now", "value_json_text": "123"}]
+    assert result["updates"] == [{"path": "now", "value": 123}]
     assert execution_context.execution_locals["now"] == 123
 
 
 def test_assign_tool_rejects_reserved_local_targets():
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     execution_context = ExecutionContext(
         execution_id="test_assign_tool_rejects_reserved_local_targets",
@@ -207,36 +206,24 @@ def test_assign_tool_rejects_reserved_local_targets():
         memory=None,
     )
 
-    original_revision = execution_context.execution_locals_revision
+    from nighthawk.tools.contracts import ToolBoundaryFailure
 
-    result_memory = assign_tool(execution_context, "memory", "123")
-    assert result_memory == {
-        "ok": False,
-        "target_path": "memory",
-        "execution_locals_revision": original_revision,
-        "error": {
-            "type": "parse",
-            "message": "Invalid target_path; expected name(.field)* with ASCII identifiers",
-        },
-    }
+    with pytest.raises(ToolBoundaryFailure) as error_memory:
+        assign_tool(execution_context, "memory", "123")
+    assert error_memory.value.kind == "invalid_input"
+    assert "Invalid target_path" in str(error_memory.value)
     assert "memory" not in execution_context.execution_locals
 
-    result_private = assign_tool(execution_context, "__private", "123")
-    assert result_private == {
-        "ok": False,
-        "target_path": "__private",
-        "execution_locals_revision": original_revision,
-        "error": {
-            "type": "parse",
-            "message": "Invalid target_path; expected name(.field)* with ASCII identifiers",
-        },
-    }
+    with pytest.raises(ToolBoundaryFailure) as error_private:
+        assign_tool(execution_context, "__private", "123")
+    assert error_private.value.kind == "invalid_input"
+    assert "Invalid target_path" in str(error_private.value)
     assert "__private" not in execution_context.execution_locals
 
 
 def test_assign_tool_validates_only_when_type_information_present():
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     execution_context = ExecutionContext(
         execution_id="test_assign_tool_validates_only_when_type_information_present",
@@ -248,23 +235,21 @@ def test_assign_tool_validates_only_when_type_information_present():
     )
 
     result_no_type = assign_tool(execution_context, "count", "'1'")
-    assert result_no_type["ok"] is True
     assert result_no_type["target_path"] == "count"
-    assert result_no_type["updates"] == [{"path": "count", "value_json_text": '"1"'}]
+    assert result_no_type["updates"] == [{"path": "count", "value": "1"}]
     assert execution_context.execution_locals["count"] == "1"
 
     execution_context.binding_name_to_type["count"] = int
 
     result_with_type = assign_tool(execution_context, "count", "'2'")
-    assert result_with_type["ok"] is True
     assert result_with_type["target_path"] == "count"
-    assert result_with_type["updates"] == [{"path": "count", "value_json_text": "2"}]
+    assert result_with_type["updates"] == [{"path": "count", "value": 2}]
     assert execution_context.execution_locals["count"] == 2
 
 
 def test_assign_tool_rejects_dunder_segments():
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     execution_context = ExecutionContext(
         execution_id="test_assign_tool_rejects_dunder_segments",
@@ -275,23 +260,17 @@ def test_assign_tool_rejects_dunder_segments():
         memory=None,
     )
 
-    original_revision = execution_context.execution_locals_revision
+    from nighthawk.tools.contracts import ToolBoundaryFailure
 
-    result = assign_tool(execution_context, "x.__class__", "123")
-    assert result == {
-        "ok": False,
-        "target_path": "x.__class__",
-        "execution_locals_revision": original_revision,
-        "error": {
-            "type": "parse",
-            "message": "Invalid target_path; expected name(.field)* with ASCII identifiers",
-        },
-    }
+    with pytest.raises(ToolBoundaryFailure) as error_dunder:
+        assign_tool(execution_context, "x.__class__", "123")
+    assert error_dunder.value.kind == "invalid_input"
+    assert "Invalid target_path" in str(error_dunder.value)
 
 
 def test_assign_tool_is_atomic_on_traversal_failure():
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     class Root:
         pass
@@ -308,16 +287,18 @@ def test_assign_tool_is_atomic_on_traversal_failure():
 
     original_revision = execution_context.execution_locals_revision
 
-    result = assign_tool(execution_context, "root.child.value", "123")
-    assert result["ok"] is False
-    assert result["execution_locals_revision"] == original_revision
-    assert result["error"]["type"] == "traversal"
+    from nighthawk.tools.contracts import ToolBoundaryFailure
+
+    with pytest.raises(ToolBoundaryFailure) as error_traversal:
+        assign_tool(execution_context, "root.child.value", "123")
+    assert error_traversal.value.kind == "resolution"
+    assert execution_context.execution_locals_revision == original_revision
     assert not hasattr(root, "child")
 
 
-def test_assign_tool_is_atomic_on_validation_failure_and_never_raises():
+def test_assign_tool_is_atomic_on_validation_failure():
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     execution_context = ExecutionContext(
         execution_id="test_assign_tool_is_atomic_on_validation_failure_and_never_raises",
@@ -331,10 +312,12 @@ def test_assign_tool_is_atomic_on_validation_failure_and_never_raises():
 
     original_revision = execution_context.execution_locals_revision
 
-    result = assign_tool(execution_context, "count", "'not an int'")
-    assert result["ok"] is False
-    assert result["execution_locals_revision"] == original_revision
-    assert result["error"]["type"] == "validation"
+    from nighthawk.tools.contracts import ToolBoundaryFailure
+
+    with pytest.raises(ToolBoundaryFailure) as error_validation:
+        assign_tool(execution_context, "count", "'not an int'")
+    assert error_validation.value.kind == "invalid_input"
+    assert execution_context.execution_locals_revision == original_revision
     assert execution_context.execution_locals["count"] == 1
 
 
@@ -342,7 +325,7 @@ def test_assign_tool_validates_memory_fields_and_is_atomic():
     from pydantic import BaseModel
 
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.tools import assign_tool
+    from nighthawk.tools.assignment import assign_tool
 
     class Memory(BaseModel):
         n: int = 1
@@ -358,17 +341,18 @@ def test_assign_tool_validates_memory_fields_and_is_atomic():
     )
 
     ok_result = assign_tool(execution_context, "memory.n", "'2'")
-    assert ok_result["ok"] is True
     assert ok_result["target_path"] == "memory.n"
-    assert ok_result["updates"] == [{"path": "memory.n", "value_json_text": "2"}]
+    assert ok_result["updates"] == [{"path": "memory.n", "value": 2}]
     assert memory.n == 2
 
     original_revision = execution_context.execution_locals_revision
 
-    bad_result = assign_tool(execution_context, "memory.n", "'not an int'")
-    assert bad_result["ok"] is False
-    assert bad_result["execution_locals_revision"] == original_revision
-    assert bad_result["error"]["type"] == "validation"
+    from nighthawk.tools.contracts import ToolBoundaryFailure
+
+    with pytest.raises(ToolBoundaryFailure) as error_memory_validation:
+        assign_tool(execution_context, "memory.n", "'not an int'")
+    assert error_memory_validation.value.kind == "invalid_input"
+    assert execution_context.execution_locals_revision == original_revision
     assert memory.n == 2
 
 
@@ -460,7 +444,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
 
     agent = FakeAgent()
 
-    from nighthawk.tools import get_visible_tools
+    from nighthawk.tools.registry import get_visible_tools
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -517,7 +501,7 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
 
     agent = FakeAgent()
 
-    from nighthawk.tools import get_visible_tools
+    from nighthawk.tools.registry import get_visible_tools
 
     with nh.environment(
         nh.ExecutionEnvironment(

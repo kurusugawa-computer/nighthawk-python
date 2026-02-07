@@ -13,7 +13,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel, _parse_codex_jsonl_lines
 from nighthawk.execution.context import ExecutionContext
-from nighthawk.tools import get_visible_tools
+from nighthawk.tools.registry import get_visible_tools
 
 
 def test_parse_codex_jsonl_lines_extracts_agent_message_and_thread_id_and_usage() -> None:
@@ -261,4 +261,8 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     payload = json.loads(result.output)
     assert payload["prompt_received"] is True
     assert payload["tool_names"] == ["nh_eval"]
-    assert payload["nh_eval_text"] == '"2"'
+
+    tool_result = json.loads(payload["nh_eval_text"])
+    assert tool_result["status"] == "success"
+    assert tool_result["error"] is None
+    assert tool_result["value"] == 2

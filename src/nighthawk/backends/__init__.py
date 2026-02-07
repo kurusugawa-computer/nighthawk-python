@@ -11,7 +11,17 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, Sy
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..tools.assignment import serialize_value_to_json_text
+from ..tools.contracts import ErrorKind, ToolBoundaryFailure, tool_result_failure_json_text, tool_result_success_json_text
+
+_UNEXPECTED_EXCEPTION_TYPE_TO_ERROR_KIND: tuple[tuple[type[BaseException], ErrorKind], ...] = ((TimeoutError, "transient"),)
+
+
+def classify_unexpected_exception(exception: Exception) -> "ErrorKind":
+    for exception_type, kind in _UNEXPECTED_EXCEPTION_TYPE_TO_ERROR_KIND:
+        if isinstance(exception, exception_type):
+            return kind
+    return "internal"
+
 
 type ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
 
@@ -94,11 +104,14 @@ async def build_tool_name_to_handler(
     backend_label: str,
 ) -> dict[str, ToolHandler]:
     run_context = get_current_run_context_or_none()
-    if run_context is None:
-        raise UnexpectedModelBehavior(f"{backend_label} requires a Pydantic AI RunContext")
 
     toolset = FunctionToolset(visible_tools)
-    tool_name_to_tool = await toolset.get_tools(run_context)
+
+    tool_name_to_tool: dict[str, Any]
+    if run_context is None:
+        tool_name_to_tool = {}
+    else:
+        tool_name_to_tool = await toolset.get_tools(run_context)
 
     function_tool_names = {tool_definition.name for tool_definition in model_request_parameters.function_tools}
 
@@ -113,9 +126,22 @@ async def build_tool_name_to_handler(
             *,
             tool_name: str = tool_name,
             tool: Any = tool,
-            run_context: RunContext[Any] = run_context,
         ) -> str:
-            validated_arguments = tool.args_validator.validate_python(arguments)
+            try:
+                validated_arguments = tool.args_validator.validate_python(arguments)
+            except Exception as exception:
+                return tool_result_failure_json_text(
+                    kind="invalid_input",
+                    message=str(exception),
+                    guidance="Fix tool arguments to match the tool schema and retry.",
+                )
+
+            if run_context is None:
+                return tool_result_failure_json_text(
+                    kind="internal",
+                    message=f"{backend_label} requires a Pydantic AI RunContext",
+                    guidance="This is a backend configuration error.",
+                )
 
             tool_call_id = generate_tool_call_id()
             tool_run_context = replace_run_context_for_tool(
@@ -124,8 +150,28 @@ async def build_tool_name_to_handler(
                 tool_call_id=tool_call_id,
             )
 
-            result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
-            return serialize_value_to_json_text(result)
+            try:
+                result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
+            except ToolBoundaryFailure as exception:
+                return tool_result_failure_json_text(
+                    kind=exception.kind,
+                    message=str(exception),
+                    guidance=exception.guidance,
+                )
+            except (UserError, UnexpectedModelBehavior) as exception:
+                return tool_result_failure_json_text(
+                    kind="internal",
+                    message=str(exception),
+                    guidance="The tool backend failed. Retry or report this error.",
+                )
+            except Exception as exception:
+                return tool_result_failure_json_text(
+                    kind=classify_unexpected_exception(exception),
+                    message=str(exception),
+                    guidance="The tool execution raised an unexpected error. Retry or report this error.",
+                )
+
+            return tool_result_success_json_text(result)
 
         tool_name_to_handler[tool_name] = handler
 

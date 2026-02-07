@@ -702,15 +702,14 @@ def test_dotted_mutation_is_independent_of_commit_selection(tmp_path: Path):
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
             from nighthawk.execution.contracts import ExecutionFinal
-            from nighthawk.tools import assign_tool
+            from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
             assign_result = assign_tool(deps, "obj.field", "123")
-            assert assign_result["ok"] is True
-            assert assign_result["updates"] == [{"path": "obj.field", "value_json_text": "123"}]
+            assert assign_result["updates"] == [{"path": "obj.field", "value": 123}]
 
             return FakeRunResult(ExecutionFinal(effect=None, error=None))
 
@@ -756,7 +755,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):
             from nighthawk.execution.contracts import ExecutionEffect, ExecutionFinal
-            from nighthawk.tools import assign_tool
+            from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
             _ = user_prompt
