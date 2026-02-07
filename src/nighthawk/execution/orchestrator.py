@@ -164,7 +164,9 @@ class Orchestrator:
 
         allowed_effect_types = tuple(effect_type for effect_type in base_allowed_effect_types if effect_type not in denied_effect_types)
 
-        execution_globals: dict[str, object] = {"__builtins__": __builtins__}
+        execution_globals: dict[str, object] = dict(python_globals)
+        if "__builtins__" not in execution_globals:
+            execution_globals["__builtins__"] = __builtins__
 
         execution_locals: dict[str, object] = {}
 
@@ -185,16 +187,16 @@ class Orchestrator:
 
         python_builtins = python_globals.get("__builtins__", __builtins__)
 
-        def resolve_input_binding_value(binding_name: str) -> object:
+        def resolve_input_binding_value(binding_name: str) -> tuple[object, str]:
             if binding_name in python_locals:
-                return python_locals[binding_name]
+                return python_locals[binding_name], "locals"
 
             for scope in reversed(python_cell_scope_stack):
                 if binding_name not in scope:
                     continue
                 cell = scope[binding_name]
                 try:
-                    return cell.cell_contents
+                    return cell.cell_contents, "cell_scope"
                 except ValueError:
                     break
 
@@ -208,26 +210,31 @@ class Orchestrator:
 
             for scope in reversed(python_name_scope_stack):
                 if binding_name in scope:
-                    return scope[binding_name]
+                    return scope[binding_name], "name_scope"
 
             if binding_name in python_globals:
-                return python_globals[binding_name]
+                return python_globals[binding_name], "globals"
 
             if isinstance(python_builtins, dict) and binding_name in python_builtins:
-                return python_builtins[binding_name]
+                return python_builtins[binding_name], "builtins"
 
             if hasattr(python_builtins, binding_name):
-                return getattr(python_builtins, binding_name)
+                return getattr(python_builtins, binding_name), "builtins"
 
             error = NameError(f"name {binding_name!r} is not defined")
             error.name = binding_name
             raise error
 
         resolved_input_binding_name_to_value: dict[str, object] = {}
+        resolved_input_binding_name_to_resolution_kind: dict[str, str] = {}
         for binding_name in input_binding_names:
-            resolved_input_binding_name_to_value[binding_name] = resolve_input_binding_value(binding_name)
+            value, resolution_kind = resolve_input_binding_value(binding_name)
+            resolved_input_binding_name_to_value[binding_name] = value
+            resolved_input_binding_name_to_resolution_kind[binding_name] = resolution_kind
 
-        execution_locals.update(resolved_input_binding_name_to_value)
+        for binding_name, resolution_kind in resolved_input_binding_name_to_resolution_kind.items():
+            if resolution_kind in ("locals", "cell_scope", "name_scope"):
+                execution_locals[binding_name] = resolved_input_binding_name_to_value[binding_name]
 
         execution_context = ExecutionContext(
             execution_id=str(uuid.uuid4()),

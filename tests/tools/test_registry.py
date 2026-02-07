@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import textwrap
+
 import pytest
 from pydantic import BaseModel
 
@@ -344,6 +347,95 @@ def test_assign_tool_validates_pydantic_fields_and_is_atomic():
     assert model.n == 2
 
 
+class _FakeRunResult:
+    def __init__(self, output):
+        self.output = output
+
+
+class _FakeAgent:
+    def __init__(self):
+        self.seen_prompts: list[str] = []
+
+    def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+        from nighthawk.execution.contracts import ExecutionFinal
+
+        self.seen_prompts.append(user_prompt)
+        assert deps is not None
+        _ = kwargs
+        return _FakeRunResult(ExecutionFinal(effect=None, error=None))
+
+
+G = 1
+
+
+def test_agent_backend_prompts(tmp_path):
+    agent = _FakeAgent()
+    with nh.environment(
+        nh.ExecutionEnvironment(
+            execution_configuration=nh.ExecutionConfiguration(),
+            execution_executor=nh.AgentExecutor(agent=agent),
+            workspace_root=tmp_path,
+        )
+    ):
+        a = 1.0
+
+        @nh.fn
+        def f() -> None:
+            x = 10
+            """natural
+            Say hi.
+            """
+
+            y = "hello"
+            """natural
+            <a><G>
+            """
+
+            _ = x
+            _ = y
+
+        f()
+
+        _ = a
+
+    logging.info(agent.seen_prompts)
+    assert agent.seen_prompts[0] == textwrap.dedent(
+        """\
+        <<<NH:PROGRAM>>>
+        Say hi.
+        
+        <<<NH:END_PROGRAM>>>
+        
+        <<<NH:GLOBALS>>>
+        
+        <<<NH:END_GLOBALS>>>
+        
+        <<<NH:LOCALS>>>
+        a: float = 1.0
+        x: int = 10
+        <<<NH:END_LOCALS>>>
+        """
+    )
+    assert agent.seen_prompts[1] == textwrap.dedent(
+        """\
+        <<<NH:PROGRAM>>>
+        <a><G>
+        
+        <<<NH:END_PROGRAM>>>
+        
+        <<<NH:GLOBALS>>>
+        G: int = 1
+        <<<NH:END_GLOBALS>>>
+        
+        <<<NH:LOCALS>>>
+        a: float = 1.0
+        x: int = 10
+        y: str = 'hello'
+        <<<NH:END_LOCALS>>>
+        """
+    )
+
+
 def test_agent_backend_prompt_sections_are_present(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -391,11 +483,16 @@ def test_agent_backend_prompt_sections_are_present(tmp_path):
     assert "<<<NH:END_PROGRAM>>>" in prompt
     assert "<<<NH:LOCALS>>>" in prompt
     assert "<<<NH:END_LOCALS>>>" in prompt
+    assert "<<<NH:GLOBALS>>>" in prompt
+    assert "<<<NH:END_GLOBALS>>>" in prompt
     assert "Say hi." in prompt
-    assert "x: type(x) = 10" in prompt
+    assert "x: int = 10" in prompt
     locals_section = prompt.split("<<<NH:LOCALS>>>\n", 1)[1].split("\n<<<NH:END_LOCALS>>>", 1)[0]
     assert "memory" not in locals_section
-    assert "x: type(x) = 10" in locals_section
+    assert "x: int = 10" in locals_section
+
+    globals_section = prompt.split("<<<NH:GLOBALS>>>\n", 1)[1].split("\n<<<NH:END_GLOBALS>>>", 1)[0]
+    assert globals_section.splitlines() == []
 
 
 def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
