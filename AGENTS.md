@@ -20,6 +20,9 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 ## Design principles
 
 - Avoid premature abstraction: Do not add classes/parameters just for hypothetical reuse; match the current call graph.
+- Keep identifiers module-private until they are clearly used from outside the module in non-test code. Prefer a leading underscore for internal names; only make names public when there is a real external caller, and export intentionally (for example via __all__).
+- Pydantic-first dependencies: The core library may depend on Pydantic and Pydantic AI as required (non-optional) dependencies.
+- Prefer built-ins over reimplementation: Use `pydantic.BaseModel` and built-in features from Pydantic and Pydantic AI aggressively. Avoid re-implementing functionality that either library already provides (e.g., validation, coercion, parsing, schema/serialization, agent/tool abstractions).
 - Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
   - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
   - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
