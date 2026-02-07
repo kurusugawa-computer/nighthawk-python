@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
-from typing import TYPE_CHECKING, Any, TypedDict, cast
-
-if TYPE_CHECKING:
-    from claude_agent_sdk.types import PermissionMode
-else:
-    PermissionMode = str  # type: ignore[assignment]
+from typing import Any, TypedDict, cast
 
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
@@ -20,6 +15,8 @@ from pydantic_ai.usage import RequestUsage
 from ..execution.environment import get_environment
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
+
+PermissionMode = str  # type: ignore[assignment]
 
 
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):
@@ -122,9 +119,9 @@ class ClaudeCodeModel(BackendModelBase):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
-        from claude_agent_sdk import ClaudeAgentOptions, SdkMcpTool, create_sdk_mcp_server
-        from claude_agent_sdk import query as claude_agent_sdk_query
-        from claude_agent_sdk.types import AssistantMessage, ResultMessage
+        from claude_agent_sdk import ClaudeAgentOptions, SdkMcpTool, create_sdk_mcp_server  # pyright: ignore[reportMissingImports]
+        from claude_agent_sdk import query as claude_agent_sdk_query  # pyright: ignore[reportMissingImports]
+        from claude_agent_sdk.types import AssistantMessage, ResultMessage  # pyright: ignore[reportMissingImports]
 
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 

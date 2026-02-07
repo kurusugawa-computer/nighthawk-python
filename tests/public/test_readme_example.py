@@ -1,23 +1,15 @@
-from pydantic import BaseModel
-
 import nighthawk as nh
 from tests.execution.stub_executor import StubExecutor
-
-
-class FakeMemory(BaseModel):
-    pass
 
 
 def test_readme_quick_example_style(tmp_path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = FakeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):

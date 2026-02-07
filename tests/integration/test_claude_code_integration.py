@@ -2,13 +2,8 @@ import os
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
 
 import nighthawk as nh
-
-
-class FakeMemory(BaseModel):
-    pass
 
 
 def test_claude_code_natural_block_uses_tool(tmp_path: Path) -> None:
@@ -23,7 +18,6 @@ def test_claude_code_natural_block_uses_tool(tmp_path: Path) -> None:
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
         execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
-        memory=FakeMemory(),
         workspace_root=tmp_path,
     )
 

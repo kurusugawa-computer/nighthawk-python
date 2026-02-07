@@ -201,8 +201,6 @@ if __name__ == "__main__":
 
 
 def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
-    from pydantic import BaseModel
-
     codex_executable = _write_executable_codex_cli_stub(directory=tmp_path)
 
     execution_configuration = nh.ExecutionConfiguration(model="codex:default")
@@ -212,13 +210,9 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             _ = kwargs
             raise AssertionError("ExecutionExecutor should not be used by this test")
 
-    class FakeMemory(BaseModel):
-        pass
-
     environment = nh.ExecutionEnvironment(
         execution_configuration=execution_configuration,
         execution_executor=StubExecutor(),
-        memory=FakeMemory(),
         workspace_root=tmp_path,
     )
 
@@ -229,7 +223,6 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             execution_globals={"__builtins__": __builtins__},
             execution_locals={},
             binding_commit_targets=set(),
-            memory=None,
         )
 
         from typing import cast

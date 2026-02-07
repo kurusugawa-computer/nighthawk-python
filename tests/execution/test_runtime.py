@@ -3,16 +3,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
 from tests.execution.stub_executor import StubExecutor
-
-
-class RuntimeMemory(BaseModel):
-    pass
-
 
 GLOBAL_NUMBER = 7
 SHADOWED_NUMBER = 1
@@ -61,7 +55,6 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=AssertingExecutor(),
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -85,12 +78,10 @@ def test_stub_return_effect_returns_value_from_source_path(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -113,12 +104,10 @@ def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -142,12 +131,10 @@ def test_stub_return_effect_invalid_source_path_raises(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -169,12 +156,10 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -199,12 +184,10 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -229,12 +212,10 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -285,7 +266,6 @@ def test_docstring_natural_block_is_literal_no_implicit_interpolation(tmp_path: 
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=recording_executor,
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -307,12 +287,10 @@ def test_frontmatter_deny_return_rejects_return_effect(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -338,12 +316,10 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -372,12 +348,10 @@ def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -441,7 +415,6 @@ def test_inline_fstring_natural_block_can_access_locals(tmp_path: Path):
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=recording_executor,
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -468,13 +441,11 @@ def test_inline_fstring_natural_block_can_call_local_and_global_helpers(tmp_path
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
 
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -538,7 +509,6 @@ def test_enclosing_scope_capture_is_isolated_between_factories(tmp_path: Path) -
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=recording_executor,
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -598,7 +568,6 @@ def test_input_binding_can_resolve_enclosing_scope_name(tmp_path: Path) -> None:
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=AssertingExecutor(),
-            memory=RuntimeMemory(),
             workspace_root=tmp_path,
         )
     ):
@@ -625,12 +594,10 @@ def test_frontmatter_deny_continue_in_loop_rejects_continue_effect(tmp_path: Pat
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -660,12 +627,10 @@ def test_fn_updates_output_binding_via_inline_fstring_natural_block(tmp_path: Pa
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=StubExecutor(),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -716,14 +681,12 @@ def test_dotted_mutation_is_independent_of_commit_selection(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     agent = FakeAgent()
 
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):
@@ -779,14 +742,12 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
     )
-    memory = RuntimeMemory()
     agent = FakeAgent()
 
     with nh.environment(
         nh.ExecutionEnvironment(
             execution_configuration=configuration.execution_configuration,
             execution_executor=nh.AgentExecutor(agent=agent),
-            memory=memory,
             workspace_root=tmp_path,
         )
     ):

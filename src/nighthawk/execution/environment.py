@@ -6,8 +6,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
-from pydantic import BaseModel
-
 from ..configuration import ExecutionConfiguration
 from ..errors import NighthawkError
 
@@ -19,8 +17,10 @@ if TYPE_CHECKING:
 class ExecutionEnvironment:
     execution_configuration: ExecutionConfiguration
     execution_executor: ExecutionExecutor
-    memory: BaseModel
     workspace_root: Path
+
+    execution_system_prompt_suffix_fragments: tuple[str, ...] = ()
+    execution_user_prompt_suffix_fragments: tuple[str, ...] = ()
 
 
 _environment_var: ContextVar[ExecutionEnvironment | None] = ContextVar(
@@ -59,7 +59,8 @@ def environment_override(
     workspace_root: str | Path | None = None,
     execution_configuration: ExecutionConfiguration | None = None,
     execution_executor: ExecutionExecutor | None = None,
-    memory: BaseModel | None = None,
+    execution_system_prompt_suffix_fragment: str | None = None,
+    execution_user_prompt_suffix_fragment: str | None = None,
 ) -> Iterator[ExecutionEnvironment]:
     current = get_environment()
 
@@ -75,8 +76,23 @@ def environment_override(
     if execution_executor is not None:
         next_environment = replace(next_environment, execution_executor=execution_executor)
 
-    if memory is not None:
-        next_environment = replace(next_environment, memory=memory)  # type: ignore[arg-type]
+    if execution_system_prompt_suffix_fragment is not None:
+        next_environment = replace(
+            next_environment,
+            execution_system_prompt_suffix_fragments=(
+                *next_environment.execution_system_prompt_suffix_fragments,
+                execution_system_prompt_suffix_fragment,
+            ),
+        )
+
+    if execution_user_prompt_suffix_fragment is not None:
+        next_environment = replace(
+            next_environment,
+            execution_user_prompt_suffix_fragments=(
+                *next_environment.execution_user_prompt_suffix_fragments,
+                execution_user_prompt_suffix_fragment,
+            ),
+        )
 
     from ..tools.registry import environment_scope
 

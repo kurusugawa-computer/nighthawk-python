@@ -118,16 +118,10 @@ class Orchestrator:
                 raise ExecutionError(f"Invalid source_path segment (dunder): {part!r}")
 
         root_name = parts[0]
-        if root_name == "memory":
-            if execution_context.memory is None:
-                raise ExecutionError("Memory is not enabled")
-            current: object = execution_context.memory
-            remaining = parts[1:]
-        else:
-            if root_name not in execution_context.execution_locals:
-                raise ExecutionError(f"Unknown root name in source_path: {root_name}")
-            current = execution_context.execution_locals[root_name]
-            remaining = parts[1:]
+        if root_name not in execution_context.execution_locals:
+            raise ExecutionError(f"Unknown root name in source_path: {root_name}")
+        current = execution_context.execution_locals[root_name]
+        remaining = parts[1:]
 
         for part in remaining:
             try:
@@ -179,9 +173,6 @@ class Orchestrator:
             execution_locals.update(execution_context_stack[-1].execution_locals)
 
         execution_locals.update(python_locals)
-
-        if self.environment.memory is not None:
-            execution_locals["memory"] = self.environment.memory
 
         binding_commit_targets = set(output_binding_names)
 
@@ -244,7 +235,6 @@ class Orchestrator:
             execution_globals=execution_globals,
             execution_locals=execution_locals,
             binding_commit_targets=binding_commit_targets,
-            memory=self.environment.memory,
             binding_name_to_type=binding_name_to_type,
         )
 

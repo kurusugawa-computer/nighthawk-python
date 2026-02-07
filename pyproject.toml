@@ -21,7 +21,7 @@ claude-code = [
   "claude-agent-sdk>=0.1",
 ]
 codex = [
-  "mcp>=1.26.0",
+  "mcp>=1.26",
 ]
 
 [dependency-groups]
