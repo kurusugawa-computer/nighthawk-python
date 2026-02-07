@@ -1,4 +1,5 @@
 .agent/logs/
+.agent/ideal/
 .agent/execplans/
 .claude/**/*.local.*
 
