@@ -1,5 +1,6 @@
 services:
   devcontainer:
+    container_name: nighthawk-devcontainer
     build:
       context: .
       dockerfile: Dockerfile.devcontainer
@@ -8,6 +9,7 @@ services:
     command: sleep infinity
 
   litellm:
+    container_name: nighthawk-litellm
     build:
       context: .
       dockerfile: Dockerfile.litellm
