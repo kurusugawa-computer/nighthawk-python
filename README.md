@@ -37,7 +37,7 @@ Run:
 git clone https://github.com/kurusugawa-computer/nighthawk-python.git
 cd nighthawk-python
 uv sync
-NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q tests/integration/test_llm_integration.py
+uv run pytest -q
 ```
 
 ## What is in this repository
@@ -183,6 +183,21 @@ calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
 This project assumes the Natural DSL source and any imported markdown are trusted, repository-managed assets.
 
 Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into Natural blocks or any host-side interpolation helpers you define.
+
+
+## Logfire with an OTel backend
+
+Run an OTel collector UI (otel-tui) with docker:
+
+```bash
+docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
+```
+
+Then run integration tests with `OTEL_EXPORTER_OTLP_ENDPOINT` set:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run pytest -q tests/integration/test_llm_integration.py
+```
 
 ## References
 

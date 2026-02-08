@@ -119,5 +119,3 @@ If you see an `uv` warning about hardlinking (common in containers / cross-files
 
 - `OPENAI_API_KEY`: Required for any OpenAI integration.
 - `CODEX_API_KEY`: Required for any Codex integration.
-- `NIGHTHAWK_MODEL`: Model name override (defaults to `gpt-5.2`).
-- `NIGHTHAWK_RUN_INTEGRATION_TESTS=1`: Enables integration tests (otherwise skipped).
