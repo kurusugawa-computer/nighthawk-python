@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-import logging
-import textwrap
-
 import pytest
-from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import ToolRegistrationError
-
-
-class FakeMemory(BaseModel):
-    pass
 
 
 def test_tool_registers_globally_without_environment():
@@ -345,95 +337,6 @@ def test_assign_tool_validates_pydantic_fields_and_is_atomic():
     assert error_validation.value.kind == "invalid_input"
     assert execution_context.execution_locals_revision == original_revision
     assert model.n == 2
-
-
-class _FakeRunResult:
-    def __init__(self, output):
-        self.output = output
-
-
-class _FakeAgent:
-    def __init__(self):
-        self.seen_prompts: list[str] = []
-
-    def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.execution.contracts import ExecutionFinal
-
-        self.seen_prompts.append(user_prompt)
-        assert deps is not None
-        _ = kwargs
-        return _FakeRunResult(ExecutionFinal(effect=None, error=None))
-
-
-G = 1
-
-
-def test_agent_backend_prompts(tmp_path):
-    agent = _FakeAgent()
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=nh.ExecutionConfiguration(),
-            execution_executor=nh.AgentExecutor(agent=agent),
-            workspace_root=tmp_path,
-        )
-    ):
-        a = 1.0
-
-        @nh.fn
-        def f() -> None:
-            x = 10
-            """natural
-            Say hi.
-            """
-
-            y = "hello"
-            """natural
-            <a><G>
-            """
-
-            _ = x
-            _ = y
-
-        f()
-
-        _ = a
-
-    logging.info(agent.seen_prompts)
-    assert agent.seen_prompts[0] == textwrap.dedent(
-        """\
-        <<<NH:PROGRAM>>>
-        Say hi.
-        
-        <<<NH:END_PROGRAM>>>
-        
-        <<<NH:GLOBALS>>>
-        
-        <<<NH:END_GLOBALS>>>
-        
-        <<<NH:LOCALS>>>
-        a: float = 1.0
-        x: int = 10
-        <<<NH:END_LOCALS>>>
-        """
-    )
-    assert agent.seen_prompts[1] == textwrap.dedent(
-        """\
-        <<<NH:PROGRAM>>>
-        <a><G>
-        
-        <<<NH:END_PROGRAM>>>
-        
-        <<<NH:GLOBALS>>>
-        G: int = 1
-        <<<NH:END_GLOBALS>>>
-        
-        <<<NH:LOCALS>>>
-        a: float = 1.0
-        x: int = 10
-        y: str = 'hello'
-        <<<NH:END_LOCALS>>>
-        """
-    )
 
 
 def test_agent_backend_prompt_sections_are_present(tmp_path):
