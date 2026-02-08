@@ -10,7 +10,7 @@ from ..execution.context import python_cell_scope, python_name_scope
 from ..execution.environment import get_environment
 from ..execution.orchestrator import Orchestrator
 from .blocks import find_natural_blocks
-from .transform import transform_function_source
+from .transform import transform_module_ast
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -47,18 +47,18 @@ def fn(func: F | None = None) -> F:
     if func is None:
         return lambda f: fn(f)  # type: ignore[return-value]
 
-    lines, _ = inspect.getsourcelines(func)
+    lines, starting_line_number = inspect.getsourcelines(func)
     source = textwrap.dedent("".join(lines))
 
     try:
-        module = ast.parse(source)
-        for node in module.body:
+        original_module = ast.parse(source)
+        for node in original_module.body:
             if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
                 node.decorator_list = []
-                source = ast.unparse(module)
                 break
+        ast.increment_lineno(original_module, starting_line_number - 1)
     except Exception:
-        pass
+        original_module = ast.Module(body=[], type_ignores=[])
 
     def extract_inline_fstring_name_set(func_source: str, *, function_name: str) -> set[str]:
         try:
@@ -122,10 +122,9 @@ def fn(func: F | None = None) -> F:
 
     captured_name_tuple = tuple(sorted(capture_name_set))
 
-    transformed_source = transform_function_source(source, captured_name_tuple=captured_name_tuple)
+    transformed_module = transform_module_ast(original_module, captured_name_tuple=captured_name_tuple)
 
-    def build_transformed_factory_source(*, transformed_module_source: str) -> str:
-        transformed_module = ast.parse(transformed_module_source)
+    def build_transformed_factory_module(*, transformed_module: ast.Module) -> ast.Module:
 
         transformed_function_def: ast.FunctionDef | None = None
         for node in transformed_module.body:
@@ -134,7 +133,7 @@ def fn(func: F | None = None) -> F:
                 break
 
         if transformed_function_def is None:
-            raise RuntimeError("Transformed function not found in transformed module source")
+            raise RuntimeError("Transformed function not found in transformed module")
 
         captured_value_name = "__nh_captured_values__"
         factory_name = "__nh_factory__"
@@ -172,12 +171,12 @@ def fn(func: F | None = None) -> F:
 
         factory_module = ast.Module(body=[factory_function_def], type_ignores=[])
         ast.fix_missing_locations(factory_module)
-        return ast.unparse(factory_module)
+        return factory_module
 
     filename = inspect.getsourcefile(func) or "<nighthawk>"
 
-    factory_source = build_transformed_factory_source(transformed_module_source=transformed_source)
-    code = compile(factory_source, filename, "exec")
+    factory_module = build_transformed_factory_module(transformed_module=transformed_module)
+    code = compile(factory_module, filename, "exec")
 
     globals_namespace: dict[str, object] = dict(func.__globals__)
     globals_namespace["__nighthawk_orchestrator__"] = _OrchestratorProxy()

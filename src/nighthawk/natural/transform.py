@@ -41,8 +41,20 @@ class NaturalTransformer(ast.NodeTransformer):
                             is_in_loop=self._loop_depth > 0,
                         )
 
+                        # Preserve user-source location: the injected runtime call and its
+                        # subsequent assignments should point at the Natural docstring
+                        # sentinel line (the opening triple-quote line).
+                        sentinel_location = ast.copy_location(ast.Pass(), first_statement)
+                        sentinel_location.end_lineno = sentinel_location.lineno
+                        sentinel_location.end_col_offset = sentinel_location.col_offset
+
+                        injected_with_location = [
+                            ast.copy_location(statement, sentinel_location)
+                            for statement in injected
+                        ]
+
                         body_without_docstring = node.body[1:]
-                        node.body = injected + body_without_docstring
+                        node.body = injected_with_location + body_without_docstring
 
             node = self.generic_visit(node)  # type: ignore[assignment]
 
@@ -169,7 +181,12 @@ class NaturalTransformer(ast.NodeTransformer):
                     return_annotation,
                     is_in_loop=is_in_loop,
                 )
-                return [ast.copy_location(statement, node) for statement in statements]  # type: ignore[return-value]
+
+                sentinel_location = ast.copy_location(ast.Pass(), node)
+                sentinel_location.end_lineno = sentinel_location.lineno
+                sentinel_location.end_col_offset = sentinel_location.col_offset
+
+                return [ast.copy_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
         if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
             _validate_joined_string_bindings_do_not_span_formatted_values(value)
@@ -195,7 +212,12 @@ class NaturalTransformer(ast.NodeTransformer):
                 return_annotation,
                 is_in_loop=is_in_loop,
             )
-            return [ast.copy_location(statement, node) for statement in statements]  # type: ignore[return-value]
+
+            sentinel_location = ast.copy_location(ast.Pass(), node)
+            sentinel_location.end_lineno = sentinel_location.lineno
+            sentinel_location.end_col_offset = sentinel_location.col_offset
+
+            return [ast.copy_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
         return node
 
@@ -435,6 +457,12 @@ def build_runtime_call_and_assignments(
     return assigns
 
 
+def transform_module_ast(module: ast.Module, *, captured_name_tuple: tuple[str, ...] = ()) -> ast.Module:
+    module = NaturalTransformer(captured_name_tuple=captured_name_tuple).visit(module)  # type: ignore[assignment]
+    ast.fix_missing_locations(module)
+    return module
+
+
 def transform_function_source(func_source: str, *, captured_name_tuple: tuple[str, ...] = ()) -> str:
     """Return a rewritten module source with Natural blocks rewritten."""
 
@@ -443,8 +471,7 @@ def transform_function_source(func_source: str, *, captured_name_tuple: tuple[st
     except SyntaxError as e:
         raise NaturalParseError(str(e)) from e
 
-    module = NaturalTransformer(captured_name_tuple=captured_name_tuple).visit(module)  # type: ignore[assignment]
-    ast.fix_missing_locations(module)
+    module = transform_module_ast(module, captured_name_tuple=captured_name_tuple)
 
     try:
         return ast.unparse(module)
