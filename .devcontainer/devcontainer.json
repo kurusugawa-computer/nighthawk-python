@@ -11,7 +11,8 @@
 	"postCreateCommand": "npm install -g pyright @openai/codex && pip install --no-cache-dir uv",
 	"remoteEnv": {
 		"ANTHROPIC_BASE_URL": "http://litellm:4000",
-		"ANTHROPIC_AUTH_TOKEN": "sk-dummy"
+		"ANTHROPIC_AUTH_TOKEN": "sk-dummy",
+		"CLAUDE_CODE_MAX_OUTPUT_TOKENS": "128000"
 	},
 	"customizations": {
 		"vscode": {
