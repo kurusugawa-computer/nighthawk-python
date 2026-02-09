@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import ExecutionConfiguration
+from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
 from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
@@ -302,7 +303,7 @@ class AgentExecutor:
         )
 
         tools = get_visible_tools()
-        toolset = FunctionToolset(tools)
+        toolset = ToolResultWrapperToolset(FunctionToolset(tools))
 
         output_type: object
         should_normalize_final = False
