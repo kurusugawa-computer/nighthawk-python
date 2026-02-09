@@ -143,7 +143,7 @@ def test_readme_hybrid_nesting_normalize_then_call_python_helper():
         execution_configuration=nh.ExecutionConfiguration(),
         execution_executor=nh.AgentExecutor(
             execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="high"),
         ),
         workspace_root=Path("."),
     )

@@ -6,22 +6,19 @@ from dataclasses import replace
 from typing import Any
 
 from pydantic_ai import RunContext
-from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
+from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, SystemPromptPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..tools.contracts import ErrorKind, ToolBoundaryFailure, tool_result_failure_json_text, tool_result_success_json_text
-
-_UNEXPECTED_EXCEPTION_TYPE_TO_ERROR_KIND: tuple[tuple[type[BaseException], ErrorKind], ...] = ((TimeoutError, "transient"),)
-
-
-def classify_unexpected_exception(exception: Exception) -> "ErrorKind":
-    for exception_type, kind in _UNEXPECTED_EXCEPTION_TYPE_TO_ERROR_KIND:
-        if isinstance(exception, exception_type):
-            return kind
-    return "internal"
-
+from ..tools.contracts import (
+    ToolBoundaryFailure,
+    ToolResult,
+    ToolResultWrapperToolset,
+    serialize_value_to_json_text,
+    tool_result_failure_json_text,
+    tool_result_success_json_text,
+)
 
 type ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
 
@@ -105,7 +102,7 @@ async def build_tool_name_to_handler(
 ) -> dict[str, ToolHandler]:
     run_context = get_current_run_context_or_none()
 
-    toolset = FunctionToolset(visible_tools)
+    toolset = ToolResultWrapperToolset(FunctionToolset(visible_tools))
 
     tool_name_to_tool: dict[str, Any]
     if run_context is None:
@@ -127,14 +124,29 @@ async def build_tool_name_to_handler(
             tool_name: str = tool_name,
             tool: Any = tool,
         ) -> str:
+            tool_call_id = generate_tool_call_id()
+
             try:
                 validated_arguments = tool.args_validator.validate_python(arguments)
             except Exception as exception:
-                return tool_result_failure_json_text(
-                    kind="invalid_input",
-                    message=str(exception),
-                    guidance="Fix tool arguments to match the tool schema and retry.",
-                )
+                errors_method = getattr(exception, "errors", None)
+                if callable(errors_method):
+                    try:
+                        error_details = errors_method(include_url=False, include_context=False)
+                        if isinstance(error_details, list):
+                            return RetryPromptPart(
+                                tool_name=tool_name,
+                                content=error_details,
+                                tool_call_id=tool_call_id,
+                            ).model_response()
+                    except Exception:
+                        pass
+
+                return RetryPromptPart(
+                    tool_name=tool_name,
+                    content=str(exception) or "Invalid tool arguments",
+                    tool_call_id=tool_call_id,
+                ).model_response()
 
             if run_context is None:
                 return tool_result_failure_json_text(
@@ -143,7 +155,6 @@ async def build_tool_name_to_handler(
                     guidance="This is a backend configuration error.",
                 )
 
-            tool_call_id = generate_tool_call_id()
             tool_run_context = replace_run_context_for_tool(
                 run_context,
                 tool_name=tool_name,
@@ -151,7 +162,9 @@ async def build_tool_name_to_handler(
             )
 
             try:
-                result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
+                tool_result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
+            except (ModelRetry, CallDeferred, ApprovalRequired):
+                raise
             except ToolBoundaryFailure as exception:
                 return tool_result_failure_json_text(
                     kind=exception.kind,
@@ -166,12 +179,15 @@ async def build_tool_name_to_handler(
                 )
             except Exception as exception:
                 return tool_result_failure_json_text(
-                    kind=classify_unexpected_exception(exception),
-                    message=str(exception),
+                    kind="internal",
+                    message=str(exception) or "Tool execution failed",
                     guidance="The tool execution raised an unexpected error. Retry or report this error.",
                 )
 
-            return tool_result_success_json_text(result)
+            if isinstance(tool_result, ToolResult):
+                return serialize_value_to_json_text(tool_result)
+
+            return tool_result_success_json_text(tool_result)
 
         tool_name_to_handler[tool_name] = handler
 
