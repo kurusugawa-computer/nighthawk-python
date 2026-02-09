@@ -54,7 +54,7 @@ def test_agent_import_and_construction_and_run():
     agent = agent_executor.agent
 
     system_prompts = agent._system_prompts  # type: ignore[attr-defined]
-    assert any("Nighthawk Natural block" in str(p) for p in system_prompts)
+    assert any("Do the work described in <<<NH:PROGRAM>>>." in str(p) for p in system_prompts)
 
     tool_context = ExecutionContext(
         execution_id="test_agent_import_and_construction_and_run",
@@ -161,3 +161,39 @@ def test_readme_hybrid_nesting_normalize_then_call_python_helper():
 
     assert python_average_call_argument_list
     assert python_average_call_argument_list[-1] == [1, 2, 3, 4, 5]
+
+
+def test_reasoning_memo():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+    logfire.info("hello")
+
+    environment = nh.ExecutionEnvironment(
+        execution_configuration=nh.ExecutionConfiguration(),
+        execution_executor=nh.AgentExecutor(
+            execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="high"),
+        ),
+        workspace_root=Path("."),
+    )
+    with nh.environment(environment):
+        _memo: list[str] = []
+
+        def memo(text: str):
+            _memo.append(text)
+
+        @nh.fn
+        def test_function() -> str:
+            answer: str = ""
+            """natural
+            If a+|a|=0, try to prove that a<0.
+            Record the proof steps by eval <memo> dynamically.
+            Step 1: List the conditions and questions in the original proposition.
+            Step 2: Merge the conditions listed in Step 1 into one. Define it as wj.
+            Step 3: Let us think it step by step. Please consider all possibilities. If the intersection between wj (defined in Step 2) and the negation of the question is not empty at least in one possibility, the original proposition is false. Otherwise, the original proposition is true.
+            Set answer to <:answer>.
+            """
+            return answer
+
+        answer = test_function()
+        logfire.info(answer.replace("{", "{{").replace("}", "}}"))
+        logfire.info(str(_memo).replace("{", "{{").replace("}", "}}"))

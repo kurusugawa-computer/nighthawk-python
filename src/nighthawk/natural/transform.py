@@ -48,10 +48,7 @@ class NaturalTransformer(ast.NodeTransformer):
                         sentinel_location.end_lineno = sentinel_location.lineno
                         sentinel_location.end_col_offset = sentinel_location.col_offset
 
-                        injected_with_location = [
-                            ast.copy_location(statement, sentinel_location)
-                            for statement in injected
-                        ]
+                        injected_with_location = [ast.copy_location(statement, sentinel_location) for statement in injected]
 
                         body_without_docstring = node.body[1:]
                         node.body = injected_with_location + body_without_docstring
