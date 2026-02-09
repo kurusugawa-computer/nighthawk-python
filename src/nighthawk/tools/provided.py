@@ -21,6 +21,23 @@ class ProvidedToolDefinition:
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     metadata = {"nighthawk.provided": True}
 
+    def nh_assign(
+        run_context: RunContext[ExecutionContext],
+        target_path: str,
+        expression: str,
+    ) -> dict[str, Any]:
+        return assign_tool(
+            run_context.deps,
+            target_path,
+            expression,
+        )
+
+    def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> object:
+        try:
+            return eval_expression(run_context.deps, expression)
+        except Exception as exception:
+            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
+
     def nh_dir(run_context: RunContext[ExecutionContext], expression: str) -> str:
         try:
             value = eval_expression(run_context.deps, expression)
@@ -37,24 +54,31 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         except Exception as exception:
             raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
-    def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> object:
-        try:
-            return eval_expression(run_context.deps, expression)
-        except Exception as exception:
-            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
-
-    def nh_assign(
-        run_context: RunContext[ExecutionContext],
-        target_path: str,
-        expression: str,
-    ) -> dict[str, Any]:
-        return assign_tool(
-            run_context.deps,
-            target_path,
-            expression,
-        )
-
     return [
+        ProvidedToolDefinition(
+            name="nh_assign",
+            tool=cast(
+                Tool[ExecutionContext],
+                Tool(
+                    nh_assign,
+                    name="nh_assign",
+                    metadata=metadata,
+                    description=("Assign a computed value to a target in the form name(.field)*. On success, returns a JSON-serializable payload with an `updates` list."),
+                ),
+            ),
+        ),
+        ProvidedToolDefinition(
+            name="nh_eval",
+            tool=cast(
+                Tool[ExecutionContext],
+                Tool(
+                    nh_eval,
+                    name="nh_eval",
+                    metadata=metadata,
+                    description=("Evaluate a Python expression and return a JSON-serializable value. Use this to inspect values and call functions."),
+                ),
+            ),
+        ),
         ProvidedToolDefinition(
             name="nh_dir",
             tool=cast(
@@ -75,31 +99,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                     nh_help,
                     name="nh_help",
                     metadata=metadata,
-                    description=("Return Python help() text for the evaluated value. Use this to read documentation for objects available in context."),
-                ),
-            ),
-        ),
-        ProvidedToolDefinition(
-            name="nh_eval",
-            tool=cast(
-                Tool[ExecutionContext],
-                Tool(
-                    nh_eval,
-                    name="nh_eval",
-                    metadata=metadata,
-                    description=("Evaluate a Python expression in the tool evaluation environment and return a JSON-serializable value. Use this to inspect values; do not use it to mutate state."),
-                ),
-            ),
-        ),
-        ProvidedToolDefinition(
-            name="nh_assign",
-            tool=cast(
-                Tool[ExecutionContext],
-                Tool(
-                    nh_assign,
-                    name="nh_assign",
-                    metadata=metadata,
-                    description=("Assign a computed value to a target in the form name(.field)*. On success, returns a JSON-serializable payload with an `updates` list; on failure, raises to be converted to the tool boundary envelope."),
+                    description=("Return Python help() text for the evaluated value. Use this to read documentation for objects."),
                 ),
             ),
         ),
