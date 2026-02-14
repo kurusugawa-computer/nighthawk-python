@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import Any
 
+import tiktoken
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, SystemPromptPart, ToolReturnPart, UserPromptPart
@@ -15,7 +16,6 @@ from ..tools.contracts import (
     ToolBoundaryFailure,
     ToolResult,
     ToolResultWrapperToolset,
-    serialize_value_to_json_text,
     tool_result_failure_json_text,
     tool_result_success_json_text,
 )
@@ -149,10 +149,15 @@ async def build_tool_name_to_handler(
                 ).model_response()
 
             if run_context is None:
+                execution_configuration = run_context.deps.execution_configuration  # type: ignore[attr-defined]
+                encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
                 return tool_result_failure_json_text(
                     kind="internal",
                     message=f"{backend_label} requires a Pydantic AI RunContext",
                     guidance="This is a backend configuration error.",
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=encoding,
+                    style=execution_configuration.json_renderer_style,
                 )
 
             tool_run_context = replace_run_context_for_tool(
@@ -166,28 +171,56 @@ async def build_tool_name_to_handler(
             except (ModelRetry, CallDeferred, ApprovalRequired):
                 raise
             except ToolBoundaryFailure as exception:
+                execution_configuration = run_context.deps.execution_configuration  # type: ignore[attr-defined]
+                encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
                 return tool_result_failure_json_text(
                     kind=exception.kind,
                     message=str(exception),
                     guidance=exception.guidance,
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=encoding,
+                    style=execution_configuration.json_renderer_style,
                 )
             except (UserError, UnexpectedModelBehavior) as exception:
+                execution_configuration = run_context.deps.execution_configuration  # type: ignore[attr-defined]
+                encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
                 return tool_result_failure_json_text(
                     kind="internal",
                     message=str(exception),
                     guidance="The tool backend failed. Retry or report this error.",
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=encoding,
+                    style=execution_configuration.json_renderer_style,
                 )
             except Exception as exception:
+                execution_configuration = run_context.deps.execution_configuration  # type: ignore[attr-defined]
+                encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
                 return tool_result_failure_json_text(
                     kind="internal",
                     message=str(exception) or "Tool execution failed",
                     guidance="The tool execution raised an unexpected error. Retry or report this error.",
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=encoding,
+                    style=execution_configuration.json_renderer_style,
                 )
 
-            if isinstance(tool_result, ToolResult):
-                return serialize_value_to_json_text(tool_result)
+            execution_configuration = run_context.deps.execution_configuration  # type: ignore[attr-defined]
+            encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
 
-            return tool_result_success_json_text(tool_result)
+            if isinstance(tool_result, ToolResult):
+                return tool_result_success_json_text(
+                    value=tool_result.value,
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=encoding,
+                    style=execution_configuration.json_renderer_style,
+                )
+
+            return tool_result_success_json_text(
+                value=tool_result,
+                max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                encoding=encoding,
+                style=execution_configuration.json_renderer_style,
+            )
 
         tool_name_to_handler[tool_name] = handler
 

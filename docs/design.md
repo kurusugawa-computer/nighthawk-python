@@ -89,7 +89,6 @@ This file intentionally does not maintain a persistent divergence ledger.
     - `execution_system_prompt_template`: system prompt template that defines the execution protocol.
     - `execution_user_prompt_template`: full user prompt template including section delimiters.
   - `context_limits`: limits for rendering dynamic context into the prompt.
-    - v1 uses an approximate conversion `max_chars = max_tokens * 4`.
   - `context_redaction`: rules for reducing or masking sensitive data in prompt context.
 
 `context_redaction` minimal requirements:
@@ -98,6 +97,7 @@ This file intentionally does not maintain a persistent divergence ledger.
   - Locals allowlist: if empty, all local names are eligible for inclusion; if non-empty, only listed names are eligible.
 - Masking behavior:
   - If a local name matches a configured mask rule (for example a substring match), its value is replaced with a fixed marker.
+  - The default marker is `[redacted]`.
 - v1 limitation:
   - Redaction is shallow: it applies to which top-level names are shown and whether their values are replaced by a marker. It is not a recursive structured scrubber.
 

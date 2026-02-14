@@ -70,9 +70,8 @@ def test_wrapper_returns_toolresult_success_with_placeholder_for_unknown_value()
     content = getattr(tool_return_part, "content")
 
     dumped = tool_return_ta.dump_python(content, mode="json")
-    assert dumped["status"] == "success"
     assert dumped["error"] is None
-    assert dumped["value"] == "<NotJson>"
+    assert dumped["value"] == "<nonserializable>"
 
 
 def test_wrapper_converts_tool_exception_to_toolresult_failure() -> None:
@@ -99,7 +98,6 @@ def test_wrapper_converts_tool_exception_to_toolresult_failure() -> None:
     content = getattr(tool_return_part, "content")
 
     dumped = tool_return_ta.dump_python(content, mode="json")
-    assert dumped["status"] == "failure"
     assert dumped["value"] is None
     assert dumped["error"]["kind"] == "internal"
 

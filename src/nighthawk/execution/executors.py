@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from inspect import signature
 from string import Template
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol, cast
 
-from pydantic import BaseModel
+import tiktoken
+from pydantic import BaseModel, ConfigDict, create_model
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import ExecutionConfiguration
+from ..json_renderer import SENTINEL_NONSERIALIZABLE, count_tokens, render_json_text, to_jsonable_value
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
@@ -35,171 +38,145 @@ class ExecutionExecutor(Protocol):
         raise NotImplementedError
 
 
-def _approx_max_chars_from_tokens(max_tokens: int) -> int:
-    return max_tokens * 4
-
-
-def _summarize_for_prompt(value: object, *, max_chars: int) -> str:
-    text = repr(value)
-    if len(text) > max_chars:
-        return text[:max_chars] + "..."
-    return text
-
-
-def _should_mask_name(name: str, *, name_substrings_to_mask: tuple[str, ...]) -> bool:
-    lowered = name.lower()
-    return any(substring in lowered for substring in name_substrings_to_mask)
-
-
-def _render_locals_section(execution_context: ExecutionContext) -> str:
+def _render_locals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
     execution_configuration = execution_context.execution_configuration
     context_limits = execution_configuration.context_limits
-    redaction = execution_configuration.context_redaction
+    section_max_tokens = context_limits.locals_max_tokens
+    referent_values = execution_context.execution_locals
 
-    value_max_chars = _approx_max_chars_from_tokens(context_limits.value_max_tokens)
-    section_max_chars = _approx_max_chars_from_tokens(context_limits.locals_max_tokens)
+    def _to_type_name(reference: str) -> str:
+        return eval(f"type({reference})", locals=referent_values).__name__
 
     lines: list[str] = []
-    total_chars = 0
+    total_tokens = 0
     shown_items = 0
 
-    allowed_names = set(redaction.locals_allowlist) if redaction.locals_allowlist else None
-
-    eligible_names: list[str] = []
-    for name in sorted(execution_context.execution_locals.keys()):
-        if name.startswith("__"):
+    eligible_references: list[str] = []
+    for reference in sorted(references):
+        if reference.startswith("__"):
             continue
-        if allowed_names is not None and name not in allowed_names:
-            continue
-        eligible_names.append(name)
+        eligible_references.append(reference)
 
-    for name in eligible_names:
+    for reference in eligible_references:
         if shown_items >= context_limits.locals_max_items:
             break
 
-        if _should_mask_name(name, name_substrings_to_mask=redaction.name_substrings_to_mask):
-            rendered_value = redaction.masked_value_marker
-        else:
-            try:
-                value = execution_context.execution_locals[name]
-            except Exception:
-                continue
-            rendered_value = _summarize_for_prompt(value, max_chars=value_max_chars)
+        value = referent_values[reference]
 
-        name_type = eval(f"type({name})", locals=execution_context.execution_locals).__name__
-        if name_type == "function":
-            name_type = str(signature(value))  # type: ignore
-        rendered = f"{name}: {name_type} = {rendered_value}"
+        reference_type_name = _to_type_name(reference)
+        if reference_type_name == "function":
+            reference_type_name = str(signature(value))  # type: ignore
+        rendered_name_and_type = f"{reference}: {reference_type_name} = "
 
-        rendered_with_newline = rendered + "\n"
-        if total_chars + len(rendered_with_newline) > section_max_chars:
+        rendered_value, rendered_value_tokens = render_json_text(
+            value,
+            max_tokens=context_limits.value_max_tokens,
+            encoding=token_encoding,
+            style=execution_configuration.json_renderer_style,
+        )
+
+        rendered = rendered_name_and_type + rendered_value
+        rendered_tokens = count_tokens(rendered_name_and_type, token_encoding) + rendered_value_tokens
+
+        if total_tokens + rendered_tokens + 1 > section_max_tokens:
             break
 
         lines.append(rendered)
-        total_chars += len(rendered_with_newline)
+        total_tokens += rendered_tokens + 1
         shown_items += 1
 
-    truncated = shown_items < len(eligible_names)
+    truncated = shown_items < len(eligible_references)
     if truncated:
-        lines.append("...<truncated>")
+        lines.append("<snipped>")
 
     return "\n".join(lines)
 
 
-def _find_reference_tokens(*, text: str) -> tuple[tuple[str, ...], str]:
-    reference_pattern = r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
+def _extract_references_and_program(text: str) -> tuple[tuple[str, ...], str]:
+    reference_path_pattern = r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
 
-    unescaped_token_pattern = re.compile(r"(?<!\\)<(" + reference_pattern + r")>")
-    escaped_token_pattern = re.compile(r"\\<(" + reference_pattern + r")>")
+    unescaped_token_pattern = re.compile(r"(?<!\\)<(" + reference_path_pattern + r")>")
+    escaped_token_pattern = re.compile(r"\\<(" + reference_path_pattern + r")>")
 
-    selected_references: list[str] = []
+    references: set[str] = set()
     for match in unescaped_token_pattern.finditer(text):
-        selected_references.append(match.group(1))
+        reference_path = match.group(1)
+        references.add(reference_path.split(".", 1)[0])
 
     def unescape(match: re.Match[str]) -> str:
         return f"<{match.group(1)}>"
 
     unescaped_text = escaped_token_pattern.sub(unescape, text)
-
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for reference in selected_references:
-        if reference in seen:
-            continue
-        seen.add(reference)
-        ordered.append(reference)
-
-    return tuple(ordered), unescaped_text
+    return tuple(references), unescaped_text
 
 
-def _render_globals_section(*, execution_context: ExecutionContext, references_in_appearance_order: tuple[str, ...]) -> str:
+def _render_globals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
     execution_configuration = execution_context.execution_configuration
     context_limits = execution_configuration.context_limits
-    redaction = execution_configuration.context_redaction
+    section_max_tokens = context_limits.globals_max_tokens
+    referent_values = execution_context.execution_globals
 
-    value_max_chars = _approx_max_chars_from_tokens(context_limits.value_max_tokens)
-    section_max_chars = _approx_max_chars_from_tokens(context_limits.globals_max_tokens)
+    def _to_type_name(reference: str) -> str:
+        return eval(f"type({reference})", globals=referent_values).__name__
 
     lines: list[str] = []
-    total_chars = 0
+    total_tokens = 0
     shown_items = 0
-    limit_reached = False
 
-    selected_top_level_name_set: set[str] = set()
-    for reference_path in references_in_appearance_order:
-        top_level_name = reference_path.split(".", 1)[0]
-        if top_level_name.startswith("__"):
+    eligible_references: list[str] = []
+    for reference in sorted(references):
+        if reference.startswith("__"):
             continue
-        selected_top_level_name_set.add(top_level_name)
+        if reference in execution_context.execution_locals:
+            continue
+        if reference not in execution_context.execution_globals:
+            continue
+        eligible_references.append(reference)
 
-    eligible_top_level_names: list[str] = []
-    for top_level_name in sorted(selected_top_level_name_set):
-        if top_level_name in execution_context.execution_locals:
-            continue
-        if top_level_name not in execution_context.execution_globals:
-            continue
-        eligible_top_level_names.append(top_level_name)
-
-    for top_level_name in eligible_top_level_names:
+    for reference in eligible_references:
         if shown_items >= context_limits.globals_max_items:
-            limit_reached = True
             break
 
-        value = execution_context.execution_globals[top_level_name]
+        value = referent_values[reference]
 
-        if _should_mask_name(top_level_name, name_substrings_to_mask=redaction.name_substrings_to_mask):
-            rendered_value = redaction.masked_value_marker
-        else:
-            rendered_value = _summarize_for_prompt(value, max_chars=value_max_chars)
+        reference_type_name = _to_type_name(reference)
+        if reference_type_name == "function":
+            reference_type_name = str(signature(value))  # type: ignore
+        rendered_name_and_type = f"{reference}: {reference_type_name} = "
 
-        name_type = eval(f"type({top_level_name})", globals=execution_context.execution_globals).__name__
-        if name_type == "function":
-            name_type = str(signature(value))  # type: ignore
-        rendered = f"{top_level_name}: {name_type} = {rendered_value}"
+        rendered_value, rendered_value_tokens = render_json_text(
+            value,
+            max_tokens=context_limits.value_max_tokens,
+            encoding=token_encoding,
+            style=execution_configuration.json_renderer_style,
+        )
 
-        rendered_with_newline = rendered + "\n"
-        if total_chars + len(rendered_with_newline) > section_max_chars:
-            limit_reached = True
+        rendered = rendered_name_and_type + rendered_value
+        rendered_tokens = count_tokens(rendered_name_and_type, token_encoding) + rendered_value_tokens
+
+        if total_tokens + rendered_tokens + 1 > section_max_tokens:
             break
 
         lines.append(rendered)
-        total_chars += len(rendered_with_newline)
+        total_tokens += rendered_tokens + 1
         shown_items += 1
 
-    if limit_reached:
-        lines.append("...<truncated>")
+    truncated = shown_items < len(eligible_references)
+    if truncated:
+        lines.append("<snipped>")
 
     return "\n".join(lines)
 
 
-def build_user_prompt(*, processed_natural_program: str, execution_context: ExecutionContext) -> str:
+def build_user_prompt(processed_natural_program: str, execution_context: ExecutionContext) -> str:
     execution_configuration = execution_context.execution_configuration
     template_text = execution_configuration.prompts.execution_user_prompt_template
+    token_encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
 
-    references, program_text = _find_reference_tokens(text=processed_natural_program)
+    locals_text = _render_locals_section(execution_context, execution_context.execution_locals.keys(), token_encoding)
 
-    locals_text = _render_locals_section(execution_context)
-    globals_text = _render_globals_section(execution_context=execution_context, references_in_appearance_order=references)
+    references, program_text = _extract_references_and_program(processed_natural_program)
+    globals_text = _render_globals_section(execution_context, references, token_encoding)
 
     template = Template(template_text)
     environment = get_environment()
@@ -306,7 +283,6 @@ class AgentExecutor:
         toolset = ToolResultWrapperToolset(FunctionToolset(tools))
 
         output_type: object
-        should_normalize_final = False
 
         if allowed_effect_types == ():
 
@@ -315,7 +291,6 @@ class AgentExecutor:
                 error: object | None = None
 
             output_type = ExecutionFinalNoEffects
-            should_normalize_final = True
         elif not is_in_loop:
             if allowed_effect_types != ("return",):
                 raise ExecutionError("Internal error: when is_in_loop is false, allowed_effect_types must be () or ('return',)")
@@ -329,20 +304,29 @@ class AgentExecutor:
                 error: object | None = None
 
             output_type = ExecutionFinalNoLoop
-            should_normalize_final = True
         else:
-            literal = Literal[allowed_effect_types]
+            unknown_effect_types = set(allowed_effect_types).difference(EXECUTION_EFFECT_TYPES)
+            if unknown_effect_types:
+                raise ExecutionError(f"Internal error: allowed_effect_types contains unknown effect types: {tuple(sorted(unknown_effect_types))}")
 
-            class ExecutionEffectWithAllowedSet(BaseModel, extra="forbid"):
-                type: literal  # type: ignore[valid-type]
-                source_path: str | None = None
+            allowed_effect_types_deduplicated = tuple(dict.fromkeys(allowed_effect_types))
+            allowed_effect_type = cast(Any, Literal)[allowed_effect_types_deduplicated]
 
-            class ExecutionFinalWithAllowedSet(BaseModel, extra="forbid"):
-                effect: ExecutionEffectWithAllowedSet | None = None
-                error: object | None = None
+            ExecutionEffectWithAllowedSet = create_model(
+                "ExecutionEffectWithAllowedSet",
+                __config__=ConfigDict(extra="forbid"),
+                type=(allowed_effect_type, ...),
+                source_path=(str | None, None),
+            )
+
+            ExecutionFinalWithAllowedSet = create_model(
+                "ExecutionFinalWithAllowedSet",
+                __config__=ConfigDict(extra="forbid"),
+                effect=(ExecutionEffectWithAllowedSet | None, None),
+                error=(object | None, None),
+            )
 
             output_type = ExecutionFinalWithAllowedSet
-            should_normalize_final = True
 
         with execution_context_scope(execution_context):
             result = self.agent.run_sync(
@@ -359,19 +343,10 @@ class AgentExecutor:
             message = getattr(error, "message", str(error))
             raise ExecutionError(f"Execution failed: {message}")
 
-        if should_normalize_final:
-            if isinstance(final, BaseModel):
-                final = ExecutionFinal.model_validate(final.model_dump())
-            else:
-                final = ExecutionFinal.model_validate(final)
-
-        try:
-            if isinstance(final, BaseModel):
-                final = ExecutionFinal.model_validate(final.model_dump())
-            else:
-                final = ExecutionFinal.model_validate(final)
-        except Exception as e:
-            raise ExecutionError(f"Execution produced unexpected final type: {e}") from e
+        if isinstance(final, BaseModel):
+            final = ExecutionFinal.model_validate(final.model_dump())
+        else:
+            final = ExecutionFinal.model_validate(final)
 
         bindings: dict[str, object] = {}
         for name in binding_names:
