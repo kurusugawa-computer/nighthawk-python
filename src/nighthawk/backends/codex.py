@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from typing import Any, TypedDict
 
+import tiktoken
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -21,6 +22,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
 
+from ..configuration import ExecutionConfiguration
 from ..execution.environment import get_environment
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase
@@ -110,9 +112,11 @@ class _McpToolServer:
         *,
         tool_name_to_tool_definition: dict[str, ToolDefinition],
         tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
+        execution_configuration: ExecutionConfiguration,
     ) -> None:
         self._tool_name_to_tool_definition = tool_name_to_tool_definition
         self._tool_name_to_handler = tool_name_to_handler
+        self._execution_configuration = execution_configuration
 
         self._server: Any | None = None
         self._server_thread: threading.Thread | None = None
@@ -129,18 +133,18 @@ class _McpToolServer:
         if self._server_thread is not None:
             raise RuntimeError("MCP tool server is already started")
 
-        import uvicorn  # pyright: ignore[reportMissingImports]
-        from mcp.server.fastmcp.server import StreamableHTTPASGIApp  # pyright: ignore[reportMissingImports]
-        from mcp.server.lowlevel.server import Server as McpLowLevelServer  # pyright: ignore[reportMissingImports]
-        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager  # pyright: ignore[reportMissingImports]
-        from starlette.applications import Starlette  # pyright: ignore[reportMissingImports]
-        from starlette.routing import Route  # pyright: ignore[reportMissingImports]
+        import uvicorn
+        from mcp.server.fastmcp.server import StreamableHTTPASGIApp
+        from mcp.server.lowlevel.server import Server as McpLowLevelServer
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+        from starlette.applications import Starlette
+        from starlette.routing import Route
 
         mcp_server = McpLowLevelServer("nighthawk")
 
         @mcp_server.list_tools()
         async def list_tools() -> list[Any]:
-            from mcp import types as mcp_types  # pyright: ignore[reportMissingImports]
+            from mcp import types as mcp_types
 
             tools: list[mcp_types.Tool] = []
             for tool_name in sorted(self._tool_name_to_handler.keys()):
@@ -159,26 +163,34 @@ class _McpToolServer:
 
         @mcp_server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
-            from mcp import types as mcp_types  # pyright: ignore[reportMissingImports]
+            from mcp import types as mcp_types
 
             from ..tools.contracts import tool_result_failure_json_text
 
             handler = self._tool_name_to_handler.get(name)
             if handler is None:
+                execution_configuration = self._execution_configuration
                 result_text = tool_result_failure_json_text(
                     kind="resolution",
                     message=f"Unknown tool: {name}",
                     guidance="Choose a visible tool name and retry.",
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=tiktoken.get_encoding(execution_configuration.tokenizer_encoding),
+                    style=execution_configuration.json_renderer_style,
                 )
                 return [mcp_types.TextContent(type="text", text=result_text)]
 
             try:
                 result_text = await handler(arguments)
             except Exception as exception:
+                execution_configuration = self._execution_configuration
                 result_text = tool_result_failure_json_text(
                     kind="internal",
                     message=str(exception),
                     guidance="The tool boundary wrapper failed. Retry or report this error.",
+                    max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                    encoding=tiktoken.get_encoding(execution_configuration.tokenizer_encoding),
+                    style=execution_configuration.json_renderer_style,
                 )
             return [mcp_types.TextContent(type="text", text=result_text)]
 
@@ -319,9 +331,12 @@ async def _mcp_tool_server_if_needed(
         yield None
         return
 
+    execution_configuration = get_environment().execution_configuration
+
     server = _McpToolServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,
         tool_name_to_handler=tool_name_to_handler,
+        execution_configuration=execution_configuration,
     )
     server.start()
 

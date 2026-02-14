@@ -43,7 +43,10 @@ def test_globals_markers_present_even_when_empty(tmp_path) -> None:
             workspace_root=tmp_path,
         )
     ):
-        prompt = build_user_prompt(processed_natural_program="Say hi.", execution_context=execution_context)
+        prompt = build_user_prompt(
+            processed_natural_program="Say hi.",
+            execution_context=execution_context,
+        )
     assert "<<<NH:GLOBALS>>>" in prompt
     assert "<<<NH:END_GLOBALS>>>" in prompt
 
@@ -116,7 +119,7 @@ def test_locals_first_prevents_globals_entry(tmp_path) -> None:
 
     globals_section = _globals_section(prompt)
     assert "module" not in globals_section
-    assert "...<truncated>" not in globals_section
+    assert "<snipped>" not in globals_section
 
 
 def test_same_reference_is_deduplicated(tmp_path) -> None:

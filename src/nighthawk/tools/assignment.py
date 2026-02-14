@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Any, NoReturn
 
 from pydantic import BaseModel, TypeAdapter
-from pydantic_core import to_jsonable_python
 
 from ..errors import ToolEvaluationError
 from ..execution.context import ExecutionContext
+from ..json_renderer import to_jsonable_value
 from .contracts import ToolBoundaryFailure
 
 
@@ -30,14 +30,7 @@ def _raise_execution(*, message: str, guidance: str) -> NoReturn:
 
 
 def _to_jsonable_value(value: object) -> object:
-    try:
-        return to_jsonable_python(
-            value,
-            serialize_unknown=True,
-            fallback=lambda v: f"<{type(v).__name__}>",
-        )
-    except Exception:
-        return f"<{type(value).__name__}>"
+    return to_jsonable_value(value)
 
 
 def _parse_target_path(target_path: str) -> tuple[str, ...] | None:

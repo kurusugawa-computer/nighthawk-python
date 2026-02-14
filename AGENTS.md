@@ -45,6 +45,8 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - `DSL` = Domain Specific Language
 - `LLM` = Large Language Model
 - `NH` / `nh` = Nighthawk
+- `max` = maximum
+- `min` = minimum
 - Loop indices: `i`, `j`, `k` (e.g., `for i in range(n): ...`).
 
 ## Context and orientation
@@ -84,6 +86,9 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 ### Common commands (run from repo root)
 
+- Run python for investigating:
+  - `uv run python`
+
 - Install/sync dependencies:
   - `uv sync --all-extras --all-groups`
 
@@ -107,9 +112,6 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 - Enable and run integration tests:
   - `set -a; source .env; set +a; uv run pytest -q`
-
-- Run python for investigating:
-  - `uv run python`
 
 If you see an `uv` warning about hardlinking (common in containers / cross-filesystem workspaces), it does not indicate test failure. If you want to suppress it:
 

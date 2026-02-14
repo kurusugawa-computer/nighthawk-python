@@ -5,17 +5,19 @@ description = "Compact reimplementation of nightjarpy-like Natural blocks in Pyt
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+  "headson>=0.16.1",
   "pydantic>=2",
-  "pydantic-ai-slim>=1.52",
+  "pydantic-ai-slim>=1.59",
   "pyyaml>=6",
+  "tiktoken>=0.12",
 ]
 
 [project.optional-dependencies]
 openai = [
-  "pydantic-ai-slim[openai]>=1.52",
+  "pydantic-ai-slim[openai]>=1.59",
 ]
 vertexai = [
-  "pydantic-ai-slim[google,vertexai]>=1.52",
+  "pydantic-ai-slim[google,vertexai]>=1.59",
 ]
 claude-code = [
   "claude-agent-sdk>=0.1",
@@ -28,7 +30,7 @@ codex = [
 dev = [
   "logfire>=4",
   "pytest>=9",
-  "ruff>=0.14",
+  "ruff>=0.15",
 ]
 
 [build-system]

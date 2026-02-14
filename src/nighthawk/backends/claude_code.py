@@ -4,6 +4,7 @@ import json
 import textwrap
 from typing import Any, Literal, TypedDict, cast
 
+import tiktoken
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -150,10 +151,15 @@ class ClaudeCodeModel(BackendModelBase):
                 except Exception as exception:
                     from ..tools.contracts import tool_result_failure_json_text
 
+                    execution_configuration = get_environment().execution_configuration
+                    encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
                     result_text = tool_result_failure_json_text(
                         kind="internal",
                         message=str(exception),
                         guidance="The tool boundary wrapper failed. Retry or report this error.",
+                        max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                        encoding=encoding,
+                        style=execution_configuration.json_renderer_style,
                     )
                 return {"content": [{"type": "text", "text": result_text}]}
 

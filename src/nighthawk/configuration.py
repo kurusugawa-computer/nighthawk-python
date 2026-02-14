@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 DEFAULT_EXECUTION_SYSTEM_PROMPT_TEMPLATE = """\
 You are executing a DSL block embedded at a specific point inside a running Python function.
@@ -43,14 +44,7 @@ $globals
 
 @dataclass(frozen=True)
 class ExecutionContextLimits:
-    """Limits for rendering dynamic context into the LLM prompt.
-
-    All `*_max_tokens` values are approximate in v1.
-
-    v1 implementation note: limits are enforced using a character budget derived from
-    `max_chars = max_tokens * 4`. This is a rough proxy and may under-estimate token
-    usage for JSON-heavy, symbol-heavy, or non-English text.
-    """
+    """Limits for rendering dynamic context into the LLM prompt."""
 
     locals_max_tokens: int = 25000
     locals_max_items: int = 200
@@ -60,39 +54,7 @@ class ExecutionContextLimits:
 
     value_max_tokens: int = 200
 
-
-@dataclass(frozen=True)
-class ExecutionContextRedaction:
-    """Rules for reducing or masking sensitive data in prompt context.
-
-    This is intentionally simple in v1. It is designed to be replaced or augmented
-    by a dedicated redaction system in the future.
-
-    Allowlist behavior:
-
-    - If `locals_allowlist` is empty, all locals are eligible for inclusion.
-    - If `locals_allowlist` is non-empty, only those local names are eligible.
-
-    Masking behavior:
-
-    - If a local name or dictionary key name contains any
-      substring in `name_substrings_to_mask` (case-insensitive), the value is
-      replaced with `masked_value_marker`.
-    """
-
-    locals_allowlist: tuple[str, ...] = ()
-
-    name_substrings_to_mask: tuple[str, ...] = (
-        "token",
-        "secret",
-        "password",
-        "api",
-        "auth",
-        "bearer",
-        "cookie",
-    )
-
-    masked_value_marker: str = "<redacted>"
+    tool_result_max_tokens: int = 2_000
 
 
 @dataclass(frozen=True)
@@ -107,6 +69,9 @@ def _validate_model_identifier(model: str) -> None:
         raise ValueError(f"Invalid model identifier {model!r}; expected 'provider:model'")
 
 
+type JsonRendererStyle = Literal["strict", "default", "detailed"]
+
+
 @dataclass(frozen=True)
 class ExecutionConfiguration:
     model: str = "openai-responses:gpt-5-nano"
@@ -116,9 +81,10 @@ class ExecutionConfiguration:
 
     tokenizer_encoding: str = "o200k_base"
 
+    json_renderer_style: JsonRendererStyle = "strict"
+
     prompts: ExecutionPrompts = field(default_factory=ExecutionPrompts)
     context_limits: ExecutionContextLimits = field(default_factory=ExecutionContextLimits)
-    context_redaction: ExecutionContextRedaction = field(default_factory=ExecutionContextRedaction)
 
 
 @dataclass(frozen=True)

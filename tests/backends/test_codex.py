@@ -256,6 +256,5 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     assert payload["tool_names"] == ["nh_eval"]
 
     tool_result = json.loads(payload["nh_eval_text"])
-    assert tool_result["status"] == "success"
     assert tool_result["error"] is None
     assert tool_result["value"] == 2

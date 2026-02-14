@@ -1,141 +1,16 @@
 from __future__ import annotations
 
-import dataclasses
-import json
-import math
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable
 from typing import Any, Generic, Literal, TypeVar
 
+import tiktoken
 from pydantic import BaseModel
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
 from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 
-_MAX_DEPTH = 8
-_MAX_COLLECTION_ITEMS = 100
-_MAX_STRING_CHARS = 10_000
-
-
-type Jsonable = dict[str, "Jsonable"] | list["Jsonable"] | str | int | float | bool | None
-
-
-def _placeholder_for_value(value: object) -> str:
-    return f"<{type(value).__name__}>"
-
-
-def _truncate_string(value: str) -> str:
-    if len(value) <= _MAX_STRING_CHARS:
-        return value
-    return value[:_MAX_STRING_CHARS] + "...(truncated)"
-
-
-def _stable_sort_key(value: Jsonable) -> str:
-    try:
-        return json.dumps(value, sort_keys=True, ensure_ascii=True)
-    except Exception:
-        return str(value)
-
-
-def best_effort_jsonable(value: object, *, _depth: int = 0) -> Jsonable:
-    """Convert an arbitrary Python value into a JSON-compatible Python value.
-
-    Contract:
-    - Never raises.
-    - Deterministic and bounded.
-    - Unknown values become a placeholder string like "<TypeName>".
-    """
-
-    if value is None:
-        return None
-
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, int):
-        return value
-
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            return _placeholder_for_value(value)
-        return value
-
-    if isinstance(value, str):
-        return _truncate_string(value)
-
-    if isinstance(value, bytes):
-        return _placeholder_for_value(value)
-
-    if _depth >= _MAX_DEPTH:
-        return "...<max_depth>"
-
-    if isinstance(value, BaseModel):
-        try:
-            dumped = value.model_dump(mode="python")
-        except Exception:
-            return _placeholder_for_value(value)
-        return best_effort_jsonable(dumped, _depth=_depth + 1)
-
-    if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        try:
-            field_name_to_value: dict[str, Jsonable] = {}
-            for i, field in enumerate(dataclasses.fields(value)):
-                if i >= _MAX_COLLECTION_ITEMS:
-                    break
-                field_name_to_value[field.name] = best_effort_jsonable(getattr(value, field.name), _depth=_depth + 1)
-            return field_name_to_value
-        except Exception:
-            return _placeholder_for_value(value)
-
-    try:
-        if isinstance(value, Mapping):
-            key_to_value: dict[str, Jsonable] = {}
-            items: list[tuple[str, object]] = []
-            for i, (key, item_value) in enumerate(value.items()):
-                if i >= _MAX_COLLECTION_ITEMS:
-                    break
-                items.append((str(key), item_value))
-
-            for key, item_value in sorted(items, key=lambda item: item[0]):
-                key_to_value[key] = best_effort_jsonable(item_value, _depth=_depth + 1)
-
-            return key_to_value
-
-        if isinstance(value, (set, frozenset)):
-            limited_items = list(value)[:_MAX_COLLECTION_ITEMS]
-            converted = [best_effort_jsonable(item, _depth=_depth + 1) for item in limited_items]
-            return sorted(converted, key=_stable_sort_key)
-
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            limited_items = list(value)[:_MAX_COLLECTION_ITEMS]
-            return [best_effort_jsonable(item, _depth=_depth + 1) for item in limited_items]
-
-    except Exception:
-        return _placeholder_for_value(value)
-
-    return _placeholder_for_value(value)
-
-
-def serialize_value_to_json_text(
-    value: object,
-    *,
-    sort_keys: bool = True,
-    ensure_ascii: bool = False,
-) -> str:
-    try:
-        jsonable = best_effort_jsonable(value)
-        return json.dumps(
-            jsonable,
-            sort_keys=sort_keys,
-            ensure_ascii=ensure_ascii,
-        )
-    except Exception:
-        return json.dumps(
-            _placeholder_for_value(value),
-            sort_keys=sort_keys,
-            ensure_ascii=ensure_ascii,
-        )
-
+from ..json_renderer import JsonableValue, RenderStyle, render_json_text, to_jsonable_value
 
 type ErrorKind = Literal["invalid_input", "resolution", "execution", "transient", "internal"]
 
@@ -162,34 +37,70 @@ class ToolResult(BaseModel, Generic[ValueType], extra="forbid"):
     error: Error | None
 
 
-_MAX_ERROR_MESSAGE_CHARS = 2000
+def _render_channel_json_text(
+    value: object,
+    *,
+    max_tokens: int,
+    encoding: tiktoken.Encoding,
+    style: RenderStyle,
+) -> tuple[str, int]:
+    return render_json_text(
+        value,
+        max_tokens=max_tokens,
+        encoding=encoding,
+        style=style,
+    )
 
 
-def _truncate_text(text: str, *, max_chars: int) -> str:
-    if len(text) <= max_chars:
-        return text
-    snipped = len(text) - max_chars
-    return f"{text[:max_chars]}...(snipped {snipped} chars)"
+def render_tool_result_json_text(
+    *,
+    value: object | None,
+    error: object | None,
+    max_tokens: int,
+    encoding: tiktoken.Encoding,
+    style: RenderStyle,
+) -> str:
+    if error is None:
+        error_text = "null"
+        error_token_count = 0
+        value_max_tokens = max_tokens
+    else:
+        error_max_tokens = int(max_tokens * 0.9)
+        error_text, error_token_count = _render_channel_json_text(
+            error,
+            max_tokens=error_max_tokens,
+            encoding=encoding,
+            style=style,
+        )
+        value_max_tokens = max(max_tokens - error_token_count, 0)
+
+    if value is None:
+        value_text = "null"
+    else:
+        value_text, _ = _render_channel_json_text(
+            value,
+            max_tokens=value_max_tokens,
+            encoding=encoding,
+            style=style,
+        )
+
+    return f'{{"value":{value_text},"error":{error_text}}}'
 
 
-def sanitize_error_message(message: str) -> str:
-    # Conservative: do not include tracebacks or large dumps.
-    sanitized = " ".join(message.split())
-    return _truncate_text(sanitized, max_chars=_MAX_ERROR_MESSAGE_CHARS)
-
-
-def tool_result_success_json_text(value: object) -> str:
-    try:
-        payload: dict[str, Any] = {
-            "status": "success",
-            "value": best_effort_jsonable(value),
-            "error": None,
-        }
-        return serialize_value_to_json_text(payload)
-    except Exception as exception:
-        # serialize_value_to_json_text should already be never-raise, but keep a final guard.
-        message = sanitize_error_message(str(exception) or "Failed to serialize tool success result")
-        return tool_result_failure_json_text(kind="internal", message=message, guidance=None)
+def tool_result_success_json_text(
+    *,
+    value: object,
+    max_tokens: int,
+    encoding: tiktoken.Encoding,
+    style: RenderStyle,
+) -> str:
+    return render_tool_result_json_text(
+        value=value,
+        error=None,
+        max_tokens=max_tokens,
+        encoding=encoding,
+        style=style,
+    )
 
 
 def tool_result_failure_json_text(
@@ -197,30 +108,22 @@ def tool_result_failure_json_text(
     kind: ErrorKind,
     message: str,
     guidance: str | None,
+    max_tokens: int,
+    encoding: tiktoken.Encoding,
+    style: RenderStyle,
 ) -> str:
-    try:
-        payload: dict[str, Any] = {
-            "status": "failure",
-            "value": None,
-            "error": {
-                "kind": kind,
-                "message": sanitize_error_message(message),
-                "guidance": guidance,
-            },
-        }
-        return serialize_value_to_json_text(payload)
-    except Exception as exception:
-        # If this fails, we must still return valid JSON text.
-        fallback = {
-            "status": "failure",
-            "value": None,
-            "error": {
-                "kind": "internal",
-                "message": sanitize_error_message(str(exception) or "Failed to serialize tool failure result"),
-                "guidance": None,
-            },
-        }
-        return serialize_value_to_json_text(fallback)
+    error_payload: dict[str, Any] = {
+        "kind": kind,
+        "message": message,
+        "guidance": guidance,
+    }
+    return render_tool_result_json_text(
+        value=None,
+        error=error_payload,
+        max_tokens=max_tokens,
+        encoding=encoding,
+        style=style,
+    )
 
 
 def classify_unexpected_exception(exception: BaseException) -> ErrorKind:
@@ -229,23 +132,39 @@ def classify_unexpected_exception(exception: BaseException) -> ErrorKind:
     return "internal"
 
 
-def normalize_tool_success(value: object) -> ToolResult[Jsonable]:
-    return ToolResult(status="success", value=best_effort_jsonable(value), error=None)
+def normalize_tool_success(value: object) -> ToolResult[JsonableValue]:
+    return ToolResult(status="success", value=to_jsonable_value(value), error=None)
 
 
-def normalize_tool_failure(*, kind: ErrorKind, message: str, guidance: str | None) -> ToolResult[Jsonable]:
+def normalize_tool_failure(*, kind: ErrorKind, message: str, guidance: str | None) -> ToolResult[JsonableValue]:
     return ToolResult(
         status="failure",
         value=None,
         error=Error(
             kind=kind,
-            message=sanitize_error_message(message),
+            message=message,
             guidance=guidance,
         ),
     )
 
 
-async def run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> ToolResult[Jsonable]:
+def render_tool_result_for_debug(
+    tool_result: ToolResult[JsonableValue],
+    *,
+    max_tokens: int,
+    encoding: tiktoken.Encoding,
+    style: RenderStyle,
+) -> str:
+    return render_tool_result_json_text(
+        value=tool_result.value,
+        error=tool_result.error,
+        max_tokens=max_tokens,
+        encoding=encoding,
+        style=style,
+    )
+
+
+async def run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> ToolResult[JsonableValue]:
     """Execute a tool call and normalize the outcome to a ToolResult.
 
     Control-flow exceptions are re-raised unchanged.
@@ -276,8 +195,6 @@ async def run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> 
 
 class ToolResultWrapperToolset(WrapperToolset[Any]):
     def __getattr__(self, name: str) -> object:
-        # WrapperToolset intentionally does not proxy attributes.
-        # Nighthawk tests and some callers inspect FunctionToolset internals (e.g. `.tools`).
         return getattr(self.wrapped, name)
 
     async def call_tool(
@@ -286,7 +203,7 @@ class ToolResultWrapperToolset(WrapperToolset[Any]):
         tool_args: dict[str, Any],
         ctx: RunContext[Any],
         tool: ToolsetTool[Any],
-    ) -> ToolResult[Jsonable]:
+    ) -> ToolResult[JsonableValue]:
         async def tool_call() -> object:
             return await self.wrapped.call_tool(name, tool_args, ctx, tool)
 
