@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from inspect import signature
@@ -8,15 +7,15 @@ from string import Template
 from typing import Any, Iterable, Protocol, cast
 
 import tiktoken
-from pydantic import BaseModel, ConfigDict, create_model
+from pydantic import TypeAdapter
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import ExecutionConfiguration
-from ..json_renderer import SENTINEL_NONSERIALIZABLE, count_tokens, render_json_text, to_jsonable_value
+from ..json_renderer import count_tokens, render_json_text
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope
-from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
+from .contracts import EXECUTION_OUTCOME_TYPES, ExecutionOutcome, ExecutionOutcomeType, build_execution_outcome_json_schema
 from .environment import get_environment
 
 
@@ -32,9 +31,8 @@ class ExecutionExecutor(Protocol):
         processed_natural_program: str,
         execution_context: ExecutionContext,
         binding_names: list[str],
-        is_in_loop: bool,
-        allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
-    ) -> tuple[ExecutionFinal, dict[str, object]]:
+        allowed_outcome_types: tuple[str, ...],
+    ) -> tuple[ExecutionOutcome, dict[str, object]]:
         raise NotImplementedError
 
 
@@ -217,7 +215,7 @@ def _new_agent_executor(
 
     agent = Agent(
         model=model,
-        output_type=ExecutionFinal,
+        output_type=str,
         deps_type=ExecutionContext,
         system_prompt=execution_configuration.prompts.execution_system_prompt_template,
         **agent_constructor_keyword_arguments,
@@ -267,11 +265,8 @@ class AgentExecutor:
         processed_natural_program: str,
         execution_context: ExecutionContext,
         binding_names: list[str],
-        is_in_loop: bool,
-        allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
-    ) -> tuple[ExecutionFinal, dict[str, object]]:
-        from typing import Literal
-
+        allowed_outcome_types: tuple[str, ...],
+    ) -> tuple[ExecutionOutcome, dict[str, object]]:
         from ..errors import ExecutionError
 
         user_prompt = build_user_prompt(
@@ -282,75 +277,44 @@ class AgentExecutor:
         tools = get_visible_tools()
         toolset = ToolResultWrapperToolset(FunctionToolset(tools))
 
-        output_type: object
+        from pydantic_ai import StructuredDict
 
-        if allowed_effect_types == ():
+        unknown_outcome_types = set(allowed_outcome_types).difference(EXECUTION_OUTCOME_TYPES)
+        if unknown_outcome_types:
+            raise ExecutionError(f"Internal error: allowed_outcome_types contains unknown outcome types: {tuple(sorted(unknown_outcome_types))}")
 
-            class ExecutionFinalNoEffects(BaseModel, extra="forbid"):
-                effect: None = None
-                error: object | None = None
+        allowed_outcome_types_deduplicated = tuple(dict.fromkeys(allowed_outcome_types))
+        allowed_outcome_types_typed = cast(tuple[ExecutionOutcomeType, ...], allowed_outcome_types_deduplicated)
 
-            output_type = ExecutionFinalNoEffects
-        elif not is_in_loop:
-            if allowed_effect_types != ("return",):
-                raise ExecutionError("Internal error: when is_in_loop is false, allowed_effect_types must be () or ('return',)")
+        error_type_binding_names: tuple[str, ...] = tuple(
+            name
+            for name, value in sorted(execution_context.execution_locals.items())
+            if not name.startswith("__") and isinstance(value, type) and issubclass(value, BaseException) and value.__name__ == name
+        )
 
-            class ExecutionEffectNoLoop(BaseModel, extra="forbid"):
-                type: Literal["return"]
-                source_path: str | None = None
+        outcome_json_schema = build_execution_outcome_json_schema(
+            allowed_outcome_types=allowed_outcome_types_typed,
+            error_type_binding_names=error_type_binding_names,
+        )
 
-            class ExecutionFinalNoLoop(BaseModel, extra="forbid"):
-                effect: ExecutionEffectNoLoop | None = None
-                error: object | None = None
-
-            output_type = ExecutionFinalNoLoop
-        else:
-            unknown_effect_types = set(allowed_effect_types).difference(EXECUTION_EFFECT_TYPES)
-            if unknown_effect_types:
-                raise ExecutionError(f"Internal error: allowed_effect_types contains unknown effect types: {tuple(sorted(unknown_effect_types))}")
-
-            allowed_effect_types_deduplicated = tuple(dict.fromkeys(allowed_effect_types))
-            allowed_effect_type = cast(Any, Literal)[allowed_effect_types_deduplicated]
-
-            ExecutionEffectWithAllowedSet = create_model(
-                "ExecutionEffectWithAllowedSet",
-                __config__=ConfigDict(extra="forbid"),
-                type=(allowed_effect_type, ...),
-                source_path=(str | None, None),
-            )
-
-            ExecutionFinalWithAllowedSet = create_model(
-                "ExecutionFinalWithAllowedSet",
-                __config__=ConfigDict(extra="forbid"),
-                effect=(ExecutionEffectWithAllowedSet | None, None),
-                error=(object | None, None),
-            )
-
-            output_type = ExecutionFinalWithAllowedSet
+        structured_output_type = StructuredDict(outcome_json_schema, name="ExecutionOutcome")
 
         with execution_context_scope(execution_context):
             result = self.agent.run_sync(
                 user_prompt,
                 deps=execution_context,
                 toolsets=[toolset],
-                output_type=output_type,
+                output_type=structured_output_type,
             )
 
-        final: object = result.output
-
-        error = getattr(final, "error", None)
-        if error is not None:
-            message = getattr(error, "message", str(error))
-            raise ExecutionError(f"Execution failed: {message}")
-
-        if isinstance(final, BaseModel):
-            final = ExecutionFinal.model_validate(final.model_dump())
-        else:
-            final = ExecutionFinal.model_validate(final)
+        try:
+            execution_outcome = TypeAdapter(ExecutionOutcome).validate_python(result.output)
+        except Exception as e:
+            raise ExecutionError(f"Execution produced invalid outcome: {e}") from e
 
         bindings: dict[str, object] = {}
         for name in binding_names:
             if name in execution_context.assigned_binding_names:
                 bindings[name] = execution_context.execution_locals[name]
 
-        return final, bindings
+        return execution_outcome, bindings

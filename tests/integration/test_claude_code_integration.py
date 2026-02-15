@@ -13,6 +13,9 @@ def test_claude_code_natural_block_uses_tool(tmp_path: Path) -> None:
     if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
         pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
 
+    if os.getenv("CLAUDECODE") is not None:
+        pytest.skip("Claude Code integration test cannot run inside an existing Claude Code session")
+
     execution_configuration = nh.ExecutionConfiguration(model="claude-code:default")
 
     environment = nh.ExecutionEnvironment(

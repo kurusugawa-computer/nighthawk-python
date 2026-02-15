@@ -37,8 +37,10 @@ def test_simple():
 def test_agent_import_and_construction_and_run():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 
+    from pydantic_ai import StructuredDict
+
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.contracts import EXECUTION_EFFECT_TYPES
+    from nighthawk.execution.contracts import EXECUTION_OUTCOME_TYPES
     from tests.execution.stub_executor import StubExecutor
 
     environment = nh.ExecutionEnvironment(
@@ -65,13 +67,23 @@ def test_agent_import_and_construction_and_run():
     )
 
     result = agent.run_sync(
-        'Return exactly this JSON object and nothing else: {"effect": {"type": "continue", "source_path": null}, "error": null}',
+        'Return exactly this JSON object and nothing else: {"type": "continue"}',
         deps=tool_context,
+        output_type=StructuredDict(
+            {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["continue"]},
+                },
+                "required": ["type"],
+                "additionalProperties": False,
+            },
+            name="ExecutionOutcome",
+        ),
     )
 
-    assert result.output.effect is not None
-    assert result.output.effect.type in EXECUTION_EFFECT_TYPES
-    assert result.output.error is None
+    assert result.output["type"] == "continue"
+    assert result.output["type"] in EXECUTION_OUTCOME_TYPES
 
 
 def test_natural_block_evaluate_order():

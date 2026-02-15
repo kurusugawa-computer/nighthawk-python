@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.execution.context import ExecutionContext
-from nighthawk.execution.contracts import ExecutionFinal
+from nighthawk.execution.contracts import PassOutcome
 
 
 class RuntimeMemory(BaseModel):
@@ -38,15 +38,13 @@ def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) ->
             processed_natural_program: str,
             execution_context: ExecutionContext,
             binding_names: list[str],
-            is_in_loop: bool,
-            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
-        ) -> tuple[ExecutionFinal, dict[str, object]]:
+            allowed_outcome_types: tuple[str, ...],
+        ) -> tuple[PassOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = execution_context
             _ = binding_names
-            _ = is_in_loop
-            _ = allowed_effect_types
-            return ExecutionFinal(effect=None, error=None), {}
+            _ = allowed_outcome_types
+            return PassOutcome(type="pass"), {}
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -61,7 +59,7 @@ def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) ->
             """natural
             <later_value>
             <:result>
-            {"execution_final": {"effect": null, "error": null}, "bindings": {"result": 0}}
+            {"execution_outcome": {"type": "pass"}, "bindings": {"result": 0}}
             """
             later_value = 123
             _ = later_value
@@ -87,17 +85,13 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
             processed_natural_program: str,
             execution_context: "ExecutionContext",
             binding_names: list[str],
-            is_in_loop: bool,
-            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
-        ) -> tuple[ExecutionFinal, dict[str, object]]:
-            from nighthawk.execution.contracts import ExecutionFinal
-
+            allowed_outcome_types: tuple[str, ...],
+        ) -> tuple[PassOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = execution_context
             _ = binding_names
-            _ = is_in_loop
-            _ = allowed_effect_types
-            return ExecutionFinal(effect=None, error=None), {}
+            _ = allowed_outcome_types
+            return PassOutcome(type="pass"), {}
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -133,7 +127,7 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.execution.contracts import ExecutionFinal
+            from nighthawk.execution.contracts import PassOutcome
             from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
@@ -142,7 +136,7 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 
             assign_tool(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
 
-            return FakeRunResult(ExecutionFinal(effect=None, error=None))
+            return FakeRunResult(PassOutcome(type="pass"))
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -177,13 +171,13 @@ def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.execution.contracts import ExecutionFinal
+            from nighthawk.execution.contracts import PassOutcome
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
-            return FakeRunResult(ExecutionFinal(effect=None, error=None))
+            return FakeRunResult(PassOutcome(type="pass"))
 
     with nh.environment(
         nh.ExecutionEnvironment(

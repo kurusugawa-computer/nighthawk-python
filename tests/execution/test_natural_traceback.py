@@ -16,12 +16,12 @@ class _FakeAgent:
         self.seen_prompts: list[str] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.execution.contracts import ExecutionFinal
+        from nighthawk.execution.contracts import PassOutcome
 
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return _FakeRunResult(ExecutionFinal(effect=None, error=None))
+        return _FakeRunResult(PassOutcome(type="pass"))
 
 
 def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
@@ -135,15 +135,13 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
             processed_natural_program: str,
             execution_context: object,
             binding_names: list[str],
-            is_in_loop: bool,
-            allowed_effect_types: tuple[str, ...] = ("return", "break", "continue"),
+            allowed_outcome_types: tuple[str, ...],
         ):
             _ = (
                 processed_natural_program,
                 execution_context,
                 binding_names,
-                is_in_loop,
-                allowed_effect_types,
+                allowed_outcome_types,
             )
             raise RuntimeError("Executor failed")
 
