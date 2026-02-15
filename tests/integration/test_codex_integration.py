@@ -23,6 +23,10 @@ def _requires_codex_integration() -> None:
     if os.getenv("CODEX_API_KEY") is None:
         pytest.skip("Codex CLI integration test requires CODEX_API_KEY")
 
+    # Codex CLI is probabilistic and relies on local state; allow skipping in environments where it is flaky.
+    if os.getenv("NIGHTHAWK_SKIP_CODEX_INTEGRATION") == "1":
+        pytest.skip("Codex integration tests are skipped")
+
 
 def test_codex_natural_block_uses_tool(tmp_path: Path) -> None:
     _requires_codex_integration()

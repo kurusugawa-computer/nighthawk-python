@@ -363,31 +363,20 @@ def build_runtime_call_and_assignments(
 
     assigns.append(
         ast.Assign(
-            targets=[ast.Name(id="__nh_final__", ctx=ast.Store())],
+            targets=[ast.Name(id="__nh_execution_outcome__", ctx=ast.Store())],
             value=ast.Subscript(
                 value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                slice=ast.Constant("execution_final"),
+                slice=ast.Constant("execution_outcome"),
                 ctx=ast.Load(),
             ),
         )
     )
 
-    assigns.append(
-        ast.Assign(
-            targets=[ast.Name(id="__nh_effect__", ctx=ast.Store())],
-            value=ast.Attribute(
-                value=ast.Name(id="__nh_final__", ctx=ast.Load()),
-                attr="effect",
-                ctx=ast.Load(),
-            ),
-        )
-    )
-
-    effect_statements: list[ast.stmt] = [
+    outcome_statements: list[ast.stmt] = [
         ast.If(
             test=ast.Compare(
                 left=ast.Attribute(
-                    value=ast.Name(id="__nh_effect__", ctx=ast.Load()),
+                    value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
                     attr="type",
                     ctx=ast.Load(),
                 ),
@@ -398,7 +387,7 @@ def build_runtime_call_and_assignments(
                 ast.Return(
                     value=ast.Subscript(
                         value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                        slice=ast.Constant("effect_value"),
+                        slice=ast.Constant("return_value"),
                         ctx=ast.Load(),
                     )
                 )
@@ -408,12 +397,12 @@ def build_runtime_call_and_assignments(
     ]
 
     if is_in_loop:
-        effect_statements.extend(
+        outcome_statements.extend(
             [
                 ast.If(
                     test=ast.Compare(
                         left=ast.Attribute(
-                            value=ast.Name(id="__nh_effect__", ctx=ast.Load()),
+                            value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
                             attr="type",
                             ctx=ast.Load(),
                         ),
@@ -426,7 +415,7 @@ def build_runtime_call_and_assignments(
                 ast.If(
                     test=ast.Compare(
                         left=ast.Attribute(
-                            value=ast.Name(id="__nh_effect__", ctx=ast.Load()),
+                            value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
                             attr="type",
                             ctx=ast.Load(),
                         ),
@@ -442,11 +431,11 @@ def build_runtime_call_and_assignments(
     assigns.append(
         ast.If(
             test=ast.Compare(
-                left=ast.Name(id="__nh_effect__", ctx=ast.Load()),
+                left=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
                 ops=[ast.IsNot()],
                 comparators=[ast.Constant(None)],
             ),
-            body=effect_statements,
+            body=outcome_statements,
             orelse=[],
         )
     )

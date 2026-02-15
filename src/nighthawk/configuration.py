@@ -17,13 +17,24 @@ Tools and state:
 - The only way to update Python locals / bindings is nh_assign(target_path, expression). Do not claim state updates without nh_assign.
 - Tool calls return {"status":"success"|"failure","value":...,"error":...} JSON text. Check status; on failure, fix and retry.
 
-Final output (ExecutionFinal JSON only):
-- Output exactly one JSON object and nothing else: {"effect": ..., "error": ...}
-- effect is a HOST PYTHON control-flow command (surrounding function/loop), not an answer; default MUST be null.
-  - null: default behavior; no control-flow change (Python continues after this Natural block)
-  - {"type":"return","source_path":path|null}: return from the surrounding Python function NOW; source_path MUST name a local holding the desired return value (assign literals first via nh_assign)
-  - {"type":"break"} / {"type":"continue"}: loop control only when allowed
-- On failure, set error and set effect to null.
+Final output (ExecutionOutcome JSON only):
+- Output exactly one JSON object and nothing else.
+- The object MUST have a required discriminator field `type`.
+- The baseline outcome types are `pass`, `return`, `break`, `continue`, and `raise`.
+- `pass`:
+  - Use this outcome by default.
+  - Payload keys: `type` only.
+- `return`:
+  - Use this outcome only when you must return from the surrounding Python function immediately.
+  - Payload keys: `type`, and required `source_path`.
+  - `source_path` must be a dot-separated identifier path into execution locals.
+  - If you need to return a literal, first call nh_assign to bind it into execution locals (e.g., nh_assign("result", "11")), then set source_path to that name.
+- `break` / `continue`:
+  - Use these outcomes only when the Natural block appears syntactically inside a Python loop.
+  - Payload keys: `type` only.
+- `raise`:
+  - Payload keys: `type`, `message`, and optional `error_type`.
+  - `error_type` is an optional classification token.
 """
 
 

@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import inspect
 import uuid
-from dataclasses import dataclass
 from types import FrameType
-from typing import cast
 
 import yaml
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from ..errors import ExecutionError
 from .context import (
@@ -16,7 +14,7 @@ from .context import (
     get_python_cell_scope_stack,
     get_python_name_scope_stack,
 )
-from .contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
+from .contracts import EXECUTION_OUTCOME_TYPES
 from .environment import ExecutionEnvironment
 
 
@@ -78,8 +76,8 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
 
     denied: list[str] = []
     for item in deny_value:
-        if item not in EXECUTION_EFFECT_TYPES:
-            raise ExecutionError(f"Unknown denied effect: {item}")
+        if item not in EXECUTION_OUTCOME_TYPES:
+            raise ExecutionError(f"Unknown denied outcome type: {item}")
         if item not in denied:
             denied.append(item)
 
@@ -87,13 +85,13 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
     return instructions_without_frontmatter, tuple(denied)
 
 
-@dataclass
 class Orchestrator:
-    environment: ExecutionEnvironment
+    def __init__(self, environment: ExecutionEnvironment) -> None:
+        self.environment = environment
 
     @classmethod
     def from_environment(cls, environment: ExecutionEnvironment) -> "Orchestrator":
-        return cls(environment=environment)
+        return cls(environment)
 
     def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
         try:
@@ -126,18 +124,8 @@ class Orchestrator:
         for part in remaining:
             try:
                 current = getattr(current, part)
-                continue
-            except Exception:
-                pass
-
-            if isinstance(current, dict):
-                try:
-                    current = current[part]
-                    continue
-                except Exception:
-                    pass
-
-            raise ExecutionError(f"Failed to resolve source_path segment {part!r} in {source_path!r}")
+            except Exception as e:
+                raise ExecutionError(f"Failed to resolve source_path segment {part!r} in {source_path!r}") from e
 
         return current
 
@@ -155,14 +143,14 @@ class Orchestrator:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
-        processed_without_frontmatter, denied_effect_types = _split_frontmatter_or_none(natural_program)
+        processed_without_frontmatter, denied_outcome_types = _split_frontmatter_or_none(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
 
-        base_allowed_effect_types = ["return"]
+        base_allowed_outcome_types: list[str] = ["pass", "return", "raise"]
         if is_in_loop:
-            base_allowed_effect_types.extend(["break", "continue"])
+            base_allowed_outcome_types.extend(["break", "continue"])
 
-        allowed_effect_types = tuple(effect_type for effect_type in base_allowed_effect_types if effect_type not in denied_effect_types)
+        allowed_outcome_types = tuple(outcome_type for outcome_type in base_allowed_outcome_types if outcome_type not in denied_outcome_types)
 
         execution_globals: dict[str, object] = dict(python_globals)
         if "__builtins__" not in execution_globals:
@@ -245,51 +233,36 @@ class Orchestrator:
             binding_name_to_type=binding_name_to_type,
         )
 
-        final: object
-        effect_value: object | None = None
-
-        final, bindings = self.environment.execution_executor.run_natural_block(
+        execution_outcome, bindings = self.environment.execution_executor.run_natural_block(
             processed_natural_program=processed_without_frontmatter,
             execution_context=execution_context,
             binding_names=output_binding_names,
-            is_in_loop=is_in_loop,
-            allowed_effect_types=allowed_effect_types,
+            allowed_outcome_types=allowed_outcome_types,
         )
 
         input_bindings = dict(resolved_input_binding_name_to_value)
 
         execution_context.execution_locals.update(bindings)
 
-        final_typed = final
-        if not isinstance(final_typed, ExecutionFinal):
-            if isinstance(final_typed, BaseModel):
-                final_typed = ExecutionFinal.model_validate(final_typed.model_dump())
-            else:
-                final_typed = ExecutionFinal.model_validate(final_typed)
+        if execution_outcome.type not in allowed_outcome_types:
+            raise ExecutionError(
+                f"Outcome '{execution_outcome.type}' is not allowed for this Natural block. Allowed outcomes: {allowed_outcome_types}"
+            )
 
-        if not isinstance(final_typed, ExecutionFinal):
-            raise ExecutionError("Execution produced unexpected final type")
+        return_value: object | None = None
 
-        final_typed_execution = cast(ExecutionFinal, final_typed)
+        if execution_outcome.type == "return":
+            resolved = self._resolve_reference_path(execution_context, execution_outcome.source_path)
+            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
 
-        effect = final_typed_execution.effect
-        if effect is not None:
-            if effect.type not in allowed_effect_types:
-                deny_message = f"Effect '{effect.type}' is not allowed for this Natural block. Allowed effects: {allowed_effect_types}"
-                raise ExecutionError(deny_message)
-
-            if effect.type == "return":
-                if effect.source_path is None:
-                    effect_value = self._parse_and_coerce_return_value(None, return_annotation)
-                else:
-                    resolved = self._resolve_reference_path(execution_context, effect.source_path)
-                    effect_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+        if execution_outcome.type == "raise":
+            raise ExecutionError(f"Execution failed: {execution_outcome.message}")
 
         return {
-            "execution_final": final_typed,
+            "execution_outcome": execution_outcome,
             "input_bindings": dict(input_bindings),
             "bindings": bindings,
-            "effect_value": effect_value,
+            "return_value": return_value,
         }
 
 

@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from pydantic import TypeAdapter
+
 from nighthawk.errors import ExecutionError
-from nighthawk.execution.contracts import EXECUTION_EFFECT_TYPES, ExecutionFinal
+from nighthawk.execution.contracts import ExecutionOutcome
 
 
 @dataclass(frozen=True)
@@ -17,8 +19,8 @@ class StubExecutor:
 
     - Find the first '{' in the Natural program text.
     - Parse the substring starting there as a JSON object.
-    - Expect an envelope with keys: 'execution_final' and 'bindings'.
-    - Validate 'execution_final' against `ExecutionFinal`.
+    - Expect an envelope with keys: 'execution_outcome' and 'bindings'.
+    - Validate 'execution_outcome' against `ExecutionOutcome`.
     - Return bindings filtered to only names in the provided binding list.
     """
 
@@ -28,12 +30,10 @@ class StubExecutor:
         processed_natural_program: str,
         execution_context: object,
         binding_names: list[str],
-        is_in_loop: bool,
-        allowed_effect_types: tuple[str, ...] = EXECUTION_EFFECT_TYPES,
-    ) -> tuple[ExecutionFinal, dict[str, object]]:
+        allowed_outcome_types: tuple[str, ...],
+    ) -> tuple[ExecutionOutcome, dict[str, object]]:
         _ = execution_context
-        _ = is_in_loop
-        _ = allowed_effect_types
+        _ = allowed_outcome_types
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:
@@ -47,15 +47,15 @@ class StubExecutor:
         if not isinstance(data, dict):
             raise ExecutionError("Execution expected JSON object (stub mode)")
 
-        if "execution_final" not in data:
-            raise ExecutionError("Stub execution expected 'execution_final' in envelope")
+        if "execution_outcome" not in data:
+            raise ExecutionError("Stub execution expected 'execution_outcome' in envelope")
         if "bindings" not in data:
             raise ExecutionError("Stub execution expected 'bindings' in envelope")
 
         try:
-            execution_final = ExecutionFinal.model_validate(data["execution_final"])
+            execution_outcome = TypeAdapter(ExecutionOutcome).validate_python(data["execution_outcome"])
         except Exception as e:
-            raise ExecutionError(f"Stub execution has invalid execution_final: {e}") from e
+            raise ExecutionError(f"Stub execution has invalid execution_outcome: {e}") from e
 
         bindings_object = data["bindings"]
         if not isinstance(bindings_object, dict):
@@ -66,4 +66,4 @@ class StubExecutor:
             if name in bindings_object:
                 bindings[name] = bindings_object[name]
 
-        return execution_final, bindings
+        return execution_outcome, bindings

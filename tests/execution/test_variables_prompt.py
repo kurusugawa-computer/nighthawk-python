@@ -13,12 +13,12 @@ class _FakeAgent:
         self.seen_prompts: list[str] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.execution.contracts import ExecutionFinal
+        from nighthawk.execution.contracts import PassOutcome
 
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return _FakeRunResult(ExecutionFinal(effect=None, error=None))
+        return _FakeRunResult(PassOutcome(type="pass"))
 
 
 G = 1

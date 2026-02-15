@@ -62,7 +62,9 @@ This file intentionally does not maintain a persistent divergence ledger.
   - Model selection is sourced only from `execution_configuration.model`; `ExecutionContext` does not carry a separate `model` field.
 - Locals summary: a bounded text rendering of selected values from `execution_locals`, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
-- Control-flow effect: a request to the Python interpreter to run `continue`, `break`, or `return`.
+- Outcome: the single, unambiguous result of executing a Natural block.
+- Outcome type: the required `type` field on an outcome object. The baseline types are `pass`, `return`, `break`, `continue`, and `raise`.
+- Allowed outcome set: the set of outcome types allowed for a specific Natural block instance, derived from syntactic context and deny-only frontmatter.
 - Frontmatter: optional YAML metadata at the start of a Natural program, delimited by `---` lines.
 
 ## 5. User-facing API
@@ -289,33 +291,37 @@ Atomicity requirement:
 
 ### 8.4. Execution contract (final JSON)
 
-At the end of each execution, the LLM returns a final JSON object.
+At the end of each execution, the LLM returns a final JSON object that represents exactly one outcome variant. The outcome is a discriminated union keyed by the required field `type`.
 
-- `effect`: optional object
-  - Control-flow effect requested by the Natural block.
-  - Keys:
-    - `type`: string, one of `continue`, `break`, `return`
-    - `source_path`: optional string
+Outcome types:
 
-Implementation note:
+- `pass`:
+  - Success with no control-flow change.
+  - Payload keys: `type` only.
 
-- The canonical set of effect type strings is defined in `src/nighthawk/execution/llm.py` (see `EXECUTION_EFFECT_TYPES`). Other execution modules should refer to that definition rather than repeating string tuples.
-      - If `type` is `return`, this may be provided as a dotted reference path into execution locals.
-      - The host resolves `source_path` against execution locals, then validates/coerces the resolved Python value to the function's return type annotation.
-      - If `source_path` is omitted or `null`, the return value is treated as `None`.
+- `return`:
+  - Return from the surrounding Python function immediately.
+  - Payload keys: `type`, and optional `source_path`.
+  - If `source_path` is provided and not null, it must be a dot-separated identifier path into execution locals.
+  - The host resolves `source_path` within execution locals only, using attribute access only.
+  - The host then validates/coerces the resolved Python value to the function's return type annotation.
 
-If execution fails, the LLM returns:
+- `break` / `continue`:
+  - Loop control.
+  - Payload keys: `type` only.
+  - These outcomes are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
 
-- `error`: object
-  - `message`: string
-  - `type`: string (optional)
+- `raise`:
+  - Failure.
+  - Payload keys: `type`, `message`, and optional `error_type`.
+  - `error_type` is a stable classification token only.
+  - If `error_type` is provided, it must be one of the names listed under the `<<<NH:ERROR_TYPE_BINDINGS>>>` section in the prompt.
 
 The implementation chooses strict parsing. Any non-JSON final response is an error.
 
 Notes:
 
-- Control-flow effects are expressed only via the final JSON `effect`.
-- `break` and `continue` effects are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
+- The allowed outcome set for a Natural block is derived from syntactic context (hard cap) and deny-only frontmatter.
 - Python locals are committed at Natural block boundaries based on `<:name>` bindings.
 
 Frontmatter (optional):
@@ -341,20 +347,23 @@ Directive: `deny`
 - `deny` is required when frontmatter is present.
 - `deny` must be a YAML sequence of strings.
 - Unknown keys are errors.
-- Unknown effect names are errors.
+- Unknown outcome type names are errors.
 
-Allowed effect names in `deny` are:
+Allowed outcome type names in `deny` are a subset of the baseline outcome types:
 
+- `pass`
 - `return`
 - `break`
 - `continue`
+- `raise`
 
 Semantics:
 
-- Default allowed effects for a Natural block are:
-  - `return` (always)
-  - plus `break` and `continue` only if the block is syntactically inside a Python loop.
-- If frontmatter denies an effect, and the model returns that effect, the host raises an `ExecutionError`.
+- Syntactic context defines a hard cap on allowed outcomes:
+  - Outside a loop: `pass`, `return`, `raise`.
+  - Inside a loop: `pass`, `return`, `break`, `continue`, `raise`.
+- Frontmatter deny declarations may only exclude outcome types; they must not expand the syntactic cap.
+- If frontmatter denies an outcome type, and the model returns that outcome type, the host raises an `ExecutionError`.
 
 Implementation note:
 
@@ -368,9 +377,9 @@ For tests, this repo includes a test-only `StubExecutor` under `tests/execution/
 
 - Parsing rule: inside the Natural block text, stub mode finds the first `{` character and parses the substring starting there as a JSON object.
 - The JSON object must be an envelope with:
-  - `execution_final`: an object matching the ExecutionFinal schema
+  - `execution_outcome`: an object matching the ExecutionOutcome schema
   - `bindings`: an object mapping names to values
-- The stub executor returns `execution_final` from the envelope.
+- The stub executor returns `execution_outcome` from the envelope.
 - The stub executor returns a bindings object filtered to include only names present in the `<:name>` binding list for that Natural block.
 
 ## 9. Return value
@@ -379,7 +388,7 @@ In the simplest docstring pattern, the Python function body returns a variable t
 
 - `return result`
 
-If an execution requests `effect.type == "return"`, the orchestrator returns the validated return value immediately.
+If an execution requests `outcome.type == "return"`, the orchestrator returns the validated return value immediately.
 
 ## 10. Environment
 
