@@ -6,15 +6,15 @@ import pytest
 import nighthawk as nh
 
 
-def test_claude_code_natural_block_uses_tool(tmp_path: Path) -> None:
+def test_claude_code_natural_block_uses_tool(tmp_path: Path, monkeypatch) -> None:
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
     if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
         pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
 
-    if os.getenv("CLAUDECODE") is not None:
-        pytest.skip("Claude Code integration test cannot run inside an existing Claude Code session")
+    # Claude Code sets CLAUDECODE for nested sessions. Clear it so this integration test can run when invoked from within Claude Code.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
 
     execution_configuration = nh.ExecutionConfiguration(model="claude-code:default")
 
