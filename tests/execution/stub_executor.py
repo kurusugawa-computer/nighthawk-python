@@ -30,10 +30,10 @@ class StubExecutor:
         processed_natural_program: str,
         execution_context: object,
         binding_names: list[str],
-        allowed_outcome_types: tuple[str, ...],
+        allowed_outcome_kinds: tuple[str, ...],
     ) -> tuple[ExecutionOutcome, dict[str, object]]:
         _ = execution_context
-        _ = allowed_outcome_types
+        _ = allowed_outcome_kinds
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:

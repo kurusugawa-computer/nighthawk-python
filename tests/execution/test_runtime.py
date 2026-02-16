@@ -14,7 +14,7 @@ SHADOWED_NUMBER = 1
 
 def global_import_file(file_path: Path | str) -> str:
     _ = file_path
-    return '{"execution_outcome": {"type": "pass"}, "bindings": {"result": 20}}'
+    return '{"execution_outcome": {"kind": "pass"}, "bindings": {"result": 20}}'
 
 
 def create_workspace_directories(workspace_root: Path) -> None:
@@ -40,14 +40,14 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
             processed_natural_program: str,
             execution_context: ExecutionContext,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = binding_names
-            _ = allowed_outcome_types
+            _ = allowed_outcome_kinds
 
             assert execution_context.execution_locals["x"] == 10
-            return PassOutcome(type="pass"), {"result": 11}
+            return PassOutcome(kind="pass"), {"result": 11}
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -70,7 +70,7 @@ def test_fn_updates_output_binding_via_docstring_natural_block(tmp_path: Path):
         assert f(10) == 11
 
 
-def test_stub_return_effect_returns_value_from_source_path(tmp_path: Path):
+def test_stub_return_effect_returns_value_from_return_reference_path(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
@@ -88,7 +88,7 @@ def test_stub_return_effect_returns_value_from_source_path(tmp_path: Path):
         def f() -> int:
             """natural
             <:result>
-            {"execution_outcome": {"type": "return", "source_path": "result"}, "bindings": {"result": 11}}
+            {"execution_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 11}}
             """
             result = 0
             return result
@@ -114,7 +114,7 @@ def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
         def f() -> int:
             """natural
             <:result>
-            {"execution_outcome": {"type": "return", "source_path": "result"}, "bindings": {"result": "not an int"}}
+            {"execution_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": "not an int"}}
             """
             result = 0
             return result
@@ -123,7 +123,7 @@ def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
             f()
 
 
-def test_stub_return_effect_invalid_source_path_raises(tmp_path: Path):
+def test_stub_return_effect_invalid_return_reference_path_raises(tmp_path: Path):
     create_workspace_directories(tmp_path)
 
     configuration = nh.Configuration(
@@ -140,7 +140,7 @@ def test_stub_return_effect_invalid_source_path_raises(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {"execution_outcome": {"type": "return", "source_path": "missing"}, "bindings": {}}
+            {"execution_outcome": {"kind": "return", "return_reference_path": "missing"}, "bindings": {}}
             """
             return 0
 
@@ -168,7 +168,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
             for _ in range(5):
                 total += 1
                 """natural
-                {"execution_outcome": {"type": "continue"}, "bindings": {}}
+                {"execution_outcome": {"kind": "continue"}, "bindings": {}}
                 """
                 total += 100
             return total
@@ -196,7 +196,7 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
             for _ in range(5):
                 total += 1
                 """natural
-                {"execution_outcome": {"type": "break"}, "bindings": {}}
+                {"execution_outcome": {"kind": "break"}, "bindings": {}}
                 """
                 total += 100
             return total
@@ -221,7 +221,7 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
         @nh.fn
         def f() -> int:
             """natural
-            {"execution_outcome": {"type": "break"}, "bindings": {}}
+            {"execution_outcome": {"kind": "break"}, "bindings": {}}
             """
             return 1
 
@@ -248,13 +248,13 @@ def test_docstring_natural_block_is_literal_no_implicit_interpolation(tmp_path: 
             processed_natural_program: str,
             execution_context: object,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = execution_context
             _ = binding_names
-            _ = allowed_outcome_types
+            _ = allowed_outcome_kinds
             self.seen_programs.append(processed_natural_program)
-            return PassOutcome(type="pass"), {}
+            return PassOutcome(kind="pass"), {}
 
     recording_executor = RecordingExecutor()
 
@@ -298,7 +298,7 @@ def test_frontmatter_deny_return_rejects_return_effect(tmp_path: Path):
             deny:
               - return
             ---
-            {"execution_outcome": {"type": "return", "source_path": "result"}, "bindings": {"result": 0}}
+            {"execution_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 0}}
             """
             return 0
 
@@ -330,7 +330,7 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines(tmp_path: Path):
               - return
             ---
             <:result>
-            {"execution_outcome": {"type": "return", "source_path": "result"}, "bindings": {"result": 11}}
+            {"execution_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 11}}
             """
             return result
 
@@ -357,7 +357,7 @@ def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
             computed_result = x + 1
             envelope_json_text = json.dumps(
                 {
-                    "execution_outcome": {"type": "pass"},
+                    "execution_outcome": {"kind": "pass"},
                     "bindings": {"result": computed_result},
                 }
             )
@@ -395,13 +395,13 @@ def test_inline_fstring_natural_block_can_access_locals(tmp_path: Path):
             processed_natural_program: str,
             execution_context: object,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = execution_context
             _ = binding_names
-            _ = allowed_outcome_types
+            _ = allowed_outcome_kinds
             self.seen_programs.append(processed_natural_program)
-            return PassOutcome(type="pass"), {"result": 2}
+            return PassOutcome(kind="pass"), {"result": 2}
 
     recording_executor = RecordingExecutor()
 
@@ -448,7 +448,7 @@ def test_inline_fstring_natural_block_can_call_local_and_global_helpers(tmp_path
         def function_under_test() -> int:
             def local_import_file(file_path: Path | str) -> str:
                 _ = file_path
-                return '{"execution_outcome": {"type": "pass"}, "bindings": {"result": 10}}'
+                return '{"execution_outcome": {"kind": "pass"}, "bindings": {"result": 10}}'
 
             result = 0
 
@@ -486,14 +486,14 @@ def test_enclosing_scope_capture_is_isolated_between_factories(tmp_path: Path) -
             processed_natural_program: str,
             execution_context: object,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = execution_context
             _ = binding_names
-            _ = allowed_outcome_types
+            _ = allowed_outcome_kinds
 
             self.seen_programs.append(processed_natural_program)
-            return PassOutcome(type="pass"), {}
+            return PassOutcome(kind="pass"), {}
 
     recording_executor = RecordingExecutor()
 
@@ -545,14 +545,14 @@ def test_input_binding_can_resolve_enclosing_scope_name(tmp_path: Path) -> None:
             processed_natural_program: str,
             execution_context: ExecutionContext,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = binding_names
-            _ = allowed_outcome_types
+            _ = allowed_outcome_kinds
 
             assert execution_context.execution_locals["x"] == 123
-            return PassOutcome(type="pass"), {}
+            return PassOutcome(kind="pass"), {}
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -602,7 +602,7 @@ def test_frontmatter_deny_continue_in_loop_rejects_continue_effect(tmp_path: Pat
                 deny:
                   - continue
                 ---
-                {"execution_outcome": {"type": "continue"}, "bindings": {}}
+                {"execution_outcome": {"kind": "continue"}, "bindings": {}}
                 """
                 total += 100
             return total
@@ -633,7 +633,7 @@ def test_fn_updates_output_binding_via_inline_fstring_natural_block(tmp_path: Pa
             computed_result = x * 2
             envelope_json_text = json.dumps(
                 {
-                    "execution_outcome": {"type": "pass"},
+                    "execution_outcome": {"kind": "pass"},
                     "bindings": {"result": computed_result},
                 }
             )
@@ -666,7 +666,7 @@ def test_dotted_mutation_is_independent_of_commit_selection(tmp_path: Path):
             assign_result = assign_tool(deps, "obj.field", "123")
             assert assign_result["updates"] == [{"path": "obj.field", "value": 123}]
 
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -722,7 +722,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             execution_context = get_current_execution_context()
             assert execution_context.execution_locals["result"] == 11
 
-            return FakeRunResult(ReturnOutcome(type="return", source_path="result"))
+            return FakeRunResult(ReturnOutcome(kind="return", return_reference_path="result"))
 
     configuration = nh.Configuration(
         execution_configuration=nh.ExecutionConfiguration(),
@@ -745,7 +745,7 @@ def test_agent_backend_is_used_by_default(tmp_path: Path):
             computed_result = x + 1
             envelope_json_text = json.dumps(
                 {
-                    "execution_outcome": {"type": "pass"},
+                    "execution_outcome": {"kind": "pass"},
                     "bindings": {"result": computed_result},
                 }
             )

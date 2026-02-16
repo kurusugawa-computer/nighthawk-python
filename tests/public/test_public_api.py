@@ -112,7 +112,7 @@ def test_decorated_function_requires_environment():
     def f(x: int):
         f"""natural
         <:result>
-        {{"execution_outcome": {{"type": "pass"}}, "bindings": {{"result": {x + 1}}}}}
+        {{"execution_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
         """
         return result  # type: ignore # noqa: F821
 

@@ -18,9 +18,9 @@ from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope, resolve_name_in_execution_context
 from .contracts import (
-    EXECUTION_OUTCOME_TYPES,
+    EXECUTION_OUTCOME_KINDS,
     ExecutionOutcome,
-    ExecutionOutcomeType,
+    ExecutionOutcomeKind,
     build_execution_outcome_json_schema,
     build_execution_outcome_system_prompt_suffix_fragment,
 )
@@ -39,7 +39,7 @@ class ExecutionExecutor(Protocol):
         processed_natural_program: str,
         execution_context: ExecutionContext,
         binding_names: list[str],
-        allowed_outcome_types: tuple[str, ...],
+        allowed_outcome_kinds: tuple[str, ...],
     ) -> tuple[ExecutionOutcome, dict[str, object]]:
         raise NotImplementedError
 
@@ -266,7 +266,7 @@ class AgentExecutor:
         processed_natural_program: str,
         execution_context: ExecutionContext,
         binding_names: list[str],
-        allowed_outcome_types: tuple[str, ...],
+        allowed_outcome_kinds: tuple[str, ...],
     ) -> tuple[ExecutionOutcome, dict[str, object]]:
         user_prompt = build_user_prompt(
             processed_natural_program=processed_natural_program,
@@ -276,12 +276,12 @@ class AgentExecutor:
         tools = get_visible_tools()
         toolset = ToolResultWrapperToolset(FunctionToolset(tools))
 
-        unknown_outcome_types = set(allowed_outcome_types).difference(EXECUTION_OUTCOME_TYPES)
-        if unknown_outcome_types:
-            raise ExecutionError(f"Internal error: allowed_outcome_types contains unknown outcome types: {tuple(sorted(unknown_outcome_types))}")
+        unknown_outcome_kinds = set(allowed_outcome_kinds).difference(EXECUTION_OUTCOME_KINDS)
+        if unknown_outcome_kinds:
+            raise ExecutionError(f"Internal error: allowed_outcome_kinds contains unknown outcome kinds: {tuple(sorted(unknown_outcome_kinds))}")
 
-        allowed_outcome_types_deduplicated = tuple(dict.fromkeys(allowed_outcome_types))
-        allowed_outcome_types_typed = cast(tuple[ExecutionOutcomeType, ...], allowed_outcome_types_deduplicated)
+        allowed_outcome_kinds_deduplicated = tuple(dict.fromkeys(allowed_outcome_kinds))
+        allowed_outcome_kinds_typed = cast(tuple[ExecutionOutcomeKind, ...], allowed_outcome_kinds_deduplicated)
 
         referenced_names, _ = _extract_references_and_program(processed_natural_program)
 
@@ -299,17 +299,17 @@ class AgentExecutor:
                 continue
             error_type_binding_name_list.append(name)
 
-        error_type_binding_names = tuple(error_type_binding_name_list)
+        raise_error_type_binding_names = tuple(error_type_binding_name_list)
 
         execution_outcome_system_prompt_fragment = build_execution_outcome_system_prompt_suffix_fragment(
-            allowed_outcome_types=allowed_outcome_types_typed,
-            error_type_binding_names=error_type_binding_names,
+            allowed_outcome_kinds=allowed_outcome_kinds_typed,
+            raise_error_type_binding_names=raise_error_type_binding_names,
         )
 
         with environment_override(execution_system_prompt_suffix_fragment=execution_outcome_system_prompt_fragment):
             outcome_json_schema = build_execution_outcome_json_schema(
-                allowed_outcome_types=allowed_outcome_types_typed,
-                error_type_binding_names=error_type_binding_names,
+                allowed_outcome_kinds=allowed_outcome_kinds_typed,
+                raise_error_type_binding_names=raise_error_type_binding_names,
             )
             structured_output_type = StructuredDict(outcome_json_schema, name="ExecutionOutcome")
 

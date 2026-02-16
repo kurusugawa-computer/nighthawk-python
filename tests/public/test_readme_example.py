@@ -19,7 +19,7 @@ def test_readme_quick_example_style(tmp_path):
             f"""natural
             <numbers>
             <:result>
-            {{"execution_outcome": {{"type": "pass"}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
+            {{"execution_outcome": {{"kind": "pass"}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
             """
             return result  # type: ignore  # noqa: F821
 
