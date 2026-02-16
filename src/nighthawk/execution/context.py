@@ -90,3 +90,21 @@ def get_current_execution_context() -> ExecutionContext:
     if not stack:
         raise NighthawkError("ExecutionContext is not set")
     return stack[-1]
+
+
+def resolve_name_in_execution_context(execution_context: ExecutionContext, name: str) -> object | None:
+    if name in execution_context.execution_locals:
+        return execution_context.execution_locals[name]
+
+    if name in execution_context.execution_globals:
+        return execution_context.execution_globals[name]
+
+    python_builtins = execution_context.execution_globals.get("__builtins__", __builtins__)
+
+    if isinstance(python_builtins, dict):
+        return python_builtins.get(name)
+
+    if hasattr(python_builtins, name):
+        return getattr(python_builtins, name)
+
+    return None

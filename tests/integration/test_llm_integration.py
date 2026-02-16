@@ -115,6 +115,29 @@ def test_natural_block_evaluate_order():
         assert result == 15
 
 
+def test_raise_exception():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment = nh.ExecutionEnvironment(
+        execution_configuration=nh.ExecutionConfiguration(),
+        execution_executor=nh.AgentExecutor(
+            execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+        ),
+        workspace_root=Path("."),
+    )
+    with nh.environment(environment):
+
+        @nh.fn
+        def test_function():
+            """natural
+            raise a <ValueError> with message "This is a test error."
+            """
+
+        with pytest.raises(ValueError, match="This is a test error."):
+            test_function()
+
+
 def test_condition():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 
@@ -155,7 +178,7 @@ def test_readme_hybrid_nesting_normalize_then_call_python_helper():
         execution_configuration=nh.ExecutionConfiguration(),
         execution_executor=nh.AgentExecutor(
             execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="high"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
         workspace_root=Path("."),
     )
@@ -164,12 +187,12 @@ def test_readme_hybrid_nesting_normalize_then_call_python_helper():
         @nh.fn
         def calculate_average(numbers: list[object]) -> float:
             """natural
-            Normalize <numbers> into python number list (e.g., [1, 2, ...]).
+            Use your knowledge to instantiate <numbers> directly into a Python list (e.g., [1, 2, ...]).
             Then compute <:result> by calling <python_average>.
             """
-            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+            return result + 1  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        assert calculate_average([1, "2", "three", "cuatro", "五"]) == 3.0
+        assert calculate_average([1, "2", "three", "cuatro", "五"]) == 3.0 + 1
 
     assert python_average_call_argument_list
     assert python_average_call_argument_list[-1] == [1, 2, 3, 4, 5]
@@ -207,5 +230,4 @@ def test_reasoning_memo():
             return answer
 
         answer = test_function()
-        logfire.info(answer.replace("{", "{{").replace("}", "}}"))
-        logfire.info(str(_memo).replace("{", "{{").replace("}", "}}"))
+        assert "false" in answer.lower()

@@ -15,6 +15,8 @@ type JsonableValue = dict[str, "JsonableValue"] | list["JsonableValue"] | str | 
 
 SENTINEL_CYCLE = "<cycle>"
 SENTINEL_NONSERIALIZABLE = "<nonserializable>"
+SENTINEL_FUNCTION = "<function>"
+SENTINEL_EXCEPTION = "<exception>"
 
 _MINIMUM_OUTPUT = "{}"
 _MINIMUM_OUTPUT_TOKEN_COUNT = len(_MINIMUM_OUTPUT)  # estimate token count roughly
@@ -89,6 +91,12 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
 
     if isinstance(value, (bytes, bytearray)):
         return SENTINEL_NONSERIALIZABLE
+
+    if isinstance(value, type) and issubclass(value, BaseException):
+        return SENTINEL_EXCEPTION
+
+    if callable(value):
+        return SENTINEL_FUNCTION
 
     object_id = id(value)
     if object_id in active_object_id_set:
