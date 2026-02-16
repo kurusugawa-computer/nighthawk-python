@@ -59,9 +59,9 @@ def _get_codex_cli_model_settings(model_settings: ModelSettings | None) -> Codex
     if allowed_tool_names_value is None:
         allowed_tool_names = None
     else:
-        if not isinstance(allowed_tool_names_value, tuple) or not all(isinstance(name, str) for name in allowed_tool_names_value):
-            raise UserError("allowed_tool_names must be a tuple[str, ...] or None")
-        allowed_tool_names = allowed_tool_names_value
+        if not isinstance(allowed_tool_names_value, (list, tuple)) or not all(isinstance(name, str) for name in allowed_tool_names_value):
+            raise UserError("allowed_tool_names must be a list[str], tuple[str, ...], or None")
+        allowed_tool_names = tuple(allowed_tool_names_value)
 
     codex_executable_value = model_settings.get("codex_executable")
     if codex_executable_value is None:

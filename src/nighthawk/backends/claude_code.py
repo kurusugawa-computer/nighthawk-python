@@ -23,15 +23,24 @@ PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):
     permission_mode: PermissionMode
     allowed_tool_names: tuple[str, ...] | None
+    claude_allowed_tool_names: tuple[str, ...] | None
+    claude_max_turns: int
 
 
 def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeAgentSdkModelSettings:
-    default_settings: ClaudeAgentSdkModelSettings = {"permission_mode": "default", "allowed_tool_names": None}
+    default_settings: ClaudeAgentSdkModelSettings = {
+        "permission_mode": "default",
+        "allowed_tool_names": None,
+        "claude_allowed_tool_names": None,
+        "claude_max_turns": 50,
+    }
     if model_settings is None:
         return default_settings
 
     permission_mode = model_settings.get("permission_mode", "default")
     allowed_tool_names_value = model_settings.get("allowed_tool_names")
+    claude_allowed_tool_names_value = model_settings.get("claude_allowed_tool_names")
+    claude_max_turns_value = model_settings.get("claude_max_turns")
 
     if not isinstance(permission_mode, str):
         raise UserError("permission_mode must be a string")
@@ -43,13 +52,32 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
     if allowed_tool_names_value is None:
         allowed_tool_names = None
     else:
-        if not isinstance(allowed_tool_names_value, tuple) or not all(isinstance(name, str) for name in allowed_tool_names_value):
-            raise UserError("allowed_tool_names must be a tuple[str, ...] or None")
-        allowed_tool_names = allowed_tool_names_value
+        if not isinstance(allowed_tool_names_value, (list, tuple)) or not all(isinstance(name, str) for name in allowed_tool_names_value):
+            raise UserError("allowed_tool_names must be a list[str], tuple[str, ...], or None")
+        allowed_tool_names = tuple(allowed_tool_names_value)
+
+    claude_allowed_tool_names: tuple[str, ...] | None
+    if claude_allowed_tool_names_value is None:
+        claude_allowed_tool_names = None
+    else:
+        if not isinstance(claude_allowed_tool_names_value, (list, tuple)) or not all(isinstance(name, str) for name in claude_allowed_tool_names_value):
+            raise UserError("claude_allowed_tool_names must be a list[str], tuple[str, ...], or None")
+        claude_allowed_tool_names = tuple(claude_allowed_tool_names_value)
+
+    if claude_max_turns_value is None:
+        claude_max_turns = 50
+    else:
+        if not isinstance(claude_max_turns_value, int) or isinstance(claude_max_turns_value, bool):
+            raise UserError("claude_max_turns must be an int")
+        if claude_max_turns_value <= 0:
+            raise UserError("claude_max_turns must be greater than 0")
+        claude_max_turns = claude_max_turns_value
 
     return {
         "permission_mode": cast(PermissionMode, permission_mode),
         "allowed_tool_names": allowed_tool_names,
+        "claude_allowed_tool_names": claude_allowed_tool_names,
+        "claude_max_turns": claude_max_turns,
     }
 
 
@@ -176,6 +204,15 @@ class ClaudeCodeModel(BackendModelBase):
 
         allowed_tools_for_claude = [f"mcp__nighthawk__{tool_name}" for tool_name in allowed_tool_names]
 
+        claude_allowed_tool_names = claude_agent_sdk_model_settings.get("claude_allowed_tool_names") or ()
+        merged_allowed_tools: list[str] = []
+        seen_allowed_tools: set[str] = set()
+        for tool_name in [*claude_allowed_tool_names, *allowed_tools_for_claude]:
+            if tool_name in seen_allowed_tools:
+                continue
+            merged_allowed_tools.append(tool_name)
+            seen_allowed_tools.add(tool_name)
+
         try:
             working_directory = get_environment().workspace_root
         except Exception:
@@ -196,14 +233,14 @@ class ClaudeCodeModel(BackendModelBase):
 
         options = ClaudeAgentOptions(
             tools=[],
-            allowed_tools=allowed_tools_for_claude,
+            allowed_tools=merged_allowed_tools,
             system_prompt=system_prompt_text,
             mcp_servers={"nighthawk": sdk_server},
             permission_mode=claude_agent_sdk_model_settings.get("permission_mode", "default"),
             model=self._model_name,
             cwd=working_directory,
             setting_sources=[],
-            max_turns=50,
+            max_turns=claude_agent_sdk_model_settings.get("claude_max_turns", 50),
             output_format=_build_json_schema_output_format(model_request_parameters),
         )
 
