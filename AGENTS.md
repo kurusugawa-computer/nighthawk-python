@@ -7,7 +7,7 @@ This file provides repository-specific guidance for coding agents and human cont
 - Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans, Ideal State documents).
 - In chat sessions, communicate in Japanese; when writing to files, use English; internal reasoning may use any language.
 - When listing questions, confirmations, or proposed decisions for the user, assign a short stable Id to each item so the user can respond inline.
-  - Required format: `Q-SLUG-001` (questions), `C-SLUG-001` (confirmations), `P-SLUG-001` (proposals). For follow-ups, append a suffix like `Q-KEBAB-001A`.
+  - Required format: `Q-SLUG-001` (questions), `C-SLUG-001` (confirmations), `P-SLUG-001` (proposals). For follow-ups, append a suffix like `Q-SLUG-001A`.
   - Each item must be answerable on its own and must include its Id in the text.
 
 ## ExecPlans
@@ -70,9 +70,9 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 - A Python 3.13+ library that embeds a small "Natural" DSL inside Python functions and executes it using an LLM (provider dependencies are installed via extras).
 - There is no CLI entry point currently.
 
-### Safety model (MVP)
+### Safety model
 
-- MVP assumes Natural DSL sources and any included markdown are trusted, repository-managed assets.
+- Assume Natural DSL sources and any included markdown are trusted, repository-managed assets.
 - Do not wire untrusted user input into Natural blocks or template preprocessing.
 
 ## Development workflow
