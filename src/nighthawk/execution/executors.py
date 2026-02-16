@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from inspect import signature
 from string import Template
-from typing import Any, Iterable, Protocol, Tuple, cast
+from typing import Any, Iterable, Protocol, cast
 
 import tiktoken
 from pydantic import TypeAdapter
@@ -13,7 +13,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import ExecutionConfiguration
 from ..errors import ExecutionError
-from ..json_renderer import count_tokens, render_json_text
+from ..json_renderer import RenderStyle, count_tokens, render_json_text
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .context import ExecutionContext, execution_context_scope, resolve_name_in_execution_context
@@ -44,41 +44,33 @@ class ExecutionExecutor(Protocol):
         raise NotImplementedError
 
 
-def _render_locals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
-    execution_configuration = execution_context.execution_configuration
-    context_limits = execution_configuration.context_limits
-    section_max_tokens = context_limits.locals_max_tokens
-    referent_values = execution_context.execution_locals
-
-    def _to_type_name(reference: str) -> str:
-        return eval(f"type({reference})", locals=referent_values).__name__
-
+def _render_reference_and_value_list_section(
+    *,
+    reference_and_value_list: list[tuple[str, object]],
+    max_items: int,
+    section_max_tokens: int,
+    value_max_tokens: int,
+    token_encoding: tiktoken.Encoding,
+    json_renderer_style: RenderStyle,
+) -> str:
     lines: list[str] = []
     total_tokens = 0
     shown_items = 0
 
-    eligible_references: list[str] = []
-    for reference in sorted(references):
-        if reference.startswith("__"):
-            continue
-        eligible_references.append(reference)
-
-    for reference in eligible_references:
-        if shown_items >= context_limits.locals_max_items:
+    for reference, value in reference_and_value_list:
+        if shown_items >= max_items:
             break
 
-        value = referent_values[reference]
-
-        reference_type_name = _to_type_name(reference)
+        reference_type_name = type(value).__name__
         if reference_type_name == "function":
             reference_type_name = str(signature(value))  # type: ignore
         rendered_name_and_type = f"{reference}: {reference_type_name} = "
 
         rendered_value, rendered_value_tokens = render_json_text(
             value,
-            max_tokens=context_limits.value_max_tokens,
+            max_tokens=value_max_tokens,
             encoding=token_encoding,
-            style=execution_configuration.json_renderer_style,
+            style=json_renderer_style,
         )
 
         rendered = rendered_name_and_type + rendered_value
@@ -91,11 +83,31 @@ def _render_locals_section(execution_context: ExecutionContext, references: Iter
         total_tokens += rendered_tokens + 1
         shown_items += 1
 
-    truncated = shown_items < len(eligible_references)
+    truncated = shown_items < len(reference_and_value_list)
     if truncated:
         lines.append("<snipped>")
 
     return "\n".join(lines)
+
+
+def _render_locals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
+    execution_configuration = execution_context.execution_configuration
+    context_limits = execution_configuration.context_limits
+
+    eligible_reference_and_value_list: list[tuple[str, object]] = []
+    for reference in sorted(references):
+        if reference.startswith("__"):
+            continue
+        eligible_reference_and_value_list.append((reference, execution_context.execution_locals[reference]))
+
+    return _render_reference_and_value_list_section(
+        reference_and_value_list=eligible_reference_and_value_list,
+        max_items=context_limits.locals_max_items,
+        section_max_tokens=context_limits.locals_max_tokens,
+        value_max_tokens=context_limits.value_max_tokens,
+        token_encoding=token_encoding,
+        json_renderer_style=execution_configuration.json_renderer_style,
+    )
 
 
 def _extract_references_and_program(text: str) -> tuple[tuple[str, ...], str]:
@@ -119,13 +131,8 @@ def _extract_references_and_program(text: str) -> tuple[tuple[str, ...], str]:
 def _render_globals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
     execution_configuration = execution_context.execution_configuration
     context_limits = execution_configuration.context_limits
-    section_max_tokens = context_limits.globals_max_tokens
 
-    lines: list[str] = []
-    total_tokens = 0
-    shown_items = 0
-
-    eligible_reference_and_values: list[Tuple[str, object]] = []
+    eligible_reference_and_value_list: list[tuple[str, object]] = []
     for reference in sorted(references):
         if reference.startswith("__"):
             continue
@@ -134,39 +141,16 @@ def _render_globals_section(execution_context: ExecutionContext, references: Ite
         value = resolve_name_in_execution_context(execution_context, reference)
         if value is None:
             continue
-        eligible_reference_and_values.append((reference, value))
+        eligible_reference_and_value_list.append((reference, value))
 
-    for reference, value in eligible_reference_and_values:
-        if shown_items >= context_limits.globals_max_items:
-            break
-
-        reference_type_name = type(value).__name__
-        if reference_type_name == "function":
-            reference_type_name = str(signature(value))  # type: ignore
-        rendered_name_and_type = f"{reference}: {reference_type_name} = "
-
-        rendered_value, rendered_value_tokens = render_json_text(
-            value,
-            max_tokens=context_limits.value_max_tokens,
-            encoding=token_encoding,
-            style=execution_configuration.json_renderer_style,
-        )
-
-        rendered = rendered_name_and_type + rendered_value
-        rendered_tokens = count_tokens(rendered_name_and_type, token_encoding) + rendered_value_tokens
-
-        if total_tokens + rendered_tokens + 1 > section_max_tokens:
-            break
-
-        lines.append(rendered)
-        total_tokens += rendered_tokens + 1
-        shown_items += 1
-
-    truncated = shown_items < len(eligible_reference_and_values)
-    if truncated:
-        lines.append("<snipped>")
-
-    return "\n".join(lines)
+    return _render_reference_and_value_list_section(
+        reference_and_value_list=eligible_reference_and_value_list,
+        max_items=context_limits.globals_max_items,
+        section_max_tokens=context_limits.globals_max_tokens,
+        value_max_tokens=context_limits.value_max_tokens,
+        token_encoding=token_encoding,
+        json_renderer_style=execution_configuration.json_renderer_style,
+    )
 
 
 def build_user_prompt(processed_natural_program: str, execution_context: ExecutionContext) -> str:
