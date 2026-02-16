@@ -13,6 +13,7 @@ from .context import (
     get_execution_context_stack,
     get_python_cell_scope_stack,
     get_python_name_scope_stack,
+    resolve_name_in_execution_context,
 )
 from .contracts import EXECUTION_OUTCOME_TYPES
 from .environment import ExecutionEnvironment
@@ -245,9 +246,7 @@ class Orchestrator:
         execution_context.execution_locals.update(bindings)
 
         if execution_outcome.type not in allowed_outcome_types:
-            raise ExecutionError(
-                f"Outcome '{execution_outcome.type}' is not allowed for this Natural block. Allowed outcomes: {allowed_outcome_types}"
-            )
+            raise ExecutionError(f"Outcome '{execution_outcome.type}' is not allowed for this Natural block. Allowed outcomes: {allowed_outcome_types}")
 
         return_value: object | None = None
 
@@ -256,6 +255,14 @@ class Orchestrator:
             return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
 
         if execution_outcome.type == "raise":
+            if execution_outcome.error_type is not None:
+                error_type_name = execution_outcome.error_type
+                resolved_error_type = resolve_name_in_execution_context(execution_context, error_type_name)
+                if resolved_error_type is None:
+                    raise ExecutionError(f"Invalid error_type: {error_type_name!r}")
+                if not isinstance(resolved_error_type, type) or not issubclass(resolved_error_type, BaseException):
+                    raise ExecutionError(f"Invalid error_type: {execution_outcome.error_type!r}")
+                raise resolved_error_type(execution_outcome.message)
             raise ExecutionError(f"Execution failed: {execution_outcome.message}")
 
         return {

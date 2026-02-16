@@ -291,7 +291,15 @@ Atomicity requirement:
 
 ### 8.4. Execution contract (final JSON)
 
-At the end of each execution, the LLM returns a final JSON object that represents exactly one outcome variant. The outcome is a discriminated union keyed by the required field `type`.
+At the end of each execution, the LLM returns a final JSON object that represents exactly one outcome variant.
+
+Purpose:
+
+- The outcome is a control-flow signal to the host Python runtime.
+- It is not a user-facing "answer" payload.
+- The implementation uses strict parsing. Output JSON only, with only the fields allowed for the chosen `type`.
+
+The outcome is a discriminated union keyed by the required field `type`.
 
 Outcome types:
 
@@ -301,8 +309,8 @@ Outcome types:
 
 - `return`:
   - Return from the surrounding Python function immediately.
-  - Payload keys: `type`, and optional `source_path`.
-  - If `source_path` is provided and not null, it must be a dot-separated identifier path into execution locals.
+  - Payload keys: `type`, and required `source_path`.
+  - `source_path` must be a dot-separated identifier path into execution locals.
   - The host resolves `source_path` within execution locals only, using attribute access only.
   - The host then validates/coerces the resolved Python value to the function's return type annotation.
 
@@ -314,8 +322,9 @@ Outcome types:
 - `raise`:
   - Failure.
   - Payload keys: `type`, `message`, and optional `error_type`.
-  - `error_type` is a stable classification token only.
-  - If `error_type` is provided, it must be one of the names listed under the `<<<NH:ERROR_TYPE_BINDINGS>>>` section in the prompt.
+  - `error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
+  - The host enforces this using the structured output JSON Schema: when `error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
+  - When `error_type` is provided, the host raises that exception type with the provided `message`.
 
 The implementation chooses strict parsing. Any non-JSON final response is an error.
 
