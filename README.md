@@ -1,5 +1,9 @@
 # Nighthawk
 
+<div align="center">
+<img src="docs/assets/nighthawk_logo-128x128.png" alt="logo" width="128px" margin="10px"></img>
+</div>
+
 Nighthawk is an experimental Python library exploring a simple split:
 
 - Use **hard control** (Python code) for strict procedure, verification, and deterministic flow.
