@@ -59,11 +59,11 @@ To keep planning cheap and avoid reading large plan narratives, invariant status
 - The ExecPlan file MUST NOT contain the ideal-path.
 - The ExecPlan file MUST be fully self-contained. It must not require reading the Ideal State document to understand what to do.
 - Use stable Ids so the user can respond inline:
-  - Proposals: `P-KEBAB-001`
-  - Questions: `Q-KEBAB-001`
-  - Confirmations: `C-KEBAB-001`
-  - Decisions: `D-KEBAB-001`
-  - Follow-ups: append suffixes (for example, `Q-KEBAB-001A`).
+  - Proposals: `P-SLUG-001`
+  - Questions: `Q-SLUG-001`
+  - Confirmations: `C-SLUG-001`
+  - Decisions: `D-SLUG-001`
+  - Follow-ups: append suffixes (for example, `Q-SLUG-001A`).
 - Use ASCII punctuation only.
 
 ## Inputs

@@ -79,11 +79,11 @@ This Skill is also intentionally artifact-forward: create the Ideal State docume
      - Further inserts: `I-042B`, ..., `I-042Z`, then `I-042AA`, `I-042AB`, etc.
 
 10. Stable Ids for inline responses:
-   - Proposals: `P-KEBAB-001`
-   - Questions: `Q-KEBAB-001`
-   - Confirmations: `C-KEBAB-001`
-   - Decisions (for decision logs): `D-KEBAB-001`
-   - Follow-ups: append suffixes (for example, `Q-KEBAB-001A`).
+   - Proposals: `P-SLUG-001`
+   - Questions: `Q-SLUG-001`
+   - Confirmations: `C-SLUG-001`
+   - Decisions (for decision logs): `D-SLUG-001`
+   - Follow-ups: append suffixes (for example, `Q-SLUG-001A`).
 
 11. Ideal State document isolation:
    - The assistant MUST only read or operate on the Ideal State document explicitly provided via `@<ideal-path>`.
@@ -106,7 +106,7 @@ This Skill assumes the first invocation may provide only `<topic>`.
 If arguments omit `@<ideal-path>`:
 
 1. Propose 1-3 ideal-path candidates.
-   - Default recommendation: `.agent/ideal/<topic-kebab>.md`
+   - Default recommendation: `.agent/ideal/YYYYMMDD-<topic-slug>.md`
 2. Ask the user to choose one path (or provide another).
 3. Create the file early (skeleton), once the path is chosen and editing permission is granted.
 
