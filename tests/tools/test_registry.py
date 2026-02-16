@@ -56,7 +56,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
             _ = user_prompt
             _ = deps
             _ = kwargs
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     agent = FakeAgent()
 
@@ -78,7 +78,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
                 return "ok"
 
             """natural
-            {"execution_outcome": {"type": "pass"}, "bindings": {}}
+            {"execution_outcome": {"kind": "pass"}, "bindings": {}}
             """
 
         f()
@@ -111,7 +111,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
 
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     agent = FakeAgent()
 
@@ -126,7 +126,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
         @nh.fn
         def f() -> None:
             """natural
-            {"execution_outcome": {"type": "pass"}, "bindings": {}}
+            {"execution_outcome": {"kind": "pass"}, "bindings": {}}
             """
 
             @nh.tool(name="test_late_global", overwrite=True)
@@ -135,7 +135,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
                 return "late"
 
             """natural
-            {"execution_outcome": {"type": "pass"}, "bindings": {}}
+            {"execution_outcome": {"kind": "pass"}, "bindings": {}}
             """
 
         f()
@@ -358,7 +358,7 @@ def test_agent_backend_prompt_sections_are_present(tmp_path):
             self.seen_prompts.append(user_prompt)
             assert deps is not None
             _ = kwargs
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     agent = FakeAgent()
 
@@ -421,7 +421,7 @@ def test_tool_defined_in_environment_scope_is_not_global(tmp_path):
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
 
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     agent = FakeAgent()
 
@@ -476,7 +476,7 @@ def test_environment_override_tool_scope_does_not_leak(tmp_path):
             _ = user_prompt
             _ = deps
             _ = kwargs
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     agent = FakeAgent()
 

@@ -377,7 +377,7 @@ def build_runtime_call_and_assignments(
             test=ast.Compare(
                 left=ast.Attribute(
                     value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
-                    attr="type",
+                    attr="kind",
                     ctx=ast.Load(),
                 ),
                 ops=[ast.Eq()],
@@ -403,7 +403,7 @@ def build_runtime_call_and_assignments(
                     test=ast.Compare(
                         left=ast.Attribute(
                             value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
-                            attr="type",
+                            attr="kind",
                             ctx=ast.Load(),
                         ),
                         ops=[ast.Eq()],
@@ -416,7 +416,7 @@ def build_runtime_call_and_assignments(
                     test=ast.Compare(
                         left=ast.Attribute(
                             value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
-                            attr="type",
+                            attr="kind",
                             ctx=ast.Load(),
                         ),
                         ops=[ast.Eq()],

@@ -18,7 +18,7 @@ class _FakeAgent:
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return _FakeRunResult(PassOutcome(type="pass"))
+        return _FakeRunResult(PassOutcome(kind="pass"))
 
 
 G = 1

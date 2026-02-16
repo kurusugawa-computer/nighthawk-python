@@ -15,7 +15,7 @@ from .context import (
     get_python_name_scope_stack,
     resolve_name_in_execution_context,
 )
-from .contracts import EXECUTION_OUTCOME_TYPES
+from .contracts import EXECUTION_OUTCOME_KINDS
 from .environment import ExecutionEnvironment
 
 
@@ -77,8 +77,8 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
 
     denied: list[str] = []
     for item in deny_value:
-        if item not in EXECUTION_OUTCOME_TYPES:
-            raise ExecutionError(f"Unknown denied outcome type: {item}")
+        if item not in EXECUTION_OUTCOME_KINDS:
+            raise ExecutionError(f"Unknown denied outcome kind: {item}")
         if item not in denied:
             denied.append(item)
 
@@ -101,24 +101,24 @@ class Orchestrator:
         except Exception as e:
             raise ExecutionError(f"Return value validation failed: {e}") from e
 
-    def _resolve_reference_path(self, execution_context: ExecutionContext, source_path: str) -> object:
-        parts = source_path.split(".")
+    def _resolve_reference_path(self, execution_context: ExecutionContext, return_reference_path: str) -> object:
+        parts = return_reference_path.split(".")
         if any(part == "" for part in parts):
-            raise ExecutionError(f"Invalid source_path: {source_path!r}")
+            raise ExecutionError(f"Invalid return_reference_path: {return_reference_path!r}")
 
         for part in parts:
             try:
                 part.encode("ascii")
             except UnicodeEncodeError:
-                raise ExecutionError(f"Invalid source_path segment (non-ASCII): {part!r}")
+                raise ExecutionError(f"Invalid return_reference_path segment (non-ASCII): {part!r}")
             if not part.isidentifier():
-                raise ExecutionError(f"Invalid source_path segment (not identifier): {part!r}")
+                raise ExecutionError(f"Invalid return_reference_path segment (not identifier): {part!r}")
             if part.startswith("__"):
-                raise ExecutionError(f"Invalid source_path segment (dunder): {part!r}")
+                raise ExecutionError(f"Invalid return_reference_path segment (dunder): {part!r}")
 
         root_name = parts[0]
         if root_name not in execution_context.execution_locals:
-            raise ExecutionError(f"Unknown root name in source_path: {root_name}")
+            raise ExecutionError(f"Unknown root name in return_reference_path: {root_name}")
         current = execution_context.execution_locals[root_name]
         remaining = parts[1:]
 
@@ -126,7 +126,7 @@ class Orchestrator:
             try:
                 current = getattr(current, part)
             except Exception as e:
-                raise ExecutionError(f"Failed to resolve source_path segment {part!r} in {source_path!r}") from e
+                raise ExecutionError(f"Failed to resolve return_reference_path segment {part!r} in {return_reference_path!r}") from e
 
         return current
 
@@ -147,11 +147,11 @@ class Orchestrator:
         processed_without_frontmatter, denied_outcome_types = _split_frontmatter_or_none(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
 
-        base_allowed_outcome_types: list[str] = ["pass", "return", "raise"]
+        base_allowed_outcome_kinds: list[str] = ["pass", "return", "raise"]
         if is_in_loop:
-            base_allowed_outcome_types.extend(["break", "continue"])
+            base_allowed_outcome_kinds.extend(["break", "continue"])
 
-        allowed_outcome_types = tuple(outcome_type for outcome_type in base_allowed_outcome_types if outcome_type not in denied_outcome_types)
+        allowed_outcome_kinds = tuple(outcome_type for outcome_type in base_allowed_outcome_kinds if outcome_type not in denied_outcome_types)
 
         execution_globals: dict[str, object] = dict(python_globals)
         if "__builtins__" not in execution_globals:
@@ -238,32 +238,32 @@ class Orchestrator:
             processed_natural_program=processed_without_frontmatter,
             execution_context=execution_context,
             binding_names=output_binding_names,
-            allowed_outcome_types=allowed_outcome_types,
+            allowed_outcome_kinds=allowed_outcome_kinds,
         )
 
         input_bindings = dict(resolved_input_binding_name_to_value)
 
         execution_context.execution_locals.update(bindings)
 
-        if execution_outcome.type not in allowed_outcome_types:
-            raise ExecutionError(f"Outcome '{execution_outcome.type}' is not allowed for this Natural block. Allowed outcomes: {allowed_outcome_types}")
+        if execution_outcome.kind not in allowed_outcome_kinds:
+            raise ExecutionError(f"Outcome '{execution_outcome.kind}' is not allowed for this Natural block. Allowed outcome kinds: {allowed_outcome_kinds}")
 
         return_value: object | None = None
 
-        if execution_outcome.type == "return":
-            resolved = self._resolve_reference_path(execution_context, execution_outcome.source_path)
+        if execution_outcome.kind == "return":
+            resolved = self._resolve_reference_path(execution_context, execution_outcome.return_reference_path)
             return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
 
-        if execution_outcome.type == "raise":
-            if execution_outcome.error_type is not None:
-                error_type_name = execution_outcome.error_type
-                resolved_error_type = resolve_name_in_execution_context(execution_context, error_type_name)
-                if resolved_error_type is None:
-                    raise ExecutionError(f"Invalid error_type: {error_type_name!r}")
-                if not isinstance(resolved_error_type, type) or not issubclass(resolved_error_type, BaseException):
-                    raise ExecutionError(f"Invalid error_type: {execution_outcome.error_type!r}")
-                raise resolved_error_type(execution_outcome.message)
-            raise ExecutionError(f"Execution failed: {execution_outcome.message}")
+        if execution_outcome.kind == "raise":
+            if execution_outcome.raise_error_type is not None:
+                raise_error_type_name = execution_outcome.raise_error_type
+                resolved_raise_error_type = resolve_name_in_execution_context(execution_context, raise_error_type_name)
+                if resolved_raise_error_type is None:
+                    raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
+                if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
+                    raise ExecutionError(f"Invalid raise_error_type: {execution_outcome.raise_error_type!r}")
+                raise resolved_raise_error_type(execution_outcome.raise_message)
+            raise ExecutionError(f"Execution failed: {execution_outcome.raise_message}")
 
         return {
             "execution_outcome": execution_outcome,

@@ -38,13 +38,13 @@ def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) ->
             processed_natural_program: str,
             execution_context: ExecutionContext,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = execution_context
             _ = binding_names
-            _ = allowed_outcome_types
-            return PassOutcome(type="pass"), {}
+            _ = allowed_outcome_kinds
+            return PassOutcome(kind="pass"), {}
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -59,7 +59,7 @@ def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) ->
             """natural
             <later_value>
             <:result>
-            {"execution_outcome": {"type": "pass"}, "bindings": {"result": 0}}
+            {"execution_outcome": {"kind": "pass"}, "bindings": {"result": 0}}
             """
             later_value = 123
             _ = later_value
@@ -85,13 +85,13 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
             processed_natural_program: str,
             execution_context: "ExecutionContext",
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ) -> tuple[PassOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = execution_context
             _ = binding_names
-            _ = allowed_outcome_types
-            return PassOutcome(type="pass"), {}
+            _ = allowed_outcome_kinds
+            return PassOutcome(kind="pass"), {}
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -136,7 +136,7 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 
             assign_tool(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
 
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     with nh.environment(
         nh.ExecutionEnvironment(
@@ -177,7 +177,7 @@ def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
             _ = user_prompt
             _ = kwargs
 
-            return FakeRunResult(PassOutcome(type="pass"))
+            return FakeRunResult(PassOutcome(kind="pass"))
 
     with nh.environment(
         nh.ExecutionEnvironment(

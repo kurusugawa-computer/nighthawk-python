@@ -40,7 +40,7 @@ def test_agent_import_and_construction_and_run():
     from pydantic_ai import StructuredDict
 
     from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.contracts import EXECUTION_OUTCOME_TYPES
+    from nighthawk.execution.contracts import EXECUTION_OUTCOME_KINDS
     from tests.execution.stub_executor import StubExecutor
 
     environment = nh.ExecutionEnvironment(
@@ -67,23 +67,23 @@ def test_agent_import_and_construction_and_run():
     )
 
     result = agent.run_sync(
-        'Return exactly this JSON object and nothing else: {"type": "continue"}',
+        'Return exactly this JSON object and nothing else: {"kind": "continue"}',
         deps=tool_context,
         output_type=StructuredDict(
             {
                 "type": "object",
                 "properties": {
-                    "type": {"type": "string", "enum": ["continue"]},
+                    "kind": {"type": "string", "enum": ["continue"]},
                 },
-                "required": ["type"],
+                "required": ["kind"],
                 "additionalProperties": False,
             },
             name="ExecutionOutcome",
         ),
     )
 
-    assert result.output["type"] == "continue"
-    assert result.output["type"] in EXECUTION_OUTCOME_TYPES
+    assert result.output["kind"] == "continue"
+    assert result.output["kind"] in EXECUTION_OUTCOME_KINDS
 
 
 def test_natural_block_evaluate_order():

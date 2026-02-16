@@ -63,7 +63,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Locals summary: a bounded text rendering of selected values from `execution_locals`, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Outcome: the single, unambiguous result of executing a Natural block.
-- Outcome type: the required `type` field on an outcome object. The baseline types are `pass`, `return`, `break`, `continue`, and `raise`.
+- Outcome kind: the required `kind` field on an outcome object. The baseline kinds are `pass`, `return`, `break`, `continue`, and `raise`.
 - Allowed outcome set: the set of outcome types allowed for a specific Natural block instance, derived from syntactic context and deny-only frontmatter.
 - Frontmatter: optional YAML metadata at the start of a Natural program, delimited by `---` lines.
 
@@ -297,34 +297,34 @@ Purpose:
 
 - The outcome is a control-flow signal to the host Python runtime.
 - It is not a user-facing "answer" payload.
-- The implementation uses strict parsing. Output JSON only, with only the fields allowed for the chosen `type`.
+- The implementation uses strict parsing. Output JSON only, with only the fields allowed for the chosen `kind`.
 
-The outcome is a discriminated union keyed by the required field `type`.
+The outcome is a discriminated union keyed by the required field `kind`.
 
-Outcome types:
+Outcome kinds:
 
 - `pass`:
   - Success with no control-flow change.
-  - Payload keys: `type` only.
+  - Payload keys: `kind` only.
 
 - `return`:
   - Return from the surrounding Python function immediately.
-  - Payload keys: `type`, and required `source_path`.
-  - `source_path` must be a dot-separated identifier path into execution locals.
-  - The host resolves `source_path` within execution locals only, using attribute access only.
+  - Payload keys: `kind`, and required `return_reference_path`.
+  - `return_reference_path` must be a dot-separated identifier path into execution locals.
+  - The host resolves `return_reference_path` within execution locals only, using attribute access only.
   - The host then validates/coerces the resolved Python value to the function's return type annotation.
 
 - `break` / `continue`:
   - Loop control.
-  - Payload keys: `type` only.
+  - Payload keys: `kind` only.
   - These outcomes are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
 
 - `raise`:
   - Failure.
-  - Payload keys: `type`, `message`, and optional `error_type`.
-  - `error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
-  - The host enforces this using the structured output JSON Schema: when `error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
-  - When `error_type` is provided, the host raises that exception type with the provided `message`.
+  - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.
+  - `raise_error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
+  - The host enforces this using the structured output JSON Schema: when `raise_error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
+  - When `raise_error_type` is provided, the host raises that exception type with the provided `raise_message`.
 
 The implementation chooses strict parsing. Any non-JSON final response is an error.
 

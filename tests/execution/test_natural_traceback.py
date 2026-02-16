@@ -21,7 +21,7 @@ class _FakeAgent:
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return _FakeRunResult(PassOutcome(type="pass"))
+        return _FakeRunResult(PassOutcome(kind="pass"))
 
 
 def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
@@ -135,13 +135,13 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
             processed_natural_program: str,
             execution_context: object,
             binding_names: list[str],
-            allowed_outcome_types: tuple[str, ...],
+            allowed_outcome_kinds: tuple[str, ...],
         ):
             _ = (
                 processed_natural_program,
                 execution_context,
                 binding_names,
-                allowed_outcome_types,
+                allowed_outcome_kinds,
             )
             raise RuntimeError("Executor failed")
 
