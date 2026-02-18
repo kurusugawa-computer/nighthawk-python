@@ -10,13 +10,6 @@ This file provides repository-specific guidance for coding agents and human cont
   - Required format: `Q-SLUG-001` (questions), `C-SLUG-001` (confirmations), `P-SLUG-001` (proposals). For follow-ups, append a suffix like `Q-SLUG-001A`.
   - Each item must be answerable on its own and must include its Id in the text.
 
-## ExecPlans
-
-Only create an ExecPlan when author instruction explicitly requests it. If an ExecPlan is not explicitly requested, do not use ExecPlan files, even for large or risky changes.
-When an ExecPlan is explicitly requested, author it following `.agent/PLANS.md` before you touch code.
-Treat the ExecPlan as both an executable specification and a transparency artifact: keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` updated as work proceeds.
-Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>.md` (ASCII only, lowercase, hyphen-separated).
-
 ## Design principles
 
 - Avoid premature abstraction: Do not add classes/parameters/utilities for hypothetical reuse; any new abstraction must be used by code in `src/` or `tests/` in the same change (docs examples do not count).
@@ -63,9 +56,9 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
   - `docs/README.md`: User-facing overview.
   - `docs/design.md`: Design specification.
   - `docs/roadmap.md`: Not implemented items.
-- `.agent/`: Agent artifacts.
-  - `.agent/execplans/`: ExecPlans (only when explicitly requested).
-  - `.agent/PLANS.md`: The ExecPlan format and requirements.
+- `.agents/`: Agent artifacts.
+  - `.agents/execplans/`: ExecPlans (only when explicitly requested).
+  - `.agents/PLANS.md`: The ExecPlan format and requirements.
 - `.devcontainer/`: Devcontainer definition (Python base image).
 - `pyproject.toml`, `uv.lock`: Project metadata and locked dependencies.
 

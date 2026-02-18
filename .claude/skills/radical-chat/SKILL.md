@@ -106,7 +106,7 @@ This Skill assumes the first invocation may provide only `<topic>`.
 If arguments omit `@<ideal-path>`:
 
 1. Propose 1-3 ideal-path candidates.
-   - Default recommendation: `.agent/ideal/YYYYMMDD-<topic-slug>.md`
+   - Default recommendation: `.agents/ideal/YYYYMMDD-<topic-slug>.md`
 2. Ask the user to choose one path (or provide another).
 3. Create the file early (skeleton), once the path is chosen and editing permission is granted.
 
@@ -144,7 +144,7 @@ When writing or updating the Ideal State document, use these sections:
 
 ### Example input (full form)
 
-    /radical-chat @.agent/ideal/execution.md execution context
+    /radical-chat @.agents/ideal/execution.md execution context
 
 ### Example input (first run, topic only)
 
@@ -152,7 +152,7 @@ When writing or updating the Ideal State document, use these sections:
 
 ### Example expected output shape (first run)
 
-- P-EXECUTION-001: Propose ideal-path `.agent/ideal/execution-context.md` unless you choose otherwise.
+- P-EXECUTION-001: Propose ideal-path `.agents/ideal/execution-context.md` unless you choose otherwise.
 - Q-EXECUTION-001: Which ideal-path should we use for the Ideal State document?
 - C-EXECUTION-001: Confirm standing permission for me to create and continuously edit the Ideal State document during this session.
 - I-001: Execution context is a defined term and must not have synonyms in code or docs.

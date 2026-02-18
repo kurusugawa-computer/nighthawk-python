@@ -1,6 +1,6 @@
-.agent/logs/
-.agent/ideal/
-.agent/execplans/
+.agents/logs/
+.agents/ideal/
+.agents/execplans/
 .claude/**/*.local.*
 
 # Byte-compiled / optimized / DLL files

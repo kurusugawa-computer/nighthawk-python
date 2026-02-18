@@ -112,7 +112,7 @@ If `<focus>` is missing, use the default focus candidate: `all invariants (singl
    - All open questions are resolved, deferred explicitly, or recorded as open questions.
    - All required confirmations are confirmed.
 
-6. Once settled, and only if the user explicitly requests it, create or update exactly one ExecPlan file in the `.agent/execplans` directory:
+6. Once settled, and only if the user explicitly requests it, create or update exactly one ExecPlan file in the `.agents/execplans` directory:
    - File name format: `YYYYMMDD-<slug>.md`
 
 ## Output contract
@@ -140,7 +140,7 @@ Read and follow `PLANS.md` in this directory. It is the source of truth for Exec
 
 ### Example input
 
-    /radical-plan @.agent/ideal/execution-context.md terminology alignment
+    /radical-plan @.agents/ideal/execution-context.md terminology alignment
 
 ### Example expected output shape
 
@@ -155,7 +155,7 @@ Read and follow `PLANS.md` in this directory. It is the source of truth for Exec
 
 ### Example input (focus omitted)
 
-    /radical-plan @.agent/ideal/execution-context.md
+    /radical-plan @.agents/ideal/execution-context.md
 
 ### Example expected output shape (focus omitted)
 
