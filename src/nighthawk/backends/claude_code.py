@@ -20,6 +20,8 @@ from . import BackendModelBase, ToolHandler
 
 PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
 
+type SettingSource = Literal["user", "project", "local"]
+
 
 def _normalize_timestamp_or_none(value: object) -> datetime:
     if isinstance(value, datetime):
@@ -29,6 +31,7 @@ def _normalize_timestamp_or_none(value: object) -> datetime:
 
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):
     permission_mode: PermissionMode
+    setting_sources: list[SettingSource] | None
     allowed_tool_names: tuple[str, ...] | None
     claude_allowed_tool_names: tuple[str, ...] | None
     claude_max_turns: int
@@ -37,6 +40,7 @@ class ClaudeAgentSdkModelSettings(TypedDict, total=False):
 def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeAgentSdkModelSettings:
     default_settings: ClaudeAgentSdkModelSettings = {
         "permission_mode": "default",
+        "setting_sources": None,
         "allowed_tool_names": None,
         "claude_allowed_tool_names": None,
         "claude_max_turns": 50,
@@ -44,16 +48,30 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
     if model_settings is None:
         return default_settings
 
-    permission_mode = model_settings.get("permission_mode", "default")
-    allowed_tool_names_value = model_settings.get("allowed_tool_names")
-    claude_allowed_tool_names_value = model_settings.get("claude_allowed_tool_names")
-    claude_max_turns_value = model_settings.get("claude_max_turns")
+    model_settings_dict = cast(dict[str, Any], model_settings)
+
+    permission_mode = model_settings_dict.get("permission_mode", "default")
+    setting_sources_value = model_settings_dict.get("setting_sources")
+    allowed_tool_names_value = model_settings_dict.get("allowed_tool_names")
+    claude_allowed_tool_names_value = model_settings_dict.get("claude_allowed_tool_names")
+    claude_max_turns_value = model_settings_dict.get("claude_max_turns")
 
     if not isinstance(permission_mode, str):
         raise UserError("permission_mode must be a string")
 
     if permission_mode not in {"default", "acceptEdits", "plan", "bypassPermissions"}:
         raise UserError("permission_mode must be one of: default, acceptEdits, plan, bypassPermissions")
+
+    setting_sources: list[SettingSource] | None
+    if setting_sources_value is None:
+        setting_sources = None
+    else:
+        if not isinstance(setting_sources_value, (list, tuple)) or not all(isinstance(source, str) for source in setting_sources_value):
+            raise UserError("setting_sources must be a list[SettingSource], tuple[SettingSource, ...], or None")
+        allowed_setting_sources = {"user", "project", "local"}
+        if not all(source in allowed_setting_sources for source in setting_sources_value):
+            raise UserError("setting_sources must contain only: user, project, local")
+        setting_sources = list(cast(tuple[SettingSource, ...], tuple(setting_sources_value)))
 
     allowed_tool_names: tuple[str, ...] | None
     if allowed_tool_names_value is None:
@@ -82,6 +100,7 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
 
     return {
         "permission_mode": cast(PermissionMode, permission_mode),
+        "setting_sources": setting_sources,
         "allowed_tool_names": allowed_tool_names,
         "claude_allowed_tool_names": claude_allowed_tool_names,
         "claude_max_turns": claude_max_turns,
@@ -243,14 +262,21 @@ class ClaudeCodeModel(BackendModelBase):
             )
 
         options = ClaudeAgentOptions(
-            tools=[],
+            tools={
+                "type": "preset",
+                "preset": "claude_code",
+            },
             allowed_tools=merged_allowed_tools,
-            system_prompt=system_prompt_text,
+            system_prompt={
+                "type": "preset",
+                "preset": "claude_code",
+                "append": system_prompt_text,
+            },
             mcp_servers={"nighthawk": sdk_server},
             permission_mode=claude_agent_sdk_model_settings.get("permission_mode", "default"),
             model=self._model_name,
             cwd=working_directory,
-            setting_sources=[],
+            setting_sources=claude_agent_sdk_model_settings.get("setting_sources"),
             max_turns=claude_agent_sdk_model_settings.get("claude_max_turns", 50),
             output_format=_build_json_schema_output_format(model_request_parameters),
         )
