@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import textwrap
 from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
@@ -284,14 +285,21 @@ class ClaudeCodeModel(BackendModelBase):
         assistant_model_name: str | None = None
         result_message: ResultMessage | None = None
 
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(user_prompt_text)
+        # Claude Code sets the CLAUDECODE environment variable for nested sessions.
+        # When the variable is set, the Claude Code CLI refuses to launch.
+        claude_code_nested_environment_value = os.environ.pop("CLAUDECODE", None)
+        try:
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(user_prompt_text)
 
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    assistant_model_name = message.model
-                elif isinstance(message, ResultMessage):
-                    result_message = message
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        assistant_model_name = message.model
+                    elif isinstance(message, ResultMessage):
+                        result_message = message
+        finally:
+            if claude_code_nested_environment_value is not None:
+                os.environ["CLAUDECODE"] = claude_code_nested_environment_value
 
         if result_message is None:
             raise UnexpectedModelBehavior("Claude Agent SDK backend did not produce a result message")
