@@ -250,36 +250,36 @@ class Runner:
                 allowed_step_kinds=allowed_step_kinds,
             )
 
-        input_bindings = dict(resolved_input_binding_name_to_value)
+            input_bindings = dict(resolved_input_binding_name_to_value)
 
-        step_context.step_locals.update(bindings)
+            step_context.step_locals.update(bindings)
 
-        if step_outcome.kind not in allowed_step_kinds:
-            raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
+            if step_outcome.kind not in allowed_step_kinds:
+                raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
 
-        return_value: object | None = None
+            return_value: object | None = None
 
-        if step_outcome.kind == "return":
-            resolved = self._resolve_reference_path(step_context, step_outcome.return_reference_path)
-            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+            if step_outcome.kind == "return":
+                resolved = self._resolve_reference_path(step_context, step_outcome.return_reference_path)
+                return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
 
-        if step_outcome.kind == "raise":
-            if step_outcome.raise_error_type is not None:
-                raise_error_type_name = step_outcome.raise_error_type
-                resolved_raise_error_type = resolve_name_in_step_context(step_context, raise_error_type_name)
-                if resolved_raise_error_type is None:
-                    raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
-                if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
-                    raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}")
-                raise resolved_raise_error_type(step_outcome.raise_message)
-            raise ExecutionError(f"Execution failed: {step_outcome.raise_message}")
+            if step_outcome.kind == "raise":
+                if step_outcome.raise_error_type is not None:
+                    raise_error_type_name = step_outcome.raise_error_type
+                    resolved_raise_error_type = resolve_name_in_step_context(step_context, raise_error_type_name)
+                    if resolved_raise_error_type is None:
+                        raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
+                    if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
+                        raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}")
+                    raise resolved_raise_error_type(step_outcome.raise_message)
+                raise ExecutionError(f"Execution failed: {step_outcome.raise_message}")
 
-        return {
-            "step_outcome": step_outcome,
-            "input_bindings": dict(input_bindings),
-            "bindings": bindings,
-            "return_value": return_value,
-        }
+            return {
+                "step_outcome": step_outcome,
+                "input_bindings": dict(input_bindings),
+                "bindings": bindings,
+                "return_value": return_value,
+            }
 
 
 def get_caller_frame() -> FrameType:
