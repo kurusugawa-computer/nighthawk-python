@@ -11,36 +11,36 @@ from pydantic import TypeAdapter
 from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..configuration import ExecutionConfiguration
+from ..configuration import RunConfiguration
 from ..errors import ExecutionError
 from ..json_renderer import RenderStyle, count_tokens, render_json_text
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
-from .context import ExecutionContext, execution_context_scope, resolve_name_in_execution_context
-from .contracts import (
-    EXECUTION_OUTCOME_KINDS,
-    ExecutionOutcome,
-    ExecutionOutcomeKind,
-    build_execution_outcome_json_schema,
-    build_execution_outcome_system_prompt_suffix_fragment,
+from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_environment, scope, span
+from .step_context import StepContext, resolve_name_in_step_context, step_context_scope
+from .step_contract import (
+    STEP_KINDS,
+    StepKind,
+    StepOutcome,
+    build_step_json_schema,
+    build_step_system_prompt_suffix_fragment,
 )
-from .environment import environment_override, get_environment
 
 
-class ExecutionAgent(Protocol):
+class StepExecutionAgent(Protocol):
     def run_sync(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
 
-class ExecutionExecutor(Protocol):
-    def run_natural_block(
+class StepExecutor(Protocol):
+    def run_step(
         self,
         *,
         processed_natural_program: str,
-        execution_context: ExecutionContext,
+        step_context: StepContext,
         binding_names: list[str],
-        allowed_outcome_kinds: tuple[str, ...],
-    ) -> tuple[ExecutionOutcome, dict[str, object]]:
+        allowed_step_kinds: tuple[str, ...],
+    ) -> tuple[StepOutcome, dict[str, object]]:
         raise NotImplementedError
 
 
@@ -90,15 +90,15 @@ def _render_reference_and_value_list_section(
     return "\n".join(lines)
 
 
-def _render_locals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
-    execution_configuration = execution_context.execution_configuration
-    context_limits = execution_configuration.context_limits
+def _render_locals_section(step_context: StepContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
+    run_configuration = step_context.run_configuration
+    context_limits = run_configuration.context_limits
 
     eligible_reference_and_value_list: list[tuple[str, object]] = []
     for reference in sorted(references):
         if reference.startswith("__"):
             continue
-        eligible_reference_and_value_list.append((reference, execution_context.execution_locals[reference]))
+        eligible_reference_and_value_list.append((reference, step_context.step_locals[reference]))
 
     return _render_reference_and_value_list_section(
         reference_and_value_list=eligible_reference_and_value_list,
@@ -106,7 +106,7 @@ def _render_locals_section(execution_context: ExecutionContext, references: Iter
         section_max_tokens=context_limits.locals_max_tokens,
         value_max_tokens=context_limits.value_max_tokens,
         token_encoding=token_encoding,
-        json_renderer_style=execution_configuration.json_renderer_style,
+        json_renderer_style=run_configuration.json_renderer_style,
     )
 
 
@@ -128,17 +128,17 @@ def _extract_references_and_program(text: str) -> tuple[tuple[str, ...], str]:
     return tuple(references), unescaped_text
 
 
-def _render_globals_section(execution_context: ExecutionContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
-    execution_configuration = execution_context.execution_configuration
-    context_limits = execution_configuration.context_limits
+def _render_globals_section(step_context: StepContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
+    run_configuration = step_context.run_configuration
+    context_limits = run_configuration.context_limits
 
     eligible_reference_and_value_list: list[tuple[str, object]] = []
     for reference in sorted(references):
         if reference.startswith("__"):
             continue
-        if reference in execution_context.execution_locals:
+        if reference in step_context.step_locals:
             continue
-        value = resolve_name_in_execution_context(execution_context, reference)
+        value = resolve_name_in_step_context(step_context, reference)
         if value is None:
             continue
         eligible_reference_and_value_list.append((reference, value))
@@ -149,22 +149,22 @@ def _render_globals_section(execution_context: ExecutionContext, references: Ite
         section_max_tokens=context_limits.globals_max_tokens,
         value_max_tokens=context_limits.value_max_tokens,
         token_encoding=token_encoding,
-        json_renderer_style=execution_configuration.json_renderer_style,
+        json_renderer_style=run_configuration.json_renderer_style,
     )
 
 
-def build_user_prompt(processed_natural_program: str, execution_context: ExecutionContext) -> str:
-    execution_configuration = execution_context.execution_configuration
-    template_text = execution_configuration.prompts.execution_user_prompt_template
-    token_encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
+def build_user_prompt(processed_natural_program: str, step_context: StepContext) -> str:
+    run_configuration = step_context.run_configuration
+    template_text = run_configuration.prompts.step_user_prompt_template
+    token_encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
 
-    locals_text = _render_locals_section(execution_context, execution_context.execution_locals.keys(), token_encoding)
+    locals_text = _render_locals_section(step_context, step_context.step_locals.keys(), token_encoding)
 
     references, program_text = _extract_references_and_program(processed_natural_program)
-    globals_text = _render_globals_section(execution_context, references, token_encoding)
+    globals_text = _render_globals_section(step_context, references, token_encoding)
 
     template = Template(template_text)
-    environment = get_environment()
+    current_environment = get_environment()
 
     prompt_text = template.substitute(
         program=program_text,
@@ -172,18 +172,18 @@ def build_user_prompt(processed_natural_program: str, execution_context: Executi
         globals=globals_text,
     )
 
-    suffix_fragments = environment.execution_user_prompt_suffix_fragments
+    suffix_fragments = current_environment.user_prompt_suffix_fragments
     if suffix_fragments:
         return "\n\n".join([prompt_text, *suffix_fragments])
 
     return prompt_text
 
 
-def _new_agent_executor(
-    execution_configuration: ExecutionConfiguration,
+def _new_agent_step_executor(
+    run_configuration: RunConfiguration,
     agent_constructor_keyword_arguments: dict[str, Any],
-) -> ExecutionAgent:
-    model_identifier = execution_configuration.model
+) -> StepExecutionAgent:
+    model_identifier = run_configuration.model
     provider, provider_model_name = model_identifier.split(":", 1)
 
     match provider:
@@ -200,20 +200,20 @@ def _new_agent_executor(
 
     agent = Agent(
         model=model,
-        output_type=str,
-        deps_type=ExecutionContext,
-        system_prompt=execution_configuration.prompts.execution_system_prompt_template,
+        output_type=StepOutcome,  # pyright: ignore
+        deps_type=StepContext,
+        system_prompt=run_configuration.prompts.step_system_prompt_template,
         **agent_constructor_keyword_arguments,
     )
 
     @agent.system_prompt(dynamic=True)
     def _environment_system_prompt() -> str | None:  # pyright: ignore[reportUnusedFunction]
         try:
-            environment = get_environment()
+            current_environment = get_environment()
         except Exception:
             return None
 
-        suffix_fragments = environment.execution_system_prompt_suffix_fragments
+        suffix_fragments = current_environment.system_prompt_suffix_fragments
         if not suffix_fragments:
             return None
 
@@ -223,60 +223,60 @@ def _new_agent_executor(
 
 
 @dataclass(frozen=True, init=False)
-class AgentExecutor:
-    agent: ExecutionAgent
+class AgentStepExecutor:
+    agent: StepExecutionAgent
 
     def __init__(
         self,
         *,
-        agent: ExecutionAgent | None = None,
-        execution_configuration: ExecutionConfiguration | None = None,
+        agent: StepExecutionAgent | None = None,
+        run_configuration: RunConfiguration | None = None,
         **agent_constructor_keyword_arguments: Any,
     ) -> None:
         if agent is not None:
-            if execution_configuration is not None or agent_constructor_keyword_arguments:
-                raise ValueError("When agent is provided, do not also pass execution_configuration or Agent constructor arguments")
+            if run_configuration is not None or agent_constructor_keyword_arguments:
+                raise ValueError("When agent is provided, do not also pass run_configuration or Agent constructor arguments")
             object.__setattr__(self, "agent", agent)
             return
 
-        if execution_configuration is None:
-            raise ValueError("AgentExecutor requires either agent=... or execution_configuration=...")
+        if run_configuration is None:
+            raise ValueError("AgentStepExecutor requires either agent=... or run_configuration=...")
 
-        object.__setattr__(self, "agent", _new_agent_executor(execution_configuration, agent_constructor_keyword_arguments))
+        object.__setattr__(self, "agent", _new_agent_step_executor(run_configuration, agent_constructor_keyword_arguments))
 
-    def run_natural_block(
+    def run_step(
         self,
         *,
         processed_natural_program: str,
-        execution_context: ExecutionContext,
+        step_context: StepContext,
         binding_names: list[str],
-        allowed_outcome_kinds: tuple[str, ...],
-    ) -> tuple[ExecutionOutcome, dict[str, object]]:
+        allowed_step_kinds: tuple[str, ...],
+    ) -> tuple[StepOutcome, dict[str, object]]:
         user_prompt = build_user_prompt(
             processed_natural_program=processed_natural_program,
-            execution_context=execution_context,
+            step_context=step_context,
         )
 
         tools = get_visible_tools()
         toolset = ToolResultWrapperToolset(FunctionToolset(tools))
 
-        unknown_outcome_kinds = set(allowed_outcome_kinds).difference(EXECUTION_OUTCOME_KINDS)
-        if unknown_outcome_kinds:
-            raise ExecutionError(f"Internal error: allowed_outcome_kinds contains unknown outcome kinds: {tuple(sorted(unknown_outcome_kinds))}")
+        unknown_kinds = set(allowed_step_kinds).difference(STEP_KINDS)
+        if unknown_kinds:
+            raise ExecutionError(f"Internal error: allowed_step_kinds contains unknown kinds: {tuple(sorted(unknown_kinds))}")
 
-        allowed_outcome_kinds_deduplicated = tuple(dict.fromkeys(allowed_outcome_kinds))
-        allowed_outcome_kinds_typed = cast(tuple[ExecutionOutcomeKind, ...], allowed_outcome_kinds_deduplicated)
+        allowed_kinds_deduplicated = tuple(dict.fromkeys(allowed_step_kinds))
+        allowed_kinds_typed = cast(tuple[StepKind, ...], allowed_kinds_deduplicated)
 
         referenced_names, _ = _extract_references_and_program(processed_natural_program)
 
         error_type_candidate_names: set[str] = set(referenced_names)
-        for name, value in execution_context.execution_locals.items():
+        for name, value in step_context.step_locals.items():
             if isinstance(value, type) and issubclass(value, BaseException) and value.__name__ == name:
                 error_type_candidate_names.add(name)
 
         error_type_binding_name_list: list[str] = []
         for name in sorted(error_type_candidate_names):
-            value = resolve_name_in_execution_context(execution_context, name)
+            value = resolve_name_in_step_context(step_context, name)
             if value is None:
                 continue
             if not isinstance(value, type) or not issubclass(value, BaseException) or value.__name__ != name:
@@ -285,34 +285,43 @@ class AgentExecutor:
 
         raise_error_type_binding_names = tuple(error_type_binding_name_list)
 
-        execution_outcome_system_prompt_fragment = build_execution_outcome_system_prompt_suffix_fragment(
-            allowed_outcome_kinds=allowed_outcome_kinds_typed,
+        step_system_prompt_fragment = build_step_system_prompt_suffix_fragment(
+            allowed_kinds=allowed_kinds_typed,
             raise_error_type_binding_names=raise_error_type_binding_names,
         )
 
-        with environment_override(execution_system_prompt_suffix_fragment=execution_outcome_system_prompt_fragment):
-            outcome_json_schema = build_execution_outcome_json_schema(
-                allowed_outcome_kinds=allowed_outcome_kinds_typed,
+        with scope(system_prompt_suffix_fragment=step_system_prompt_fragment):
+            outcome_json_schema = build_step_json_schema(
+                allowed_kinds=allowed_kinds_typed,
                 raise_error_type_binding_names=raise_error_type_binding_names,
             )
-            structured_output_type = StructuredDict(outcome_json_schema, name="ExecutionOutcome")
+            structured_output_type = StructuredDict(outcome_json_schema, name="StepOutcome")
 
-            with execution_context_scope(execution_context):
-                result = self.agent.run_sync(
-                    user_prompt,
-                    deps=execution_context,
-                    toolsets=[toolset],
-                    output_type=structured_output_type,
-                )
+            current_environment = get_environment()
+            with span(
+                "nighthawk.step_executor",
+                **{
+                    RUN_ID: current_environment.run_id,
+                    SCOPE_ID: current_environment.scope_id,
+                    STEP_ID: step_context.step_id,
+                },
+            ):
+                with step_context_scope(step_context):
+                    result = self.agent.run_sync(
+                        user_prompt,
+                        deps=step_context,
+                        toolsets=[toolset],
+                        output_type=structured_output_type,
+                    )
 
         try:
-            execution_outcome = TypeAdapter(ExecutionOutcome).validate_python(result.output)
+            step_outcome = TypeAdapter(StepOutcome).validate_python(result.output)
         except Exception as e:
-            raise ExecutionError(f"Execution produced invalid outcome: {e}") from e
+            raise ExecutionError(f"Step produced invalid step outcome: {e}") from e
 
         bindings: dict[str, object] = {}
         for name in binding_names:
-            if name in execution_context.assigned_binding_names:
-                bindings[name] = execution_context.execution_locals[name]
+            if name in step_context.assigned_binding_names:
+                bindings[name] = step_context.step_locals[name]
 
-        return execution_outcome, bindings
+        return step_outcome, bindings

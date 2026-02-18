@@ -13,106 +13,106 @@ class FakeMemory(BaseModel):
 
 
 def test_environment_replace_and_getter(tmp_path: Path):
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=StubExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=StubExecutor(),
             workspace_root=tmp_path,
         )
     ):
-        environment = nh.get_environment()
-        assert environment.workspace_root == tmp_path.resolve()
-        assert environment.execution_configuration == configuration.execution_configuration
+        environment_value = nh.get_environment()
+        assert environment_value.workspace_root == tmp_path.resolve()
+        assert environment_value.run_configuration == configuration.run_configuration
 
     with pytest.raises(NighthawkError):
         nh.get_environment()
 
 
-def test_environment_override_workspace_root_nesting(tmp_path: Path):
+def test_scope_workspace_root_nesting(tmp_path: Path):
     root1 = tmp_path / "root1"
     root2 = tmp_path / "root2"
     root1.mkdir()
     root2.mkdir()
 
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=StubExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=StubExecutor(),
             workspace_root=root1,
         )
     ):
         assert nh.get_environment().workspace_root == root1.resolve()
 
-        with nh.environment_override(workspace_root=root2):
+        with nh.scope(workspace_root=root2):
             assert nh.get_environment().workspace_root == root2.resolve()
 
         assert nh.get_environment().workspace_root == root1.resolve()
 
 
-def test_environment_override_configuration_replaces_configuration(tmp_path: Path):
-    configuration_1 = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+def test_scope_configuration_replaces_configuration(tmp_path: Path):
+    configuration_1 = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
-    configuration_2 = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-nano"),
+    configuration_2 = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-nano"),
     )
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration_1.execution_configuration,
-            execution_executor=StubExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration_1.run_configuration,
+            step_executor=StubExecutor(),
             workspace_root=tmp_path,
         )
     ):
-        assert nh.get_environment().execution_configuration == configuration_1.execution_configuration
+        assert nh.get_environment().run_configuration == configuration_1.run_configuration
 
-        with nh.environment_override(
-            execution_configuration=configuration_2.execution_configuration,
+        with nh.scope(
+            run_configuration=configuration_2.run_configuration,
         ):
-            assert nh.get_environment().execution_configuration == configuration_2.execution_configuration
+            assert nh.get_environment().run_configuration == configuration_2.run_configuration
 
-        assert nh.get_environment().execution_configuration == configuration_1.execution_configuration
+        assert nh.get_environment().run_configuration == configuration_1.run_configuration
 
 
-def test_environment_override_requires_existing_environment(tmp_path: Path):
+def test_scope_requires_existing_environment(tmp_path: Path):
     with pytest.raises(NighthawkError):
-        with nh.environment_override(workspace_root=tmp_path):
+        with nh.scope(workspace_root=tmp_path):
             pass
 
 
-def test_execution_configuration_model_default_applies():
-    configuration = nh.ExecutionConfiguration()
+def test_run_configuration_model_default_applies():
+    configuration = nh.RunConfiguration()
     assert configuration.model == "openai-responses:gpt-5-nano"
 
 
-def test_execution_configuration_model_requires_provider_model_format():
+def test_run_configuration_model_requires_provider_model_format():
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model="openai-responses")
+        nh.RunConfiguration(model="openai-responses")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model=":gpt-5-nano")
+        nh.RunConfiguration(model=":gpt-5-nano")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model="openai-responses:")
+        nh.RunConfiguration(model="openai-responses:")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.ExecutionConfiguration(model="openai-responses:gpt-5-nano:extra")
+        nh.RunConfiguration(model="openai-responses:gpt-5-nano:extra")
 
 
 def test_decorated_function_requires_environment():
-    @nh.fn
+    @nh.natural_function
     def f(x: int):
         f"""natural
         <:result>
-        {{"execution_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
+        {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
         """
         return result  # type: ignore # noqa: F821
 

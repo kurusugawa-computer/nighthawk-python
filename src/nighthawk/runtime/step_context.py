@@ -6,29 +6,29 @@ from dataclasses import dataclass, field
 from types import CellType
 from typing import Iterator
 
-from ..configuration import ExecutionConfiguration
+from ..configuration import RunConfiguration
 from ..errors import NighthawkError
 
 
 @dataclass
-class ExecutionContext:
-    execution_id: str
-    execution_configuration: ExecutionConfiguration
+class StepContext:
+    step_id: str
+    run_configuration: RunConfiguration
 
-    execution_globals: dict[str, object]
-    execution_locals: dict[str, object]
+    step_globals: dict[str, object]
+    step_locals: dict[str, object]
 
     binding_commit_targets: set[str]
 
-    # Ordinary user-provided binding (for example a global named "memory") may exist in execution_locals.
+    # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)
-    execution_locals_revision: int = 0
+    step_locals_revision: int = 0
 
 
-_execution_context_stack_var: ContextVar[list[ExecutionContext]] = ContextVar(
-    "nighthawk_execution_context_stack",
+_step_context_stack_var: ContextVar[list[StepContext]] = ContextVar(
+    "nighthawk_step_context_stack",
     default=[],
 )
 
@@ -44,13 +44,13 @@ _python_cell_scope_stack_var: ContextVar[list[dict[str, CellType]]] = ContextVar
 
 
 @contextmanager
-def execution_context_scope(execution_context: ExecutionContext) -> Iterator[None]:
-    current = _execution_context_stack_var.get()
-    token = _execution_context_stack_var.set([*current, execution_context])
+def step_context_scope(step_context: StepContext) -> Iterator[None]:
+    current = _step_context_stack_var.get()
+    token = _step_context_stack_var.set([*current, step_context])
     try:
         yield
     finally:
-        _execution_context_stack_var.reset(token)
+        _step_context_stack_var.reset(token)
 
 
 @contextmanager
@@ -73,8 +73,8 @@ def python_cell_scope(name_to_cell: dict[str, CellType]) -> Iterator[None]:
         _python_cell_scope_stack_var.reset(token)
 
 
-def get_execution_context_stack() -> tuple[ExecutionContext, ...]:
-    return tuple(_execution_context_stack_var.get())
+def get_step_context_stack() -> tuple[StepContext, ...]:
+    return tuple(_step_context_stack_var.get())
 
 
 def get_python_name_scope_stack() -> tuple[dict[str, object], ...]:
@@ -85,21 +85,21 @@ def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:
     return tuple(_python_cell_scope_stack_var.get())
 
 
-def get_current_execution_context() -> ExecutionContext:
-    stack = _execution_context_stack_var.get()
+def get_current_step_context() -> StepContext:
+    stack = _step_context_stack_var.get()
     if not stack:
-        raise NighthawkError("ExecutionContext is not set")
+        raise NighthawkError("StepContext is not set")
     return stack[-1]
 
 
-def resolve_name_in_execution_context(execution_context: ExecutionContext, name: str) -> object | None:
-    if name in execution_context.execution_locals:
-        return execution_context.execution_locals[name]
+def resolve_name_in_step_context(step_context: StepContext, name: str) -> object | None:
+    if name in step_context.step_locals:
+        return step_context.step_locals[name]
 
-    if name in execution_context.execution_globals:
-        return execution_context.execution_globals[name]
+    if name in step_context.step_globals:
+        return step_context.step_globals[name]
 
-    python_builtins = execution_context.execution_globals.get("__builtins__", __builtins__)
+    python_builtins = step_context.step_globals.get("__builtins__", __builtins__)
 
     if isinstance(python_builtins, dict):
         return python_builtins.get(name)

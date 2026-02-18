@@ -310,8 +310,8 @@ def build_runtime_call_and_assignments(
     envelope_variable = ast.Name(id="__nh_envelope__", ctx=ast.Store())
     call_expression = ast.Call(
         func=ast.Attribute(
-            value=ast.Name(id="__nighthawk_orchestrator__", ctx=ast.Load()),
-            attr="run_natural_block",
+            value=ast.Name(id="__nighthawk_runner__", ctx=ast.Load()),
+            attr="run_step",
             ctx=ast.Load(),
         ),
         args=[
@@ -363,10 +363,10 @@ def build_runtime_call_and_assignments(
 
     assigns.append(
         ast.Assign(
-            targets=[ast.Name(id="__nh_execution_outcome__", ctx=ast.Store())],
+            targets=[ast.Name(id="__nh_step_outcome__", ctx=ast.Store())],
             value=ast.Subscript(
                 value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                slice=ast.Constant("execution_outcome"),
+                slice=ast.Constant("step_outcome"),
                 ctx=ast.Load(),
             ),
         )
@@ -376,7 +376,7 @@ def build_runtime_call_and_assignments(
         ast.If(
             test=ast.Compare(
                 left=ast.Attribute(
-                    value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
+                    value=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
                     attr="kind",
                     ctx=ast.Load(),
                 ),
@@ -402,7 +402,7 @@ def build_runtime_call_and_assignments(
                 ast.If(
                     test=ast.Compare(
                         left=ast.Attribute(
-                            value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
+                            value=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
                             attr="kind",
                             ctx=ast.Load(),
                         ),
@@ -415,7 +415,7 @@ def build_runtime_call_and_assignments(
                 ast.If(
                     test=ast.Compare(
                         left=ast.Attribute(
-                            value=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
+                            value=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
                             attr="kind",
                             ctx=ast.Load(),
                         ),
@@ -431,7 +431,7 @@ def build_runtime_call_and_assignments(
     assigns.append(
         ast.If(
             test=ast.Compare(
-                left=ast.Name(id="__nh_execution_outcome__", ctx=ast.Load()),
+                left=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
                 ops=[ast.IsNot()],
                 comparators=[ast.Constant(None)],
             ),

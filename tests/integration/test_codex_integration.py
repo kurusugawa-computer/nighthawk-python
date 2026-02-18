@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel
-from nighthawk.execution.context import ExecutionContext
+from nighthawk.runtime.step_context import StepContext
 
 
 class StructuredOutput(BaseModel):
@@ -28,20 +28,20 @@ def _requires_codex_integration() -> None:
         pytest.skip("Codex integration tests are skipped")
 
 
-def test_codex_natural_block_uses_tool(tmp_path: Path) -> None:
+def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
+    run_configuration = nh.RunConfiguration(model="codex:default")
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=execution_configuration,
-        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
+    environment_value = nh.Environment(
+        run_configuration=run_configuration,
+        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
         workspace_root=tmp_path,
     )
 
-    with nh.environment(environment):
+    with nh.run(environment_value):
 
-        @nh.fn
+        @nh.natural_function
         def test_function() -> str:
             result = ""
             """natural
@@ -54,25 +54,25 @@ def test_codex_natural_block_uses_tool(tmp_path: Path) -> None:
         assert test_function() == "2"
 
 
-def test_codex_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
+def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
+    run_configuration = nh.RunConfiguration(model="codex:default")
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=execution_configuration,
-        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
+    environment_value = nh.Environment(
+        run_configuration=run_configuration,
+        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
         workspace_root=tmp_path,
     )
 
-    with nh.environment(environment):
+    with nh.run(environment_value):
 
         @nh.tool(name="test_operation")
         def test_operation(run_context, *, a: int, b: int) -> int:  # type: ignore[no-untyped-def]
             _ = run_context
             return a + b
 
-        @nh.fn
+        @nh.natural_function
         def test_function() -> int:
             result = 0
             """natural
@@ -86,22 +86,22 @@ def test_codex_natural_block_uses_custom_nh_tool(tmp_path: Path) -> None:
 def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
+    run_configuration = nh.RunConfiguration(model="codex:default")
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=execution_configuration,
-        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
+    environment_value = nh.Environment(
+        run_configuration=run_configuration,
+        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
         workspace_root=tmp_path,
     )
 
-    with nh.environment(environment):
+    with nh.run(environment_value):
         model = CodexModel()
 
-        tool_context = ExecutionContext(
-            execution_id="test_codex_structured_output_via_output_schema",
-            execution_configuration=execution_configuration,
-            execution_globals={"__builtins__": __builtins__},
-            execution_locals={},
+        tool_context = StepContext(
+            step_id="test_codex_structured_output_via_output_schema",
+            run_configuration=run_configuration,
+            step_globals={"__builtins__": __builtins__},
+            step_locals={},
             binding_commit_targets=set(),
         )
 
@@ -109,7 +109,7 @@ def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
 
         structured_agent = Agent(
             model=model,
-            deps_type=ExecutionContext,
+            deps_type=StepContext,
             output_type=StructuredOutput,
         )
 

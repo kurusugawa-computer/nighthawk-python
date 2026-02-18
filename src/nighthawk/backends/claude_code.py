@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
+from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
 
 import tiktoken
@@ -13,11 +14,17 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
-from ..execution.environment import get_environment
+from ..runtime.scoping import get_environment
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
 
 PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
+
+
+def _normalize_timestamp_or_none(value: object) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(tz=datetime.now().astimezone().tzinfo)
 
 
 class ClaudeAgentSdkModelSettings(TypedDict, total=False):
@@ -179,15 +186,15 @@ class ClaudeCodeModel(BackendModelBase):
                 except Exception as exception:
                     from ..tools.contracts import tool_result_failure_json_text
 
-                    execution_configuration = get_environment().execution_configuration
-                    encoding = tiktoken.get_encoding(execution_configuration.tokenizer_encoding)
+                    run_configuration = get_environment().run_configuration
+                    encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
                     result_text = tool_result_failure_json_text(
                         kind="internal",
                         message=str(exception),
                         guidance="The tool boundary wrapper failed. Retry or report this error.",
-                        max_tokens=execution_configuration.context_limits.tool_result_max_tokens,
+                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
                         encoding=encoding,
-                        style=execution_configuration.json_renderer_style,
+                        style=run_configuration.json_renderer_style,
                     )
                 return {"content": [{"type": "text", "text": result_text}]}
 
@@ -273,30 +280,19 @@ class ClaudeCodeModel(BackendModelBase):
         else:
             output_text = json.dumps(structured_output, ensure_ascii=False)
 
-        usage = _normalize_claude_agent_sdk_usage_to_request_usage(result_message.usage)
-
-        provider_details: dict[str, Any] = {
-            "claude_code": {
-                "session_id": result_message.session_id,
-            }
-        }
-
         return ModelResponse(
             parts=[TextPart(content=output_text)],
-            usage=usage,
-            model_name=assistant_model_name or self.model_name,
-            provider_name="claude-code",
-            provider_details=provider_details,
+            model_name=assistant_model_name,
+            timestamp=_normalize_timestamp_or_none(getattr(result_message, "timestamp", None)),
+            usage=_normalize_claude_agent_sdk_usage_to_request_usage(getattr(result_message, "usage", None)),
         )
 
 
-def _single_user_message_stream(prompt_text: str) -> Any:
-    async def iterator():
+def _single_user_message_stream(prompt_text: str):
+    async def generator():
         yield {
             "type": "user",
             "message": {"role": "user", "content": prompt_text},
-            "parent_tool_use_id": None,
-            "session_id": "nighthawk",
         }
 
-    return iterator()
+    return generator()

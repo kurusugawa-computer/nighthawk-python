@@ -5,43 +5,43 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-EXECUTION_OUTCOME_KINDS: tuple[str, ...] = ("pass", "return", "break", "continue", "raise")
+STEP_KINDS: tuple[str, ...] = ("pass", "return", "break", "continue", "raise")
 
-EXECUTION_OUTCOME_KINDS_NON_LOOP: tuple[str, ...] = ("pass", "return", "raise")
+STEP_KINDS_NON_LOOP: tuple[str, ...] = ("pass", "return", "raise")
 
 
-type ExecutionOutcomeKind = Literal["pass", "return", "break", "continue", "raise"]
+type StepKind = Literal["pass", "return", "break", "continue", "raise"]
 
 
 _REFERENCE_PATH_PATTERN = r"^(?!__)[A-Za-z_][A-Za-z0-9_]*(?:\.(?!__)[A-Za-z_][A-Za-z0-9_]*)*$"
 
 
-class PassOutcome(BaseModel):
+class PassStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["pass"]
 
 
-class ReturnOutcome(BaseModel):
+class ReturnStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["return"]
     return_reference_path: str
 
 
-class BreakOutcome(BaseModel):
+class BreakStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["break"]
 
 
-class ContinueOutcome(BaseModel):
+class ContinueStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["continue"]
 
 
-class RaiseOutcome(BaseModel):
+class RaiseStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["raise"]
@@ -49,34 +49,37 @@ class RaiseOutcome(BaseModel):
     raise_error_type: str | None = None
 
 
-type ExecutionOutcome = Annotated[
-    PassOutcome | ReturnOutcome | BreakOutcome | ContinueOutcome | RaiseOutcome,
+# This union is used both for host-side parsing and for providing a JSON schema to the LLM.
+# The JSON schema builder uses a top-level object with a discriminator-like `kind`.
+
+type StepOutcome = Annotated[
+    PassStepOutcome | ReturnStepOutcome | BreakStepOutcome | ContinueStepOutcome | RaiseStepOutcome,
     Field(discriminator="kind"),
 ]
 
 
-def build_execution_outcome_json_schema(
+def build_step_json_schema(
     *,
-    allowed_outcome_kinds: tuple[ExecutionOutcomeKind, ...],
+    allowed_kinds: tuple[StepKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> dict[str, object]:
-    if not allowed_outcome_kinds:
-        raise ValueError("allowed_outcome_kinds must not be empty")
+    if not allowed_kinds:
+        raise ValueError("allowed_kinds must not be empty")
 
     properties: dict[str, object] = {
         "kind": {
             "type": "string",
-            "enum": list(allowed_outcome_kinds),
+            "enum": list(allowed_kinds),
         },
     }
 
-    if "return" in allowed_outcome_kinds:
+    if "return" in allowed_kinds:
         properties["return_reference_path"] = {
             "type": "string",
             "pattern": _REFERENCE_PATH_PATTERN,
         }
 
-    if "raise" in allowed_outcome_kinds:
+    if "raise" in allowed_kinds:
         properties["raise_message"] = {
             "type": "string",
         }
@@ -89,7 +92,7 @@ def build_execution_outcome_json_schema(
 
     schema: dict[str, object] = {
         "type": "object",
-        "title": "ExecutionOutcome",
+        "title": "StepOutcome",
         "properties": properties,
         "required": ["kind"],
         "additionalProperties": False,
@@ -102,30 +105,30 @@ def build_execution_outcome_json_schema(
     return schema
 
 
-def build_execution_outcome_system_prompt_suffix_fragment(
+def build_step_system_prompt_suffix_fragment(
     *,
-    allowed_outcome_kinds: tuple[ExecutionOutcomeKind, ...],
+    allowed_kinds: tuple[StepKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> str:
-    if not allowed_outcome_kinds:
-        raise ValueError("allowed_outcome_kinds must not be empty")
+    if not allowed_kinds:
+        raise ValueError("allowed_kinds must not be empty")
 
-    allowed_kinds_text = ", ".join(f"`{outcome_kind}`" for outcome_kind in allowed_outcome_kinds)
+    allowed_kinds_text = ", ".join(f"`{outcome_kind}`" for outcome_kind in allowed_kinds)
 
     sections: list[str] = []
     sections.append(
         textwrap.dedent(
             f"""\
-            Final output (ExecutionOutcome):
+            Final output (StepOutcome):
             - Output exactly one JSON object and nothing else.
-            - Purpose: tell the host Python runtime what control flow to take AFTER this Natural block.
+            - Purpose: tell the host Python runtime what step to take AFTER this Natural block.
             - `kind` MUST be one of: {allowed_kinds_text}.
             - Output only the fields allowed for the chosen `kind`. Do not include other keys.
             """
         )
     )
 
-    if "pass" in allowed_outcome_kinds:
+    if "pass" in allowed_kinds:
         sections.append(
             textwrap.dedent(
                 """
@@ -137,20 +140,20 @@ def build_execution_outcome_system_prompt_suffix_fragment(
             )
         )
 
-    if "return" in allowed_outcome_kinds:
+    if "return" in allowed_kinds:
         sections.append(
             textwrap.dedent(
                 """
                 - `return`:
                   - Use this ONLY when the Natural program explicitly requires an immediate Python `return` from the surrounding function.
                   - Do NOT use `return` to "return the answer". Most blocks should end with `pass`.
-                  - `return_reference_path` is required and must be a dot-separated identifier path into execution locals.
+                  - `return_reference_path` is required and must be a dot-separated identifier path into step locals.
                   - If you need to return a literal, nh_assign it first, then set `return_reference_path` to that name.
                 """
             )
         )
 
-    if "break" in allowed_outcome_kinds:
+    if "break" in allowed_kinds:
         sections.append(
             textwrap.dedent(
                 """
@@ -161,7 +164,7 @@ def build_execution_outcome_system_prompt_suffix_fragment(
             )
         )
 
-    if "continue" in allowed_outcome_kinds:
+    if "continue" in allowed_kinds:
         sections.append(
             textwrap.dedent(
                 """
@@ -172,7 +175,7 @@ def build_execution_outcome_system_prompt_suffix_fragment(
             )
         )
 
-    if "raise" in allowed_outcome_kinds:
+    if "raise" in allowed_kinds:
         sections.append(
             textwrap.dedent(
                 """

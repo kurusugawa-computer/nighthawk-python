@@ -7,8 +7,8 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.execution.context import ExecutionContext
-from nighthawk.execution.contracts import PassOutcome
+from nighthawk.runtime.step_context import StepContext
+from nighthawk.runtime.step_contract import PassStepOutcome
 
 
 class RuntimeMemory(BaseModel):
@@ -23,43 +23,43 @@ def create_workspace_directories(workspace_root: Path) -> None:
     (workspace_root / "tests").mkdir()
 
 
-def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) -> None:
+def test_docstring_step_executes_first_and_name_is_undefined(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
 
     @dataclass
     class NoopExecutor:
-        def run_natural_block(
+        def run_step(
             self,
             *,
             processed_natural_program: str,
-            execution_context: ExecutionContext,
+            step_context: StepContext,
             binding_names: list[str],
-            allowed_outcome_kinds: tuple[str, ...],
-        ) -> tuple[PassOutcome, dict[str, object]]:
+            allowed_step_kinds: tuple[str, ...],
+        ) -> tuple[PassStepOutcome, dict[str, object]]:
             _ = processed_natural_program
-            _ = execution_context
+            _ = step_context
             _ = binding_names
-            _ = allowed_outcome_kinds
-            return PassOutcome(kind="pass"), {}
+            _ = allowed_step_kinds
+            return PassStepOutcome(kind="pass"), {}
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=NoopExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=NoopExecutor(),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def f() -> int:
             """natural
             <later_value>
             <:result>
-            {"execution_outcome": {"kind": "pass"}, "bindings": {"result": 0}}
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 0}}
             """
             later_value = 123
             _ = later_value
@@ -73,35 +73,35 @@ def test_docstring_block_executes_first_and_name_is_undefined(tmp_path: Path) ->
 def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
 
     @dataclass
     class NoopExecutor:
-        def run_natural_block(
+        def run_step(
             self,
             *,
             processed_natural_program: str,
-            execution_context: "ExecutionContext",
+            step_context: StepContext,
             binding_names: list[str],
-            allowed_outcome_kinds: tuple[str, ...],
-        ) -> tuple[PassOutcome, dict[str, object]]:
+            allowed_step_kinds: tuple[str, ...],
+        ) -> tuple[PassStepOutcome, dict[str, object]]:
             _ = processed_natural_program
-            _ = execution_context
+            _ = step_context
             _ = binding_names
-            _ = allowed_outcome_kinds
-            return PassOutcome(kind="pass"), {}
+            _ = allowed_step_kinds
+            return PassStepOutcome(kind="pass"), {}
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=NoopExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=NoopExecutor(),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def f() -> None:
             """natural
             <missing>
@@ -112,11 +112,11 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
             f()
 
 
-def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool_eval(tmp_path: Path) -> None:
+def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
 
     GLOBAL_NUMBER = NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER
@@ -127,7 +127,7 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.execution.contracts import PassOutcome
+            from nighthawk.runtime.step_contract import PassStepOutcome
             from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
@@ -136,17 +136,17 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 
             assign_tool(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
 
-            return FakeRunResult(PassOutcome(kind="pass"))
+            return FakeRunResult(PassStepOutcome(kind="pass"))
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.AgentExecutor(agent=FakeAgent()),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=nh.AgentStepExecutor(agent=FakeAgent()),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def f() -> int:
             """natural
             <NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER>
@@ -161,8 +161,8 @@ def test_input_binding_globals_are_injected_into_execution_locals_for_agent_tool
 def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
     create_workspace_directories(tmp_path)
 
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
 
     class FakeRunResult:
@@ -171,27 +171,27 @@ def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.execution.contracts import PassOutcome
+            from nighthawk.runtime.step_contract import PassStepOutcome
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
-            return FakeRunResult(PassOutcome(kind="pass"))
+            return FakeRunResult(PassStepOutcome(kind="pass"))
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=nh.AgentExecutor(agent=FakeAgent()),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=nh.AgentStepExecutor(agent=FakeAgent()),
             workspace_root=tmp_path,
         )
     ):
-        from nighthawk.execution.orchestrator import Orchestrator
+        from nighthawk.runtime.runner import Runner
 
-        orchestrator = Orchestrator.from_environment(nh.get_environment())
-        frame = nh.execution.orchestrator.get_caller_frame()  # type: ignore[attr-defined]
+        runner = Runner.from_environment(nh.get_environment())
+        frame = nh.runtime.runner.get_caller_frame()  # type: ignore[attr-defined]
 
-        envelope = orchestrator.run_natural_block(
+        envelope = runner.run_step(
             "Hello.",
             input_binding_names=[],
             output_binding_names=["result"],

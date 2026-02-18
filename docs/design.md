@@ -29,10 +29,10 @@ This file intentionally does not maintain a persistent divergence ledger.
   - Function docstring Natural blocks
   - Inline Natural blocks (standalone string literal statements)
 - Reduce the "LLM is a black box" problem by actively mapping LLM-relevant state into the Python interpreter:
-  - expose a summary of execution locals to the LLM
-  - allow the LLM to synchronize intermediate state into an execution locals mapping during reasoning
+  - expose a summary of step locals to the LLM
+  - allow the LLM to synchronize intermediate state into a step locals mapping during reasoning
   - commit selected state back into Python locals at Natural block boundaries
-- Provide a coherent execution model where all state is ordinary Python values in execution locals, and persistence (if desired) is user-managed via ordinary bindings.
+- Provide a coherent execution model where all state is ordinary Python values in step locals, and persistence (if desired) is user-managed via ordinary bindings.
 
 ## 2. Non-goals
 
@@ -55,12 +55,12 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Natural DSL: the constrained syntax inside a Natural block (token binding plus free-form instructions).
 - Python locals (`python_locals`): the actual Python local variables in the function's frame.
 - Python globals (`python_globals`): the Python module globals for the compiled function.
-- Execution locals (`execution_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
-- Execution globals (`execution_globals`): a limited globals mapping used as the execution environment for LLM expressions.
-- ExecutionContext: a mutable, per-Natural-block object passed to tools and executors.
-  - Required fields include `execution_id` (unique at least within an `ExecutionEnvironment` lifetime) and `execution_configuration`.
-  - Model selection is sourced only from `execution_configuration.model`; `ExecutionContext` does not carry a separate `model` field.
-- Locals summary: a bounded text rendering of selected values from `execution_locals`, included in the LLM prompt.
+- Step locals (`step_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
+- Step globals (`step_globals`): a limited globals mapping used as the execution environment for LLM expressions.
+- StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
+  - Required fields include `step_id` (unique Id for the step) and `run_configuration`.
+  - Model selection is sourced only from `run_configuration.model`; StepContext does not carry a separate `model` field.
+- Locals summary: a bounded text rendering of selected values from `step_locals`, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Outcome: the single, unambiguous result of executing a Natural block.
 - Outcome kind: the required `kind` field on an outcome object. The baseline kinds are `pass`, `return`, `break`, `continue`, and `raise`.
@@ -71,25 +71,25 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 ### 5.1. Decorator
 
-- `nighthawk.fn`
+- `nighthawk.natural_function`
   - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
   - Compilation happens at decoration time, and Natural blocks are executed at function call time.
   - Note: The decorator requires the function source to be available for inspection.
 
 ### 5.2. Configuration
 
-- `Configuration`
-  - `execution_configuration`: configuration for execution.
+- `NighthawkConfiguration`
+  - `run_configuration`: configuration for execution.
 
-- `ExecutionConfiguration`
+- `RunConfiguration`
   - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
     - Examples: `openai-responses:gpt-5.2`, `openai-responses:gpt-5-nano`.
     - Special cases:
       - `claude-code:default` and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
   - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. Default: `o200k_base`.
   - `prompts`: prompt templates used for execution.
-    - `execution_system_prompt_template`: system prompt template that defines the execution protocol.
-    - `execution_user_prompt_template`: full user prompt template including section delimiters.
+    - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
+    - `step_user_prompt_template`: full user prompt template including section delimiters.
   - `context_limits`: limits for rendering dynamic context into the prompt.
   - `context_redaction`: rules for reducing or masking sensitive data in prompt context.
 
@@ -182,9 +182,9 @@ Clarifying note (bindings vs tool targets):
 - Tool targets (for example `nh_assign`) may use dotted paths for attribute mutation.
 - Commit selection remains based on `<:name>` identifiers (top-level names only).
 
-## 8. Orchestrator model
+## 8. Runner model
 
-### 8.1. State layers: python locals and execution locals
+### 8.1. State layers: python locals and step locals
 
 Nighthawk uses multiple state layers.
 
@@ -193,13 +193,13 @@ Nighthawk uses multiple state layers.
 - These are the actual local variables in the executing Python function.
 - After a Natural block finishes, selected values are committed into Python locals so subsequent Python code can read them.
 
-2) Execution locals (`execution_locals`)
+2) Step locals (`step_locals`)
 
-- `execution_locals` is a mapping used as the locals environment for LLM expression evaluation.
+- `step_locals` is a mapping used as the locals environment for LLM expression evaluation.
 - It is initialized at the start of each Natural block execution:
-  - If nested execution exists, start from the outer execution's `execution_locals` values.
+  - If nested execution exists, start from the outer execution's `step_locals` values.
   - Overlay the caller frame's current `python_locals`.
-- During execution, the LLM can update `execution_locals` via tools (Section 8.3).
+- During execution, the LLM can update `step_locals` via tools (Section 8.3).
 - At the end of execution, values for `<:name>` bindings are committed into Python locals.
 
 
@@ -209,7 +209,7 @@ To reduce black-box behavior, Nighthawk includes bounded prompt context sections
 
 Locals summary:
 
-- The prompt includes a rendered view of selected names from `execution_locals`.
+- The prompt includes a rendered view of selected names from `step_locals`.
 - Rendering is bounded by `context_limits` (approximate token budgeting) and may truncate.
 - Rendering applies `context_redaction` allowlists and masking rules.
 
@@ -227,20 +227,20 @@ Provided tools (built-in):
 - Provided tools are always available by default.
 - Provided tools are exposed with names prefixed by `nh_` to reduce collisions.
 
-Tools operate against `execution_locals` and `execution_globals`.
+Tools operate against `step_locals` and `step_globals`.
 
-Decision (execution_globals):
+Decision (step_globals):
 
-- `execution_globals` includes only `__builtins__`.
+- `step_globals` includes only `__builtins__`.
 
-Expressions are evaluated against `execution_globals` + `execution_locals`.
+Expressions are evaluated against `step_globals` + `step_locals`.
 
 Read tools:
 
 - `nh_dir(expression: str) -> str`
 - `nh_help(expression: str) -> str`
 - `nh_eval(expression: str) -> str`
-  - Evaluates a Python expression in `execution_globals` and `execution_locals`.
+  - Evaluates a Python expression in `step_globals` and `step_locals`.
   - Returns JSON text.
 
 Write tool:
@@ -258,14 +258,14 @@ Reserved targets:
 
 Semantics of `nh_assign`:
 
-- Evaluate `expression` as a Python expression using `execution_globals` and `execution_locals`.
+- Evaluate `expression` as a Python expression using `step_globals` and `step_locals`.
 - If `target_path` is a bare `name`:
-  - Assign into `execution_locals[name]`.
+  - Assign into `step_locals[name]`.
   - Validation:
     - If extracted type information is available for the corresponding `<:name>` binding, validate/coerce to that type.
     - Otherwise, assign without validation.
 - If `target_path` is dotted (`name.field...`):
-  - Resolve the root object from `execution_locals[name]`.
+  - Resolve the root object from `step_locals[name]`.
   - Traverse attributes for each intermediate segment.
   - Assign using attribute assignment on the final segment.
   - Validation:
@@ -274,7 +274,7 @@ Semantics of `nh_assign`:
 Commit and mutation notes:
 
 - Commit selection is controlled only by `<:name>` bindings.
-- `<:name>` selects which top-level names are committed from `execution_locals` into Python locals at Natural block boundaries.
+- `<:name>` selects which top-level names are committed from `step_locals` into Python locals at Natural block boundaries.
 - Dotted mutation is independent of `<:name>`.
 
 Write tool return value:
@@ -310,8 +310,8 @@ Outcome kinds:
 - `return`:
   - Return from the surrounding Python function immediately.
   - Payload keys: `kind`, and required `return_reference_path`.
-  - `return_reference_path` must be a dot-separated identifier path into execution locals.
-  - The host resolves `return_reference_path` within execution locals only, using attribute access only.
+  - `return_reference_path` must be a dot-separated identifier path into step locals.
+  - The host resolves `return_reference_path` within step locals only, using attribute access only.
   - The host then validates/coerces the resolved Python value to the function's return type annotation.
 
 - `break` / `continue`:
@@ -382,13 +382,13 @@ Implementation note:
 
 Nighthawk previously supported a "stub backend" as a library feature. This has been removed.
 
-For tests, this repo includes a test-only `StubExecutor` under `tests/execution/stub_executor.py`. It does not call an LLM. Instead, it reads an execution envelope from the Natural program text.
+For tests, this repo includes a test-only `StubExecutor` under `tests/execution/stub_executor.py`. It does not call an LLM. Instead, it reads a step envelope from the Natural program text.
 
 - Parsing rule: inside the Natural block text, stub mode finds the first `{` character and parses the substring starting there as a JSON object.
 - The JSON object must be an envelope with:
-  - `execution_outcome`: an object matching the ExecutionOutcome schema
+  - `step_outcome`: an object matching the StepOutcome schema
   - `bindings`: an object mapping names to values
-- The stub executor returns `execution_outcome` from the envelope.
+- The stub executor returns `step_outcome` from the envelope.
 - The stub executor returns a bindings object filtered to include only names present in the `<:name>` binding list for that Natural block.
 
 ## 9. Return value
@@ -397,27 +397,33 @@ In the simplest docstring pattern, the Python function body returns a variable t
 
 - `return result`
 
-If an execution requests `outcome.type == "return"`, the orchestrator returns the validated return value immediately.
+If a step requests `outcome.kind == "return"`, the runner returns the validated return value immediately.
 
 ## 10. Environment
 
 Nighthawk uses an implicit environment (dynamic scoping) carried via `contextvars.ContextVar`.
 
-The environment is required for execution and contains:
+The environment is required for step execution and contains:
 
-- `execution_configuration` (required): execution configuration.
+- `run_id`: the Id of the outermost environment (trace root).
+- `scope_id`: the Id of the current (possibly nested) run scope.
+- `run_configuration` (required): execution configuration.
 - `workspace_root` (required): base directory for include resolution.
-- `execution_executor` (required): a runner strategy object responsible for executing Natural blocks.
-- `execution_system_prompt_suffix_fragments` and `execution_user_prompt_suffix_fragments`: optional sequences of strings appended to the end of the effective system/user prompts for the duration of a scoped override.
+- `step_executor` (required): a strategy object responsible for executing steps (Natural blocks).
+- `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`: optional sequences of strings appended to the end of the effective system/user prompts for the duration of a scoped override.
 
 API:
 
-- `nighthawk.environment(environment: ExecutionEnvironment)`
-  - Replace/bootstrap. Can be used even when no environment is currently set.
-- `nighthawk.environment_override(...)`
-  - Overlay. Requires an existing environment. Only specified fields are overridden for the duration of the `with`.
+- `nighthawk.run(environment: Environment)`
+  - Replace/bootstrap. Starts a new trace root by generating a new `run_id` and `scope_id`.
+  - Can be used even when no environment is currently set.
+- `nighthawk.scope(...)`
+  - Enter a nested scope within the current run.
+  - Requires an existing environment.
+  - Generates a new `scope_id` (keeps the current `run_id`).
+  - Only specified fields are overridden for the duration of the `with`.
   - Supports appending prompt suffix fragments for system and user prompts.
-- `nighthawk.get_environment() -> ExecutionEnvironment`
+- `nighthawk.get_environment() -> Environment`
   - Get the current environment. Raises if unset.
 
 ## 11. Interpolation (opt-in, f-strings only)
@@ -436,7 +442,7 @@ Natural blocks often need to embed computed values (for example, paths or JSON e
 
 Note:
 
-- This interpolation mechanism is distinct from the `nh_eval` tool. f-string evaluation runs in the normal Python execution context, while `nh_eval` evaluates expressions inside the Natural execution environment (`execution_globals` + `execution_locals`).
+- This interpolation mechanism is distinct from the `nh_eval` tool. f-string evaluation runs in the normal Python execution context, while `nh_eval` evaluates expressions inside the Natural execution environment (`step_globals` + `step_locals`).
 
 Decision:
 
@@ -447,7 +453,7 @@ Decision:
 
 Nighthawk does not define a built-in persistence or memory model.
 
-If you want a long-lived object, define it yourself and bind it as an ordinary Python value (for example, a module global named `memory`). Because expression evaluation and assignment operate on `execution_locals`, the value bound to `memory` behaves like any other local: it can be read via expressions and mutated via dotted assignment targets.
+If you want a long-lived object, define it yourself and bind it as an ordinary Python value (for example, a module global named `memory`). Because expression evaluation and assignment operate on `step_locals`, the value bound to `memory` behaves like any other local: it can be read via expressions and mutated via dotted assignment targets.
 
 ## 13. Error handling
 

@@ -8,15 +8,16 @@ import yaml
 from pydantic import TypeAdapter
 
 from ..errors import ExecutionError
-from .context import (
-    ExecutionContext,
-    get_execution_context_stack,
+from .environment import Environment
+from .scoping import RUN_ID, SCOPE_ID, STEP_ID, span
+from .step_context import (
+    StepContext,
     get_python_cell_scope_stack,
     get_python_name_scope_stack,
-    resolve_name_in_execution_context,
+    get_step_context_stack,
+    resolve_name_in_step_context,
 )
-from .contracts import EXECUTION_OUTCOME_KINDS
-from .environment import ExecutionEnvironment
+from .step_contract import STEP_KINDS
 
 
 def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tuple[str, ...]]:
@@ -77,8 +78,8 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
 
     denied: list[str] = []
     for item in deny_value:
-        if item not in EXECUTION_OUTCOME_KINDS:
-            raise ExecutionError(f"Unknown denied outcome kind: {item}")
+        if item not in STEP_KINDS:
+            raise ExecutionError(f"Unknown denied step kind: {item}")
         if item not in denied:
             denied.append(item)
 
@@ -86,12 +87,12 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
     return instructions_without_frontmatter, tuple(denied)
 
 
-class Orchestrator:
-    def __init__(self, environment: ExecutionEnvironment) -> None:
+class Runner:
+    def __init__(self, environment: Environment) -> None:
         self.environment = environment
 
     @classmethod
-    def from_environment(cls, environment: ExecutionEnvironment) -> "Orchestrator":
+    def from_environment(cls, environment: Environment) -> "Runner":
         return cls(environment)
 
     def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
@@ -101,7 +102,7 @@ class Orchestrator:
         except Exception as e:
             raise ExecutionError(f"Return value validation failed: {e}") from e
 
-    def _resolve_reference_path(self, execution_context: ExecutionContext, return_reference_path: str) -> object:
+    def _resolve_reference_path(self, step_context: StepContext, return_reference_path: str) -> object:
         parts = return_reference_path.split(".")
         if any(part == "" for part in parts):
             raise ExecutionError(f"Invalid return_reference_path: {return_reference_path!r}")
@@ -117,9 +118,9 @@ class Orchestrator:
                 raise ExecutionError(f"Invalid return_reference_path segment (dunder): {part!r}")
 
         root_name = parts[0]
-        if root_name not in execution_context.execution_locals:
+        if root_name not in step_context.step_locals:
             raise ExecutionError(f"Unknown root name in return_reference_path: {root_name}")
-        current = execution_context.execution_locals[root_name]
+        current = step_context.step_locals[root_name]
         remaining = parts[1:]
 
         for part in remaining:
@@ -130,7 +131,7 @@ class Orchestrator:
 
         return current
 
-    def run_natural_block(
+    def run_step(
         self,
         natural_program: str,
         input_binding_names: list[str],
@@ -144,26 +145,26 @@ class Orchestrator:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
-        processed_without_frontmatter, denied_outcome_types = _split_frontmatter_or_none(natural_program)
+        processed_without_frontmatter, denied_step_kinds = _split_frontmatter_or_none(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
 
-        base_allowed_outcome_kinds: list[str] = ["pass", "return", "raise"]
+        base_allowed_kinds: list[str] = ["pass", "return", "raise"]
         if is_in_loop:
-            base_allowed_outcome_kinds.extend(["break", "continue"])
+            base_allowed_kinds.extend(["break", "continue"])
 
-        allowed_outcome_kinds = tuple(outcome_type for outcome_type in base_allowed_outcome_kinds if outcome_type not in denied_outcome_types)
+        allowed_step_kinds = tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
 
-        execution_globals: dict[str, object] = dict(python_globals)
-        if "__builtins__" not in execution_globals:
-            execution_globals["__builtins__"] = __builtins__
+        step_globals: dict[str, object] = dict(python_globals)
+        if "__builtins__" not in step_globals:
+            step_globals["__builtins__"] = __builtins__
 
-        execution_locals: dict[str, object] = {}
+        step_locals: dict[str, object] = {}
 
-        execution_context_stack = get_execution_context_stack()
-        if execution_context_stack:
-            execution_locals.update(execution_context_stack[-1].execution_locals)
+        step_context_stack = get_step_context_stack()
+        if step_context_stack:
+            step_locals.update(step_context_stack[-1].step_locals)
 
-        execution_locals.update(python_locals)
+        step_locals.update(python_locals)
 
         binding_commit_targets = set(output_binding_names)
 
@@ -223,50 +224,58 @@ class Orchestrator:
 
         for binding_name, resolution_kind in resolved_input_binding_name_to_resolution_kind.items():
             if resolution_kind in ("locals", "cell_scope", "name_scope"):
-                execution_locals[binding_name] = resolved_input_binding_name_to_value[binding_name]
+                step_locals[binding_name] = resolved_input_binding_name_to_value[binding_name]
 
-        execution_context = ExecutionContext(
-            execution_id=str(uuid.uuid4()),
-            execution_configuration=self.environment.execution_configuration,
-            execution_globals=execution_globals,
-            execution_locals=execution_locals,
+        step_context = StepContext(
+            step_id=str(uuid.uuid4()),
+            run_configuration=self.environment.run_configuration,
+            step_globals=step_globals,
+            step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
             binding_name_to_type=binding_name_to_type,
         )
 
-        execution_outcome, bindings = self.environment.execution_executor.run_natural_block(
-            processed_natural_program=processed_without_frontmatter,
-            execution_context=execution_context,
-            binding_names=output_binding_names,
-            allowed_outcome_kinds=allowed_outcome_kinds,
-        )
+        with span(
+            "nighthawk.step",
+            **{
+                RUN_ID: self.environment.run_id,
+                SCOPE_ID: self.environment.scope_id,
+                STEP_ID: step_context.step_id,
+            },
+        ):
+            step_outcome, bindings = self.environment.step_executor.run_step(
+                processed_natural_program=processed_without_frontmatter,
+                step_context=step_context,
+                binding_names=output_binding_names,
+                allowed_step_kinds=allowed_step_kinds,
+            )
 
         input_bindings = dict(resolved_input_binding_name_to_value)
 
-        execution_context.execution_locals.update(bindings)
+        step_context.step_locals.update(bindings)
 
-        if execution_outcome.kind not in allowed_outcome_kinds:
-            raise ExecutionError(f"Outcome '{execution_outcome.kind}' is not allowed for this Natural block. Allowed outcome kinds: {allowed_outcome_kinds}")
+        if step_outcome.kind not in allowed_step_kinds:
+            raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
 
         return_value: object | None = None
 
-        if execution_outcome.kind == "return":
-            resolved = self._resolve_reference_path(execution_context, execution_outcome.return_reference_path)
+        if step_outcome.kind == "return":
+            resolved = self._resolve_reference_path(step_context, step_outcome.return_reference_path)
             return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
 
-        if execution_outcome.kind == "raise":
-            if execution_outcome.raise_error_type is not None:
-                raise_error_type_name = execution_outcome.raise_error_type
-                resolved_raise_error_type = resolve_name_in_execution_context(execution_context, raise_error_type_name)
+        if step_outcome.kind == "raise":
+            if step_outcome.raise_error_type is not None:
+                raise_error_type_name = step_outcome.raise_error_type
+                resolved_raise_error_type = resolve_name_in_step_context(step_context, raise_error_type_name)
                 if resolved_raise_error_type is None:
                     raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
                 if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
-                    raise ExecutionError(f"Invalid raise_error_type: {execution_outcome.raise_error_type!r}")
-                raise resolved_raise_error_type(execution_outcome.raise_message)
-            raise ExecutionError(f"Execution failed: {execution_outcome.raise_message}")
+                    raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}")
+                raise resolved_raise_error_type(step_outcome.raise_message)
+            raise ExecutionError(f"Execution failed: {step_outcome.raise_message}")
 
         return {
-            "execution_outcome": execution_outcome,
+            "step_outcome": step_outcome,
             "input_bindings": dict(input_bindings),
             "bindings": bindings,
             "return_value": return_value,

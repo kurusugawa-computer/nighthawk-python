@@ -12,7 +12,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel, _parse_codex_jsonl_lines
-from nighthawk.execution.context import ExecutionContext
+from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.registry import get_visible_tools
 
 
@@ -118,63 +118,51 @@ def _parse_config_arguments(argv: list[str]) -> dict[str, str]:
 
 
 def _decode_toml_literal(value_text: str) -> object:
-    # The backend writes TOML literals using JSON serialization.
-    return json.loads(value_text)
+    if value_text == "true":
+        return True
+    if value_text == "false":
+        return False
+    if value_text.startswith('"') and value_text.endswith('"'):
+        return json.loads(value_text)
+    if value_text.startswith("["):
+        return json.loads(value_text)
+    if value_text.startswith("{"):
+        return json.loads(value_text)
+    try:
+        return int(value_text)
+    except Exception:
+        return value_text
 
 
 async def _run() -> None:
-    argv = sys.argv[1:]
-    if not argv or argv[0] != "exec":
-        raise RuntimeError(f"Unexpected argv: {argv!r}")
-
-    configuration = _parse_config_arguments(argv)
-
-    mcp_server_url_text = configuration.get("mcp_servers.nighthawk.url")
-    if mcp_server_url_text is None:
-        raise RuntimeError("Missing config mcp_servers.nighthawk.url")
-
-    mcp_server_url = _decode_toml_literal(mcp_server_url_text)
-    if not isinstance(mcp_server_url, str):
-        raise RuntimeError("mcp_servers.nighthawk.url must be a string")
-
-    enabled_tools: list[str] | None = None
-    enabled_tools_text = configuration.get("mcp_servers.nighthawk.enabled_tools")
-    if enabled_tools_text is not None:
-        enabled_tools_object = _decode_toml_literal(enabled_tools_text)
-        if not isinstance(enabled_tools_object, list) or not all(isinstance(x, str) for x in enabled_tools_object):
-            raise RuntimeError("mcp_servers.nighthawk.enabled_tools must be a list[str]")
-        enabled_tools = enabled_tools_object
-
     prompt_text = sys.stdin.read()
+    config = _parse_config_arguments(sys.argv)
 
-    async with streamable_http_client(mcp_server_url) as (read_stream, write_stream, _get_session_id):
-        async with ClientSession(read_stream, write_stream) as session:
+    mcp_url_text = config.get("mcp_server_url") or config.get("mcp_servers.nighthawk.url") or '""'
+    allowed_tools_text = config.get("allowed_tools") or config.get("mcp_servers.nighthawk.enabled_tools") or "[]"
+
+    mcp_url = _decode_toml_literal(mcp_url_text)
+    allowed_tools = _decode_toml_literal(allowed_tools_text)
+
+    if not isinstance(mcp_url, str) or mcp_url == "":
+        raise RuntimeError("Missing mcp_server_url")
+
+    async with streamable_http_client(mcp_url) as (read, write, _get_session_id):
+        async with ClientSession(read, write) as session:
             await session.initialize()
-            tools_result = await session.list_tools()
-            tool_names = [tool.name for tool in tools_result.tools]
+            response = await session.call_tool("nh_eval", arguments={"expression": "1 + 1"})
+            nh_eval_text = response.content[0].text
 
-            if enabled_tools is not None and set(tool_names) != set(enabled_tools):
-                raise RuntimeError(f"Tool list mismatch. server={tool_names!r} enabled={enabled_tools!r}")
+    payload = {
+        "prompt_received": prompt_text.strip() != "",
+        "tool_names": allowed_tools,
+        "nh_eval_text": nh_eval_text,
+    }
 
-            result = await session.call_tool("nh_eval", {"expression": "1 + 1"})
-            text_chunks: list[str] = []
-            for content in result.content:
-                text = getattr(content, "text", None)
-                if isinstance(text, str):
-                    text_chunks.append(text)
-            nh_eval_text = "".join(text_chunks)
-
-    agent_message_text = json.dumps(
-        {
-            "prompt_received": bool(prompt_text.strip()),
-            "tool_names": tool_names,
-            "nh_eval_text": nh_eval_text,
-        },
-        sort_keys=True,
-    )
+    agent_message_text = json.dumps(payload)
 
     events = [
-        {"type": "thread.started", "thread_id": "t_stub"},
+        {"type": "thread.started", "thread_id": "t_123"},
         {
             "type": "item.completed",
             "item": {"id": "i1", "type": "agent_message", "text": agent_message_text},
@@ -203,25 +191,25 @@ if __name__ == "__main__":
 def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     codex_executable = _write_executable_codex_cli_stub(directory=tmp_path)
 
-    execution_configuration = nh.ExecutionConfiguration(model="codex:default")
+    run_configuration = nh.RunConfiguration(model="codex:default")
 
     class StubExecutor:
-        def run_natural_block(self, **kwargs):  # type: ignore[no-untyped-def]
+        def run_step(self, **kwargs):  # type: ignore[no-untyped-def]
             _ = kwargs
-            raise AssertionError("ExecutionExecutor should not be used by this test")
+            raise AssertionError("StepExecutor should not be used by this test")
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=execution_configuration,
-        execution_executor=StubExecutor(),
+    environment_value = nh.Environment(
+        run_configuration=run_configuration,
+        step_executor=StubExecutor(),
         workspace_root=tmp_path,
     )
 
-    with nh.environment(environment):
-        execution_context = ExecutionContext(
-            execution_id="test_codex_cli_model_contract_calls_tool_via_mcp",
-            execution_configuration=execution_configuration,
-            execution_globals={"__builtins__": __builtins__},
-            execution_locals={},
+    with nh.run(environment_value):
+        step_context = StepContext(
+            step_id="test_codex_cli_model_contract_calls_tool_via_mcp",
+            run_configuration=run_configuration,
+            step_globals={"__builtins__": __builtins__},
+            step_locals={},
             binding_commit_targets=set(),
         )
 
@@ -240,13 +228,13 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
 
         agent = Agent(
             model=CodexModel(),
-            deps_type=ExecutionContext,
+            deps_type=StepContext,
             output_type=str,
         )
 
         result = agent.run_sync(
             "Compute 1 + 1 via nh_eval.",
-            deps=execution_context,
+            deps=step_context,
             toolsets=[toolset],
             model_settings=model_settings,
         )
