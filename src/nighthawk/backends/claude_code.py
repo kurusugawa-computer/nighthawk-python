@@ -155,8 +155,12 @@ class ClaudeCodeModel(BackendModelBase):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
-        from claude_agent_sdk import ClaudeAgentOptions, SdkMcpTool, create_sdk_mcp_server  # pyright: ignore[reportMissingImports]
-        from claude_agent_sdk import query as claude_agent_sdk_query  # pyright: ignore[reportMissingImports]
+        from claude_agent_sdk import (
+            ClaudeAgentOptions,
+            ClaudeSDKClient,
+            SdkMcpTool,
+            create_sdk_mcp_server,
+        )
         from claude_agent_sdk.types import AssistantMessage, ResultMessage  # pyright: ignore[reportMissingImports]
 
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
@@ -254,13 +258,14 @@ class ClaudeCodeModel(BackendModelBase):
         assistant_model_name: str | None = None
         result_message: ResultMessage | None = None
 
-        prompt_stream = _single_user_message_stream(user_prompt_text)
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(user_prompt_text)
 
-        async for message in claude_agent_sdk_query(prompt=prompt_stream, options=options):
-            if isinstance(message, AssistantMessage):
-                assistant_model_name = message.model
-            elif isinstance(message, ResultMessage):
-                result_message = message
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    assistant_model_name = message.model
+                elif isinstance(message, ResultMessage):
+                    result_message = message
 
         if result_message is None:
             raise UnexpectedModelBehavior("Claude Agent SDK backend did not produce a result message")
@@ -286,13 +291,3 @@ class ClaudeCodeModel(BackendModelBase):
             timestamp=_normalize_timestamp_or_none(getattr(result_message, "timestamp", None)),
             usage=_normalize_claude_agent_sdk_usage_to_request_usage(getattr(result_message, "usage", None)),
         )
-
-
-def _single_user_message_stream(prompt_text: str):
-    async def generator():
-        yield {
-            "type": "user",
-            "message": {"role": "user", "content": prompt_text},
-        }
-
-    return generator()
