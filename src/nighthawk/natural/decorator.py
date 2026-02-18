@@ -6,17 +6,17 @@ import textwrap
 from functools import wraps
 from typing import Any, Callable, TypeVar, cast
 
-from ..execution.context import python_cell_scope, python_name_scope
-from ..execution.environment import get_environment
-from ..execution.orchestrator import Orchestrator
+from ..runtime.runner import Runner
+from ..runtime.scoping import get_environment
+from ..runtime.step_context import python_cell_scope, python_name_scope
 from .blocks import find_natural_blocks
 from .transform import transform_module_ast
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class _OrchestratorProxy:
-    def run_natural_block(
+class _RunnerProxy:
+    def run_step(
         self,
         natural_program: str,
         input_binding_names: list[str],
@@ -31,8 +31,8 @@ class _OrchestratorProxy:
         caller_frame = frame.f_back
 
         current_environment = get_environment()
-        orchestrator = Orchestrator.from_environment(current_environment)
-        return orchestrator.run_natural_block(
+        runner = Runner.from_environment(current_environment)
+        return runner.run_step(
             natural_program,
             input_binding_names,
             output_binding_names,
@@ -43,9 +43,9 @@ class _OrchestratorProxy:
         )
 
 
-def fn(func: F | None = None) -> F:
+def natural_function(func: F | None = None) -> F:
     if func is None:
-        return lambda f: fn(f)  # type: ignore[return-value]
+        return lambda f: natural_function(f)  # type: ignore[return-value]
 
     lines, starting_line_number = inspect.getsourcelines(func)
     source = textwrap.dedent("".join(lines))
@@ -125,7 +125,6 @@ def fn(func: F | None = None) -> F:
     transformed_module = transform_module_ast(original_module, captured_name_tuple=captured_name_tuple)
 
     def build_transformed_factory_module(*, transformed_module: ast.Module) -> ast.Module:
-
         transformed_function_def: ast.FunctionDef | None = None
         for node in transformed_module.body:
             if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
@@ -179,7 +178,7 @@ def fn(func: F | None = None) -> F:
     code = compile(factory_module, filename, "exec")
 
     globals_namespace: dict[str, object] = dict(func.__globals__)
-    globals_namespace["__nighthawk_orchestrator__"] = _OrchestratorProxy()
+    globals_namespace["__nighthawk_runner__"] = _RunnerProxy()
     from .blocks import extract_program as _nh_extract_program
 
     globals_namespace["__nh_extract_program__"] = _nh_extract_program

@@ -13,12 +13,12 @@ class _FakeAgent:
         self.seen_prompts: list[str] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.execution.contracts import PassOutcome
+        from nighthawk.runtime.step_contract import PassStepOutcome
 
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return _FakeRunResult(PassOutcome(kind="pass"))
+        return _FakeRunResult(PassStepOutcome(kind="pass"))
 
 
 G = 1
@@ -26,16 +26,16 @@ G = 1
 
 def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
     agent = _FakeAgent()
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=nh.ExecutionConfiguration(),
-            execution_executor=nh.AgentExecutor(agent=agent),
+    with nh.run(
+        nh.Environment(
+            run_configuration=nh.RunConfiguration(),
+            step_executor=nh.AgentStepExecutor(agent=agent),
             workspace_root=tmp_path,
         )
     ):
         a = 1.0
 
-        @nh.fn
+        @nh.natural_function
         def f() -> None:
             x = 10
             """natural

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-DEFAULT_EXECUTION_SYSTEM_PROMPT_TEMPLATE = """\
+DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE = """\
 You are executing one Nighthawk Natural (NH) DSL block at a specific point inside a running Python function.
 
 Do the work described in <<<NH:PROGRAM>>>.
@@ -23,7 +23,7 @@ Tools and state:
 """
 
 
-DEFAULT_EXECUTION_USER_PROMPT_TEMPLATE = """\
+DEFAULT_STEP_USER_PROMPT_TEMPLATE = """\
 <<<NH:PROGRAM>>>
 $program
 <<<NH:END_PROGRAM>>>
@@ -39,7 +39,7 @@ $globals
 
 
 @dataclass(frozen=True)
-class ExecutionContextLimits:
+class StepContextLimits:
     """Limits for rendering dynamic context into the LLM prompt."""
 
     locals_max_tokens: int = 25000
@@ -54,9 +54,9 @@ class ExecutionContextLimits:
 
 
 @dataclass(frozen=True)
-class ExecutionPrompts:
-    execution_system_prompt_template: str = DEFAULT_EXECUTION_SYSTEM_PROMPT_TEMPLATE
-    execution_user_prompt_template: str = DEFAULT_EXECUTION_USER_PROMPT_TEMPLATE
+class StepPrompts:
+    step_system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
+    step_user_prompt_template: str = DEFAULT_STEP_USER_PROMPT_TEMPLATE
 
 
 def _validate_model_identifier(model: str) -> None:
@@ -69,7 +69,7 @@ type JsonRendererStyle = Literal["strict", "default", "detailed"]
 
 
 @dataclass(frozen=True)
-class ExecutionConfiguration:
+class RunConfiguration:
     model: str = "openai-responses:gpt-5-nano"
 
     def __post_init__(self) -> None:
@@ -79,10 +79,10 @@ class ExecutionConfiguration:
 
     json_renderer_style: JsonRendererStyle = "strict"
 
-    prompts: ExecutionPrompts = field(default_factory=ExecutionPrompts)
-    context_limits: ExecutionContextLimits = field(default_factory=ExecutionContextLimits)
+    prompts: StepPrompts = field(default_factory=StepPrompts)
+    context_limits: StepContextLimits = field(default_factory=StepContextLimits)
 
 
 @dataclass(frozen=True)
-class Configuration:
-    execution_configuration: ExecutionConfiguration
+class NighthawkConfiguration:
+    run_configuration: RunConfiguration

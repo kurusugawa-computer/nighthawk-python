@@ -10,14 +10,14 @@ from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 from ..errors import ToolRegistrationError
-from ..execution.context import ExecutionContext
+from ..runtime.step_context import StepContext
 from .provided import build_provided_tool_definitions
 
 
 @dataclass(frozen=True)
 class ToolDefinition:
     name: str
-    tool: Tool[ExecutionContext]
+    tool: Tool[StepContext]
 
 
 _builtin_tool_definitions: dict[str, ToolDefinition] = {}
@@ -25,8 +25,8 @@ _builtin_tools_registered = False
 
 _global_tool_definitions: dict[str, ToolDefinition] = {}
 
-_environment_scope_stack_var: ContextVar[list[dict[str, ToolDefinition]]] = ContextVar(
-    "nighthawk_environment_tool_scope_stack",
+_tool_scope_stack_var: ContextVar[list[dict[str, ToolDefinition]]] = ContextVar(
+    "nighthawk_tool_scope_stack",
     default=[],
 )
 
@@ -72,7 +72,7 @@ def _visible_tool_definitions() -> dict[str, ToolDefinition]:
     merged: dict[str, ToolDefinition] = dict(_builtin_tool_definitions)
     merged.update(_global_tool_definitions)
 
-    for scope in _environment_scope_stack_var.get():
+    for scope in _tool_scope_stack_var.get():
         merged.update(scope)
 
     for scope in _call_scope_stack_var.get():
@@ -98,25 +98,25 @@ def _register_tool_definition(tool_definition: ToolDefinition, *, overwrite: boo
         _call_scope_stack_var.set(next_stack)
         return
 
-    environment_scope_stack = _environment_scope_stack_var.get()
-    if environment_scope_stack:
-        current_scope = dict(environment_scope_stack[-1])
+    tool_scope_stack = _tool_scope_stack_var.get()
+    if tool_scope_stack:
+        current_scope = dict(tool_scope_stack[-1])
         current_scope[name] = tool_definition
-        next_stack = [*environment_scope_stack[:-1], current_scope]
-        _environment_scope_stack_var.set(next_stack)
+        next_stack = [*tool_scope_stack[:-1], current_scope]
+        _tool_scope_stack_var.set(next_stack)
         return
 
     _global_tool_definitions[name] = tool_definition
 
 
 @contextmanager
-def environment_scope() -> Iterator[None]:
-    current = _environment_scope_stack_var.get()
-    token = _environment_scope_stack_var.set([*current, {}])
+def tool_scope() -> Iterator[None]:
+    current = _tool_scope_stack_var.get()
+    token = _tool_scope_stack_var.set([*current, {}])
     try:
         yield
     finally:
-        _environment_scope_stack_var.reset(token)
+        _tool_scope_stack_var.reset(token)
 
 
 @contextmanager
@@ -129,7 +129,7 @@ def call_scope() -> Iterator[None]:
         _call_scope_stack_var.reset(token)
 
 
-def get_visible_tools() -> list[Tool[ExecutionContext]]:
+def get_visible_tools() -> list[Tool[StepContext]]:
     ensure_builtin_tools_registered()
     visible = dict(_visible_tool_definitions())
     return [definition.tool for definition in visible.values()]
@@ -157,7 +157,7 @@ def tool(
         if resolved_description is None:
             resolved_description = inner.__doc__
 
-        tool_object: Tool[ExecutionContext] = Tool(
+        tool_object: Tool[StepContext] = Tool(
             inner,
             name=tool_name,
             description=resolved_description,
@@ -178,6 +178,6 @@ def reset_global_tools_for_tests() -> None:
     _global_tool_definitions.clear()
 
 
-def require_tool_signature(_run_context: RunContext[ExecutionContext], /) -> None:
+def require_tool_signature(_run_context: RunContext[StepContext], /) -> None:
     _ = _run_context
     raise NotImplementedError

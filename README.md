@@ -63,7 +63,7 @@ Constraints / defaults (current implementation):
 
 Model identifiers:
 
-- `ExecutionConfiguration(model=...)` uses `provider:model`.
+- `RunConfiguration(model=...)` uses `provider:model`.
 - For `claude-code` and `codex`, you can use `:default` to use the backend/provider default model.
   - Examples: `claude-code:default`, `codex:default`.
 
@@ -121,7 +121,7 @@ Cons:
 Pseudo-code example:
 
 ```py
-@nj.fn
+@nh.natural_function
 def calculate_average(numbers):
     """natural
     Consider the values of <numbers> and compute the semantic average as <:result>
@@ -171,7 +171,7 @@ Pseudo-code example:
 def python_average(numbers):
     return sum(numbers) / len(numbers)
 
-@nh.fn
+@nh.natural_function
 def calculate_average(numbers):
     """natural
     Normalize <numbers> into python number list (e.g., [1, 2, ...]).

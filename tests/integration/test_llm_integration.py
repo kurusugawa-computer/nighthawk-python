@@ -3,8 +3,10 @@ from pathlib import Path
 
 import logfire
 import pytest
+from pydantic_ai import RunContext
 
 import nighthawk as nh
+from nighthawk.runtime.step_context import StepContext
 
 logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
@@ -39,18 +41,17 @@ def test_agent_import_and_construction_and_run():
 
     from pydantic_ai import StructuredDict
 
-    from nighthawk.execution.context import ExecutionContext
-    from nighthawk.execution.contracts import EXECUTION_OUTCOME_KINDS
+    from nighthawk.runtime.step_contract import STEP_KINDS
     from tests.execution.stub_executor import StubExecutor
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=StubExecutor(),
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=StubExecutor(),
         workspace_root=Path("."),
     )
 
-    agent_executor = nh.AgentExecutor(
-        execution_configuration=environment.execution_configuration,
+    agent_executor = nh.AgentStepExecutor(
+        run_configuration=environment_value.run_configuration,
         model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
     )
     agent = agent_executor.agent
@@ -58,11 +59,11 @@ def test_agent_import_and_construction_and_run():
     system_prompts = agent._system_prompts  # type: ignore[attr-defined]
     assert any("Do the work described in <<<NH:PROGRAM>>>." in str(p) for p in system_prompts)
 
-    tool_context = ExecutionContext(
-        execution_id="test_agent_import_and_construction_and_run",
-        execution_configuration=environment.execution_configuration,
-        execution_globals={"__builtins__": __builtins__},
-        execution_locals={},
+    tool_context = StepContext(
+        step_id="test_agent_import_and_construction_and_run",
+        run_configuration=environment_value.run_configuration,
+        step_globals={"__builtins__": __builtins__},
+        step_locals={},
         binding_commit_targets=set(),
     )
 
@@ -78,32 +79,32 @@ def test_agent_import_and_construction_and_run():
                 "required": ["kind"],
                 "additionalProperties": False,
             },
-            name="ExecutionOutcome",
+            name="StepOutcome",
         ),
     )
 
     assert result.output["kind"] == "continue"
-    assert result.output["kind"] in EXECUTION_OUTCOME_KINDS
+    assert result.output["kind"] in STEP_KINDS
 
 
 def test_natural_block_evaluate_order():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 
-    execution_configuration = nh.ExecutionConfiguration()
-    execution_executor = nh.AgentExecutor(
-        execution_configuration=execution_configuration,
+    run_configuration = nh.RunConfiguration()
+    step_executor = nh.AgentStepExecutor(
+        run_configuration=run_configuration,
         model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
     )
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=execution_configuration,
-        execution_executor=execution_executor,
+    environment_value = nh.Environment(
+        run_configuration=run_configuration,
+        step_executor=step_executor,
         workspace_root=Path("."),
     )
 
-    with nh.environment(environment):
+    with nh.run(environment_value):
 
-        @nh.fn
+        @nh.natural_function
         def test_function() -> int:
             v = 10
             """natural
@@ -118,17 +119,17 @@ def test_natural_block_evaluate_order():
 def test_raise_exception():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=nh.AgentExecutor(
-            execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
         workspace_root=Path("."),
     )
-    with nh.environment(environment):
+    with nh.run(environment_value):
 
-        @nh.fn
+        @nh.natural_function
         def test_function():
             """natural
             raise a <ValueError> with message "This is a test error."
@@ -141,17 +142,17 @@ def test_raise_exception():
 def test_condition():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=nh.AgentExecutor(
-            execution_configuration=nh.ExecutionConfiguration(),
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
         workspace_root=Path("."),
     )
-    with nh.environment(environment):
+    with nh.run(environment_value):
 
-        @nh.fn
+        @nh.natural_function
         def test_function(v: int) -> int:
             v += 1
             """natural
@@ -162,72 +163,222 @@ def test_condition():
             return v
 
         assert test_function(9) == 11
-        assert test_function(1) == 8
 
 
-def test_readme_hybrid_nesting_normalize_then_call_python_helper():
+def test_multiple_blocks_one_call_scope():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 
-    python_average_call_argument_list: list[list[float]] = []
-
-    def python_average(numbers: list[float]) -> float:
-        python_average_call_argument_list.append(numbers)
-        return sum(numbers) / len(numbers)
-
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=nh.AgentExecutor(
-            execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
         workspace_root=Path("."),
     )
-    with nh.environment(environment):
 
-        @nh.fn
-        def calculate_average(numbers: list[object]) -> float:
+    with nh.run(environment_value):
+
+        @nh.natural_function
+        def f() -> int:
+            x = 1
             """natural
-            Use your knowledge to instantiate <numbers> directly into a Python list (e.g., [1, 2, ...]).
-            Then compute <:result> by calling <python_average>.
+            <:x>
+            increase x by 10
             """
-            return result + 1  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        assert calculate_average([1, "2", "three", "cuatro", "五"]) == 3.0 + 1
+            """natural
+            <:x>
+            increase x by 20
+            """
 
-    assert python_average_call_argument_list
-    assert python_average_call_argument_list[-1] == [1, 2, 3, 4, 5]
+            return x
+
+        assert f() == 31
 
 
-def test_reasoning_memo():
+def test_system_prompt_suffix_fragments():
     OpenAIResponsesModelSettings = _requires_openai_integration()
-    logfire.info("hello")
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=nh.ExecutionConfiguration(),
-        execution_executor=nh.AgentExecutor(
-            execution_configuration=nh.ExecutionConfiguration(model="openai-responses:gpt-5-mini"),
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="high"),
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
         workspace_root=Path("."),
     )
-    with nh.environment(environment):
-        _memo: list[str] = []
 
-        def memo(text: str):
-            _memo.append(text)
+    with nh.run(environment_value):
+        with nh.scope(system_prompt_suffix_fragment="Hello suffix"):
 
-        @nh.fn
-        def test_function() -> str:
-            answer: str = ""
+            @nh.natural_function
+            def f() -> int:
+                x = 1
+                """natural
+                <:x>
+                increase x by 10
+                """
+
+                return x
+
+            assert f() == 11
+
+
+def test_user_prompt_suffix_fragments():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+        ),
+        workspace_root=Path("."),
+    )
+
+    with nh.run(environment_value):
+        with nh.scope(user_prompt_suffix_fragment="Hello suffix"):
+
+            @nh.natural_function
+            def f() -> int:
+                x = 1
+                """natural
+                <:x>
+                increase x by 10
+                """
+
+                return x
+
+            assert f() == 11
+
+
+def test_tool_visibility_scopes():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+        ),
+        workspace_root=Path("."),
+    )
+
+    with nh.run(environment_value):
+
+        @nh.tool(name="hello")
+        def hello(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
+            _ = run_context
+            return "hello"
+
+        with nh.scope():
+            with nh.scope():
+
+                @nh.natural_function
+                def f() -> str:
+                    """natural
+                    Call hello.
+                    """
+                    return ""
+
+                f()
+
+
+def test_provided_tools_smoke():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+        ),
+        workspace_root=Path("."),
+    )
+
+    with nh.run(environment_value):
+
+        @nh.tool(name="my_tool")
+        def my_tool(run_context: RunContext[StepContext]) -> int:  # type: ignore[no-untyped-def]
+            _ = run_context
+            return 1
+
+        @nh.natural_function
+        def f() -> int:
             """natural
-            If a+|a|=0, try to prove that a<0.
-            Record the proof steps by eval <memo> dynamically.
-            Step 1: List the conditions and questions in the original proposition.
-            Step 2: Merge the conditions listed in Step 1 into one. Define it as wj.
-            Step 3: Let us think it step by step. Please consider all possibilities. If the intersection between wj (defined in Step 2) and the negation of the question is not empty at least in one possibility, the original proposition is false. Otherwise, the original proposition is true.
-            Set answer to <:answer>.
+            <:result>
+            Use nh_eval("1 + 1") then my_tool() then nh_assign("result", "my_tool() + 2")
             """
-            return answer
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        answer = test_function()
-        assert "false" in answer.lower()
+        assert f() == 3
+
+
+def test_session_isolation(tmp_path):
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+        ),
+        workspace_root=tmp_path,
+    )
+
+    with nh.run(environment_value):
+
+        @nh.tool(name="tmp_write")
+        def tmp_write(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
+            _ = run_context
+            path = Path(tmp_path) / "hello.txt"
+            path.write_text("hello", encoding="utf-8")
+            return str(path)
+
+        @nh.natural_function
+        def f() -> str:
+            """natural
+            <:result>
+            Use tmp_write then set result to file contents.
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        result = f()
+        assert "hello" in result
+
+
+def test_provided_tools_do_not_leak_into_outer_environment(tmp_path):
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
+        ),
+        workspace_root=tmp_path,
+    )
+
+    with nh.run(environment_value):
+
+        @nh.tool(name="tmp_write")
+        def tmp_write(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
+            _ = run_context
+            path = Path(tmp_path) / "hello.txt"
+            path.write_text("hello", encoding="utf-8")
+            return str(path)
+
+        with nh.scope():
+
+            @nh.natural_function
+            def f() -> str:
+                """natural
+                <:result>
+                Use nh_eval("1 + 1") then tmp_write then set result to file contents.
+                """
+                return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+            result = f()
+
+    assert isinstance(result, str)

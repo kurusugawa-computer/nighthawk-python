@@ -19,9 +19,12 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
 
 ## Design principles
 
-- Avoid premature abstraction: Do not add classes/parameters just for hypothetical reuse; match the current call graph.
+- Avoid premature abstraction: Do not add classes/parameters/utilities for hypothetical reuse; any new abstraction must be used by code in `src/` or `tests/` in the same change (docs examples do not count).
 - Keep identifiers module-private until they are clearly used from outside the module in non-test code. Prefer a leading underscore for internal names; only make names public when there is a real external caller, and export intentionally (for example via __all__).
 - Pydantic-first dependencies: The core library may depend on Pydantic and Pydantic AI as required (non-optional) dependencies.
+- Observability-first dependencies: Prefer `logfire` for tracing and structured observability.
+  - `logfire` is a first-class, non-optional dependency for the core library (same priority as Pydantic/PydanticAI).
+  - Use `logfire.span(...)` for run/scope/step/tool boundaries; do not add other tracing frameworks without explicit approval.
 - Prefer built-ins over reimplementation: Use `pydantic.BaseModel` and built-in features from Pydantic and Pydantic AI aggressively. Avoid re-implementing functionality that either library already provides (e.g., validation, coercion, parsing, schema/serialization, agent/tool abstractions).
 - Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
   - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
@@ -35,6 +38,7 @@ Store ExecPlans under `.agent/execplans/` and filenames must be `YYYYMMDD-<slug>
       - `binding_name_to_field_name_to_value` (nested mapping: binding name -> field name -> value)
       - `binding_types_dict_expression` (a dict-literal expression used to construct a mapping)
   - If existing code violates these naming rules, ask the user how to proceed before doing broad renames across a file or the codebase.
+- Avoid unnecessary subdirectories under `src`; do not add one-off folders that only hold `__init__.py` + a single class without maintainer buy-in.
 - Type aliases: Prefer PEP 695 `type` aliases when introducing new type aliases.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, and thorough edits to the entire codebase and documentation over minimal fixes.
 - ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.

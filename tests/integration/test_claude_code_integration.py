@@ -6,7 +6,7 @@ import pytest
 import nighthawk as nh
 
 
-def test_claude_code_natural_block_uses_tool(tmp_path: Path, monkeypatch) -> None:
+def test_claude_code_natural_step_uses_tool(tmp_path: Path, monkeypatch) -> None:
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
@@ -16,17 +16,17 @@ def test_claude_code_natural_block_uses_tool(tmp_path: Path, monkeypatch) -> Non
     # Claude Code sets CLAUDECODE for nested sessions. Clear it so this integration test can run when invoked from within Claude Code.
     monkeypatch.delenv("CLAUDECODE", raising=False)
 
-    execution_configuration = nh.ExecutionConfiguration(model="claude-code:default")
+    run_configuration = nh.RunConfiguration(model="claude-code:default")
 
-    environment = nh.ExecutionEnvironment(
-        execution_configuration=execution_configuration,
-        execution_executor=nh.AgentExecutor(execution_configuration=execution_configuration),
+    environment_value = nh.Environment(
+        run_configuration=run_configuration,
+        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
         workspace_root=tmp_path,
     )
 
-    with nh.environment(environment):
+    with nh.run(environment_value):
 
-        @nh.fn
+        @nh.natural_function
         def test_function() -> str:
             result = ""
             """natural

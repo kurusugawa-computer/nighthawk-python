@@ -7,7 +7,7 @@ from typing import Any, cast
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
-from ..execution.context import ExecutionContext
+from ..runtime.step_context import StepContext
 from .assignment import assign_tool, eval_expression
 from .contracts import ToolBoundaryFailure
 
@@ -15,14 +15,14 @@ from .contracts import ToolBoundaryFailure
 @dataclass(frozen=True)
 class ProvidedToolDefinition:
     name: str
-    tool: Tool[ExecutionContext]
+    tool: Tool[StepContext]
 
 
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     metadata = {"nighthawk.provided": True}
 
     def nh_assign(
-        run_context: RunContext[ExecutionContext],
+        run_context: RunContext[StepContext],
         target_path: str,
         expression: str,
     ) -> dict[str, Any]:
@@ -32,20 +32,20 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
             expression,
         )
 
-    def nh_eval(run_context: RunContext[ExecutionContext], expression: str) -> object:
+    def nh_eval(run_context: RunContext[StepContext], expression: str) -> object:
         try:
             return eval_expression(run_context.deps, expression)
         except Exception as exception:
             raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
-    def nh_dir(run_context: RunContext[ExecutionContext], expression: str) -> str:
+    def nh_dir(run_context: RunContext[StepContext], expression: str) -> str:
         try:
             value = eval_expression(run_context.deps, expression)
             return "\n".join(builtins.dir(value))
         except Exception as exception:
             raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
-    def nh_help(run_context: RunContext[ExecutionContext], expression: str) -> str:
+    def nh_help(run_context: RunContext[StepContext], expression: str) -> str:
         try:
             value = eval_expression(run_context.deps, expression)
             import pydoc
@@ -58,7 +58,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         ProvidedToolDefinition(
             name="nh_assign",
             tool=cast(
-                Tool[ExecutionContext],
+                Tool[StepContext],
                 Tool(
                     nh_assign,
                     name="nh_assign",
@@ -70,7 +70,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         ProvidedToolDefinition(
             name="nh_eval",
             tool=cast(
-                Tool[ExecutionContext],
+                Tool[StepContext],
                 Tool(
                     nh_eval,
                     name="nh_eval",
@@ -82,7 +82,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         ProvidedToolDefinition(
             name="nh_dir",
             tool=cast(
-                Tool[ExecutionContext],
+                Tool[StepContext],
                 Tool(
                     nh_dir,
                     name="nh_dir",
@@ -94,7 +94,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         ProvidedToolDefinition(
             name="nh_help",
             tool=cast(
-                Tool[ExecutionContext],
+                Tool[StepContext],
                 Tool(
                     nh_help,
                     name="nh_help",

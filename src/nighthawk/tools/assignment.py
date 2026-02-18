@@ -5,14 +5,14 @@ from typing import Any, NoReturn
 from pydantic import BaseModel, TypeAdapter
 
 from ..errors import ToolEvaluationError
-from ..execution.context import ExecutionContext
 from ..json_renderer import to_jsonable_value
+from ..runtime.step_context import StepContext
 from .contracts import ToolBoundaryFailure
 
 
-def eval_expression(execution_context: ExecutionContext, expression: str) -> object:
+def eval_expression(step_context: StepContext, expression: str) -> object:
     try:
-        return eval(expression, execution_context.execution_globals, execution_context.execution_locals)
+        return eval(expression, step_context.step_globals, step_context.step_locals)
     except Exception as e:
         raise ToolEvaluationError(str(e)) from e
 
@@ -65,7 +65,7 @@ def _get_pydantic_field_type(model: BaseModel, field_name: str) -> object | None
 
 
 def assign_tool(
-    execution_context: ExecutionContext,
+    step_context: StepContext,
     target_path: str,
     expression: str,
 ) -> dict[str, Any]:
@@ -76,7 +76,7 @@ def assign_tool(
 
     Notes:
     - Any segment starting with "__" is forbidden.
-    - On success, returns a JSON-serializable payload with keys `target_path`, `execution_locals_revision`, and `updates`.
+    - On success, returns a JSON-serializable payload with keys `target_path`, `step_locals_revision`, and `updates`.
     - On failure, raises ToolBoundaryFailure.
     - The operation is atomic: on any failure, no updates are performed.
     """
@@ -89,7 +89,7 @@ def assign_tool(
         )
 
     try:
-        value = eval_expression(execution_context, expression)
+        value = eval_expression(step_context, expression)
     except Exception as e:
         _raise_execution(
             message=str(e),
@@ -98,7 +98,7 @@ def assign_tool(
 
     if len(parsed_target_path) == 1:
         name = parsed_target_path[0]
-        expected_type = execution_context.binding_name_to_type.get(name)
+        expected_type = step_context.binding_name_to_type.get(name)
 
         if expected_type is not None:
             try:
@@ -110,9 +110,9 @@ def assign_tool(
                     guidance="Fix the value to match the expected type and retry.",
                 )
 
-        execution_context.execution_locals[name] = value
-        execution_context.assigned_binding_names.add(name)
-        execution_context.execution_locals_revision += 1
+        step_context.step_locals[name] = value
+        step_context.assigned_binding_names.add(name)
+        step_context.step_locals_revision += 1
 
         update: dict[str, Any] = {"path": target_path}
 
@@ -120,19 +120,19 @@ def assign_tool(
 
         return {
             "target_path": target_path,
-            "execution_locals_revision": execution_context.execution_locals_revision,
+            "step_locals_revision": step_context.step_locals_revision,
             "updates": [update],
         }
 
     root_name = parsed_target_path[0]
     attribute_path = parsed_target_path[1:]
 
-    if root_name not in execution_context.execution_locals:
+    if root_name not in step_context.step_locals:
         _raise_resolution(
             message=f"Unknown root name: {root_name}",
             guidance="Fix the target path so the referenced root name exists, then retry.",
         )
-    root_object = execution_context.execution_locals[root_name]
+    root_object = step_context.step_locals[root_name]
 
     current_object = root_object
     for attribute in attribute_path[:-1]:
@@ -173,7 +173,7 @@ def assign_tool(
             guidance="Fix the target path so the referenced attributes are assignable, then retry.",
         )
 
-    execution_context.execution_locals_revision += 1
+    step_context.step_locals_revision += 1
 
     update: dict[str, Any] = {"path": target_path}
 
@@ -181,6 +181,6 @@ def assign_tool(
 
     return {
         "target_path": target_path,
-        "execution_locals_revision": execution_context.execution_locals_revision,
+        "step_locals_revision": step_context.step_locals_revision,
         "updates": [update],
     }

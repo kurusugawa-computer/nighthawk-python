@@ -3,23 +3,23 @@ from tests.execution.stub_executor import StubExecutor
 
 
 def test_readme_quick_example_style(tmp_path):
-    configuration = nh.Configuration(
-        execution_configuration=nh.ExecutionConfiguration(),
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
     )
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=configuration.execution_configuration,
-            execution_executor=StubExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=StubExecutor(),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def calculate_average(numbers: list[int]):
             f"""natural
             <numbers>
             <:result>
-            {{"execution_outcome": {{"kind": "pass"}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
+            {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
             """
             return result  # type: ignore  # noqa: F821
 

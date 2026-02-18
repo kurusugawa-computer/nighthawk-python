@@ -13,7 +13,7 @@ from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.backends import build_tool_name_to_handler
-from nighthawk.execution.context import ExecutionContext
+from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.contracts import ToolResultWrapperToolset
 from nighthawk.tools.registry import get_visible_tools, reset_global_tools_for_tests
 
@@ -23,12 +23,12 @@ def _reset_tools() -> None:
     reset_global_tools_for_tests()
 
 
-def _new_execution_context() -> ExecutionContext:
-    return ExecutionContext(
-        execution_id="test_tool_boundary",
-        execution_configuration=nh.ExecutionConfiguration(),
-        execution_globals={"__builtins__": __builtins__},
-        execution_locals={},
+def _new_step_context() -> StepContext:
+    return StepContext(
+        step_id="test_tool_boundary",
+        run_configuration=nh.RunConfiguration(),
+        step_globals={"__builtins__": __builtins__},
+        step_locals={},
         binding_commit_targets=set(),
     )
 
@@ -56,12 +56,12 @@ def test_wrapper_returns_toolresult_success_with_placeholder_for_unknown_value()
 
     agent = Agent(
         model=TestModel(call_tools=["test_unknown_return"], custom_output_text="ok"),
-        deps_type=ExecutionContext,
+        deps_type=StepContext,
         output_type=str,
         toolsets=[toolset],
     )
 
-    result = agent.run_sync("hi", deps=_new_execution_context())
+    result = agent.run_sync("hi", deps=_new_step_context())
 
     tool_return_parts = _tool_return_parts(result)
     assert len(tool_return_parts) == 1
@@ -84,12 +84,12 @@ def test_wrapper_converts_tool_exception_to_toolresult_failure() -> None:
 
     agent = Agent(
         model=TestModel(call_tools=["test_raises"], custom_output_text="ok"),
-        deps_type=ExecutionContext,
+        deps_type=StepContext,
         output_type=str,
         toolsets=[toolset],
     )
 
-    result = agent.run_sync("hi", deps=_new_execution_context())
+    result = agent.run_sync("hi", deps=_new_step_context())
 
     tool_return_parts = _tool_return_parts(result)
     assert len(tool_return_parts) == 1
@@ -108,10 +108,10 @@ def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
         _ = run_context
         return x
 
-    execution_context = _new_execution_context()
+    step_context = _new_step_context()
 
     run_context = RunContext(
-        deps=execution_context,
+        deps=step_context,
         model=TestModel(),
         usage=RunUsage(),
     )

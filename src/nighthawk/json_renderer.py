@@ -13,10 +13,10 @@ type RenderStyle = Literal["strict", "default", "detailed"]
 
 type JsonableValue = dict[str, "JsonableValue"] | list["JsonableValue"] | str | int | float | bool | None
 
-SENTINEL_CYCLE = "<cycle>"
-SENTINEL_NONSERIALIZABLE = "<nonserializable>"
-SENTINEL_FUNCTION = "<function>"
-SENTINEL_EXCEPTION = "<exception>"
+_SENTINEL_CYCLE = "<cycle>"
+_SENTINEL_NONSERIALIZABLE = "<nonserializable>"
+_SENTINEL_FUNCTION = "<function>"
+_SENTINEL_EXCEPTION = "<exception>"
 
 _MINIMUM_OUTPUT = "{}"
 _MINIMUM_OUTPUT_TOKEN_COUNT = len(_MINIMUM_OUTPUT)  # estimate token count roughly
@@ -90,17 +90,17 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
         return value
 
     if isinstance(value, (bytes, bytearray)):
-        return SENTINEL_NONSERIALIZABLE
+        return _SENTINEL_NONSERIALIZABLE
 
     if isinstance(value, type) and issubclass(value, BaseException):
-        return SENTINEL_EXCEPTION
+        return _SENTINEL_EXCEPTION
 
     if callable(value):
-        return SENTINEL_FUNCTION
+        return _SENTINEL_FUNCTION
 
     object_id = id(value)
     if object_id in active_object_id_set:
-        return SENTINEL_CYCLE
+        return _SENTINEL_CYCLE
 
     active_object_id_set.add(object_id)
     try:
@@ -121,9 +121,9 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
         if isinstance(value, Sequence):
             return _sequence_to_jsonable(value, active_object_id_set=active_object_id_set)
 
-        return SENTINEL_NONSERIALIZABLE
+        return _SENTINEL_NONSERIALIZABLE
     except Exception:
-        return SENTINEL_NONSERIALIZABLE
+        return _SENTINEL_NONSERIALIZABLE
     finally:
         active_object_id_set.remove(object_id)
 
@@ -158,7 +158,7 @@ def _sequence_to_jsonable(value: Sequence[object], *, active_object_id_set: set[
     try:
         items = list(value)
     except Exception:
-        return SENTINEL_NONSERIALIZABLE
+        return _SENTINEL_NONSERIALIZABLE
 
     return [_to_jsonable_value_inner(item, active_object_id_set=active_object_id_set) for item in items]
 
@@ -209,8 +209,6 @@ def count_tokens(text: str, encoding: tiktoken.Encoding) -> int:
 
 
 __all__ = [
-    "SENTINEL_CYCLE",
-    "SENTINEL_NONSERIALIZABLE",
     "JsonableValue",
     "RenderStyle",
     "count_tokens",

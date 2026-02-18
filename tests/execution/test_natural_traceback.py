@@ -16,25 +16,25 @@ class _FakeAgent:
         self.seen_prompts: list[str] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.execution.contracts import PassOutcome
+        from nighthawk.runtime.step_contract import PassStepOutcome
 
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return _FakeRunResult(PassOutcome(kind="pass"))
+        return _FakeRunResult(PassStepOutcome(kind="pass"))
 
 
 def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
     agent = _FakeAgent()
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=nh.ExecutionConfiguration(),
-            execution_executor=nh.AgentExecutor(agent=agent),
+    with nh.run(
+        nh.Environment(
+            run_configuration=nh.RunConfiguration(),
+            step_executor=nh.AgentStepExecutor(agent=agent),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def f() -> None:
             """natural
             <missing_name>
@@ -69,15 +69,15 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
 
 def test_natural_traceback_includes_inline_block_line(tmp_path):
     agent = _FakeAgent()
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=nh.ExecutionConfiguration(),
-            execution_executor=nh.AgentExecutor(agent=agent),
+    with nh.run(
+        nh.Environment(
+            run_configuration=nh.RunConfiguration(),
+            step_executor=nh.AgentStepExecutor(agent=agent),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def f() -> None:
             x = 10
             """natural
@@ -129,31 +129,31 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
 
 def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
     class _FailingExecutor:
-        def run_natural_block(
+        def run_step(
             self,
             *,
             processed_natural_program: str,
-            execution_context: object,
+            step_context: object,
             binding_names: list[str],
-            allowed_outcome_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[str, ...],
         ):
             _ = (
                 processed_natural_program,
-                execution_context,
+                step_context,
                 binding_names,
-                allowed_outcome_kinds,
+                allowed_step_kinds,
             )
             raise RuntimeError("Executor failed")
 
-    with nh.environment(
-        nh.ExecutionEnvironment(
-            execution_configuration=nh.ExecutionConfiguration(),
-            execution_executor=_FailingExecutor(),
+    with nh.run(
+        nh.Environment(
+            run_configuration=nh.RunConfiguration(),
+            step_executor=_FailingExecutor(),
             workspace_root=tmp_path,
         )
     ):
 
-        @nh.fn
+        @nh.natural_function
         def f() -> None:
             """natural
             Say hi.

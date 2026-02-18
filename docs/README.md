@@ -36,7 +36,7 @@ This is the intended style. See `docs/design.md` for the specification.
 ```py
 import nighthawk as nh
 
-@nh.fn
+@nh.natural_function
 def calculate_average(numbers):
     """natural
     Consider the values of <numbers> and compute the semantic average as <:result>.
