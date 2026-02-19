@@ -408,7 +408,8 @@ The environment is required for step execution and contains:
 - `run_id`: the Id of the outermost environment (trace root).
 - `scope_id`: the Id of the current (possibly nested) run scope.
 - `run_configuration` (required): execution configuration.
-- `workspace_root` (required): base directory for include resolution.
+- `workspace_root` (required): base directory for include resolution and host file operations.
+- `agent_root` (optional): working directory used for agent execution (for example, Coding Agent backends). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 - `step_executor` (required): a strategy object responsible for executing steps (Natural blocks).
 - `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`: optional sequences of strings appended to the end of the effective system/user prompts for the duration of a scoped override.
 
