@@ -25,7 +25,7 @@ def test_environment_replace_and_getter(tmp_path: Path):
         )
     ):
         environment_value = nh.get_environment()
-        assert environment_value.workspace_root == tmp_path.resolve()
+        assert environment_value.workspace_root == tmp_path
         assert environment_value.run_configuration == configuration.run_configuration
 
     with pytest.raises(NighthawkError):
@@ -49,13 +49,10 @@ def test_scope_workspace_root_nesting(tmp_path: Path):
             workspace_root=root1,
         )
     ):
-        assert nh.get_environment().workspace_root == root1.resolve()
-
+        assert nh.get_environment().workspace_root == root1
         with nh.scope(workspace_root=root2):
-            assert nh.get_environment().workspace_root == root2.resolve()
-
-        assert nh.get_environment().workspace_root == root1.resolve()
-
+            assert nh.get_environment().workspace_root == root2
+        assert nh.get_environment().workspace_root == root1
 
 def test_scope_configuration_replaces_configuration(tmp_path: Path):
     configuration_1 = nh.NighthawkConfiguration(

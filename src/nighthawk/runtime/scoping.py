@@ -52,7 +52,8 @@ def run(environment_value: Environment) -> Iterator[None]:
         environment_value,
         run_id=_generate_id(),
         scope_id=_generate_id(),
-        workspace_root=Path(environment_value.workspace_root).expanduser().resolve(),
+        workspace_root=Path(environment_value.workspace_root),
+        agent_root=(Path(environment_value.agent_root) if environment_value.agent_root is not None else None),
     )
 
     from ..tools.registry import tool_scope
@@ -76,6 +77,7 @@ def run(environment_value: Environment) -> Iterator[None]:
 def scope(
     *,
     workspace_root: str | Path | None = None,
+    agent_root: str | Path | None = None,
     run_configuration: RunConfiguration | None = None,
     step_executor: StepExecutor | None = None,
     system_prompt_suffix_fragment: str | None = None,
@@ -89,8 +91,10 @@ def scope(
         next_environment = replace(next_environment, run_configuration=run_configuration)
 
     if workspace_root is not None:
-        resolved_root = Path(workspace_root).expanduser().resolve()  # type: ignore[arg-type]
-        next_environment = replace(next_environment, workspace_root=resolved_root)
+        next_environment = replace(next_environment, workspace_root=Path(workspace_root))  # type: ignore[arg-type]
+
+    if agent_root is not None:
+        next_environment = replace(next_environment, agent_root=Path(agent_root))  # type: ignore[arg-type]
 
     if step_executor is not None:
         next_environment = replace(next_environment, step_executor=step_executor)

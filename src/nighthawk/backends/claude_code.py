@@ -245,7 +245,7 @@ class ClaudeCodeModel(BackendModelBase):
             seen_allowed_tools.add(tool_name)
 
         try:
-            working_directory = get_environment().workspace_root
+            working_directory = get_environment().agent_root
         except Exception:
             working_directory = None
 
@@ -262,25 +262,29 @@ class ClaudeCodeModel(BackendModelBase):
                 ]
             )
 
-        options = ClaudeAgentOptions(
-            tools={
+        options_keyword_arguments: dict[str, Any] = {
+            "tools": {
                 "type": "preset",
                 "preset": "claude_code",
             },
-            allowed_tools=merged_allowed_tools,
-            system_prompt={
+            "allowed_tools": merged_allowed_tools,
+            "system_prompt": {
                 "type": "preset",
                 "preset": "claude_code",
                 "append": system_prompt_text,
             },
-            mcp_servers={"nighthawk": sdk_server},
-            permission_mode=claude_agent_sdk_model_settings.get("permission_mode", "default"),
-            model=self._model_name,
-            cwd=working_directory,
-            setting_sources=claude_agent_sdk_model_settings.get("setting_sources"),
-            max_turns=claude_agent_sdk_model_settings.get("claude_max_turns", 50),
-            output_format=_build_json_schema_output_format(model_request_parameters),
-        )
+            "mcp_servers": {"nighthawk": sdk_server},
+            "permission_mode": claude_agent_sdk_model_settings.get("permission_mode", "default"),
+            "model": self._model_name,
+            "setting_sources": claude_agent_sdk_model_settings.get("setting_sources"),
+            "max_turns": claude_agent_sdk_model_settings.get("claude_max_turns", 50),
+            "output_format": _build_json_schema_output_format(model_request_parameters),
+        }
+
+        if working_directory is not None:
+            options_keyword_arguments["cwd"] = working_directory
+
+        options = ClaudeAgentOptions(**options_keyword_arguments)
 
         assistant_model_name: str | None = None
         result_message: ResultMessage | None = None

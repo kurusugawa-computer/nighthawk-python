@@ -15,6 +15,7 @@ class Environment:
     run_configuration: RunConfiguration
     step_executor: "StepExecutor"
     workspace_root: Path
+    agent_root: Path | None = None
 
     run_id: str = ""
     scope_id: str = ""

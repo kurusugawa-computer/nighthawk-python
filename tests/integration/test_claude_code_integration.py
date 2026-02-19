@@ -73,6 +73,7 @@ def test_claude_skill() -> None:
             ),
         ),
         workspace_root=workspace_root,
+        agent_root=workspace_root,
     )
     with nh.run(environment):
 

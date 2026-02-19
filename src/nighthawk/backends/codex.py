@@ -446,7 +446,7 @@ class CodexModel(BackendModelBase):
                     codex_cli_arguments.extend(["--output-schema", output_schema_file.name])
 
                 try:
-                    working_directory = get_environment().workspace_root
+                    working_directory = get_environment().agent_root
                 except Exception:
                     working_directory = None
 
