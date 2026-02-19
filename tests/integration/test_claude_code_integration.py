@@ -13,6 +13,12 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
     if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
         pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
 
+    import logfire
+
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_mcp()
+    logfire.instrument_pydantic_ai()
+
     run_configuration = nh.RunConfiguration(model="claude-code:default")
 
     environment_value = nh.Environment(
@@ -42,6 +48,12 @@ def test_claude_skill() -> None:
 
     if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
         pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+
+    import logfire
+
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_mcp()
+    logfire.instrument_pydantic_ai()
 
     from nighthawk.backends.claude_code import ClaudeAgentSdkModelSettings
 

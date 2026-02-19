@@ -12,6 +12,7 @@ from dataclasses import replace
 from typing import Any, TypedDict
 
 import tiktoken
+from opentelemetry import context as otel_context
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -113,10 +114,12 @@ class _McpToolServer:
         tool_name_to_tool_definition: dict[str, ToolDefinition],
         tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
         run_configuration: RunConfiguration,
+        parent_otel_context: Any,
     ) -> None:
         self._tool_name_to_tool_definition = tool_name_to_tool_definition
         self._tool_name_to_handler = tool_name_to_handler
         self._run_configuration = run_configuration
+        self._parent_otel_context = parent_otel_context
 
         self._server: Any | None = None
         self._server_thread: threading.Thread | None = None
@@ -163,36 +166,40 @@ class _McpToolServer:
 
         @mcp_server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
-            from mcp import types as mcp_types
-
-            from ..tools.contracts import tool_result_failure_json_text
-
-            handler = self._tool_name_to_handler.get(name)
-            if handler is None:
-                run_configuration = self._run_configuration
-                result_text = tool_result_failure_json_text(
-                    kind="resolution",
-                    message=f"Unknown tool: {name}",
-                    guidance="Choose a visible tool name and retry.",
-                    max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                    encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
-                    style=run_configuration.json_renderer_style,
-                )
-                return [mcp_types.TextContent(type="text", text=result_text)]
-
+            context_token = otel_context.attach(self._parent_otel_context)
             try:
-                result_text = await handler(arguments)
-            except Exception as exception:
-                run_configuration = self._run_configuration
-                result_text = tool_result_failure_json_text(
-                    kind="internal",
-                    message=str(exception),
-                    guidance="The tool boundary wrapper failed. Retry or report this error.",
-                    max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                    encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
-                    style=run_configuration.json_renderer_style,
-                )
-            return [mcp_types.TextContent(type="text", text=result_text)]
+                from mcp import types as mcp_types
+
+                from ..tools.contracts import tool_result_failure_json_text
+
+                handler = self._tool_name_to_handler.get(name)
+                if handler is None:
+                    run_configuration = self._run_configuration
+                    result_text = tool_result_failure_json_text(
+                        kind="resolution",
+                        message=f"Unknown tool: {name}",
+                        guidance="Choose a visible tool name and retry.",
+                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                        encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
+                        style=run_configuration.json_renderer_style,
+                    )
+                    return [mcp_types.TextContent(type="text", text=result_text)]
+
+                try:
+                    result_text = await handler(arguments)
+                except Exception as exception:
+                    run_configuration = self._run_configuration
+                    result_text = tool_result_failure_json_text(
+                        kind="internal",
+                        message=str(exception),
+                        guidance="The tool boundary wrapper failed. Retry or report this error.",
+                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                        encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
+                        style=run_configuration.json_renderer_style,
+                    )
+                return [mcp_types.TextContent(type="text", text=result_text)]
+            finally:
+                otel_context.detach(context_token)
 
         session_manager = StreamableHTTPSessionManager(app=mcp_server)
         streamable_http_asgi = StreamableHTTPASGIApp(session_manager)
@@ -333,10 +340,12 @@ async def _mcp_tool_server_if_needed(
 
     run_configuration = get_environment().run_configuration
 
+    parent_otel_context = otel_context.get_current()
     server = _McpToolServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,
         tool_name_to_handler=tool_name_to_handler,
         run_configuration=run_configuration,
+        parent_otel_context=parent_otel_context,
     )
     server.start()
 
