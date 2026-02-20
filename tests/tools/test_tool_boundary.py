@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import anyio
 import pytest
+from opentelemetry import context as otel_context
 from pydantic_ai import Agent, RunContext
 from pydantic_ai._run_context import set_current_run_context
 from pydantic_ai.messages import tool_return_ta
@@ -15,6 +18,7 @@ import nighthawk as nh
 from nighthawk.backends import build_tool_name_to_handler
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.contracts import ToolResultWrapperToolset
+from nighthawk.tools.mcp_boundary import call_tool_for_claude_agent_sdk, call_tool_for_low_level_mcp_server
 from nighthawk.tools.registry import get_visible_tools, reset_global_tools_for_tests
 
 
@@ -146,3 +150,67 @@ def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
     retry_text = anyio.run(call_invalid)
     assert isinstance(retry_text, str)
     assert "Fix the errors and try again." in retry_text
+
+
+def test_mcp_boundary_low_level_mcp_server_returns_text_content_and_propagates_otel_context() -> None:
+    parent_otel_context = otel_context.set_value("nighthawk.test", "1", otel_context.get_current())
+
+    async def tool_handler(arguments: dict[str, object]) -> str:
+        assert arguments == {"x": 1}
+        assert otel_context.get_value("nighthawk.test") == "1"
+        return '{"value":2,"error":null}'
+
+    async def call_boundary() -> list[object]:
+        return await call_tool_for_low_level_mcp_server(
+            tool_name="stub_tool",
+            arguments={"x": 1},
+            tool_handler=tool_handler,
+            parent_otel_context=parent_otel_context,
+        )
+
+    content = anyio.run(call_boundary)
+    assert isinstance(content, list)
+    assert len(content) == 1
+    assert getattr(content[0], "type") == "text"
+    assert getattr(content[0], "text") == '{"value":2,"error":null}'
+
+
+def test_mcp_boundary_claude_agent_sdk_returns_text_content() -> None:
+    async def tool_handler(arguments: dict[str, object]) -> str:
+        assert arguments == {"x": 1}
+        return '{"value":2,"error":null}'
+
+    async def call_boundary() -> dict[str, object]:
+        return await call_tool_for_claude_agent_sdk(
+            tool_name="stub_tool",
+            arguments={"x": 1},
+            tool_handler=tool_handler,
+            parent_otel_context=otel_context.get_current(),
+        )
+
+    response = anyio.run(call_boundary)
+    assert response == {"content": [{"type": "text", "text": '{"value":2,"error":null}'}]}
+
+
+def test_mcp_boundary_converts_boundary_exception_to_json_failure_text_without_run_context() -> None:
+    async def tool_handler(arguments: dict[str, object]) -> str:
+        _ = arguments
+        raise RuntimeError("boom")
+
+    async def call_boundary() -> dict[str, object]:
+        return await call_tool_for_claude_agent_sdk(
+            tool_name="stub_tool",
+            arguments={},
+            tool_handler=tool_handler,
+            parent_otel_context=otel_context.get_current(),
+        )
+
+    response = anyio.run(call_boundary)
+    content = response["content"]
+    assert isinstance(content, list)
+    assert len(content) == 1
+    text = content[0]["text"]
+
+    parsed = json.loads(text)
+    assert parsed["value"] is None
+    assert parsed["error"]["kind"] == "internal"

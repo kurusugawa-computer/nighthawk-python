@@ -51,8 +51,7 @@ def test_claude_skill() -> None:
 
     import logfire
 
-    logfire.configure(send_to_logfire="if-token-present")
-    logfire.instrument_mcp()
+    logfire.configure(send_to_logfire="if-token-present", console=logfire.ConsoleOptions(verbose=True))
     logfire.instrument_pydantic_ai()
 
     from nighthawk.backends.claude_code import ClaudeAgentSdkModelSettings
@@ -92,3 +91,59 @@ def test_claude_skill() -> None:
         assert result == str(workspace_root)
         assert (workspace_root / "test.txt").is_file()
         (workspace_root / "test.txt").unlink(missing_ok=True)
+
+
+def test_claude_mcp_callback() -> None:
+    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+        pytest.skip("Integration tests are disabled")
+
+    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
+        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+
+    import logfire
+
+    logfire.configure(
+        send_to_logfire="if-token-present",
+        console=logfire.ConsoleOptions(
+            verbose=True,
+        ),
+    )
+    logfire.instrument_mcp()
+    logfire.instrument_pydantic_ai(
+        event_mode="logs",
+    )
+
+    from nighthawk.backends.claude_code import ClaudeAgentSdkModelSettings
+
+    workspace_root = Path(__file__).absolute().parent / "claude_working_directory"
+
+    configuration = nh.RunConfiguration(model="claude-code:default")
+
+    environment = nh.Environment(
+        run_configuration=configuration,
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=configuration,
+            model_settings=ClaudeAgentSdkModelSettings(
+                permission_mode="bypassPermissions",
+                setting_sources=["project"],
+                claude_allowed_tool_names=("Bash",),
+            ),
+        ),
+        workspace_root=workspace_root,
+        agent_root=workspace_root,
+    )
+    with nh.run(environment):
+
+        @nh.natural_function
+        def test_function():
+            def calc(a, b):
+                return a + b * 8
+
+            """natural
+            ---
+            deny: [pass, raise]
+            ---
+            return the result of the `calc(1,2)` function call.
+            """
+
+        assert test_function() == 17

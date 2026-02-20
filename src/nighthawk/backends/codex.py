@@ -8,11 +8,13 @@ import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from contextvars import copy_context
 from dataclasses import replace
 from typing import Any, TypedDict
 
 import tiktoken
 from opentelemetry import context as otel_context
+from pydantic_ai import RunContext
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -25,6 +27,7 @@ from pydantic_ai.usage import RequestUsage
 
 from ..configuration import RunConfiguration
 from ..runtime.scoping import get_environment
+from ..tools.mcp_boundary import call_tool_for_low_level_mcp_server
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase
 
@@ -115,11 +118,13 @@ class _McpToolServer:
         tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
         run_configuration: RunConfiguration,
         parent_otel_context: Any,
+        parent_run_context: RunContext[Any],
     ) -> None:
         self._tool_name_to_tool_definition = tool_name_to_tool_definition
         self._tool_name_to_handler = tool_name_to_handler
         self._run_configuration = run_configuration
         self._parent_otel_context = parent_otel_context
+        self._parent_run_context = parent_run_context
 
         self._server: Any | None = None
         self._server_thread: threading.Thread | None = None
@@ -166,40 +171,29 @@ class _McpToolServer:
 
         @mcp_server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
-            context_token = otel_context.attach(self._parent_otel_context)
-            try:
-                from mcp import types as mcp_types
+            from mcp import types as mcp_types
 
-                from ..tools.contracts import tool_result_failure_json_text
+            from ..tools.contracts import tool_result_failure_json_text
 
-                handler = self._tool_name_to_handler.get(name)
-                if handler is None:
-                    run_configuration = self._run_configuration
-                    result_text = tool_result_failure_json_text(
-                        kind="resolution",
-                        message=f"Unknown tool: {name}",
-                        guidance="Choose a visible tool name and retry.",
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
-                        style=run_configuration.json_renderer_style,
-                    )
-                    return [mcp_types.TextContent(type="text", text=result_text)]
-
-                try:
-                    result_text = await handler(arguments)
-                except Exception as exception:
-                    run_configuration = self._run_configuration
-                    result_text = tool_result_failure_json_text(
-                        kind="internal",
-                        message=str(exception),
-                        guidance="The tool boundary wrapper failed. Retry or report this error.",
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
-                        style=run_configuration.json_renderer_style,
-                    )
+            handler = self._tool_name_to_handler.get(name)
+            if handler is None:
+                run_configuration = self._run_configuration
+                result_text = tool_result_failure_json_text(
+                    kind="resolution",
+                    message=f"Unknown tool: {name}",
+                    guidance="Choose a visible tool name and retry.",
+                    max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                    encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
+                    style=run_configuration.json_renderer_style,
+                )
                 return [mcp_types.TextContent(type="text", text=result_text)]
-            finally:
-                otel_context.detach(context_token)
+
+            return await call_tool_for_low_level_mcp_server(
+                tool_name=name,
+                arguments=arguments,
+                tool_handler=handler,
+                parent_otel_context=self._parent_otel_context,
+            )
 
         session_manager = StreamableHTTPSessionManager(app=mcp_server)
         streamable_http_asgi = StreamableHTTPASGIApp(session_manager)
@@ -226,7 +220,8 @@ class _McpToolServer:
         def run_server() -> None:
             server.run(sockets=[listening_socket])
 
-        server_thread = threading.Thread(target=run_server, name="nighthawk-mcp-server", daemon=True)
+        context = copy_context()
+        server_thread = threading.Thread(target=context.run, args=(run_server,), name="nighthawk-mcp-server", daemon=True)
         server_thread.start()
 
         self._server = server
@@ -340,12 +335,19 @@ async def _mcp_tool_server_if_needed(
 
     run_configuration = get_environment().run_configuration
 
+    from pydantic_ai._run_context import get_current_run_context
+
     parent_otel_context = otel_context.get_current()
+    parent_run_context = get_current_run_context()
+    if parent_run_context is None:
+        raise RuntimeError("Codex MCP tool server requires an active RunContext")
+
     server = _McpToolServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,
         tool_name_to_handler=tool_name_to_handler,
         run_configuration=run_configuration,
         parent_otel_context=parent_otel_context,
+        parent_run_context=parent_run_context,
     )
     server.start()
 
