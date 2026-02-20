@@ -54,6 +54,7 @@ def test_scope_workspace_root_nesting(tmp_path: Path):
             assert nh.get_environment().workspace_root == root2
         assert nh.get_environment().workspace_root == root1
 
+
 def test_scope_configuration_replaces_configuration(tmp_path: Path):
     configuration_1 = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),

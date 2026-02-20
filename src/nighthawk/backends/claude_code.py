@@ -6,7 +6,7 @@ import textwrap
 from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
 
-import tiktoken
+from opentelemetry import context as otel_context
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -16,6 +16,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..runtime.scoping import get_environment
+from ..tools.mcp_boundary import call_tool_for_claude_agent_sdk
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
 
@@ -185,6 +186,8 @@ class ClaudeCodeModel(BackendModelBase):
 
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 
+        parent_otel_context = otel_context.get_current()
+
         _most_recent_request, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
             messages=messages,
             model_request_parameters=model_request_parameters,
@@ -205,22 +208,12 @@ class ClaudeCodeModel(BackendModelBase):
                 raise UnexpectedModelBehavior(f"Tool definition missing for {tool_name!r}")
 
             async def wrapped_handler(arguments: dict[str, Any], *, tool_handler: ToolHandler = handler) -> dict[str, Any]:
-                try:
-                    result_text = await tool_handler(arguments)
-                except Exception as exception:
-                    from ..tools.contracts import tool_result_failure_json_text
-
-                    run_configuration = get_environment().run_configuration
-                    encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
-                    result_text = tool_result_failure_json_text(
-                        kind="internal",
-                        message=str(exception),
-                        guidance="The tool boundary wrapper failed. Retry or report this error.",
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=encoding,
-                        style=run_configuration.json_renderer_style,
-                    )
-                return {"content": [{"type": "text", "text": result_text}]}
+                return await call_tool_for_claude_agent_sdk(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    tool_handler=tool_handler,
+                    parent_otel_context=parent_otel_context,
+                )
 
             mcp_tools.append(
                 SdkMcpTool(

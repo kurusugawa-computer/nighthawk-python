@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .configuration import NighthawkConfiguration, RunConfiguration
+from .json_renderer import JsonableValue
 from .natural.decorator import natural_function
 from .runtime.environment import Environment
 from .runtime.scoping import get_environment, run, scope
@@ -13,6 +14,7 @@ __all__ = [
     "NighthawkConfiguration",
     "RunConfiguration",
     "Environment",
+    "JsonableValue",
     "get_current_step_context",
     "get_environment",
     "natural_function",

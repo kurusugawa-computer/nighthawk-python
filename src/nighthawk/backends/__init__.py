@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import json
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import Any
 
 import tiktoken
 from pydantic_ai import RunContext
-from pydantic_ai._instrumentation import InstrumentationNames
+from pydantic_ai._run_context import set_current_run_context
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, SystemPromptPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..runtime.tool_calls import run_tool_instrumented
 from ..tools.contracts import (
     ToolBoundaryFailure,
     ToolResult,
@@ -62,8 +61,19 @@ def get_current_run_context_or_none() -> RunContext[Any] | None:
     return get_current_run_context()
 
 
+def get_current_run_context_required() -> RunContext[Any]:
+    from pydantic_ai._run_context import get_current_run_context
+
+    run_context = get_current_run_context()
+    if run_context is None:
+        raise RuntimeError("Nighthawk tool boundaries require an active RunContext")
+    return run_context
+
+
 def generate_tool_call_id() -> str:
-    return str(uuid.uuid4())
+    from ..runtime.tool_calls import generate_tool_call_id as _generate_tool_call_id
+
+    return _generate_tool_call_id()
 
 
 def replace_run_context_for_tool(
@@ -102,15 +112,11 @@ async def build_tool_name_to_handler(
     visible_tools: list[Any],
     backend_label: str,
 ) -> dict[str, ToolHandler]:
-    run_context = get_current_run_context_or_none()
+    run_context = get_current_run_context_required()
 
     toolset = ToolResultWrapperToolset(FunctionToolset(visible_tools))
 
-    tool_name_to_tool: dict[str, Any]
-    if run_context is None:
-        tool_name_to_tool = {}
-    else:
-        tool_name_to_tool = await toolset.get_tools(run_context)
+    tool_name_to_tool = await toolset.get_tools(run_context)
 
     function_tool_names = {tool_definition.name for tool_definition in model_request_parameters.function_tools}
 
@@ -127,142 +133,97 @@ async def build_tool_name_to_handler(
             tool: Any = tool,
         ) -> str:
             tool_call_id = generate_tool_call_id()
+            tool_run_context = replace_run_context_for_tool(
+                run_context,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+            )
 
-            assert run_context is not None
-            include_content = run_context.trace_include_content
-            instrumentation_names = InstrumentationNames.for_version(run_context.instrumentation_version)
+            run_configuration = run_context.deps.run_configuration  # type: ignore[attr-defined]
 
-            span_attributes = {
-                "gen_ai.tool.name": tool_name,
-                "gen_ai.tool.call.id": tool_call_id,
-                **({instrumentation_names.tool_arguments_attr: json.dumps(arguments, default=str)} if include_content else {}),
-                "logfire.msg": f"running tool: {tool_name}",
-                "logfire.json_schema": json.dumps(
-                    {
-                        "type": "object",
-                        "properties": {
-                            **(
-                                {
-                                    instrumentation_names.tool_arguments_attr: {"type": "object"},
-                                    instrumentation_names.tool_result_attr: {"type": "object"},
-                                }
-                                if include_content
-                                else {}
-                            ),
-                            "gen_ai.tool.name": {},
-                            "gen_ai.tool.call.id": {},
-                        },
-                    }
-                ),
-            }
+            async def call() -> str:
+                with set_current_run_context(tool_run_context):
+                    try:
+                        validated_arguments = tool.args_validator.validate_python(arguments)
+                    except Exception as exception:
+                        errors_method = getattr(exception, "errors", None)
+                        if callable(errors_method):
+                            try:
+                                error_details = errors_method(include_url=False, include_context=False)
+                                if isinstance(error_details, list):
+                                    return RetryPromptPart(
+                                        tool_name=tool_name,
+                                        content=error_details,
+                                        tool_call_id=tool_call_id,
+                                    ).model_response()
+                            except Exception:
+                                pass
 
-            with run_context.tracer.start_as_current_span(
-                instrumentation_names.get_tool_span_name(tool_name),
-                attributes=span_attributes,
-            ) as span:
-                try:
-                    validated_arguments = tool.args_validator.validate_python(arguments)
-                except Exception as exception:
-                    errors_method = getattr(exception, "errors", None)
-                    if callable(errors_method):
-                        try:
-                            error_details = errors_method(include_url=False, include_context=False)
-                            if isinstance(error_details, list):
-                                retry_prompt_text = RetryPromptPart(
-                                    tool_name=tool_name,
-                                    content=error_details,
-                                    tool_call_id=tool_call_id,
-                                ).model_response()
-                                if include_content and span.is_recording():
-                                    span.set_attribute(instrumentation_names.tool_result_attr, retry_prompt_text)
-                                return retry_prompt_text
-                        except Exception:
-                            pass
+                        return RetryPromptPart(
+                            tool_name=tool_name,
+                            content=str(exception) or "Invalid tool arguments",
+                            tool_call_id=tool_call_id,
+                        ).model_response()
 
-                    retry_prompt_text = RetryPromptPart(
-                        tool_name=tool_name,
-                        content=str(exception) or "Invalid tool arguments",
-                        tool_call_id=tool_call_id,
-                    ).model_response()
-                    if include_content and span.is_recording():
-                        span.set_attribute(instrumentation_names.tool_result_attr, retry_prompt_text)
-                    return retry_prompt_text
+                    try:
+                        tool_result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
+                    except (ModelRetry, CallDeferred, ApprovalRequired):
+                        raise
+                    except ToolBoundaryFailure as exception:
+                        encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
+                        return tool_result_failure_json_text(
+                            kind=exception.kind,
+                            message=str(exception),
+                            guidance=exception.guidance,
+                            max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                            encoding=encoding,
+                            style=run_configuration.json_renderer_style,
+                        )
+                    except (UserError, UnexpectedModelBehavior) as exception:
+                        encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
+                        return tool_result_failure_json_text(
+                            kind="internal",
+                            message=str(exception),
+                            guidance="The tool backend failed. Retry or report this error.",
+                            max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                            encoding=encoding,
+                            style=run_configuration.json_renderer_style,
+                        )
+                    except Exception as exception:
+                        encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
+                        return tool_result_failure_json_text(
+                            kind="internal",
+                            message=str(exception) or "Tool execution failed",
+                            guidance="The tool execution raised an unexpected error. Retry or report this error.",
+                            max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                            encoding=encoding,
+                            style=run_configuration.json_renderer_style,
+                        )
 
-                tool_run_context = replace_run_context_for_tool(
-                    run_context,
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                )
-
-                try:
-                    tool_result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
-                except (ModelRetry, CallDeferred, ApprovalRequired):
-                    raise
-                except ToolBoundaryFailure as exception:
-                    run_configuration = run_context.deps.run_configuration  # type: ignore[attr-defined]
-                    encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
-                    result_text = tool_result_failure_json_text(
-                        kind=exception.kind,
-                        message=str(exception),
-                        guidance=exception.guidance,
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=encoding,
-                        style=run_configuration.json_renderer_style,
-                    )
-                    if include_content and span.is_recording():
-                        span.set_attribute(instrumentation_names.tool_result_attr, result_text)
-                    return result_text
-                except (UserError, UnexpectedModelBehavior) as exception:
-                    run_configuration = run_context.deps.run_configuration  # type: ignore[attr-defined]
-                    encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
-                    result_text = tool_result_failure_json_text(
-                        kind="internal",
-                        message=str(exception),
-                        guidance="The tool backend failed. Retry or report this error.",
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=encoding,
-                        style=run_configuration.json_renderer_style,
-                    )
-                    if include_content and span.is_recording():
-                        span.set_attribute(instrumentation_names.tool_result_attr, result_text)
-                    return result_text
-                except Exception as exception:
-                    run_configuration = run_context.deps.run_configuration  # type: ignore[attr-defined]
-                    encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
-                    result_text = tool_result_failure_json_text(
-                        kind="internal",
-                        message=str(exception) or "Tool execution failed",
-                        guidance="The tool execution raised an unexpected error. Retry or report this error.",
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=encoding,
-                        style=run_configuration.json_renderer_style,
-                    )
-                    if include_content and span.is_recording():
-                        span.set_attribute(instrumentation_names.tool_result_attr, result_text)
-                    return result_text
-
-                run_configuration = run_context.deps.run_configuration  # type: ignore[attr-defined]
                 encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
 
                 if isinstance(tool_result, ToolResult):
-                    result_text = tool_result_success_json_text(
+                    return tool_result_success_json_text(
                         value=tool_result.value,
                         max_tokens=run_configuration.context_limits.tool_result_max_tokens,
                         encoding=encoding,
                         style=run_configuration.json_renderer_style,
                     )
-                else:
-                    result_text = tool_result_success_json_text(
-                        value=tool_result,
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                        encoding=encoding,
-                        style=run_configuration.json_renderer_style,
-                    )
 
-                if include_content and span.is_recording():
-                    span.set_attribute(instrumentation_names.tool_result_attr, result_text)
+                return tool_result_success_json_text(
+                    value=tool_result,
+                    max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                    encoding=encoding,
+                    style=run_configuration.json_renderer_style,
+                )
 
-                return result_text
+            return await run_tool_instrumented(
+                tool_name=tool_name,
+                arguments=arguments,
+                call=call,
+                run_context=tool_run_context,
+                tool_call_id=tool_call_id,
+            )
 
         tool_name_to_handler[tool_name] = handler
 
