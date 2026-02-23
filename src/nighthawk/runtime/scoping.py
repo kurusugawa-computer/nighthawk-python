@@ -48,9 +48,12 @@ def get_environment() -> Environment:
 
 @contextmanager
 def run(environment_value: Environment) -> Iterator[None]:
+    # if run_id is provided, use it for distributed tracing; otherwise, generate a new one as a bootstrap
+    actual_run_id = environment_value.run_id if environment_value.run_id else _generate_id()
+
     resolved = replace(
         environment_value,
-        run_id=_generate_id(),
+        run_id=actual_run_id,
         scope_id=_generate_id(),
         workspace_root=Path(environment_value.workspace_root),
         agent_root=(Path(environment_value.agent_root) if environment_value.agent_root is not None else None),
