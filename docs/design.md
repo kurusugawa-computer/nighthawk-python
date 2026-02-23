@@ -405,8 +405,8 @@ Nighthawk uses an implicit environment (dynamic scoping) carried via `contextvar
 
 The environment is required for step execution and contains:
 
-- `run_id`: the Id of the outermost environment (trace root).
-- `scope_id`: the Id of the current (possibly nested) run scope.
+- `run_id`: the Id of the outermost environment (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
+- `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
 - `run_configuration` (required): execution configuration.
 - `workspace_root` (required): base directory for include resolution and host file operations.
 - `agent_root` (optional): working directory used for agent execution (for example, Coding Agent backends). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
@@ -416,7 +416,9 @@ The environment is required for step execution and contains:
 API:
 
 - `nighthawk.run(environment: Environment)`
-  - Replace/bootstrap. Starts a new trace root by generating a new `run_id` and `scope_id`.
+  - Replaces the current context environment with the provided environment.
+  - Generates a new `scope_id` for the duration of the `with`.
+  - Maintains the existing `run_id` if present in the provided environment (used for trace propagation across distributed agent boundaries). Generates a new `run_id` (trace root) only if the provided environment has no `run_id`.
   - Can be used even when no environment is currently set.
 - `nighthawk.scope(...)`
   - Enter a nested scope within the current run.
