@@ -18,7 +18,7 @@ import nighthawk as nh
 from nighthawk.backends import build_tool_name_to_handler
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.contracts import ToolResultWrapperToolset
-from nighthawk.tools.mcp_boundary import call_tool_for_claude_agent_sdk, call_tool_for_low_level_mcp_server
+from nighthawk.tools.mcp_boundary import call_tool_for_claude_code, call_tool_for_low_level_mcp_server
 from nighthawk.tools.registry import get_visible_tools, reset_global_tools_for_tests
 
 
@@ -175,13 +175,13 @@ def test_mcp_boundary_low_level_mcp_server_returns_text_content_and_propagates_o
     assert getattr(content[0], "text") == '{"value":2,"error":null}'
 
 
-def test_mcp_boundary_claude_agent_sdk_returns_text_content() -> None:
+def test_mcp_boundary_claude_code_returns_text_content() -> None:
     async def tool_handler(arguments: dict[str, object]) -> str:
         assert arguments == {"x": 1}
         return '{"value":2,"error":null}'
 
     async def call_boundary() -> dict[str, object]:
-        return await call_tool_for_claude_agent_sdk(
+        return await call_tool_for_claude_code(
             tool_name="stub_tool",
             arguments={"x": 1},
             tool_handler=tool_handler,
@@ -198,7 +198,7 @@ def test_mcp_boundary_converts_boundary_exception_to_json_failure_text_without_r
         raise RuntimeError("boom")
 
     async def call_boundary() -> dict[str, object]:
-        return await call_tool_for_claude_agent_sdk(
+        return await call_tool_for_claude_code(
             tool_name="stub_tool",
             arguments={},
             tool_handler=tool_handler,

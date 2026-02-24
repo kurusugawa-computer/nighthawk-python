@@ -58,41 +58,45 @@ def test_claude_skill() -> None:
     logfire.configure(send_to_logfire="if-token-present", console=logfire.ConsoleOptions(verbose=True))
     logfire.instrument_pydantic_ai()
 
-    from nighthawk.backends.claude_code import ClaudeAgentSdkModelSettings
+    from nighthawk.backends.claude_code import ClaudeCodeModelSettings
 
-    workspace_root = Path(__file__).absolute().parent / "claude_working_directory"
-    (workspace_root / "test.txt").unlink(missing_ok=True)
+    working_directory = Path(__file__).absolute().parent / "claude_working_directory"
 
-    configuration = nh.RunConfiguration(model="claude-code:default")
+    try:
+        (working_directory / "test.txt").unlink(missing_ok=True)
 
-    environment = nh.Environment(
-        run_configuration=configuration,
-        step_executor=nh.AgentStepExecutor(
+        configuration = nh.RunConfiguration(model="claude-code:default")
+
+        environment = nh.Environment(
             run_configuration=configuration,
-            model_settings=ClaudeAgentSdkModelSettings(
-                permission_mode="bypassPermissions",
-                setting_sources=["project"],
-                claude_allowed_tool_names=("Skill", "Bash"),
+            step_executor=nh.AgentStepExecutor(
+                run_configuration=configuration,
+                model_settings=ClaudeCodeModelSettings(
+                    permission_mode="bypassPermissions",
+                    setting_sources=["project"],
+                    claude_allowed_tool_names=("Skill", "Bash"),
+                    working_directory=str(working_directory.resolve()),
+                ),
             ),
-        ),
-    )
-    with nh.run(environment):
+        )
+        with nh.run(environment):
 
-        @nh.natural_function
-        def test_function():
-            """natural
-            ---
-            deny: [pass, raise]
-            ---
-            Execute the `hoge` skill.
-            And then, return the result of the `bash -c pwd` command.
-            """
+            @nh.natural_function
+            def test_function():
+                """natural
+                ---
+                deny: [pass, raise]
+                ---
+                Execute the `hoge` skill.
+                Then, without changing the current working directory, return the result of the `bash -c pwd` command.
+                """
 
-        result = test_function()
+            result = test_function()
 
-        assert result == str(workspace_root)
-        assert (workspace_root / "test.txt").is_file()
-        (workspace_root / "test.txt").unlink(missing_ok=True)
+            assert result == str(working_directory)
+            assert (working_directory / "test.txt").is_file()
+    finally:
+        (working_directory / "test.txt").unlink(missing_ok=True)
 
 
 def test_claude_mcp_callback() -> None:
@@ -115,10 +119,7 @@ def test_claude_mcp_callback() -> None:
         event_mode="logs",
     )
 
-    from nighthawk.backends.claude_code import ClaudeAgentSdkModelSettings
-
-    workspace_root = Path(__file__).absolute().parent / "claude_working_directory"
-    _ = workspace_root
+    from nighthawk.backends.claude_code import ClaudeCodeModelSettings
 
     configuration = nh.RunConfiguration(model="claude-code:default")
 
@@ -126,7 +127,7 @@ def test_claude_mcp_callback() -> None:
         run_configuration=configuration,
         step_executor=nh.AgentStepExecutor(
             run_configuration=configuration,
-            model_settings=ClaudeAgentSdkModelSettings(
+            model_settings=ClaudeCodeModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
                 claude_allowed_tool_names=("Bash",),

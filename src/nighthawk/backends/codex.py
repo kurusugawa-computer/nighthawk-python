@@ -47,14 +47,14 @@ class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
         return super().transform(schema)
 
 
-class CodexCliModelSettings(TypedDict, total=False):
+class CodexModelSettings(TypedDict, total=False):
     allowed_tool_names: tuple[str, ...] | None
     codex_executable: str
     working_directory: str
 
 
-def _get_codex_cli_model_settings(model_settings: ModelSettings | None) -> CodexCliModelSettings:
-    default_settings: CodexCliModelSettings = {
+def _get_codex_model_settings(model_settings: ModelSettings | None) -> CodexModelSettings:
+    default_settings: CodexModelSettings = {
         "allowed_tool_names": None,
         "codex_executable": "codex",
         "working_directory": "",
@@ -117,7 +117,7 @@ def _toml_value_text(value: object) -> str:
     raise TypeError(f"Unsupported config value type: {type(value).__name__}")
 
 
-def _build_codex_cli_config_arguments(configuration_overrides: dict[str, object]) -> list[str]:
+def _build_codex_config_arguments(configuration_overrides: dict[str, object]) -> list[str]:
     arguments: list[str] = []
     for key, value in configuration_overrides.items():
         arguments.extend(["--config", f"{key}={_toml_value_text(value)}"])
@@ -377,7 +377,7 @@ async def _mcp_tool_server_if_needed(
 class CodexModel(BackendModelBase):
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
-            backend_label="Codex CLI backend",
+            backend_label="Codex backend",
             profile=ModelProfile(
                 supports_tools=True,
                 supports_json_schema_output=True,
@@ -422,11 +422,11 @@ class CodexModel(BackendModelBase):
             prompt_parts = [p for p in [system_prompt_text, user_prompt_text] if p]
             prompt_text = "\n\n".join(prompt_parts)
 
-            codex_cli_model_settings = _get_codex_cli_model_settings(model_settings)
+            codex_model_settings = _get_codex_model_settings(model_settings)
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
-                configured_allowed_tool_names=codex_cli_model_settings.get("allowed_tool_names"),
+                configured_allowed_tool_names=codex_model_settings.get("allowed_tool_names"),
                 visible_tools=get_visible_tools(),
             )
 
@@ -450,23 +450,23 @@ class CodexModel(BackendModelBase):
                     configuration_overrides["mcp_servers.nighthawk.url"] = mcp_server_url
                     configuration_overrides["mcp_servers.nighthawk.enabled_tools"] = list(allowed_tool_names)
 
-                codex_cli_arguments = [
-                    codex_cli_model_settings.get("codex_executable", "codex"),
+                codex_arguments = [
+                    codex_model_settings.get("codex_executable", "codex"),
                     "exec",
                     "--json",
                     "--skip-git-repo-check",
                 ]
-                codex_cli_arguments.extend(_build_codex_cli_config_arguments(configuration_overrides))
+                codex_arguments.extend(_build_codex_config_arguments(configuration_overrides))
 
                 if output_schema_file is not None:
-                    codex_cli_arguments.extend(["--output-schema", output_schema_file.name])
+                    codex_arguments.extend(["--output-schema", output_schema_file.name])
 
-                working_directory = codex_cli_model_settings.get("working_directory") or ""
+                working_directory = codex_model_settings.get("working_directory") or ""
                 if working_directory:
-                    codex_cli_arguments.extend(["--cd", working_directory])
+                    codex_arguments.extend(["--cd", working_directory])
 
                 process = await asyncio.create_subprocess_exec(
-                    *codex_cli_arguments,
+                    *codex_arguments,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -522,7 +522,7 @@ class CodexModel(BackendModelBase):
         except (UserError, UnexpectedModelBehavior, ValueError):
             raise
         except Exception as exception:
-            raise UnexpectedModelBehavior("Codex CLI backend failed") from exception
+            raise UnexpectedModelBehavior("Codex backend failed") from exception
         finally:
             if output_schema_file is not None:
                 try:
