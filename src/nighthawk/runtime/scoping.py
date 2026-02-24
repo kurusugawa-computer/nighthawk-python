@@ -4,7 +4,6 @@ import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
 import logfire
@@ -30,7 +29,7 @@ def span(span_name: str, /, **attributes: Any) -> Iterator[None]:
 
 
 def _generate_id() -> str:
-    return str(uuid.uuid4())
+    return uuid.uuid4().hex
 
 
 _environment_var: ContextVar[Environment | None] = ContextVar(
@@ -55,8 +54,6 @@ def run(environment_value: Environment) -> Iterator[None]:
         environment_value,
         run_id=actual_run_id,
         scope_id=_generate_id(),
-        workspace_root=Path(environment_value.workspace_root),
-        agent_root=(Path(environment_value.agent_root) if environment_value.agent_root is not None else None),
     )
 
     from ..tools.registry import tool_scope
@@ -79,8 +76,6 @@ def run(environment_value: Environment) -> Iterator[None]:
 @contextmanager
 def scope(
     *,
-    workspace_root: str | Path | None = None,
-    agent_root: str | Path | None = None,
     run_configuration: RunConfiguration | None = None,
     step_executor: StepExecutor | None = None,
     system_prompt_suffix_fragment: str | None = None,
@@ -92,12 +87,6 @@ def scope(
 
     if run_configuration is not None:
         next_environment = replace(next_environment, run_configuration=run_configuration)
-
-    if workspace_root is not None:
-        next_environment = replace(next_environment, workspace_root=Path(workspace_root))  # type: ignore[arg-type]
-
-    if agent_root is not None:
-        next_environment = replace(next_environment, agent_root=Path(agent_root))  # type: ignore[arg-type]
 
     if step_executor is not None:
         next_environment = replace(next_environment, step_executor=step_executor)

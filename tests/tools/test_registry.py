@@ -41,6 +41,7 @@ def test_tool_name_conflict_allows_overwrite_true():
 
 
 def test_tool_defined_in_call_scope_is_not_global(tmp_path):
+    _ = tmp_path
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -66,7 +67,6 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=agent),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -119,7 +119,6 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=agent),
-            workspace_root=tmp_path,
         )
     ):
 

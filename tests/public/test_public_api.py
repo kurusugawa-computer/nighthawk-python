@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 from pydantic import BaseModel
 
@@ -12,7 +10,7 @@ class FakeMemory(BaseModel):
     n: int = 0
 
 
-def test_environment_replace_and_getter(tmp_path: Path):
+def test_environment_replace_and_getter():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -21,41 +19,16 @@ def test_environment_replace_and_getter(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
         environment_value = nh.get_environment()
-        assert environment_value.workspace_root == tmp_path
         assert environment_value.run_configuration == configuration.run_configuration
 
     with pytest.raises(NighthawkError):
         nh.get_environment()
 
 
-def test_scope_workspace_root_nesting(tmp_path: Path):
-    root1 = tmp_path / "root1"
-    root2 = tmp_path / "root2"
-    root1.mkdir()
-    root2.mkdir()
-
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-            workspace_root=root1,
-        )
-    ):
-        assert nh.get_environment().workspace_root == root1
-        with nh.scope(workspace_root=root2):
-            assert nh.get_environment().workspace_root == root2
-        assert nh.get_environment().workspace_root == root1
-
-
-def test_scope_configuration_replaces_configuration(tmp_path: Path):
+def test_scope_configuration_replaces_configuration():
     configuration_1 = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -67,7 +40,6 @@ def test_scope_configuration_replaces_configuration(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration_1.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
         assert nh.get_environment().run_configuration == configuration_1.run_configuration
@@ -80,9 +52,9 @@ def test_scope_configuration_replaces_configuration(tmp_path: Path):
         assert nh.get_environment().run_configuration == configuration_1.run_configuration
 
 
-def test_scope_requires_existing_environment(tmp_path: Path):
+def test_scope_requires_existing_environment():
     with pytest.raises(NighthawkError):
-        with nh.scope(workspace_root=tmp_path):
+        with nh.scope():
             pass
 
 

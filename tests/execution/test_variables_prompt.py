@@ -25,12 +25,12 @@ G = 1
 
 
 def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
+    _ = tmp_path
     agent = _FakeAgent()
     with nh.run(
         nh.Environment(
             run_configuration=nh.RunConfiguration(),
             step_executor=nh.AgentStepExecutor(agent=agent),
-            workspace_root=tmp_path,
         )
     ):
         a = 1.0

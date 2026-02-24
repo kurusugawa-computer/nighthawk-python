@@ -26,6 +26,7 @@ def _locals_section(prompt: str) -> str:
 
 
 def test_globals_markers_present_even_when_empty(tmp_path) -> None:
+    _ = tmp_path
     step_context = _build_step_context(
         python_globals={"__builtins__": builtins},
         python_locals={"x": 10},
@@ -39,7 +40,6 @@ def test_globals_markers_present_even_when_empty(tmp_path) -> None:
         nh.Environment(
             run_configuration=step_context.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-            workspace_root=tmp_path,
         )
     ):
         prompt = build_user_prompt(
@@ -51,6 +51,7 @@ def test_globals_markers_present_even_when_empty(tmp_path) -> None:
 
 
 def test_globals_selection_escaping_and_omission(tmp_path) -> None:
+    _ = tmp_path
     module = type("Module", (), {})()
     module.attr = "value"  # type: ignore[attr-defined]
 
@@ -70,7 +71,6 @@ def test_globals_selection_escaping_and_omission(tmp_path) -> None:
         nh.Environment(
             run_configuration=step_context.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-            workspace_root=tmp_path,
         )
     ):
         prompt = build_user_prompt(
@@ -111,7 +111,6 @@ def test_locals_first_prevents_globals_entry(tmp_path) -> None:
         nh.Environment(
             run_configuration=step_context.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-            workspace_root=tmp_path,
         )
     ):
         prompt = build_user_prompt(processed_natural_program="Use <module.attr>.", step_context=step_context)
@@ -141,7 +140,6 @@ def test_same_reference_is_deduplicated(tmp_path) -> None:
         nh.Environment(
             run_configuration=step_context.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-            workspace_root=tmp_path,
         )
     ):
         prompt = build_user_prompt(
@@ -154,6 +152,7 @@ def test_same_reference_is_deduplicated(tmp_path) -> None:
 
 
 def test_globals_ordering_is_lexicographic_by_top_level_name(tmp_path) -> None:
+    _ = tmp_path
     a_module = type("AModule", (), {})()
     b_module = type("BModule", (), {})()
 
@@ -174,7 +173,6 @@ def test_globals_ordering_is_lexicographic_by_top_level_name(tmp_path) -> None:
         nh.Environment(
             run_configuration=step_context.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-            workspace_root=tmp_path,
         )
     ):
         prompt = build_user_prompt(
@@ -204,7 +202,6 @@ def test_locals_ordering_is_lexicographic_by_name(tmp_path) -> None:
         nh.Environment(
             run_configuration=step_context.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-            workspace_root=tmp_path,
         )
     ):
         prompt = build_user_prompt(

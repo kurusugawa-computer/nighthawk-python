@@ -15,7 +15,6 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
-from ..runtime.scoping import get_environment
 from ..tools.mcp_boundary import call_tool_for_claude_agent_sdk
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
@@ -37,6 +36,7 @@ class ClaudeAgentSdkModelSettings(TypedDict, total=False):
     allowed_tool_names: tuple[str, ...] | None
     claude_allowed_tool_names: tuple[str, ...] | None
     claude_max_turns: int
+    working_directory: str
 
 
 def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeAgentSdkModelSettings:
@@ -46,6 +46,7 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
         "allowed_tool_names": None,
         "claude_allowed_tool_names": None,
         "claude_max_turns": 50,
+        "working_directory": "",
     }
     if model_settings is None:
         return default_settings
@@ -57,6 +58,7 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
     allowed_tool_names_value = model_settings_dict.get("allowed_tool_names")
     claude_allowed_tool_names_value = model_settings_dict.get("claude_allowed_tool_names")
     claude_max_turns_value = model_settings_dict.get("claude_max_turns")
+    working_directory_value = model_settings_dict.get("working_directory")
 
     if not isinstance(permission_mode, str):
         raise UserError("permission_mode must be a string")
@@ -100,12 +102,22 @@ def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -
             raise UserError("claude_max_turns must be greater than 0")
         claude_max_turns = claude_max_turns_value
 
+    if working_directory_value is None:
+        working_directory = ""
+    else:
+        if not isinstance(working_directory_value, str) or working_directory_value.strip() == "":
+            raise UserError("working_directory must be a non-empty string")
+        if not os.path.isabs(working_directory_value):
+            raise UserError("working_directory must be an absolute path")
+        working_directory = working_directory_value
+
     return {
         "permission_mode": cast(PermissionMode, permission_mode),
         "setting_sources": setting_sources,
         "allowed_tool_names": allowed_tool_names,
         "claude_allowed_tool_names": claude_allowed_tool_names,
         "claude_max_turns": claude_max_turns,
+        "working_directory": working_directory,
     }
 
 
@@ -237,10 +249,7 @@ class ClaudeCodeModel(BackendModelBase):
             merged_allowed_tools.append(tool_name)
             seen_allowed_tools.add(tool_name)
 
-        try:
-            working_directory = get_environment().agent_root
-        except Exception:
-            working_directory = None
+        working_directory = claude_agent_sdk_model_settings.get("working_directory") or ""
 
         if allowed_tool_names:
             system_prompt_text = "\n\n".join(
@@ -274,7 +283,7 @@ class ClaudeCodeModel(BackendModelBase):
             "output_format": _build_json_schema_output_format(model_request_parameters),
         }
 
-        if working_directory is not None:
+        if working_directory:
             options_keyword_arguments["cwd"] = working_directory
 
         options = ClaudeAgentOptions(**options_keyword_arguments)

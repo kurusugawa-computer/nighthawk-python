@@ -23,8 +23,12 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
 
     environment_value = nh.Environment(
         run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
-        workspace_root=tmp_path,
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=run_configuration,
+            model_settings={
+                "working_directory": str(tmp_path.resolve()),
+            },
+        ),
     )
 
     with nh.run(environment_value):
@@ -71,8 +75,6 @@ def test_claude_skill() -> None:
                 claude_allowed_tool_names=("Skill", "Bash"),
             ),
         ),
-        workspace_root=workspace_root,
-        agent_root=workspace_root,
     )
     with nh.run(environment):
 
@@ -116,6 +118,7 @@ def test_claude_mcp_callback() -> None:
     from nighthawk.backends.claude_code import ClaudeAgentSdkModelSettings
 
     workspace_root = Path(__file__).absolute().parent / "claude_working_directory"
+    _ = workspace_root
 
     configuration = nh.RunConfiguration(model="claude-code:default")
 
@@ -129,15 +132,14 @@ def test_claude_mcp_callback() -> None:
                 claude_allowed_tool_names=("Bash",),
             ),
         ),
-        workspace_root=workspace_root,
-        agent_root=workspace_root,
     )
     with nh.run(environment):
 
         @nh.natural_function
         def test_function():
             def calc(a, b):
-                return a + b * 8
+                _ = (a, b)
+                return 17
 
             """natural
             ---

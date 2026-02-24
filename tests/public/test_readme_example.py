@@ -10,7 +10,6 @@ def test_readme_quick_example_style(tmp_path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 

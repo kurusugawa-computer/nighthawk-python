@@ -35,8 +35,12 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
 
     environment_value = nh.Environment(
         run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
-        workspace_root=tmp_path,
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=run_configuration,
+            model_settings={
+                "working_directory": str(tmp_path.resolve()),
+            },
+        ),
     )
 
     with nh.run(environment_value):
@@ -61,8 +65,12 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
 
     environment_value = nh.Environment(
         run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
-        workspace_root=tmp_path,
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=run_configuration,
+            model_settings={
+                "working_directory": str(tmp_path.resolve()),
+            },
+        ),
     )
 
     with nh.run(environment_value):
@@ -90,8 +98,12 @@ def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
 
     environment_value = nh.Environment(
         run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(run_configuration=run_configuration),
-        workspace_root=tmp_path,
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=run_configuration,
+            model_settings={
+                "working_directory": str(tmp_path.resolve()),
+            },
+        ),
     )
 
     with nh.run(environment_value):

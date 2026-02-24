@@ -19,14 +19,7 @@ def global_import_file(file_path: Path | str) -> str:
     return '{"step_outcome": {"kind": "pass"}, "bindings": {"result": 20}}'
 
 
-def create_workspace_directories(workspace_root: Path) -> None:
-    (workspace_root / "docs").mkdir()
-    (workspace_root / "tests").mkdir()
-
-
-def test_natural_function_updates_output_binding_via_docstring_step(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_natural_function_updates_output_binding_via_docstring_step():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -52,7 +45,6 @@ def test_natural_function_updates_output_binding_via_docstring_step(tmp_path: Pa
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=AssertingExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -69,9 +61,7 @@ def test_natural_function_updates_output_binding_via_docstring_step(tmp_path: Pa
         assert f(10) == 11
 
 
-def test_stub_return_effect_returns_value_from_return_reference_path(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_stub_return_effect_returns_value_from_return_reference_path():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -79,7 +69,6 @@ def test_stub_return_effect_returns_value_from_return_reference_path(tmp_path: P
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -95,9 +84,7 @@ def test_stub_return_effect_returns_value_from_return_reference_path(tmp_path: P
         assert f() == 11
 
 
-def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_stub_return_effect_invalid_return_value_raises():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -105,7 +92,6 @@ def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -122,9 +108,7 @@ def test_stub_return_effect_invalid_return_value_raises(tmp_path: Path):
             f()
 
 
-def test_stub_return_effect_invalid_return_reference_path_raises(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_stub_return_effect_invalid_return_reference_path_raises():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -132,7 +116,6 @@ def test_stub_return_effect_invalid_return_reference_path_raises(tmp_path: Path)
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -147,9 +130,7 @@ def test_stub_return_effect_invalid_return_reference_path_raises(tmp_path: Path)
             f()
 
 
-def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_stub_continue_effect_skips_following_statements():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -157,7 +138,6 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -175,9 +155,7 @@ def test_stub_continue_effect_skips_following_statements(tmp_path: Path):
         assert f() == 5
 
 
-def test_stub_break_effect_breaks_loop(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_stub_break_effect_breaks_loop():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -185,7 +163,6 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -203,9 +180,7 @@ def test_stub_break_effect_breaks_loop(tmp_path: Path):
         assert f() == 1
 
 
-def test_stub_break_outside_loop_raises(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_stub_break_outside_loop_raises():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -213,7 +188,6 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -228,9 +202,7 @@ def test_stub_break_outside_loop_raises(tmp_path: Path):
             f()
 
 
-def test_docstring_step_is_literal_no_implicit_interpolation(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_docstring_step_is_literal_no_implicit_interpolation():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -259,7 +231,6 @@ def test_docstring_step_is_literal_no_implicit_interpolation(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=recording_executor,
-            workspace_root=tmp_path,
         )
     ):
 
@@ -274,9 +245,7 @@ def test_docstring_step_is_literal_no_implicit_interpolation(tmp_path: Path):
     assert recording_executor.seen_programs == ["This should remain literal: {GLOBAL_NUMBER}\n"]
 
 
-def test_frontmatter_deny_return_rejects_return_step(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_frontmatter_deny_return_rejects_return_step():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -284,7 +253,6 @@ def test_frontmatter_deny_return_rejects_return_step(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -303,9 +271,7 @@ def test_frontmatter_deny_return_rejects_return_step(tmp_path: Path):
             f()
 
 
-def test_frontmatter_deny_return_recognizes_leading_blank_lines(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_frontmatter_deny_return_recognizes_leading_blank_lines():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -313,7 +279,6 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -335,9 +300,7 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines(tmp_path: Path):
             f()
 
 
-def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
-    create_workspace_directories(tmp_path)
-
+def test_frontmatter_deny_return_allows_bindings():
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -345,7 +308,6 @@ def test_frontmatter_deny_return_allows_bindings(tmp_path: Path):
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=StubExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 

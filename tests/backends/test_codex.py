@@ -201,7 +201,6 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     environment_value = nh.Environment(
         run_configuration=run_configuration,
         step_executor=StubExecutor(),
-        workspace_root=tmp_path,
     )
 
     with nh.run(environment_value):
@@ -220,6 +219,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             {
                 "codex_executable": str(codex_executable),
                 "allowed_tool_names": ("nh_eval",),
+                "working_directory": str(tmp_path.resolve()),
             },
         )
 

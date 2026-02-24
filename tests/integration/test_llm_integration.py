@@ -47,7 +47,6 @@ def test_agent_import_and_construction_and_run():
     environment_value = nh.Environment(
         run_configuration=nh.RunConfiguration(),
         step_executor=StubExecutor(),
-        workspace_root=Path("."),
     )
 
     agent_executor = nh.AgentStepExecutor(
@@ -99,7 +98,6 @@ def test_natural_block_evaluate_order():
     environment_value = nh.Environment(
         run_configuration=run_configuration,
         step_executor=step_executor,
-        workspace_root=Path("."),
     )
 
     with nh.run(environment_value):
@@ -125,7 +123,6 @@ def test_raise_exception():
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
-        workspace_root=Path("."),
     )
     with nh.run(environment_value):
 
@@ -148,7 +145,6 @@ def test_condition():
             run_configuration=nh.RunConfiguration(),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
         ),
-        workspace_root=Path("."),
     )
     with nh.run(environment_value):
 
@@ -174,7 +170,6 @@ def test_multiple_blocks_one_call_scope():
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=Path("."),
     )
 
     with nh.run(environment_value):
@@ -206,7 +201,6 @@ def test_system_prompt_suffix_fragments():
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=Path("."),
     )
 
     with nh.run(environment_value):
@@ -234,7 +228,6 @@ def test_user_prompt_suffix_fragments():
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=Path("."),
     )
 
     with nh.run(environment_value):
@@ -262,7 +255,6 @@ def test_tool_visibility_scopes():
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=Path("."),
     )
 
     with nh.run(environment_value):
@@ -294,7 +286,6 @@ def test_provided_tools_smoke():
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=Path("."),
     )
 
     with nh.run(environment_value):
@@ -324,7 +315,6 @@ def test_session_isolation(tmp_path):
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=tmp_path,
     )
 
     with nh.run(environment_value):
@@ -357,7 +347,6 @@ def test_provided_tools_do_not_leak_into_outer_environment(tmp_path):
             run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
             model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
         ),
-        workspace_root=tmp_path,
     )
 
     with nh.run(environment_value):
