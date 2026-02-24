@@ -66,7 +66,7 @@ async def _call_tool_handler_result_text(
         otel_context.detach(context_token)
 
 
-async def call_tool_for_claude_agent_sdk(
+async def call_tool_for_claude_code(
     *,
     tool_name: str,
     arguments: dict[str, object],
@@ -115,6 +115,6 @@ async def call_tool_for_low_level_mcp_server(
 
 
 __all__ = [
-    "call_tool_for_claude_agent_sdk",
+    "call_tool_for_claude_code",
     "call_tool_for_low_level_mcp_server",
 ]

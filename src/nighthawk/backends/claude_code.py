@@ -15,7 +15,7 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
-from ..tools.mcp_boundary import call_tool_for_claude_agent_sdk
+from ..tools.mcp_boundary import call_tool_for_claude_code
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
 
@@ -30,7 +30,7 @@ def _normalize_timestamp_or_none(value: object) -> datetime:
     return datetime.now(tz=datetime.now().astimezone().tzinfo)
 
 
-class ClaudeAgentSdkModelSettings(TypedDict, total=False):
+class ClaudeCodeModelSettings(TypedDict, total=False):
     permission_mode: PermissionMode
     setting_sources: list[SettingSource] | None
     allowed_tool_names: tuple[str, ...] | None
@@ -39,8 +39,8 @@ class ClaudeAgentSdkModelSettings(TypedDict, total=False):
     working_directory: str
 
 
-def _get_claude_agent_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeAgentSdkModelSettings:
-    default_settings: ClaudeAgentSdkModelSettings = {
+def _get_claude_code_model_settings(model_settings: ModelSettings | None) -> ClaudeCodeModelSettings:
+    default_settings: ClaudeCodeModelSettings = {
         "permission_mode": "default",
         "setting_sources": None,
         "allowed_tool_names": None,
@@ -135,7 +135,7 @@ def _build_json_schema_output_format(model_request_parameters: ModelRequestParam
     return {"type": "json_schema", "schema": schema}
 
 
-def _normalize_claude_agent_sdk_usage_to_request_usage(usage: object) -> RequestUsage:
+def _normalize_claude_code_usage_to_request_usage(usage: object) -> RequestUsage:
     request_usage = RequestUsage()
     if not isinstance(usage, dict):
         return request_usage
@@ -162,7 +162,7 @@ def _normalize_claude_agent_sdk_usage_to_request_usage(usage: object) -> Request
 class ClaudeCodeModel(BackendModelBase):
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
-            backend_label="Claude Agent SDK backend",
+            backend_label="Claude Code backend",
             profile=ModelProfile(
                 supports_tools=True,
                 supports_json_schema_output=True,
@@ -205,11 +205,11 @@ class ClaudeCodeModel(BackendModelBase):
             model_request_parameters=model_request_parameters,
         )
 
-        claude_agent_sdk_model_settings = _get_claude_agent_sdk_model_settings(model_settings)
+        claude_code_model_settings = _get_claude_code_model_settings(model_settings)
 
         tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
             model_request_parameters=model_request_parameters,
-            configured_allowed_tool_names=claude_agent_sdk_model_settings.get("allowed_tool_names"),
+            configured_allowed_tool_names=claude_code_model_settings.get("allowed_tool_names"),
             visible_tools=get_visible_tools(),
         )
 
@@ -220,7 +220,7 @@ class ClaudeCodeModel(BackendModelBase):
                 raise UnexpectedModelBehavior(f"Tool definition missing for {tool_name!r}")
 
             async def wrapped_handler(arguments: dict[str, Any], *, tool_handler: ToolHandler = handler) -> dict[str, Any]:
-                return await call_tool_for_claude_agent_sdk(
+                return await call_tool_for_claude_code(
                     tool_name=tool_name,
                     arguments=arguments,
                     tool_handler=tool_handler,
@@ -240,7 +240,7 @@ class ClaudeCodeModel(BackendModelBase):
 
         allowed_tools_for_claude = [f"mcp__nighthawk__{tool_name}" for tool_name in allowed_tool_names]
 
-        claude_allowed_tool_names = claude_agent_sdk_model_settings.get("claude_allowed_tool_names") or ()
+        claude_allowed_tool_names = claude_code_model_settings.get("claude_allowed_tool_names") or ()
         merged_allowed_tools: list[str] = []
         seen_allowed_tools: set[str] = set()
         for tool_name in [*claude_allowed_tool_names, *allowed_tools_for_claude]:
@@ -249,7 +249,7 @@ class ClaudeCodeModel(BackendModelBase):
             merged_allowed_tools.append(tool_name)
             seen_allowed_tools.add(tool_name)
 
-        working_directory = claude_agent_sdk_model_settings.get("working_directory") or ""
+        working_directory = claude_code_model_settings.get("working_directory") or ""
 
         if allowed_tool_names:
             system_prompt_text = "\n\n".join(
@@ -276,10 +276,10 @@ class ClaudeCodeModel(BackendModelBase):
                 "append": system_prompt_text,
             },
             "mcp_servers": {"nighthawk": sdk_server},
-            "permission_mode": claude_agent_sdk_model_settings.get("permission_mode", "default"),
+            "permission_mode": claude_code_model_settings.get("permission_mode", "default"),
             "model": self._model_name,
-            "setting_sources": claude_agent_sdk_model_settings.get("setting_sources"),
-            "max_turns": claude_agent_sdk_model_settings.get("claude_max_turns", 50),
+            "setting_sources": claude_code_model_settings.get("setting_sources"),
+            "max_turns": claude_code_model_settings.get("claude_max_turns", 50),
             "output_format": _build_json_schema_output_format(model_request_parameters),
         }
 
@@ -308,19 +308,19 @@ class ClaudeCodeModel(BackendModelBase):
                 os.environ["CLAUDECODE"] = claude_code_nested_environment_value
 
         if result_message is None:
-            raise UnexpectedModelBehavior("Claude Agent SDK backend did not produce a result message")
+            raise UnexpectedModelBehavior("Claude Code backend did not produce a result message")
 
         if result_message.is_error:
-            error_text = result_message.result or "Claude Agent SDK backend reported an error"
+            error_text = result_message.result or "Claude Code backend reported an error"
             raise UnexpectedModelBehavior(str(error_text))
 
         structured_output = result_message.structured_output
         if structured_output is None:
             if model_request_parameters.output_object is not None:
-                raise UnexpectedModelBehavior("Claude Agent SDK backend did not return structured output")
+                raise UnexpectedModelBehavior("Claude Code backend did not return structured output")
 
             if result_message.result is None:
-                raise UnexpectedModelBehavior("Claude Agent SDK backend did not return text output")
+                raise UnexpectedModelBehavior("Claude Code backend did not return text output")
             output_text = result_message.result
         else:
             output_text = json.dumps(structured_output, ensure_ascii=False)
@@ -329,5 +329,5 @@ class ClaudeCodeModel(BackendModelBase):
             parts=[TextPart(content=output_text)],
             model_name=assistant_model_name,
             timestamp=_normalize_timestamp_or_none(getattr(result_message, "timestamp", None)),
-            usage=_normalize_claude_agent_sdk_usage_to_request_usage(getattr(result_message, "usage", None)),
+            usage=_normalize_claude_code_usage_to_request_usage(getattr(result_message, "usage", None)),
         )

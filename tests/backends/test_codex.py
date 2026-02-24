@@ -71,7 +71,7 @@ def test_parse_codex_jsonl_lines_fails_closed_on_stream_error_event() -> None:
         _parse_codex_jsonl_lines(jsonl_lines)
 
 
-def _write_executable_codex_cli_stub(*, directory: Path) -> Path:
+def _write_executable_codex_stub(*, directory: Path) -> Path:
     """Write a test-only Codex CLI stub executable.
 
     NOTE: This is a contract test stub, not a real codex-cli integration.
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
 
 def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
-    codex_executable = _write_executable_codex_cli_stub(directory=tmp_path)
+    codex_executable = _write_executable_codex_stub(directory=tmp_path)
 
     run_configuration = nh.RunConfiguration(model="codex:default")
 
@@ -205,7 +205,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
 
     with nh.run(environment_value):
         step_context = StepContext(
-            step_id="test_codex_cli_model_contract_calls_tool_via_mcp",
+            step_id="test_codex_model_contract_calls_tool_via_mcp",
             run_configuration=run_configuration,
             step_globals={"__builtins__": __builtins__},
             step_locals={},
