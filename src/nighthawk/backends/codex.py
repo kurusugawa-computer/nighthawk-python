@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import copy_context
 from dataclasses import replace
+from pathlib import Path
 from typing import Any, TypedDict
 
 import tiktoken
@@ -49,12 +50,14 @@ class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
 class CodexCliModelSettings(TypedDict, total=False):
     allowed_tool_names: tuple[str, ...] | None
     codex_executable: str
+    working_directory: str
 
 
 def _get_codex_cli_model_settings(model_settings: ModelSettings | None) -> CodexCliModelSettings:
     default_settings: CodexCliModelSettings = {
         "allowed_tool_names": None,
         "codex_executable": "codex",
+        "working_directory": "",
     }
     if model_settings is None:
         return default_settings
@@ -75,9 +78,20 @@ def _get_codex_cli_model_settings(model_settings: ModelSettings | None) -> Codex
             raise UserError("codex_executable must be a non-empty string")
         codex_executable = codex_executable_value
 
+    working_directory_value = model_settings.get("working_directory")
+    if working_directory_value is None:
+        working_directory = ""
+    else:
+        if not isinstance(working_directory_value, str) or working_directory_value.strip() == "":
+            raise UserError("working_directory must be a non-empty string")
+        if not Path(working_directory_value).is_absolute():
+            raise UserError("working_directory must be an absolute path")
+        working_directory = working_directory_value
+
     return {
         "allowed_tool_names": allowed_tool_names,
         "codex_executable": codex_executable,
+        "working_directory": working_directory,
     }
 
 
@@ -447,13 +461,9 @@ class CodexModel(BackendModelBase):
                 if output_schema_file is not None:
                     codex_cli_arguments.extend(["--output-schema", output_schema_file.name])
 
-                try:
-                    working_directory = get_environment().agent_root
-                except Exception:
-                    working_directory = None
-
-                if working_directory is not None:
-                    codex_cli_arguments.extend(["--cd", str(working_directory)])
+                working_directory = codex_cli_model_settings.get("working_directory") or ""
+                if working_directory:
+                    codex_cli_arguments.extend(["--cd", working_directory])
 
                 process = await asyncio.create_subprocess_exec(
                     *codex_cli_arguments,

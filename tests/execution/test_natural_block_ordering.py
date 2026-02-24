@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
@@ -18,14 +17,7 @@ class RuntimeMemory(BaseModel):
 NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 
 
-def create_workspace_directories(workspace_root: Path) -> None:
-    (workspace_root / "docs").mkdir()
-    (workspace_root / "tests").mkdir()
-
-
-def test_docstring_step_executes_first_and_name_is_undefined(tmp_path: Path) -> None:
-    create_workspace_directories(tmp_path)
-
+def test_docstring_step_executes_first_and_name_is_undefined() -> None:
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -50,7 +42,6 @@ def test_docstring_step_executes_first_and_name_is_undefined(tmp_path: Path) -> 
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=NoopExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -70,9 +61,7 @@ def test_docstring_step_executes_first_and_name_is_undefined(tmp_path: Path) -> 
             f()
 
 
-def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_path: Path) -> None:
-    create_workspace_directories(tmp_path)
-
+def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> None:
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -97,7 +86,6 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=NoopExecutor(),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -112,9 +100,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it(tmp_p
             f()
 
 
-def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval(tmp_path: Path) -> None:
-    create_workspace_directories(tmp_path)
-
+def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval() -> None:
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -142,7 +128,6 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=FakeAgent()),
-            workspace_root=tmp_path,
         )
     ):
 
@@ -158,9 +143,7 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
         assert f() == GLOBAL_NUMBER
 
 
-def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
-    create_workspace_directories(tmp_path)
-
+def test_agent_backend_commits_only_on_assignment() -> None:
     configuration = nh.NighthawkConfiguration(
         run_configuration=nh.RunConfiguration(),
     )
@@ -183,7 +166,6 @@ def test_agent_backend_commits_only_on_assignment(tmp_path: Path) -> None:
         nh.Environment(
             run_configuration=configuration.run_configuration,
             step_executor=nh.AgentStepExecutor(agent=FakeAgent()),
-            workspace_root=tmp_path,
         )
     ):
         from nighthawk.runtime.runner import Runner

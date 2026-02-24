@@ -408,9 +408,11 @@ The environment is required for step execution and contains:
 - `run_id`: the Id of the outermost environment (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
 - `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
 - `run_configuration` (required): execution configuration.
-- `workspace_root` (required): base directory for include resolution and host file operations.
-- `agent_root` (optional): working directory used for agent execution (for example, Coding Agent backends). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 - `step_executor` (required): a strategy object responsible for executing steps (Natural blocks).
+
+Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the MAS layer (`nest`).
+
+Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 - `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`: optional sequences of strings appended to the end of the effective system/user prompts for the duration of a scoped override.
 
 API:

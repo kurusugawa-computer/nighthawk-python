@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..configuration import RunConfiguration
@@ -14,8 +13,6 @@ if TYPE_CHECKING:
 class Environment:
     run_configuration: RunConfiguration
     step_executor: "StepExecutor"
-    workspace_root: Path
-    agent_root: Path | None = None
 
     run_id: str = ""
     scope_id: str = ""
