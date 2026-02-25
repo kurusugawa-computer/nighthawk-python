@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from contextvars import copy_context
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import tiktoken
 from opentelemetry import context as otel_context
@@ -47,9 +47,15 @@ class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
         return super().transform(schema)
 
 
+type SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
+type ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
+
+
 class CodexModelSettings(TypedDict, total=False):
     allowed_tool_names: tuple[str, ...] | None
     codex_executable: str
+    model_reasoning_effort: ModelReasoningEffort | None
+    sandbox_mode: SandboxMode | None
     working_directory: str
 
 
@@ -57,6 +63,8 @@ def _get_codex_model_settings(model_settings: ModelSettings | None) -> CodexMode
     default_settings: CodexModelSettings = {
         "allowed_tool_names": None,
         "codex_executable": "codex",
+        "model_reasoning_effort": None,
+        "sandbox_mode": None,
         "working_directory": "",
     }
     if model_settings is None:
@@ -78,6 +86,24 @@ def _get_codex_model_settings(model_settings: ModelSettings | None) -> CodexMode
             raise UserError("codex_executable must be a non-empty string")
         codex_executable = codex_executable_value
 
+    sandbox_mode_value = model_settings.get("sandbox_mode")
+    if sandbox_mode_value is None:
+        sandbox_mode: SandboxMode | None = None
+    else:
+        allowed_sandbox_modes: tuple[SandboxMode, ...] = ("read-only", "workspace-write", "danger-full-access")
+        if sandbox_mode_value not in allowed_sandbox_modes:
+            raise UserError("sandbox_mode must be one of: 'read-only', 'workspace-write', 'danger-full-access', or None")
+        sandbox_mode = sandbox_mode_value
+
+    model_reasoning_effort_value = model_settings.get("model_reasoning_effort")
+    if model_reasoning_effort_value is None:
+        model_reasoning_effort: ModelReasoningEffort | None = None
+    else:
+        allowed_model_reasoning_efforts: tuple[ModelReasoningEffort, ...] = ("minimal", "low", "medium", "high", "xhigh")
+        if model_reasoning_effort_value not in allowed_model_reasoning_efforts:
+            raise UserError("model_reasoning_effort must be one of: 'minimal', 'low', 'medium', 'high', 'xhigh', or None")
+        model_reasoning_effort = model_reasoning_effort_value
+
     working_directory_value = model_settings.get("working_directory")
     if working_directory_value is None:
         working_directory = ""
@@ -91,6 +117,8 @@ def _get_codex_model_settings(model_settings: ModelSettings | None) -> CodexMode
     return {
         "allowed_tool_names": allowed_tool_names,
         "codex_executable": codex_executable,
+        "model_reasoning_effort": model_reasoning_effort,
+        "sandbox_mode": sandbox_mode,
         "working_directory": working_directory,
     }
 
@@ -449,6 +477,9 @@ class CodexModel(BackendModelBase):
                 if mcp_server_url is not None:
                     configuration_overrides["mcp_servers.nighthawk.url"] = mcp_server_url
                     configuration_overrides["mcp_servers.nighthawk.enabled_tools"] = list(allowed_tool_names)
+                model_reasoning_effort = codex_model_settings.get("model_reasoning_effort")
+                if model_reasoning_effort is not None:
+                    configuration_overrides["model_reasoning_effort"] = model_reasoning_effort
 
                 codex_arguments = [
                     codex_model_settings.get("codex_executable", "codex"),
@@ -456,6 +487,9 @@ class CodexModel(BackendModelBase):
                     "--json",
                     "--skip-git-repo-check",
                 ]
+                sandbox_mode = codex_model_settings.get("sandbox_mode")
+                if sandbox_mode is not None:
+                    codex_arguments.extend(["--sandbox", sandbox_mode])
                 codex_arguments.extend(_build_codex_config_arguments(configuration_overrides))
 
                 if output_schema_file is not None:
