@@ -91,6 +91,97 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
         assert test_function() == 42
 
 
+def test_codex_skill() -> None:
+    _requires_codex_integration()
+
+    import logfire
+
+    logfire.configure(send_to_logfire="if-token-present", console=logfire.ConsoleOptions(verbose=True))
+    logfire.instrument_pydantic_ai()
+
+    from nighthawk.backends.codex import CodexModelSettings
+
+    working_directory = Path(__file__).absolute().parent / "agent_working_directory"
+
+    try:
+        (working_directory / "test.txt").unlink(missing_ok=True)
+
+        configuration = nh.RunConfiguration(model="codex:default")
+
+        environment = nh.Environment(
+            run_configuration=configuration,
+            step_executor=nh.AgentStepExecutor(
+                run_configuration=configuration,
+                model_settings=CodexModelSettings(
+                    working_directory=str(working_directory.resolve()),
+                ),
+            ),
+        )
+        with nh.run(environment):
+
+            @nh.natural_function
+            def test_function():
+                """natural
+                ---
+                deny: [pass, raise]
+                ---
+                Execute the `hoge` skill.
+                Then, without changing the current working directory, return the result of the `bash -c pwd` command.
+                """
+
+            result = test_function()
+
+            assert result == str(working_directory)
+            assert (working_directory / "test.txt").is_file()
+    finally:
+        (working_directory / "test.txt").unlink(missing_ok=True)
+
+
+def test_codex_skill_calc() -> None:
+    _requires_codex_integration()
+
+    import logfire
+
+    logfire.configure(send_to_logfire="if-token-present", console=logfire.ConsoleOptions(verbose=True))
+    logfire.instrument_pydantic_ai()
+
+    from nighthawk.backends.codex import CodexModelSettings
+
+    working_directory = Path(__file__).absolute().parent / "agent_working_directory"
+
+    configuration = nh.RunConfiguration(model="codex:default")
+
+    environment = nh.Environment(
+        run_configuration=configuration,
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=configuration,
+            model_settings=CodexModelSettings(
+                working_directory=str(working_directory.resolve()),
+            ),
+        ),
+    )
+    with nh.run(environment):
+
+        @nh.natural_function
+        def test_function():
+            def calc(a, b):
+                return a + b * 8
+
+            """natural
+            ---
+            deny: [pass, raise]
+            ---
+            Execute the `test` skill.
+            <:result>
+            """
+
+            return result
+
+        result = test_function()
+
+        assert result == 1 + 2 * 8
+
+
 def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
     _requires_codex_integration()
 
