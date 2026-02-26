@@ -53,7 +53,7 @@ def natural_function(func: F | None = None) -> F:
     try:
         original_module = ast.parse(source)
         for node in original_module.body:
-            if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func.__name__:
                 node.decorator_list = []
                 break
         ast.increment_lineno(original_module, starting_line_number - 1)
@@ -125,9 +125,9 @@ def natural_function(func: F | None = None) -> F:
     transformed_module = transform_module_ast(original_module, captured_name_tuple=captured_name_tuple)
 
     def build_transformed_factory_module(*, transformed_module: ast.Module) -> ast.Module:
-        transformed_function_def: ast.FunctionDef | None = None
+        transformed_function_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
         for node in transformed_module.body:
-            if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func.__name__:
                 transformed_function_def = node
                 break
 
@@ -200,6 +200,20 @@ def natural_function(func: F | None = None) -> F:
 
     if getattr(transformed, "__closure__") is None and name_to_value:
         raise RuntimeError("Transformed function closure is missing for captured names")
+
+    if inspect.iscoroutinefunction(func):
+
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            from ..tools.registry import call_scope
+
+            with call_scope():
+                if name_to_value:
+                    with python_name_scope(name_to_value):
+                        return await transformed(*args, **kwargs)
+                return await transformed(*args, **kwargs)
+
+        return cast(F, async_wrapper)  # type: ignore[return-value]
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

@@ -17,7 +17,7 @@ class NaturalTransformer(ast.NodeTransformer):
         self._binding_name_to_type_expression_stack: list[dict[str, ast.expr]] = []
         self._loop_depth = 0
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+    def _visit_function_like(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.AST:
         self._return_annotation_stack.append(node.returns)
         self._binding_name_to_type_expression_stack.append(self._collect_binding_name_to_type_expression(node))
         saved_loop_depth = self._loop_depth
@@ -137,6 +137,12 @@ class NaturalTransformer(ast.NodeTransformer):
             self._return_annotation_stack.pop()
             self._loop_depth = saved_loop_depth
 
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        return self._visit_function_like(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:  # noqa: N802
+        return self._visit_function_like(node)
+
     def visit_For(self, node: ast.For) -> ast.AST:
         self._loop_depth += 1
         try:
@@ -226,7 +232,10 @@ class NaturalTransformer(ast.NodeTransformer):
             return ast.Name(id="object", ctx=ast.Load())
         return annotation
 
-    def _collect_binding_name_to_type_expression(self, node: ast.FunctionDef) -> dict[str, ast.expr]:
+    def _collect_binding_name_to_type_expression(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> dict[str, ast.expr]:
         binding_name_to_type_expression: dict[str, ast.expr] = {}
 
         for argument in [

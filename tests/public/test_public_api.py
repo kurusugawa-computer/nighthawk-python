@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from pydantic import BaseModel
 
@@ -88,3 +90,16 @@ def test_decorated_function_requires_environment():
 
     with pytest.raises(NighthawkError):
         f(1)
+
+
+def test_async_decorated_function_requires_environment():
+    @nh.natural_function
+    async def f(x: int):
+        f"""natural
+        <:result>
+        {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
+        """
+        return result  # type: ignore # noqa: F821
+
+    with pytest.raises(NighthawkError):
+        asyncio.run(f(1))
