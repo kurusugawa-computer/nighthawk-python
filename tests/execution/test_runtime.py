@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,6 +60,31 @@ def test_natural_function_updates_output_binding_via_docstring_step():
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert f(10) == 11
+
+
+def test_async_natural_function_updates_output_binding_via_docstring_step():
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
+    )
+
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=StubExecutor(),
+        )
+    ):
+
+        @nh.natural_function
+        async def f(x: int) -> int:
+            """natural
+            <x>
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
+            """
+            _ = x
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert asyncio.run(f(10)) == 11
 
 
 def test_stub_return_effect_returns_value_from_return_reference_path():
