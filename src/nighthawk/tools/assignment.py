@@ -1,18 +1,44 @@
 from __future__ import annotations
 
+import ast
+import inspect
 from typing import Any, NoReturn
 
 from pydantic import BaseModel, TypeAdapter
 
 from ..errors import ToolEvaluationError
 from ..json_renderer import to_jsonable_value
+from ..runtime.async_bridge import run_awaitable_value_synchronously
 from ..runtime.step_context import StepContext
 from .contracts import ToolBoundaryFailure
 
 
 def eval_expression(step_context: StepContext, expression: str) -> object:
     try:
-        return eval(expression, step_context.step_globals, step_context.step_locals)
+        compiled_expression = compile(
+            expression,
+            "<nighthawk-eval>",
+            "eval",
+            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+        )
+        value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
+        return run_awaitable_value_synchronously(value)
+    except Exception as e:
+        raise ToolEvaluationError(str(e)) from e
+
+
+async def eval_expression_async(step_context: StepContext, expression: str) -> object:
+    try:
+        compiled_expression = compile(
+            expression,
+            "<nighthawk-eval>",
+            "eval",
+            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+        )
+        value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
+        if inspect.isawaitable(value):
+            return await value
+        return value
     except Exception as e:
         raise ToolEvaluationError(str(e)) from e
 
@@ -64,38 +90,13 @@ def _get_pydantic_field_type(model: BaseModel, field_name: str) -> object | None
     return field.annotation
 
 
-def assign_tool(
+def _assign_value_to_target_path(
+    *,
     step_context: StepContext,
     target_path: str,
-    expression: str,
+    parsed_target_path: tuple[str, ...],
+    value: object,
 ) -> dict[str, Any]:
-    """Assign a computed value to a dotted target_path.
-
-    Target grammar:
-    - target_path := name ("." field)*
-
-    Notes:
-    - Any segment starting with "__" is forbidden.
-    - On success, returns a JSON-serializable payload with keys `target_path`, `step_locals_revision`, and `updates`.
-    - On failure, raises ToolBoundaryFailure.
-    - The operation is atomic: on any failure, no updates are performed.
-    """
-
-    parsed_target_path = _parse_target_path(target_path)
-    if parsed_target_path is None:
-        _raise_invalid_input(
-            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
-            guidance="Fix target_path to match name(.field)* with ASCII identifiers and retry.",
-        )
-
-    try:
-        value = eval_expression(step_context, expression)
-    except Exception as e:
-        _raise_execution(
-            message=str(e),
-            guidance="Fix the expression and retry.",
-        )
-
     if len(parsed_target_path) == 1:
         name = parsed_target_path[0]
         expected_type = step_context.binding_name_to_type.get(name)
@@ -115,7 +116,6 @@ def assign_tool(
         step_context.step_locals_revision += 1
 
         update: dict[str, Any] = {"path": target_path}
-
         update["value"] = _to_jsonable_value(value)
 
         return {
@@ -176,7 +176,6 @@ def assign_tool(
     step_context.step_locals_revision += 1
 
     update: dict[str, Any] = {"path": target_path}
-
     update["value"] = _to_jsonable_value(value)
 
     return {
@@ -184,3 +183,71 @@ def assign_tool(
         "step_locals_revision": step_context.step_locals_revision,
         "updates": [update],
     }
+
+
+def assign_tool(
+    step_context: StepContext,
+    target_path: str,
+    expression: str,
+) -> dict[str, Any]:
+    """Assign a computed value to a dotted target_path.
+
+    Target grammar:
+    - target_path := name ("." field)*
+
+    Notes:
+    - Any segment starting with "__" is forbidden.
+    - On success, returns a JSON-serializable payload with keys `target_path`, `step_locals_revision`, and `updates`.
+    - On failure, raises ToolBoundaryFailure.
+    - The operation is atomic: on any failure, no updates are performed.
+    """
+
+    parsed_target_path = _parse_target_path(target_path)
+    if parsed_target_path is None:
+        _raise_invalid_input(
+            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
+            guidance="Fix target_path to match name(.field)* with ASCII identifiers and retry.",
+        )
+
+    try:
+        value = eval_expression(step_context, expression)
+    except Exception as e:
+        _raise_execution(
+            message=str(e),
+            guidance="Fix the expression and retry.",
+        )
+
+    return _assign_value_to_target_path(
+        step_context=step_context,
+        target_path=target_path,
+        parsed_target_path=parsed_target_path,
+        value=value,
+    )
+
+
+async def assign_tool_async(
+    step_context: StepContext,
+    target_path: str,
+    expression: str,
+) -> dict[str, Any]:
+    parsed_target_path = _parse_target_path(target_path)
+    if parsed_target_path is None:
+        _raise_invalid_input(
+            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
+            guidance="Fix target_path to match name(.field)* with ASCII identifiers and retry.",
+        )
+
+    try:
+        value = await eval_expression_async(step_context, expression)
+    except Exception as e:
+        _raise_execution(
+            message=str(e),
+            guidance="Fix the expression and retry.",
+        )
+
+    return _assign_value_to_target_path(
+        step_context=step_context,
+        target_path=target_path,
+        parsed_target_path=parsed_target_path,
+        value=value,
+    )

@@ -48,3 +48,21 @@ Notes:
 
 - A Natural block sentinel is strict: the string literal must begin with `natural\n` (no leading blank lines).
 - `<:name>` controls which values are committed back into Python locals at Natural block boundaries.
+
+Async example:
+
+```py
+import nighthawk as nh
+
+@nh.natural_function
+async def compute() -> int:
+    async def calculate(a: int, b: int) -> int:
+        return a + b * 8
+
+    """natural
+    ---
+    deny: [pass, raise]
+    ---
+    return the result of the `await calculate(1,2)` function call.
+    """
+```

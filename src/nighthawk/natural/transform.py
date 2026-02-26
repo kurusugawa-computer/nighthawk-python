@@ -15,11 +15,13 @@ class NaturalTransformer(ast.NodeTransformer):
         self._captured_name_tuple = captured_name_tuple
         self._return_annotation_stack: list[ast.expr | None] = []
         self._binding_name_to_type_expression_stack: list[dict[str, ast.expr]] = []
+        self._is_async_function_stack: list[bool] = []
         self._loop_depth = 0
 
     def _visit_function_like(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.AST:
         self._return_annotation_stack.append(node.returns)
         self._binding_name_to_type_expression_stack.append(self._collect_binding_name_to_type_expression(node))
+        self._is_async_function_stack.append(isinstance(node, ast.AsyncFunctionDef))
         saved_loop_depth = self._loop_depth
         self._loop_depth = 0
         try:
@@ -39,6 +41,7 @@ class NaturalTransformer(ast.NodeTransformer):
                             binding_types_dict_expression,
                             return_annotation,
                             is_in_loop=self._loop_depth > 0,
+                            is_async_function=self._is_async_function_stack[-1],
                         )
 
                         # Preserve user-source location: the injected runtime call and its
@@ -133,6 +136,7 @@ class NaturalTransformer(ast.NodeTransformer):
 
             return node
         finally:
+            self._is_async_function_stack.pop()
             self._binding_name_to_type_expression_stack.pop()
             self._return_annotation_stack.pop()
             self._loop_depth = saved_loop_depth
@@ -183,6 +187,7 @@ class NaturalTransformer(ast.NodeTransformer):
                     binding_types_dict_expression,
                     return_annotation,
                     is_in_loop=is_in_loop,
+                    is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
                 )
 
                 sentinel_location = ast.copy_location(ast.Pass(), node)
@@ -214,6 +219,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 binding_types_dict_expression,
                 return_annotation,
                 is_in_loop=is_in_loop,
+                is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
             )
 
             sentinel_location = ast.copy_location(ast.Pass(), node)
@@ -315,12 +321,13 @@ def build_runtime_call_and_assignments(
     return_annotation: ast.expr,
     *,
     is_in_loop: bool,
+    is_async_function: bool,
 ) -> list[ast.stmt]:
     envelope_variable = ast.Name(id="__nh_envelope__", ctx=ast.Store())
     call_expression = ast.Call(
         func=ast.Attribute(
             value=ast.Name(id="__nighthawk_runner__", ctx=ast.Load()),
-            attr="run_step",
+            attr="run_step_async" if is_async_function else "run_step",
             ctx=ast.Load(),
         ),
         args=[
@@ -333,7 +340,10 @@ def build_runtime_call_and_assignments(
         ],
         keywords=[],
     )
-    assign_envelope = ast.Assign(targets=[envelope_variable], value=call_expression)
+    envelope_value_expression: ast.expr = call_expression
+    if is_async_function:
+        envelope_value_expression = ast.Await(value=envelope_value_expression)
+    assign_envelope = ast.Assign(targets=[envelope_variable], value=envelope_value_expression)
 
     assigns: list[ast.stmt] = [assign_envelope]
 

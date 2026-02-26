@@ -239,9 +239,9 @@ Read tools:
 
 - `nh_dir(expression: str) -> str`
 - `nh_help(expression: str) -> str`
-- `nh_eval(expression: str) -> str`
+- `nh_eval(expression: str) -> object`
   - Evaluates a Python expression in `step_globals` and `step_locals`.
-  - Returns JSON text.
+  - If the evaluated expression is awaitable, it is awaited before returning.
 
 Write tool:
 
@@ -259,6 +259,7 @@ Reserved targets:
 Semantics of `nh_assign`:
 
 - Evaluate `expression` as a Python expression using `step_globals` and `step_locals`.
+- If the evaluated expression is awaitable, it is awaited before assignment.
 - If `target_path` is a bare `name`:
   - Assign into `step_locals[name]`.
   - Validation:
@@ -312,7 +313,9 @@ Outcome kinds:
   - Payload keys: `kind`, and required `return_reference_path`.
   - `return_reference_path` must be a dot-separated identifier path into step locals.
   - The host resolves `return_reference_path` within step locals only, using attribute access only.
+  - If the surrounding function is async and the resolved value is awaitable, the host awaits it before validation.
   - The host then validates/coerces the resolved Python value to the function's return type annotation.
+  - If the surrounding function is sync and the resolved value is awaitable, execution fails.
 
 - `break` / `continue`:
   - Loop control.

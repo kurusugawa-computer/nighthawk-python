@@ -8,7 +8,7 @@ import pytest
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome
+from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome
 from tests.execution.stub_executor import StubExecutor
 
 GLOBAL_NUMBER = 7
@@ -85,6 +85,131 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert asyncio.run(f(10)) == 11
+
+
+def test_async_natural_function_awaits_awaitable_return_value_from_step_executor():
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
+    )
+
+    @dataclass
+    class AssertingExecutor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[str, ...],
+        ) -> tuple[ReturnStepOutcome, dict[str, object]]:
+            _ = processed_natural_program
+            _ = step_context
+            _ = binding_names
+            _ = allowed_step_kinds
+            raise AssertionError("run_step should not be used for this async test")
+
+        async def run_step_async(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[str, ...],
+        ) -> tuple[ReturnStepOutcome, dict[str, object]]:
+            _ = processed_natural_program
+            _ = binding_names
+            _ = allowed_step_kinds
+            _ = step_context
+
+            async def calculate() -> int:
+                return 17
+
+            return ReturnStepOutcome(kind="return", return_reference_path="result"), {"result": calculate()}
+
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=AssertingExecutor(),
+        )
+    ):
+
+        @nh.natural_function
+        async def f() -> int:
+            """natural
+            return the value.
+            """
+            return 0
+
+        assert asyncio.run(f()) == 17
+
+
+def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor():
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
+    )
+
+    class AwaitableInt:
+        def __await__(self):  # type: ignore[no-untyped-def]
+            if False:
+                yield None
+            return 17
+
+    @dataclass
+    class AssertingExecutor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[str, ...],
+        ) -> tuple[ReturnStepOutcome, dict[str, object]]:
+            _ = processed_natural_program
+            _ = step_context
+            _ = binding_names
+            _ = allowed_step_kinds
+            return ReturnStepOutcome(kind="return", return_reference_path="result"), {"result": AwaitableInt()}
+
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=AssertingExecutor(),
+        )
+    ):
+
+        @nh.natural_function
+        def f() -> int:
+            """natural
+            return the value.
+            """
+            return 0
+
+        with pytest.raises(ExecutionError, match="awaitable"):
+            f()
+
+
+def test_async_natural_function_allows_self_reference_freevar():
+    configuration = nh.NighthawkConfiguration(
+        run_configuration=nh.RunConfiguration(),
+    )
+
+    with nh.run(
+        nh.Environment(
+            run_configuration=configuration.run_configuration,
+            step_executor=StubExecutor(),
+        )
+    ):
+
+        @nh.natural_function
+        async def f() -> int:
+            """natural
+            {"step_outcome": {"kind": "pass"}, "bindings": {}}
+            """
+            if False:
+                return await f()
+            return 17
+
+        assert asyncio.run(f()) == 17
 
 
 def test_stub_return_effect_returns_value_from_return_reference_path():

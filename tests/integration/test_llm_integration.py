@@ -161,6 +161,34 @@ def test_condition():
         assert test_function(9) == 11
 
 
+@pytest.mark.asyncio
+async def test_async_function_call():
+    OpenAIResponsesModelSettings = _requires_openai_integration()
+
+    environment_value = nh.Environment(
+        run_configuration=nh.RunConfiguration(),
+        step_executor=nh.AgentStepExecutor(
+            run_configuration=nh.RunConfiguration(model="openai-responses:gpt-5-mini"),
+            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+        ),
+    )
+    with nh.run(environment_value):
+
+        @nh.natural_function
+        async def test_function():
+            async def calculate(a: int, b: int) -> int:
+                return a + b * 8
+
+            """natural
+            ---
+            deny: [pass, raise]
+            ---
+            return the result of the `await calculate(1,2)` function call.
+            """
+
+        assert (await test_function()) == 17
+
+
 def test_multiple_blocks_one_call_scope():
     OpenAIResponsesModelSettings = _requires_openai_integration()
 

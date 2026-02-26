@@ -34,7 +34,7 @@ def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> 
     item_hook = item.ihook
     item_hook.pytest_runtest_logstart(nodeid=item.nodeid, location=item.location)
 
-    max_attempts = 2
+    max_attempts = 1
     reports: list[pytest.TestReport] = []
 
     for attempt_number in range(1, max_attempts + 1):
