@@ -19,6 +19,7 @@ Trust boundaries:
 Tools and state:
 - Inspect with nh_eval(expression). It may call functions; use intentionally.
 - Update state only with nh_assign(target_path, expression). Do not claim any binding/state update without nh_assign.
+- In async Natural functions, nh_eval/nh_assign expressions may use `await`, and awaitable results are awaited before assignment and return.
 - Tool calls return JSON text: {"status":"success"|"failure","value":...,"error":...}. Always check "status".
 """
 

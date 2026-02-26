@@ -15,6 +15,7 @@ from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
+from ..json_renderer import to_jsonable_value
 from ..tools.mcp_boundary import call_tool_for_claude_code
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase, ToolHandler
@@ -157,6 +158,29 @@ def _normalize_claude_code_usage_to_request_usage(usage: object) -> RequestUsage
         request_usage.cache_write_tokens = cache_creation_input_tokens
 
     return request_usage
+
+
+def _serialize_result_message_to_json(result_message: object) -> str:
+    result_message_model_dump_json = getattr(result_message, "model_dump_json", None)
+    if callable(result_message_model_dump_json):
+        try:
+            result_message_json = result_message_model_dump_json()
+            if isinstance(result_message_json, str):
+                return result_message_json
+        except Exception:
+            pass
+
+    result_message_model_dump = getattr(result_message, "model_dump", None)
+    if callable(result_message_model_dump):
+        try:
+            result_message = result_message_model_dump()
+        except Exception:
+            pass
+
+    try:
+        return json.dumps(to_jsonable_value(result_message), ensure_ascii=False)
+    except Exception:
+        return json.dumps({"result_message_repr": repr(result_message)}, ensure_ascii=False)
 
 
 class ClaudeCodeModel(BackendModelBase):
@@ -312,12 +336,14 @@ class ClaudeCodeModel(BackendModelBase):
 
         if result_message.is_error:
             error_text = result_message.result or "Claude Code backend reported an error"
-            raise UnexpectedModelBehavior(str(error_text))
+            result_message_json = _serialize_result_message_to_json(result_message)
+            raise UnexpectedModelBehavior(f"{error_text}\nresult_message_json={result_message_json}\noutput_format={options_keyword_arguments['output_format']}")
 
         structured_output = result_message.structured_output
         if structured_output is None:
             if model_request_parameters.output_object is not None:
-                raise UnexpectedModelBehavior("Claude Code backend did not return structured output")
+                result_message_json = _serialize_result_message_to_json(result_message)
+                raise UnexpectedModelBehavior(f"Claude Code backend did not return structured output\nresult_message_json={result_message_json}")
 
             if result_message.result is None:
                 raise UnexpectedModelBehavior("Claude Code backend did not return text output")

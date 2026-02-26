@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from inspect import signature
 from string import Template
-from typing import Any, Iterable, Protocol, cast
+from typing import Any, Awaitable, Callable, Iterable, Protocol, cast
 
 import tiktoken
 from pydantic import TypeAdapter
@@ -16,6 +16,7 @@ from ..errors import ExecutionError
 from ..json_renderer import RenderStyle, count_tokens, render_json_text
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
+from .async_bridge import run_coroutine_synchronously
 from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_environment, scope, span
 from .step_context import StepContext, resolve_name_in_step_context, step_context_scope
 from .step_contract import (
@@ -244,7 +245,36 @@ class AgentStepExecutor:
 
         object.__setattr__(self, "agent", _new_agent_step_executor(run_configuration, agent_constructor_keyword_arguments))
 
-    def run_step(
+    async def _run_agent(
+        self,
+        *,
+        user_prompt: str,
+        step_context: StepContext,
+        toolset: ToolResultWrapperToolset,
+        structured_output_type: object,
+    ) -> Any:
+        async_run_method = getattr(self.agent, "run", None)
+        if callable(async_run_method):
+            async_run_method_typed = cast(Callable[..., Awaitable[Any]], async_run_method)
+            return await async_run_method_typed(
+                user_prompt,
+                deps=step_context,
+                toolsets=[toolset],
+                output_type=structured_output_type,
+            )
+
+        sync_run_method = getattr(self.agent, "run_sync", None)
+        if callable(sync_run_method):
+            return sync_run_method(
+                user_prompt,
+                deps=step_context,
+                toolsets=[toolset],
+                output_type=structured_output_type,
+            )
+
+        raise ExecutionError("AgentStepExecutor requires an agent with run(...) or run_sync(...)")
+
+    async def run_step_async(
         self,
         *,
         processed_natural_program: str,
@@ -307,11 +337,11 @@ class AgentStepExecutor:
                 },
             ):
                 with step_context_scope(step_context):
-                    result = self.agent.run_sync(
-                        user_prompt,
-                        deps=step_context,
-                        toolsets=[toolset],
-                        output_type=structured_output_type,
+                    result = await self._run_agent(
+                        user_prompt=user_prompt,
+                        step_context=step_context,
+                        toolset=toolset,
+                        structured_output_type=structured_output_type,
                     )
 
         try:
@@ -325,3 +355,23 @@ class AgentStepExecutor:
                 bindings[name] = step_context.step_locals[name]
 
         return step_outcome, bindings
+
+    def run_step(
+        self,
+        *,
+        processed_natural_program: str,
+        step_context: StepContext,
+        binding_names: list[str],
+        allowed_step_kinds: tuple[str, ...],
+    ) -> tuple[StepOutcome, dict[str, object]]:
+        return cast(
+            tuple[StepOutcome, dict[str, object]],
+            run_coroutine_synchronously(
+                lambda: self.run_step_async(
+                    processed_natural_program=processed_natural_program,
+                    step_context=step_context,
+                    binding_names=binding_names,
+                    allowed_step_kinds=allowed_step_kinds,
+                )
+            ),
+        )

@@ -4,7 +4,7 @@ import ast
 import inspect
 import textwrap
 from functools import wraps
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, Awaitable, Callable, TypeVar, cast
 
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_environment
@@ -33,6 +33,32 @@ class _RunnerProxy:
         current_environment = get_environment()
         runner = Runner.from_environment(current_environment)
         return runner.run_step(
+            natural_program,
+            input_binding_names,
+            output_binding_names,
+            binding_name_to_type,
+            return_annotation,
+            is_in_loop,
+            caller_frame=caller_frame,
+        )
+
+    async def run_step_async(
+        self,
+        natural_program: str,
+        input_binding_names: list[str],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        return_annotation: object,
+        is_in_loop: bool,
+    ) -> dict[str, object]:
+        frame = inspect.currentframe()
+        if frame is None or frame.f_back is None:
+            raise RuntimeError("No caller frame")
+        caller_frame = frame.f_back
+
+        current_environment = get_environment()
+        runner = Runner.from_environment(current_environment)
+        return await runner.run_step_async(
             natural_program,
             input_binding_names,
             output_binding_names,
@@ -195,13 +221,23 @@ def natural_function(func: F | None = None) -> F:
     if not callable(transformed):
         raise RuntimeError("Transformed function not found after factory execution")
 
-    if set(getattr(transformed, "__code__").co_freevars) != set(name_to_value.keys()):
-        raise RuntimeError(f"Transformed function freevars do not match captured names. freevars={getattr(transformed, '__code__').co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}")
+    transformed_freevar_name_set = set(getattr(transformed, "__code__").co_freevars)
+    captured_name_set = set(name_to_value.keys())
+
+    unexpected_freevar_name_set = transformed_freevar_name_set - captured_name_set
+    allowed_unexpected_freevar_name_set = {func.__name__}
+    if not unexpected_freevar_name_set.issubset(allowed_unexpected_freevar_name_set):
+        raise RuntimeError(
+            "Transformed function freevars do not match captured names. "
+            f"freevars={getattr(transformed, '__code__').co_freevars!r} "
+            f"captured={tuple(sorted(name_to_value.keys()))!r}"
+        )
 
     if getattr(transformed, "__closure__") is None and name_to_value:
         raise RuntimeError("Transformed function closure is missing for captured names")
 
     if inspect.iscoroutinefunction(func):
+        transformed_async = cast(Callable[..., Awaitable[Any]], transformed)
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -210,8 +246,8 @@ def natural_function(func: F | None = None) -> F:
             with call_scope():
                 if name_to_value:
                     with python_name_scope(name_to_value):
-                        return await transformed(*args, **kwargs)
-                return await transformed(*args, **kwargs)
+                        return await transformed_async(*args, **kwargs)
+                return await transformed_async(*args, **kwargs)
 
         return cast(F, async_wrapper)  # type: ignore[return-value]
 

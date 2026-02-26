@@ -3,11 +3,13 @@ from __future__ import annotations
 import inspect
 import uuid
 from types import FrameType
+from typing import Any, Awaitable, Callable, Coroutine, cast
 
 import yaml
 from pydantic import TypeAdapter
 
 from ..errors import ExecutionError
+from .async_bridge import run_coroutine_synchronously
 from .environment import Environment
 from .scoping import RUN_ID, SCOPE_ID, STEP_ID, span
 from .step_context import (
@@ -17,7 +19,7 @@ from .step_context import (
     get_step_context_stack,
     resolve_name_in_step_context,
 )
-from .step_contract import STEP_KINDS
+from .step_contract import STEP_KINDS, StepOutcome
 
 
 def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tuple[str, ...]]:
@@ -131,17 +133,16 @@ class Runner:
 
         return current
 
-    def run_step(
+    def _prepare_step_execution(
         self,
         natural_program: str,
         input_binding_names: list[str],
         output_binding_names: list[str],
         binding_name_to_type: dict[str, object],
-        return_annotation: object,
         is_in_loop: bool,
         *,
         caller_frame: FrameType,
-    ) -> dict[str, object]:
+    ) -> tuple[str, tuple[str, ...], StepContext, dict[str, object]]:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
@@ -235,6 +236,123 @@ class Runner:
             binding_name_to_type=binding_name_to_type,
         )
 
+        return processed_without_frontmatter, allowed_step_kinds, step_context, dict(resolved_input_binding_name_to_value)
+
+    def _validate_raise_outcome(self, step_context: StepContext, *, raise_error_type_name: str | None, raise_message: str) -> None:
+        if raise_error_type_name is not None:
+            resolved_raise_error_type = resolve_name_in_step_context(step_context, raise_error_type_name)
+            if resolved_raise_error_type is None:
+                raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
+            if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
+                raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
+            raise resolved_raise_error_type(raise_message)
+
+        raise ExecutionError(f"Execution failed: {raise_message}")
+
+    def _build_envelope_sync(
+        self,
+        *,
+        step_context: StepContext,
+        step_outcome: object,
+        allowed_step_kinds: tuple[str, ...],
+        bindings: dict[str, object],
+        input_bindings: dict[str, object],
+        return_annotation: object,
+    ) -> dict[str, object]:
+        if not hasattr(step_outcome, "kind"):
+            raise ExecutionError("Step produced invalid step outcome object")
+
+        step_outcome_kind = getattr(step_outcome, "kind")
+        if step_outcome_kind not in allowed_step_kinds:
+            raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
+
+        step_context.step_locals.update(bindings)
+
+        return_value: object | None = None
+
+        if step_outcome_kind == "return":
+            return_reference_path = getattr(step_outcome, "return_reference_path")
+            resolved = self._resolve_reference_path(step_context, return_reference_path)
+            if inspect.isawaitable(resolved):
+                raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
+            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+
+        if step_outcome_kind == "raise":
+            self._validate_raise_outcome(
+                step_context,
+                raise_error_type_name=getattr(step_outcome, "raise_error_type"),
+                raise_message=getattr(step_outcome, "raise_message"),
+            )
+
+        return {
+            "step_outcome": step_outcome,
+            "input_bindings": dict(input_bindings),
+            "bindings": bindings,
+            "return_value": return_value,
+        }
+
+    async def _build_envelope_async(
+        self,
+        *,
+        step_context: StepContext,
+        step_outcome: object,
+        allowed_step_kinds: tuple[str, ...],
+        bindings: dict[str, object],
+        input_bindings: dict[str, object],
+        return_annotation: object,
+    ) -> dict[str, object]:
+        if not hasattr(step_outcome, "kind"):
+            raise ExecutionError("Step produced invalid step outcome object")
+
+        step_outcome_kind = getattr(step_outcome, "kind")
+        if step_outcome_kind not in allowed_step_kinds:
+            raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
+
+        step_context.step_locals.update(bindings)
+
+        return_value: object | None = None
+
+        if step_outcome_kind == "return":
+            return_reference_path = getattr(step_outcome, "return_reference_path")
+            resolved = self._resolve_reference_path(step_context, return_reference_path)
+            if inspect.isawaitable(resolved):
+                resolved = await resolved
+            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+
+        if step_outcome_kind == "raise":
+            self._validate_raise_outcome(
+                step_context,
+                raise_error_type_name=getattr(step_outcome, "raise_error_type"),
+                raise_message=getattr(step_outcome, "raise_message"),
+            )
+
+        return {
+            "step_outcome": step_outcome,
+            "input_bindings": dict(input_bindings),
+            "bindings": bindings,
+            "return_value": return_value,
+        }
+
+    def run_step(
+        self,
+        natural_program: str,
+        input_binding_names: list[str],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        return_annotation: object,
+        is_in_loop: bool,
+        *,
+        caller_frame: FrameType,
+    ) -> dict[str, object]:
+        processed_without_frontmatter, allowed_step_kinds, step_context, input_bindings = self._prepare_step_execution(
+            natural_program,
+            input_binding_names,
+            output_binding_names,
+            binding_name_to_type,
+            is_in_loop,
+            caller_frame=caller_frame,
+        )
+
         with span(
             "nighthawk.step",
             **{
@@ -243,43 +361,115 @@ class Runner:
                 STEP_ID: step_context.step_id,
             },
         ):
-            step_outcome, bindings = self.environment.step_executor.run_step(
-                processed_natural_program=processed_without_frontmatter,
+            step_executor = self.environment.step_executor
+
+            run_step_method = getattr(step_executor, "run_step", None)
+            if callable(run_step_method):
+                run_step_method_typed = cast(
+                    Callable[..., tuple[StepOutcome, dict[str, object]]],
+                    run_step_method,
+                )
+                step_outcome, bindings = run_step_method_typed(
+                    processed_natural_program=processed_without_frontmatter,
+                    step_context=step_context,
+                    binding_names=output_binding_names,
+                    allowed_step_kinds=allowed_step_kinds,
+                )
+            else:
+                run_step_async_method = getattr(step_executor, "run_step_async", None)
+                if not callable(run_step_async_method):
+                    raise ExecutionError("Step executor must define run_step(...) or run_step_async(...)")
+                run_step_async_method_typed = cast(
+                    Callable[..., Awaitable[tuple[StepOutcome, dict[str, object]]]],
+                    run_step_async_method,
+                )
+                step_outcome, bindings = run_coroutine_synchronously(
+                    lambda: cast(
+                        Coroutine[Any, Any, tuple[StepOutcome, dict[str, object]]],
+                        run_step_async_method_typed(
+                            processed_natural_program=processed_without_frontmatter,
+                            step_context=step_context,
+                            binding_names=output_binding_names,
+                            allowed_step_kinds=allowed_step_kinds,
+                        ),
+                    )
+                )
+
+            return self._build_envelope_sync(
                 step_context=step_context,
-                binding_names=output_binding_names,
+                step_outcome=step_outcome,
                 allowed_step_kinds=allowed_step_kinds,
+                bindings=bindings,
+                input_bindings=input_bindings,
+                return_annotation=return_annotation,
             )
 
-            input_bindings = dict(resolved_input_binding_name_to_value)
+    async def run_step_async(
+        self,
+        natural_program: str,
+        input_binding_names: list[str],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        return_annotation: object,
+        is_in_loop: bool,
+        *,
+        caller_frame: FrameType,
+    ) -> dict[str, object]:
+        processed_without_frontmatter, allowed_step_kinds, step_context, input_bindings = self._prepare_step_execution(
+            natural_program,
+            input_binding_names,
+            output_binding_names,
+            binding_name_to_type,
+            is_in_loop,
+            caller_frame=caller_frame,
+        )
 
-            step_context.step_locals.update(bindings)
+        with span(
+            "nighthawk.step",
+            **{
+                RUN_ID: self.environment.run_id,
+                SCOPE_ID: self.environment.scope_id,
+                STEP_ID: step_context.step_id,
+            },
+        ):
+            step_executor = self.environment.step_executor
 
-            if step_outcome.kind not in allowed_step_kinds:
-                raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
+            run_step_async_method = getattr(step_executor, "run_step_async", None)
+            if callable(run_step_async_method):
+                run_step_async_method_typed = cast(
+                    Callable[..., Awaitable[tuple[StepOutcome, dict[str, object]]]],
+                    run_step_async_method,
+                )
+                step_outcome, bindings = await run_step_async_method_typed(
+                    processed_natural_program=processed_without_frontmatter,
+                    step_context=step_context,
+                    binding_names=output_binding_names,
+                    allowed_step_kinds=allowed_step_kinds,
+                )
+            else:
+                run_step_method = getattr(step_executor, "run_step", None)
+                if not callable(run_step_method):
+                    raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
 
-            return_value: object | None = None
+                run_step_method_typed = cast(
+                    Callable[..., tuple[StepOutcome, dict[str, object]]],
+                    run_step_method,
+                )
+                step_outcome, bindings = run_step_method_typed(
+                    processed_natural_program=processed_without_frontmatter,
+                    step_context=step_context,
+                    binding_names=output_binding_names,
+                    allowed_step_kinds=allowed_step_kinds,
+                )
 
-            if step_outcome.kind == "return":
-                resolved = self._resolve_reference_path(step_context, step_outcome.return_reference_path)
-                return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
-
-            if step_outcome.kind == "raise":
-                if step_outcome.raise_error_type is not None:
-                    raise_error_type_name = step_outcome.raise_error_type
-                    resolved_raise_error_type = resolve_name_in_step_context(step_context, raise_error_type_name)
-                    if resolved_raise_error_type is None:
-                        raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
-                    if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
-                        raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}")
-                    raise resolved_raise_error_type(step_outcome.raise_message)
-                raise ExecutionError(f"Execution failed: {step_outcome.raise_message}")
-
-            return {
-                "step_outcome": step_outcome,
-                "input_bindings": dict(input_bindings),
-                "bindings": bindings,
-                "return_value": return_value,
-            }
+            return await self._build_envelope_async(
+                step_context=step_context,
+                step_outcome=step_outcome,
+                allowed_step_kinds=allowed_step_kinds,
+                bindings=bindings,
+                input_bindings=input_bindings,
+                return_annotation=return_annotation,
+            )
 
 
 def get_caller_frame() -> FrameType:
