@@ -409,7 +409,7 @@ Runtime execution identity is modeled separately in `ExecutionContext`:
 - `run_id`: the Id of the outermost run (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
 - `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
 
-Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the MAS layer (`nest`).
+Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the host application layer that embeds Nighthawk.
 
 Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:

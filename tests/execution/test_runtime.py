@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import nighthawk as nh
-from nighthawk.errors import ExecutionError
+from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome
 from tests.execution.stub_executor import StubExecutor
@@ -379,3 +379,99 @@ def test_frontmatter_deny_return_allows_bindings():
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert f(10) == 11
+
+
+def test_natural_function_can_override_step_executor_configuration_model_within_scope() -> None:
+    class FakeRunResult:
+        def __init__(self, output: object) -> None:
+            self.output = output
+
+    class RecordingAgent:
+        def __init__(self) -> None:
+            self.seen_model_identifiers: list[str] = []
+
+        def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            from nighthawk.runtime.step_contract import PassStepOutcome
+            from nighthawk.tools.assignment import assign_tool
+
+            assert deps is not None
+            _ = user_prompt
+            _ = kwargs
+
+            current_step_executor = nh.get_step_executor()
+            assert isinstance(current_step_executor, nh.AgentStepExecutor)
+            current_model_identifier = current_step_executor.configuration.model
+            self.seen_model_identifiers.append(current_model_identifier)
+            assign_tool(deps, "observed_model_identifier", repr(current_model_identifier))
+
+            return FakeRunResult(PassStepOutcome(kind="pass"))
+
+    initial_model_identifier = "openai-responses:gpt-5-nano"
+    overridden_model_identifier = "openai-responses:gpt-5-mini"
+    recording_agent = RecordingAgent()
+    step_executor_configuration = nh.StepExecutorConfiguration(model=initial_model_identifier)
+    step_executor = nh.AgentStepExecutor.from_agent(
+        agent=recording_agent,
+        configuration=step_executor_configuration,
+    )
+
+    with nh.run(step_executor):
+
+        @nh.natural_function
+        def f() -> tuple[str, str, str]:
+            """natural
+            <:observed_model_identifier>
+            Record the current model identifier.
+            """
+            first_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+            with nh.scope(
+                step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
+                    model="openai-responses:gpt-5-mini"
+                )
+            ):
+                """natural
+                <:observed_model_identifier>
+                Record the current model identifier.
+                """
+                second_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+            """natural
+            <:observed_model_identifier>
+            Record the current model identifier.
+            """
+            third_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+            return (
+                first_model_identifier,
+                second_model_identifier,
+                third_model_identifier,
+            )
+
+        assert f() == (
+            initial_model_identifier,
+            overridden_model_identifier,
+            initial_model_identifier,
+        )
+
+    assert recording_agent.seen_model_identifiers == [
+        initial_model_identifier,
+        overridden_model_identifier,
+        initial_model_identifier,
+    ]
+
+
+def test_natural_function_rejects_step_executor_configuration_updates_for_non_agent_step_executor() -> None:
+    with nh.run(StubExecutor()):
+
+        @nh.natural_function
+        def f() -> None:
+            with nh.scope(
+                step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
+                    model="openai-responses:gpt-5-mini"
+                )
+            ):
+                pass
+
+        with pytest.raises(NighthawkError, match="AgentStepExecutor"):
+            f()
