@@ -10,10 +10,10 @@ from pydantic import TypeAdapter
 
 from ..errors import ExecutionError
 from .async_bridge import run_coroutine_synchronously
-from .environment import Environment
-from .scoping import RUN_ID, SCOPE_ID, STEP_ID, span
+from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_execution_context, span
 from .step_context import (
     StepContext,
+    ToolResultRenderingPolicy,
     get_python_cell_scope_stack,
     get_python_name_scope_stack,
     get_step_context_stack,
@@ -90,12 +90,12 @@ def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tup
 
 
 class Runner:
-    def __init__(self, environment: Environment) -> None:
-        self.environment = environment
+    def __init__(self, step_executor: object) -> None:
+        self.step_executor = step_executor
 
     @classmethod
-    def from_environment(cls, environment: Environment) -> "Runner":
-        return cls(environment)
+    def from_step_executor(cls, step_executor: object) -> "Runner":
+        return cls(step_executor)
 
     def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
         try:
@@ -227,13 +227,18 @@ class Runner:
             if resolution_kind in ("locals", "cell_scope", "name_scope"):
                 step_locals[binding_name] = resolved_input_binding_name_to_value[binding_name]
 
+        step_executor = self.step_executor
+        tool_result_rendering_policy = getattr(step_executor, "tool_result_rendering_policy", None)
+        if tool_result_rendering_policy is not None and not isinstance(tool_result_rendering_policy, ToolResultRenderingPolicy):
+            raise ExecutionError("Step executor tool_result_rendering_policy must be ToolResultRenderingPolicy when provided")
+
         step_context = StepContext(
             step_id=str(uuid.uuid4()),
-            run_configuration=self.environment.run_configuration,
             step_globals=step_globals,
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
             binding_name_to_type=binding_name_to_type,
+            tool_result_rendering_policy=tool_result_rendering_policy,
         )
 
         return processed_without_frontmatter, allowed_step_kinds, step_context, dict(resolved_input_binding_name_to_value)
@@ -352,16 +357,17 @@ class Runner:
             is_in_loop,
             caller_frame=caller_frame,
         )
+        execution_context = get_execution_context()
 
         with span(
             "nighthawk.step",
             **{
-                RUN_ID: self.environment.run_id,
-                SCOPE_ID: self.environment.scope_id,
+                RUN_ID: execution_context.run_id,
+                SCOPE_ID: execution_context.scope_id,
                 STEP_ID: step_context.step_id,
             },
         ):
-            step_executor = self.environment.step_executor
+            step_executor = self.step_executor
 
             run_step_method = getattr(step_executor, "run_step", None)
             if callable(run_step_method):
@@ -423,16 +429,17 @@ class Runner:
             is_in_loop,
             caller_frame=caller_frame,
         )
+        execution_context = get_execution_context()
 
         with span(
             "nighthawk.step",
             **{
-                RUN_ID: self.environment.run_id,
-                SCOPE_ID: self.environment.scope_id,
+                RUN_ID: execution_context.run_id,
+                SCOPE_ID: execution_context.scope_id,
                 STEP_ID: step_context.step_id,
             },
         ):
-            step_executor = self.environment.step_executor
+            step_executor = self.step_executor
 
             run_step_async_method = getattr(step_executor, "run_step_async", None)
             if callable(run_step_async_method):

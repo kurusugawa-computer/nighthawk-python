@@ -6,11 +6,12 @@ import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import build_user_prompt
 
+_DEFAULT_EXECUTOR_CONFIGURATION = nh.StepExecutorConfiguration()
+
 
 def _build_step_context(*, python_globals: dict[str, object], python_locals: dict[str, object]) -> StepContext:
     return StepContext(
         step_id="test",
-        run_configuration=nh.RunConfiguration(),
         step_globals=python_globals,
         step_locals=python_locals,
         binding_commit_targets=set(),
@@ -25,6 +26,14 @@ def _locals_section(prompt: str) -> str:
     return prompt.split("<<<NH:LOCALS>>>\n", 1)[1].split("\n<<<NH:END_LOCALS>>>", 1)[0]
 
 
+def _build_user_prompt_text(*, processed_natural_program: str, step_context: StepContext) -> str:
+    return build_user_prompt(
+        processed_natural_program=processed_natural_program,
+        step_context=step_context,
+        configuration=_DEFAULT_EXECUTOR_CONFIGURATION,
+    )
+
+
 def test_globals_markers_present_even_when_empty(tmp_path) -> None:
     _ = tmp_path
     step_context = _build_step_context(
@@ -36,13 +45,8 @@ def test_globals_markers_present_even_when_empty(tmp_path) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=step_context.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-        )
-    ):
-        prompt = build_user_prompt(
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
+        prompt = _build_user_prompt_text(
             processed_natural_program="Say hi.",
             step_context=step_context,
         )
@@ -67,13 +71,8 @@ def test_globals_selection_escaping_and_omission(tmp_path) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=step_context.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-        )
-    ):
-        prompt = build_user_prompt(
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
+        prompt = _build_user_prompt_text(
             processed_natural_program=("Use <module.attr>.\nDo not select \\u005c<module.attr>.\nAlso mention <module.missing>.\n").encode("utf-8").decode("unicode_escape"),
             step_context=step_context,
         )
@@ -107,13 +106,8 @@ def test_locals_first_prevents_globals_entry(tmp_path) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=step_context.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-        )
-    ):
-        prompt = build_user_prompt(processed_natural_program="Use <module.attr>.", step_context=step_context)
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
+        prompt = _build_user_prompt_text(processed_natural_program="Use <module.attr>.", step_context=step_context)
 
     globals_section = _globals_section(prompt)
     assert "module" not in globals_section
@@ -136,13 +130,8 @@ def test_same_reference_is_deduplicated(tmp_path) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=step_context.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-        )
-    ):
-        prompt = build_user_prompt(
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
+        prompt = _build_user_prompt_text(
             processed_natural_program="<module.attr> <module.attr> <module.attr>",
             step_context=step_context,
         )
@@ -169,13 +158,8 @@ def test_globals_ordering_is_lexicographic_by_top_level_name(tmp_path) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=step_context.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-        )
-    ):
-        prompt = build_user_prompt(
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
+        prompt = _build_user_prompt_text(
             processed_natural_program="<b_module.attr> <a_module.attr>",
             step_context=step_context,
         )
@@ -198,13 +182,8 @@ def test_locals_ordering_is_lexicographic_by_name(tmp_path) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=step_context.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=NoopAgent()),
-        )
-    ):
-        prompt = build_user_prompt(
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
+        prompt = _build_user_prompt_text(
             processed_natural_program="Say hi.",
             step_context=step_context,
         )

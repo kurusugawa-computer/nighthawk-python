@@ -44,10 +44,10 @@ Non-goals:
 - Persisting memory across processes (file-based snapshotting, etc.).
 - Persisting or reconstructing workspace objects (likely partial only).
 
-### Environment propagation (future)
+### Execution context propagation (future)
 
-- Propagate environment across tool execution boundaries when tools run in different threads or processes.
-- Define an explicit serialization/propagation mechanism for environment for multi-process execution.
+- Propagate execution context and step-executor context across tool execution boundaries when tools run in different threads or processes.
+- Define an explicit serialization/propagation mechanism for multi-process execution.
 
 ### Skills-style packaging (future)
 

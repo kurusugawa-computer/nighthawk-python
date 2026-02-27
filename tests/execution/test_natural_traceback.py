@@ -27,12 +27,7 @@ class _FakeAgent:
 def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
     _ = tmp_path
     agent = _FakeAgent()
-    with nh.run(
-        nh.Environment(
-            run_configuration=nh.RunConfiguration(),
-            step_executor=nh.AgentStepExecutor(agent=agent),
-        )
-    ):
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
         @nh.natural_function
         def f() -> None:
@@ -70,12 +65,7 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
 def test_natural_traceback_includes_inline_block_line(tmp_path):
     _ = tmp_path
     agent = _FakeAgent()
-    with nh.run(
-        nh.Environment(
-            run_configuration=nh.RunConfiguration(),
-            step_executor=nh.AgentStepExecutor(agent=agent),
-        )
-    ):
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
         @nh.natural_function
         def f() -> None:
@@ -145,12 +135,7 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
             )
             raise RuntimeError("Executor failed")
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=nh.RunConfiguration(),
-            step_executor=_FailingExecutor(),
-        )
-    ):
+    with nh.run(_FailingExecutor()):
 
         @nh.natural_function
         def f() -> None:

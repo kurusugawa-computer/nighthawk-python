@@ -63,7 +63,7 @@ Constraints / defaults (current implementation):
 
 Model identifiers:
 
-- `RunConfiguration(model=...)` uses `provider:model`.
+- `StepExecutorConfiguration(model=...)` uses `provider:model`.
 - For `claude-code` and `codex`, you can use `:default` to use the backend/provider default model.
   - Examples: `claude-code:default`, `codex:default`.
 

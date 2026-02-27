@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 
@@ -20,22 +19,21 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
     logfire.instrument_mcp()
     logfire.instrument_pydantic_ai()
 
-    run_configuration = nh.RunConfiguration(model="claude-code:gpt-5.3-codex")
-
     from nighthawk.backends.claude_code import ClaudeCodeModelSettings
 
-    environment_value = nh.Environment(
-        run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=run_configuration,
-            model_settings=ClaudeCodeModelSettings(
-                claude_max_turns=6,
-                working_directory=str(tmp_path.resolve()),
-            ),
+    run_configuration = nh.StepExecutorConfiguration(
+        model="claude-code:gpt-5.3-codex",
+        model_settings=ClaudeCodeModelSettings(
+            claude_max_turns=6,
+            working_directory=str(tmp_path.resolve()),
         ),
     )
 
-    with nh.run(environment_value):
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=run_configuration,
+    )
+
+    with nh.run(step_executor):
 
         @nh.natural_function
         def test_function() -> str:
@@ -69,22 +67,21 @@ def test_claude_skill() -> None:
     try:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
-        configuration = nh.RunConfiguration(model="claude-code:gpt-5.3-codex")
-
-        environment = nh.Environment(
-            run_configuration=configuration,
-            step_executor=nh.AgentStepExecutor(
-                run_configuration=configuration,
-                model_settings=ClaudeCodeModelSettings(
-                    permission_mode="bypassPermissions",
-                    setting_sources=["project"],
-                    claude_allowed_tool_names=("Skill", "Bash"),
-                    claude_max_turns=6,
-                    working_directory=str(working_directory.resolve()),
-                ),
+        configuration = nh.StepExecutorConfiguration(
+            model="claude-code:gpt-5.3-codex",
+            model_settings=ClaudeCodeModelSettings(
+                permission_mode="bypassPermissions",
+                setting_sources=["project"],
+                claude_allowed_tool_names=("Skill", "Bash"),
+                claude_max_turns=6,
+                working_directory=str(working_directory.resolve()),
             ),
         )
-        with nh.run(environment):
+
+        step_executor = nh.AgentStepExecutor.from_configuration(
+            configuration=configuration,
+        )
+        with nh.run(step_executor):
 
             @nh.natural_function
             def test_function():
@@ -120,22 +117,21 @@ def test_claude_skill_calc() -> None:
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
-    configuration = nh.RunConfiguration(model="claude-code:gpt-5.3-codex")
-
-    environment = nh.Environment(
-        run_configuration=configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=configuration,
-            model_settings=ClaudeCodeModelSettings(
-                permission_mode="bypassPermissions",
-                setting_sources=["project"],
-                claude_allowed_tool_names=("Skill", "Bash"),
-                claude_max_turns=6,
-                working_directory=str(working_directory.resolve()),
-            ),
+    configuration = nh.StepExecutorConfiguration(
+        model="claude-code:gpt-5.3-codex",
+        model_settings=ClaudeCodeModelSettings(
+            permission_mode="bypassPermissions",
+            setting_sources=["project"],
+            claude_allowed_tool_names=("Skill", "Bash"),
+            claude_max_turns=6,
+            working_directory=str(working_directory.resolve()),
         ),
     )
-    with nh.run(environment):
+
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=configuration,
+    )
+    with nh.run(step_executor):
 
         @nh.natural_function
         def test_function():
@@ -179,21 +175,20 @@ def test_claude_mcp_callback() -> None:
 
     from nighthawk.backends.claude_code import ClaudeCodeModelSettings
 
-    configuration = nh.RunConfiguration(model="claude-code:gpt-5.3-codex")
-
-    environment = nh.Environment(
-        run_configuration=configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=configuration,
-            model_settings=ClaudeCodeModelSettings(
-                permission_mode="bypassPermissions",
-                setting_sources=["project"],
-                claude_allowed_tool_names=("Bash",),
-                claude_max_turns=6,
-            ),
+    configuration = nh.StepExecutorConfiguration(
+        model="claude-code:gpt-5.3-codex",
+        model_settings=ClaudeCodeModelSettings(
+            permission_mode="bypassPermissions",
+            setting_sources=["project"],
+            claude_allowed_tool_names=("Bash",),
+            claude_max_turns=6,
         ),
     )
-    with nh.run(environment):
+
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=configuration,
+    )
+    with nh.run(step_executor):
 
         @nh.natural_function
         def test_function():

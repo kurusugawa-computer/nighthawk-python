@@ -58,8 +58,8 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Step locals (`step_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
 - Step globals (`step_globals`): a limited globals mapping used as the execution environment for LLM expressions.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
-  - Required fields include `step_id` (unique Id for the step) and `run_configuration`.
-  - Model selection is sourced only from `run_configuration.model`; StepContext does not carry a separate `model` field.
+  - Required fields include `step_id` (unique Id for the step).
+  - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
 - Locals summary: a bounded text rendering of selected values from `step_locals`, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Outcome: the single, unambiguous result of executing a Natural block.
@@ -78,30 +78,24 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 ### 5.2. Configuration
 
-- `NighthawkConfiguration`
-  - `run_configuration`: configuration for execution.
-
-- `RunConfiguration`
+- `StepExecutorConfiguration`
   - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
     - Examples: `openai-responses:gpt-5.2`, `openai-responses:gpt-5-nano`.
     - Special cases:
       - `claude-code:default` and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-  - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. Default: `o200k_base`.
+  - `model_settings`: optional model/backend settings object forwarded to Pydantic AI Agent calls.
+  - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
   - `prompts`: prompt templates used for execution.
     - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
     - `step_user_prompt_template`: full user prompt template including section delimiters.
   - `context_limits`: limits for rendering dynamic context into the prompt.
-  - `context_redaction`: rules for reducing or masking sensitive data in prompt context.
+  - `json_renderer_style`: JSON rendering style used in prompt context and tool result envelopes.
+  - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
+  - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 
-`context_redaction` minimal requirements:
-
-- Allowlist behavior:
-  - Locals allowlist: if empty, all local names are eligible for inclusion; if non-empty, only listed names are eligible.
-- Masking behavior:
-  - If a local name matches a configured mask rule (for example a substring match), its value is replaced with a fixed marker.
-  - The default marker is `[redacted]`.
-- v1 limitation:
-  - Redaction is shallow: it applies to which top-level names are shown and whether their values are replaced by a marker. It is not a recursive structured scrubber.
+- `StepExecutorConfigurationPatch`
+  - Partial override object for scoped configuration updates.
+  - Supports patching model, model settings, templates, limits, renderer style, tokenizer encoding, and prompt suffix fragment tuples.
 
 ## 6. Natural block detection
 
@@ -402,37 +396,40 @@ In the simplest docstring pattern, the Python function body returns a variable t
 
 If a step requests `outcome.kind == "return"`, the runner returns the validated return value immediately.
 
-## 10. Environment
+## 10. Runtime scoping
 
-Nighthawk uses an implicit environment (dynamic scoping) carried via `contextvars.ContextVar`.
+Nighthawk uses dynamic scoping carried via `contextvars.ContextVar`.
 
-The environment is required for step execution and contains:
+The required runtime object for step execution is:
 
-- `run_id`: the Id of the outermost environment (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
-- `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
-- `run_configuration` (required): execution configuration.
 - `step_executor` (required): a strategy object responsible for executing steps (Natural blocks).
+
+Runtime execution identity is modeled separately in `ExecutionContext`:
+
+- `run_id`: the Id of the outermost run (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
+- `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
 
 Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the MAS layer (`nest`).
 
 Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
-- `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`: optional sequences of strings appended to the end of the effective system/user prompts for the duration of a scoped override.
-
 API:
 
-- `nighthawk.run(environment: Environment)`
-  - Replaces the current context environment with the provided environment.
-  - Generates a new `scope_id` for the duration of the `with`.
-  - Maintains the existing `run_id` if present in the provided environment (used for trace propagation across distributed agent boundaries). Generates a new `run_id` (trace root) only if the provided environment has no `run_id`.
-  - Can be used even when no environment is currently set.
+- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None)`
+  - Replaces the current context step executor with the provided step executor.
+  - Generates a new `ExecutionContext` for the duration of the `with`.
+  - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
+  - Always generates a fresh `scope_id`.
+  - Can be used even when no step executor is currently set.
 - `nighthawk.scope(...)`
   - Enter a nested scope within the current run.
-  - Requires an existing environment.
+  - Requires an existing step executor.
   - Generates a new `scope_id` (keeps the current `run_id`).
   - Only specified fields are overridden for the duration of the `with`.
-  - Supports appending prompt suffix fragments for system and user prompts.
-- `nighthawk.get_environment() -> Environment`
-  - Get the current environment. Raises if unset.
+  - Supports updating `StepExecutorConfiguration` and appending scoped prompt suffix fragments for system and user prompts.
+- `nighthawk.get_step_executor() -> StepExecutor`
+  - Get the current step executor. Raises if unset.
+- `nighthawk.get_execution_context() -> ExecutionContext`
+  - Get the current runtime execution identity. Raises if unset.
 
 ## 11. Interpolation (opt-in, f-strings only)
 

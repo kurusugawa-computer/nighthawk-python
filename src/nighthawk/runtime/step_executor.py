@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from inspect import signature
 from string import Template
 from typing import Any, Awaitable, Callable, Iterable, Protocol, cast
@@ -11,14 +11,23 @@ from pydantic import TypeAdapter
 from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..configuration import RunConfiguration
+from ..configuration import StepContextLimits, StepExecutorConfiguration
 from ..errors import ExecutionError
 from ..json_renderer import RenderStyle, count_tokens, render_json_text
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
-from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_environment, scope, span
-from .step_context import StepContext, resolve_name_in_step_context, step_context_scope
+from .scoping import (
+    RUN_ID,
+    SCOPE_ID,
+    STEP_ID,
+    get_execution_context,
+    get_system_prompt_suffix_fragments,
+    get_user_prompt_suffix_fragments,
+    scope,
+    span,
+)
+from .step_context import StepContext, ToolResultRenderingPolicy, resolve_name_in_step_context, step_context_scope
 from .step_contract import (
     STEP_KINDS,
     StepKind,
@@ -91,9 +100,14 @@ def _render_reference_and_value_list_section(
     return "\n".join(lines)
 
 
-def _render_locals_section(step_context: StepContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
-    run_configuration = step_context.run_configuration
-    context_limits = run_configuration.context_limits
+def _render_locals_section(
+    *,
+    step_context: StepContext,
+    references: Iterable[str],
+    token_encoding: tiktoken.Encoding,
+    context_limits: StepContextLimits,
+    json_renderer_style: RenderStyle,
+) -> str:
 
     eligible_reference_and_value_list: list[tuple[str, object]] = []
     for reference in sorted(references):
@@ -107,7 +121,7 @@ def _render_locals_section(step_context: StepContext, references: Iterable[str],
         section_max_tokens=context_limits.locals_max_tokens,
         value_max_tokens=context_limits.value_max_tokens,
         token_encoding=token_encoding,
-        json_renderer_style=run_configuration.json_renderer_style,
+        json_renderer_style=json_renderer_style,
     )
 
 
@@ -129,9 +143,14 @@ def _extract_references_and_program(text: str) -> tuple[tuple[str, ...], str]:
     return tuple(references), unescaped_text
 
 
-def _render_globals_section(step_context: StepContext, references: Iterable[str], token_encoding: tiktoken.Encoding) -> str:
-    run_configuration = step_context.run_configuration
-    context_limits = run_configuration.context_limits
+def _render_globals_section(
+    *,
+    step_context: StepContext,
+    references: Iterable[str],
+    token_encoding: tiktoken.Encoding,
+    context_limits: StepContextLimits,
+    json_renderer_style: RenderStyle,
+) -> str:
 
     eligible_reference_and_value_list: list[tuple[str, object]] = []
     for reference in sorted(references):
@@ -150,22 +169,38 @@ def _render_globals_section(step_context: StepContext, references: Iterable[str]
         section_max_tokens=context_limits.globals_max_tokens,
         value_max_tokens=context_limits.value_max_tokens,
         token_encoding=token_encoding,
-        json_renderer_style=run_configuration.json_renderer_style,
+        json_renderer_style=json_renderer_style,
     )
 
 
-def build_user_prompt(processed_natural_program: str, step_context: StepContext) -> str:
-    run_configuration = step_context.run_configuration
-    template_text = run_configuration.prompts.step_user_prompt_template
-    token_encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
+def build_user_prompt(
+    *,
+    processed_natural_program: str,
+    step_context: StepContext,
+    configuration: StepExecutorConfiguration,
+) -> str:
+    template_text = configuration.prompts.step_user_prompt_template
+    context_limits = configuration.context_limits
+    token_encoding = configuration.resolve_token_encoding()
 
-    locals_text = _render_locals_section(step_context, step_context.step_locals.keys(), token_encoding)
+    locals_text = _render_locals_section(
+        step_context=step_context,
+        references=step_context.step_locals.keys(),
+        token_encoding=token_encoding,
+        context_limits=context_limits,
+        json_renderer_style=configuration.json_renderer_style,
+    )
 
     references, program_text = _extract_references_and_program(processed_natural_program)
-    globals_text = _render_globals_section(step_context, references, token_encoding)
+    globals_text = _render_globals_section(
+        step_context=step_context,
+        references=references,
+        token_encoding=token_encoding,
+        context_limits=context_limits,
+        json_renderer_style=configuration.json_renderer_style,
+    )
 
     template = Template(template_text)
-    current_environment = get_environment()
 
     prompt_text = template.substitute(
         program=program_text,
@@ -173,7 +208,10 @@ def build_user_prompt(processed_natural_program: str, step_context: StepContext)
         globals=globals_text,
     )
 
-    suffix_fragments = current_environment.user_prompt_suffix_fragments
+    suffix_fragments = (
+        *configuration.user_prompt_suffix_fragments,
+        *get_user_prompt_suffix_fragments(),
+    )
     if suffix_fragments:
         return "\n\n".join([prompt_text, *suffix_fragments])
 
@@ -181,10 +219,9 @@ def build_user_prompt(processed_natural_program: str, step_context: StepContext)
 
 
 def _new_agent_step_executor(
-    run_configuration: RunConfiguration,
-    agent_constructor_keyword_arguments: dict[str, Any],
+    configuration: StepExecutorConfiguration,
 ) -> StepExecutionAgent:
-    model_identifier = run_configuration.model
+    model_identifier = configuration.model
     provider, provider_model_name = model_identifier.split(":", 1)
 
     match provider:
@@ -199,51 +236,73 @@ def _new_agent_step_executor(
         case _:
             model = model_identifier
 
+    constructor_arguments: dict[str, Any] = {}
+    if configuration.model_settings is not None:
+        constructor_arguments["model_settings"] = configuration.model_settings
+
     agent = Agent(
         model=model,
         output_type=StepOutcome,  # pyright: ignore
         deps_type=StepContext,
-        system_prompt=run_configuration.prompts.step_system_prompt_template,
-        **agent_constructor_keyword_arguments,
+        system_prompt=configuration.prompts.step_system_prompt_template,
+        **constructor_arguments,
     )
 
     @agent.system_prompt(dynamic=True)
-    def _environment_system_prompt() -> str | None:  # pyright: ignore[reportUnusedFunction]
-        try:
-            current_environment = get_environment()
-        except Exception:
-            return None
-
-        suffix_fragments = current_environment.system_prompt_suffix_fragments
+    def _system_prompt_suffixes() -> str | None:  # pyright: ignore[reportUnusedFunction]
+        suffix_fragments = (
+            *configuration.system_prompt_suffix_fragments,
+            *get_system_prompt_suffix_fragments(),
+        )
         if not suffix_fragments:
             return None
-
         return "\n\n".join(suffix_fragments)
 
     return agent
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class AgentStepExecutor:
-    agent: StepExecutionAgent
+    configuration: StepExecutorConfiguration = field(default_factory=StepExecutorConfiguration)
+    agent: StepExecutionAgent | None = None
+    token_encoding: tiktoken.Encoding = field(init=False)
+    tool_result_rendering_policy: ToolResultRenderingPolicy = field(init=False)
+    agent_is_managed: bool = field(init=False)
 
-    def __init__(
-        self,
+    def __post_init__(self) -> None:
+        resolved_agent = self.agent if self.agent is not None else _new_agent_step_executor(self.configuration)
+        agent_is_managed = self.agent is None
+        resolved_token_encoding = self.configuration.resolve_token_encoding()
+        object.__setattr__(self, "agent", resolved_agent)
+        object.__setattr__(self, "agent_is_managed", agent_is_managed)
+        object.__setattr__(self, "token_encoding", resolved_token_encoding)
+        object.__setattr__(
+            self,
+            "tool_result_rendering_policy",
+            ToolResultRenderingPolicy(
+                tokenizer_encoding_name=resolved_token_encoding.name,
+                tool_result_max_tokens=self.configuration.context_limits.tool_result_max_tokens,
+                json_renderer_style=self.configuration.json_renderer_style,
+            ),
+        )
+
+    @classmethod
+    def from_agent(
+        cls,
         *,
-        agent: StepExecutionAgent | None = None,
-        run_configuration: RunConfiguration | None = None,
-        **agent_constructor_keyword_arguments: Any,
-    ) -> None:
-        if agent is not None:
-            if run_configuration is not None or agent_constructor_keyword_arguments:
-                raise ValueError("When agent is provided, do not also pass run_configuration or Agent constructor arguments")
-            object.__setattr__(self, "agent", agent)
-            return
+        agent: StepExecutionAgent,
+        configuration: StepExecutorConfiguration | None = None,
+    ) -> AgentStepExecutor:
+        resolved_configuration = configuration if configuration is not None else StepExecutorConfiguration()
+        return cls(configuration=resolved_configuration, agent=agent)
 
-        if run_configuration is None:
-            raise ValueError("AgentStepExecutor requires either agent=... or run_configuration=...")
-
-        object.__setattr__(self, "agent", _new_agent_step_executor(run_configuration, agent_constructor_keyword_arguments))
+    @classmethod
+    def from_configuration(
+        cls,
+        *,
+        configuration: StepExecutorConfiguration,
+    ) -> AgentStepExecutor:
+        return cls(configuration=configuration)
 
     async def _run_agent(
         self,
@@ -253,6 +312,7 @@ class AgentStepExecutor:
         toolset: ToolResultWrapperToolset,
         structured_output_type: object,
     ) -> Any:
+        assert self.agent is not None
         async_run_method = getattr(self.agent, "run", None)
         if callable(async_run_method):
             async_run_method_typed = cast(Callable[..., Awaitable[Any]], async_run_method)
@@ -282,9 +342,13 @@ class AgentStepExecutor:
         binding_names: list[str],
         allowed_step_kinds: tuple[str, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
+        if step_context.tool_result_rendering_policy is None:
+            step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
+
         user_prompt = build_user_prompt(
             processed_natural_program=processed_natural_program,
             step_context=step_context,
+            configuration=self.configuration,
         )
 
         tools = get_visible_tools()
@@ -327,12 +391,12 @@ class AgentStepExecutor:
             )
             structured_output_type = StructuredDict(outcome_json_schema, name="StepOutcome")
 
-            current_environment = get_environment()
+            execution_context = get_execution_context()
             with span(
                 "nighthawk.step_executor",
                 **{
-                    RUN_ID: current_environment.run_id,
-                    SCOPE_ID: current_environment.scope_id,
+                    RUN_ID: execution_context.run_id,
+                    SCOPE_ID: execution_context.scope_id,
                     STEP_ID: step_context.step_id,
                 },
             ):

@@ -239,22 +239,18 @@ if __name__ == "__main__":
 def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     codex_executable = _write_executable_codex_stub(directory=tmp_path)
 
-    run_configuration = nh.RunConfiguration(model="codex:default")
+    nh.StepExecutorConfiguration(model="codex:default")
 
     class StubExecutor:
         def run_step(self, **kwargs):  # type: ignore[no-untyped-def]
             _ = kwargs
             raise AssertionError("StepExecutor should not be used by this test")
 
-    environment_value = nh.Environment(
-        run_configuration=run_configuration,
-        step_executor=StubExecutor(),
-    )
+    step_executor = StubExecutor()
 
-    with nh.run(environment_value):
+    with nh.run(step_executor):
         step_context = StepContext(
             step_id="test_codex_model_contract_calls_tool_via_mcp",
-            run_configuration=run_configuration,
             step_globals={"__builtins__": __builtins__},
             step_locals={},
             binding_commit_targets=set(),

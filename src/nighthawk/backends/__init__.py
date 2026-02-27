@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import tiktoken
 from pydantic_ai import RunContext
@@ -12,6 +12,7 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, Sy
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..runtime.step_context import StepContext, ToolResultRenderingPolicy
 from ..runtime.tool_calls import run_tool_instrumented
 from ..tools.contracts import (
     ToolBoundaryFailure,
@@ -22,6 +23,19 @@ from ..tools.contracts import (
 )
 
 type ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
+
+_DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
+    tokenizer_encoding_name="o200k_base",
+    tool_result_max_tokens=2_000,
+    json_renderer_style="strict",
+)
+
+
+def _resolve_tool_result_rendering_policy(run_context: RunContext[StepContext]) -> ToolResultRenderingPolicy:
+    policy = run_context.deps.tool_result_rendering_policy
+    if policy is None:
+        return _DEFAULT_TOOL_RESULT_RENDERING_POLICY
+    return policy
 
 
 def find_most_recent_model_request(messages: list[ModelMessage]) -> ModelRequest:
@@ -55,19 +69,22 @@ def collect_user_prompt_text(model_request: ModelRequest, *, backend_label: str)
     return "\n\n".join(p for p in parts if p)
 
 
-def get_current_run_context_or_none() -> RunContext[Any] | None:
+def get_current_run_context_or_none() -> RunContext[StepContext] | None:
     from pydantic_ai._run_context import get_current_run_context
 
-    return get_current_run_context()
+    run_context = get_current_run_context()
+    if run_context is None:
+        return None
+    return cast(RunContext[StepContext], run_context)
 
 
-def get_current_run_context_required() -> RunContext[Any]:
+def get_current_run_context_required() -> RunContext[StepContext]:
     from pydantic_ai._run_context import get_current_run_context
 
     run_context = get_current_run_context()
     if run_context is None:
         raise RuntimeError("Nighthawk tool boundaries require an active RunContext")
-    return run_context
+    return cast(RunContext[StepContext], run_context)
 
 
 def generate_tool_call_id() -> str:
@@ -77,11 +94,11 @@ def generate_tool_call_id() -> str:
 
 
 def replace_run_context_for_tool(
-    run_context: RunContext[Any],
+    run_context: RunContext[StepContext],
     *,
     tool_name: str,
     tool_call_id: str,
-) -> RunContext[Any]:
+) -> RunContext[StepContext]:
     return replace(
         run_context,
         tool_name=tool_name,
@@ -139,7 +156,8 @@ async def build_tool_name_to_handler(
                 tool_call_id=tool_call_id,
             )
 
-            run_configuration = run_context.deps.run_configuration  # type: ignore[attr-defined]
+            rendering_policy = _resolve_tool_result_rendering_policy(run_context)
+            encoding = tiktoken.get_encoding(rendering_policy.tokenizer_encoding_name)
 
             async def call() -> str:
                 with set_current_run_context(tool_run_context):
@@ -170,51 +188,46 @@ async def build_tool_name_to_handler(
                     except (ModelRetry, CallDeferred, ApprovalRequired):
                         raise
                     except ToolBoundaryFailure as exception:
-                        encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
                         return tool_result_failure_json_text(
                             kind=exception.kind,
                             message=str(exception),
                             guidance=exception.guidance,
-                            max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                            max_tokens=rendering_policy.tool_result_max_tokens,
                             encoding=encoding,
-                            style=run_configuration.json_renderer_style,
+                            style=rendering_policy.json_renderer_style,
                         )
                     except (UserError, UnexpectedModelBehavior) as exception:
-                        encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
                         return tool_result_failure_json_text(
                             kind="internal",
                             message=str(exception),
                             guidance="The tool backend failed. Retry or report this error.",
-                            max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                            max_tokens=rendering_policy.tool_result_max_tokens,
                             encoding=encoding,
-                            style=run_configuration.json_renderer_style,
+                            style=rendering_policy.json_renderer_style,
                         )
                     except Exception as exception:
-                        encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
                         return tool_result_failure_json_text(
                             kind="internal",
                             message=str(exception) or "Tool execution failed",
                             guidance="The tool execution raised an unexpected error. Retry or report this error.",
-                            max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                            max_tokens=rendering_policy.tool_result_max_tokens,
                             encoding=encoding,
-                            style=run_configuration.json_renderer_style,
+                            style=rendering_policy.json_renderer_style,
                         )
-
-                encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
 
                 if isinstance(tool_result, ToolResult):
                     return tool_result_success_json_text(
                         value=tool_result.value,
-                        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                        max_tokens=rendering_policy.tool_result_max_tokens,
                         encoding=encoding,
-                        style=run_configuration.json_renderer_style,
+                        style=rendering_policy.json_renderer_style,
                     )
 
                 return tool_result_success_json_text(
                     value=tool_result,
-                    max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+                    max_tokens=rendering_policy.tool_result_max_tokens,
                     encoding=encoding,
-                    style=run_configuration.json_renderer_style,
+                    style=rendering_policy.json_renderer_style,
                 )
 
             return await run_tool_instrumented(

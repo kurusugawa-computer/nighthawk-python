@@ -7,7 +7,7 @@ from functools import wraps
 from typing import Any, Awaitable, Callable, TypeVar, cast
 
 from ..runtime.runner import Runner
-from ..runtime.scoping import get_environment
+from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope, python_name_scope
 from .blocks import find_natural_blocks
 from .transform import transform_module_ast
@@ -30,8 +30,8 @@ class _RunnerProxy:
             raise RuntimeError("No caller frame")
         caller_frame = frame.f_back
 
-        current_environment = get_environment()
-        runner = Runner.from_environment(current_environment)
+        current_step_executor = get_step_executor()
+        runner = Runner.from_step_executor(current_step_executor)
         return runner.run_step(
             natural_program,
             input_binding_names,
@@ -56,8 +56,8 @@ class _RunnerProxy:
             raise RuntimeError("No caller frame")
         caller_frame = frame.f_back
 
-        current_environment = get_environment()
-        runner = Runner.from_environment(current_environment)
+        current_step_executor = get_step_executor()
+        runner = Runner.from_step_executor(current_step_executor)
         return await runner.run_step_async(
             natural_program,
             input_binding_names,
@@ -227,11 +227,7 @@ def natural_function(func: F | None = None) -> F:
     unexpected_freevar_name_set = transformed_freevar_name_set - captured_name_set
     allowed_unexpected_freevar_name_set = {func.__name__}
     if not unexpected_freevar_name_set.issubset(allowed_unexpected_freevar_name_set):
-        raise RuntimeError(
-            "Transformed function freevars do not match captured names. "
-            f"freevars={getattr(transformed, '__code__').co_freevars!r} "
-            f"captured={tuple(sorted(name_to_value.keys()))!r}"
-        )
+        raise RuntimeError(f"Transformed function freevars do not match captured names. freevars={getattr(transformed, '__code__').co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}")
 
     if getattr(transformed, "__closure__") is None and name_to_value:
         raise RuntimeError("Transformed function closure is missing for captured names")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.assignment import assign_tool_async, eval_expression_async
 
@@ -10,7 +9,6 @@ from nighthawk.tools.assignment import assign_tool_async, eval_expression_async
 def _new_step_context() -> StepContext:
     return StepContext(
         step_id="test_assignment_async",
-        run_configuration=nh.RunConfiguration(),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),

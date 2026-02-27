@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from contextvars import copy_context
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 import tiktoken
 from opentelemetry import context as otel_context
@@ -26,8 +26,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
 
-from ..configuration import RunConfiguration
-from ..runtime.scoping import get_environment
+from ..runtime.step_context import StepContext, ToolResultRenderingPolicy
 from ..tools.mcp_boundary import call_tool_for_low_level_mcp_server
 from ..tools.registry import get_visible_tools
 from . import BackendModelBase
@@ -158,15 +157,13 @@ class _McpToolServer:
         *,
         tool_name_to_tool_definition: dict[str, ToolDefinition],
         tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
-        run_configuration: RunConfiguration,
+        tool_result_rendering_policy: ToolResultRenderingPolicy,
         parent_otel_context: Any,
-        parent_run_context: RunContext[Any],
     ) -> None:
         self._tool_name_to_tool_definition = tool_name_to_tool_definition
         self._tool_name_to_handler = tool_name_to_handler
-        self._run_configuration = run_configuration
+        self._tool_result_rendering_policy = tool_result_rendering_policy
         self._parent_otel_context = parent_otel_context
-        self._parent_run_context = parent_run_context
 
         self._server: Any | None = None
         self._server_thread: threading.Thread | None = None
@@ -219,14 +216,14 @@ class _McpToolServer:
 
             handler = self._tool_name_to_handler.get(name)
             if handler is None:
-                run_configuration = self._run_configuration
+                tool_result_rendering_policy = self._tool_result_rendering_policy
                 result_text = tool_result_failure_json_text(
                     kind="resolution",
                     message=f"Unknown tool: {name}",
                     guidance="Choose a visible tool name and retry.",
-                    max_tokens=run_configuration.context_limits.tool_result_max_tokens,
-                    encoding=tiktoken.get_encoding(run_configuration.tokenizer_encoding),
-                    style=run_configuration.json_renderer_style,
+                    max_tokens=tool_result_rendering_policy.tool_result_max_tokens,
+                    encoding=tiktoken.get_encoding(tool_result_rendering_policy.tokenizer_encoding_name),
+                    style=tool_result_rendering_policy.json_renderer_style,
                 )
                 return [mcp_types.TextContent(type="text", text=result_text)]
 
@@ -375,21 +372,26 @@ async def _mcp_tool_server_if_needed(
         yield None
         return
 
-    run_configuration = get_environment().run_configuration
-
     from pydantic_ai._run_context import get_current_run_context
 
     parent_otel_context = otel_context.get_current()
     parent_run_context = get_current_run_context()
     if parent_run_context is None:
         raise RuntimeError("Codex MCP tool server requires an active RunContext")
+    typed_parent_run_context = cast(RunContext[StepContext], parent_run_context)
+    tool_result_rendering_policy = typed_parent_run_context.deps.tool_result_rendering_policy
+    if tool_result_rendering_policy is None:
+        tool_result_rendering_policy = ToolResultRenderingPolicy(
+            tokenizer_encoding_name="o200k_base",
+            tool_result_max_tokens=2_000,
+            json_renderer_style="strict",
+        )
 
     server = _McpToolServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,
         tool_name_to_handler=tool_name_to_handler,
-        run_configuration=run_configuration,
+        tool_result_rendering_policy=tool_result_rendering_policy,
         parent_otel_context=parent_otel_context,
-        parent_run_context=parent_run_context,
     )
     server.start()
 

@@ -21,9 +21,7 @@ def global_import_file(file_path: Path | str) -> str:
 
 
 def test_natural_function_updates_output_binding_via_docstring_step():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     @dataclass
     class AssertingExecutor:
@@ -42,12 +40,7 @@ def test_natural_function_updates_output_binding_via_docstring_step():
             assert step_context.step_locals["x"] == 10
             return PassStepOutcome(kind="pass"), {"result": 11}
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=AssertingExecutor(),
-        )
-    ):
+    with nh.run(AssertingExecutor()):
 
         @nh.natural_function
         def f(x: int):
@@ -63,16 +56,9 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_async_natural_function_updates_output_binding_via_docstring_step():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         async def f(x: int) -> int:
@@ -88,9 +74,7 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_async_natural_function_awaits_awaitable_return_value_from_step_executor():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     @dataclass
     class AssertingExecutor:
@@ -126,12 +110,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
 
             return ReturnStepOutcome(kind="return", return_reference_path="result"), {"result": calculate()}
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=AssertingExecutor(),
-        )
-    ):
+    with nh.run(AssertingExecutor()):
 
         @nh.natural_function
         async def f() -> int:
@@ -144,9 +123,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
 
 
 def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     class AwaitableInt:
         def __await__(self):  # type: ignore[no-untyped-def]
@@ -170,12 +147,7 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
             _ = allowed_step_kinds
             return ReturnStepOutcome(kind="return", return_reference_path="result"), {"result": AwaitableInt()}
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=AssertingExecutor(),
-        )
-    ):
+    with nh.run(AssertingExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -189,16 +161,9 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
 
 
 def test_async_natural_function_allows_self_reference_freevar():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         async def f() -> int:
@@ -213,15 +178,8 @@ def test_async_natural_function_allows_self_reference_freevar():
 
 
 def test_stub_return_effect_returns_value_from_return_reference_path():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -236,15 +194,8 @@ def test_stub_return_effect_returns_value_from_return_reference_path():
 
 
 def test_stub_return_effect_invalid_return_value_raises():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -260,15 +211,8 @@ def test_stub_return_effect_invalid_return_value_raises():
 
 
 def test_stub_return_effect_invalid_return_reference_path_raises():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -282,15 +226,8 @@ def test_stub_return_effect_invalid_return_reference_path_raises():
 
 
 def test_stub_continue_effect_skips_following_statements():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -307,15 +244,8 @@ def test_stub_continue_effect_skips_following_statements():
 
 
 def test_stub_break_effect_breaks_loop():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -332,15 +262,8 @@ def test_stub_break_effect_breaks_loop():
 
 
 def test_stub_break_outside_loop_raises():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -354,9 +277,7 @@ def test_stub_break_outside_loop_raises():
 
 
 def test_docstring_step_is_literal_no_implicit_interpolation():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     @dataclass
     class RecordingExecutor:
@@ -378,12 +299,7 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
 
     recording_executor = RecordingExecutor()
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=recording_executor,
-        )
-    ):
+    with nh.run(recording_executor):
 
         @nh.natural_function
         def f() -> None:
@@ -397,15 +313,8 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
 
 
 def test_frontmatter_deny_return_rejects_return_step():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -423,15 +332,8 @@ def test_frontmatter_deny_return_rejects_return_step():
 
 
 def test_frontmatter_deny_return_recognizes_leading_blank_lines():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -452,15 +354,8 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines():
 
 
 def test_frontmatter_deny_return_allows_bindings():
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=StubExecutor(),
-        )
-    ):
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f(x: int):

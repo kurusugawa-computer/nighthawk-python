@@ -29,6 +29,7 @@ class Error(BaseModel, extra="forbid"):
 
 
 ValueType = TypeVar("ValueType")
+DepsType = TypeVar("DepsType")
 
 
 class ToolResult(BaseModel, Generic[ValueType], extra="forbid"):
@@ -193,7 +194,7 @@ async def run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> 
     return normalize_tool_success(value)
 
 
-class ToolResultWrapperToolset(WrapperToolset[Any]):
+class ToolResultWrapperToolset(WrapperToolset[DepsType], Generic[DepsType]):
     def __getattr__(self, name: str) -> object:
         return getattr(self.wrapped, name)
 
@@ -201,10 +202,12 @@ class ToolResultWrapperToolset(WrapperToolset[Any]):
         self,
         name: str,
         tool_args: dict[str, Any],
-        ctx: RunContext[Any],
-        tool: ToolsetTool[Any],
+        ctx: RunContext[DepsType],
+        tool: ToolsetTool[DepsType],
     ) -> ToolResult[JsonableValue]:
+        run_context = ctx
+
         async def tool_call() -> object:
-            return await self.wrapped.call_tool(name, tool_args, ctx, tool)
+            return await self.wrapped.call_tool(name, tool_args, run_context, tool)
 
         return await run_tool_and_normalize(tool_call)

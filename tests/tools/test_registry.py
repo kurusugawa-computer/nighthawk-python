@@ -42,9 +42,7 @@ def test_tool_name_conflict_allows_overwrite_true():
 
 def test_tool_defined_in_call_scope_is_not_global(tmp_path):
     _ = tmp_path
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -63,12 +61,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
     from nighthawk.tools.registry import get_visible_tools
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=agent),
-        )
-    ):
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
         @nh.natural_function
         def f() -> None:
@@ -89,9 +82,7 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
 
 def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     class FakeRunResult:
         def __init__(self, output):
@@ -115,12 +106,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
 
     agent = FakeAgent()
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=agent),
-        )
-    ):
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
         @nh.natural_function
         def f() -> None:

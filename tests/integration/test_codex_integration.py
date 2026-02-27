@@ -31,19 +31,18 @@ def _requires_codex_integration() -> None:
 def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    run_configuration = nh.RunConfiguration(model="codex:default")
-
-    environment_value = nh.Environment(
-        run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=run_configuration,
-            model_settings={
-                "working_directory": str(tmp_path.resolve()),
-            },
-        ),
+    run_configuration = nh.StepExecutorConfiguration(
+        model="codex:default",
+        model_settings={
+            "working_directory": str(tmp_path.resolve()),
+        },
     )
 
-    with nh.run(environment_value):
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=run_configuration,
+    )
+
+    with nh.run(step_executor):
 
         @nh.natural_function
         def test_function() -> str:
@@ -61,19 +60,18 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
 def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    run_configuration = nh.RunConfiguration(model="codex:default")
-
-    environment_value = nh.Environment(
-        run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=run_configuration,
-            model_settings={
-                "working_directory": str(tmp_path.resolve()),
-            },
-        ),
+    run_configuration = nh.StepExecutorConfiguration(
+        model="codex:default",
+        model_settings={
+            "working_directory": str(tmp_path.resolve()),
+        },
     )
 
-    with nh.run(environment_value):
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=run_configuration,
+    )
+
+    with nh.run(step_executor):
 
         @nh.tool(name="test_operation")
         def test_operation(run_context, *, a: int, b: int) -> int:  # type: ignore[no-untyped-def]
@@ -106,18 +104,17 @@ def test_codex_skill() -> None:
     try:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
-        configuration = nh.RunConfiguration(model="codex:default")
-
-        environment = nh.Environment(
-            run_configuration=configuration,
-            step_executor=nh.AgentStepExecutor(
-                run_configuration=configuration,
-                model_settings=CodexModelSettings(
-                    working_directory=str(working_directory.resolve()),
-                ),
+        configuration = nh.StepExecutorConfiguration(
+            model="codex:default",
+            model_settings=CodexModelSettings(
+                working_directory=str(working_directory.resolve()),
             ),
         )
-        with nh.run(environment):
+
+        step_executor = nh.AgentStepExecutor.from_configuration(
+            configuration=configuration,
+        )
+        with nh.run(step_executor):
 
             @nh.natural_function
             def test_function():
@@ -149,18 +146,17 @@ def test_codex_skill_calc() -> None:
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
-    configuration = nh.RunConfiguration(model="codex:default")
-
-    environment = nh.Environment(
-        run_configuration=configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=configuration,
-            model_settings=CodexModelSettings(
-                working_directory=str(working_directory.resolve()),
-            ),
+    configuration = nh.StepExecutorConfiguration(
+        model="codex:default",
+        model_settings=CodexModelSettings(
+            working_directory=str(working_directory.resolve()),
         ),
     )
-    with nh.run(environment):
+
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=configuration,
+    )
+    with nh.run(step_executor):
 
         @nh.natural_function
         def test_function():
@@ -185,24 +181,22 @@ def test_codex_skill_calc() -> None:
 def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
     _requires_codex_integration()
 
-    run_configuration = nh.RunConfiguration(model="codex:default")
-
-    environment_value = nh.Environment(
-        run_configuration=run_configuration,
-        step_executor=nh.AgentStepExecutor(
-            run_configuration=run_configuration,
-            model_settings={
-                "working_directory": str(tmp_path.resolve()),
-            },
-        ),
+    run_configuration = nh.StepExecutorConfiguration(
+        model="codex:default",
+        model_settings={
+            "working_directory": str(tmp_path.resolve()),
+        },
     )
 
-    with nh.run(environment_value):
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=run_configuration,
+    )
+
+    with nh.run(step_executor):
         model = CodexModel()
 
         tool_context = StepContext(
             step_id="test_codex_structured_output_via_output_schema",
-            run_configuration=run_configuration,
             step_globals={"__builtins__": __builtins__},
             step_locals={},
             binding_commit_targets=set(),
