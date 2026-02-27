@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
+
+import tiktoken
+from pydantic import BaseModel, ConfigDict, field_validator
 
 DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE = """\
 You are executing one Nighthawk Natural (NH) DSL block at a specific point inside a running Python function.
@@ -39,51 +41,97 @@ $globals
 """
 
 
-@dataclass(frozen=True)
-class StepContextLimits:
-    """Limits for rendering dynamic context into the LLM prompt."""
-
-    locals_max_tokens: int = 25000
-    locals_max_items: int = 200
-
-    globals_max_tokens: int = 25000
-    globals_max_items: int = 200
-
-    value_max_tokens: int = 200
-
-    tool_result_max_tokens: int = 2_000
+type JsonRendererStyle = Literal["strict", "default", "detailed"]
 
 
-@dataclass(frozen=True)
-class StepPrompts:
+def _validate_model_identifier(model: str) -> str:
+    parts = model.split(":")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"Invalid model identifier {model!r}; expected 'provider:model'")
+    return model
+
+
+class StepPromptTemplates(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     step_system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
     step_user_prompt_template: str = DEFAULT_STEP_USER_PROMPT_TEMPLATE
 
 
-def _validate_model_identifier(model: str) -> None:
-    parts = model.split(":")
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise ValueError(f"Invalid model identifier {model!r}; expected 'provider:model'")
+class StepContextLimits(BaseModel):
+    """Limits for rendering dynamic context into the LLM prompt."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    locals_max_tokens: int = 25_000
+    locals_max_items: int = 200
+
+    globals_max_tokens: int = 25_000
+    globals_max_items: int = 200
+
+    value_max_tokens: int = 200
+    tool_result_max_tokens: int = 2_000
 
 
-type JsonRendererStyle = Literal["strict", "default", "detailed"]
+class StepExecutorConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-
-@dataclass(frozen=True)
-class RunConfiguration:
     model: str = "openai-responses:gpt-5-nano"
+    model_settings: object | None = None
 
-    def __post_init__(self) -> None:
-        _validate_model_identifier(self.model)
-
-    tokenizer_encoding: str = "o200k_base"
-
+    prompts: StepPromptTemplates = StepPromptTemplates()
+    context_limits: StepContextLimits = StepContextLimits()
     json_renderer_style: JsonRendererStyle = "strict"
+    tokenizer_encoding: str | None = None
+    system_prompt_suffix_fragments: tuple[str, ...] = ()
+    user_prompt_suffix_fragments: tuple[str, ...] = ()
 
-    prompts: StepPrompts = field(default_factory=StepPrompts)
-    context_limits: StepContextLimits = field(default_factory=StepContextLimits)
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, value: str) -> str:
+        return _validate_model_identifier(value)
+
+    def resolve_token_encoding(self) -> tiktoken.Encoding:
+        if self.tokenizer_encoding is not None:
+            return tiktoken.get_encoding(self.tokenizer_encoding)
+
+        _provider, model_name = self.model.split(":", 1)
+        candidate_model_name = model_name
+
+        try:
+            return tiktoken.encoding_for_model(candidate_model_name)
+        except Exception:
+            return tiktoken.get_encoding("o200k_base")
 
 
-@dataclass(frozen=True)
-class NighthawkConfiguration:
-    run_configuration: RunConfiguration
+class StepExecutorConfigurationPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model: str | None = None
+    model_settings: object | None = None
+    prompts: StepPromptTemplates | None = None
+    context_limits: StepContextLimits | None = None
+    json_renderer_style: JsonRendererStyle | None = None
+    tokenizer_encoding: str | None = None
+    system_prompt_suffix_fragments: tuple[str, ...] | None = None
+    user_prompt_suffix_fragments: tuple[str, ...] | None = None
+
+    def apply_to(self, configuration: StepExecutorConfiguration) -> StepExecutorConfiguration:
+        updated_values: dict[str, Any] = {}
+        if self.model is not None:
+            updated_values["model"] = self.model
+        if self.model_settings is not None:
+            updated_values["model_settings"] = self.model_settings
+        if self.prompts is not None:
+            updated_values["prompts"] = self.prompts
+        if self.context_limits is not None:
+            updated_values["context_limits"] = self.context_limits
+        if self.json_renderer_style is not None:
+            updated_values["json_renderer_style"] = self.json_renderer_style
+        if self.tokenizer_encoding is not None:
+            updated_values["tokenizer_encoding"] = self.tokenizer_encoding
+        if self.system_prompt_suffix_fragments is not None:
+            updated_values["system_prompt_suffix_fragments"] = self.system_prompt_suffix_fragments
+        if self.user_prompt_suffix_fragments is not None:
+            updated_values["user_prompt_suffix_fragments"] = self.user_prompt_suffix_fragments
+        return configuration.model_copy(update=updated_values)

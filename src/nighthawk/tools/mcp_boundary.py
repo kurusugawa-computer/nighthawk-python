@@ -7,22 +7,39 @@ import tiktoken
 from opentelemetry import context as otel_context
 from opentelemetry.context import Context as OtelContext
 
-from ..runtime.scoping import get_environment
+from ..runtime.step_context import ToolResultRenderingPolicy, get_current_step_context
 from .contracts import tool_result_failure_json_text
 
 type ToolHandler = Any
 
+_DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
+    tokenizer_encoding_name="o200k_base",
+    tool_result_max_tokens=2_000,
+    json_renderer_style="strict",
+)
+
+
+def _resolve_tool_result_rendering_policy() -> ToolResultRenderingPolicy:
+    try:
+        step_context = get_current_step_context()
+    except Exception:
+        return _DEFAULT_TOOL_RESULT_RENDERING_POLICY
+
+    if step_context.tool_result_rendering_policy is None:
+        return _DEFAULT_TOOL_RESULT_RENDERING_POLICY
+    return step_context.tool_result_rendering_policy
+
 
 def _tool_boundary_failure_text(*, message: str, guidance: str) -> str:
-    run_configuration = get_environment().run_configuration
-    encoding = tiktoken.get_encoding(run_configuration.tokenizer_encoding)
+    rendering_policy = _resolve_tool_result_rendering_policy()
+    encoding = tiktoken.get_encoding(rendering_policy.tokenizer_encoding_name)
     return tool_result_failure_json_text(
         kind="internal",
         message=message,
         guidance=guidance,
-        max_tokens=run_configuration.context_limits.tool_result_max_tokens,
+        max_tokens=rendering_policy.tool_result_max_tokens,
         encoding=encoding,
-        style=run_configuration.json_renderer_style,
+        style=rendering_policy.json_renderer_style,
     )
 
 

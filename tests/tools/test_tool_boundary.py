@@ -30,7 +30,6 @@ def _reset_tools() -> None:
 def _new_step_context() -> StepContext:
     return StepContext(
         step_id="test_tool_boundary",
-        run_configuration=nh.RunConfiguration(),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),

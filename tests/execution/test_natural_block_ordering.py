@@ -18,9 +18,7 @@ NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 
 
 def test_docstring_step_executes_first_and_name_is_undefined() -> None:
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     @dataclass
     class NoopExecutor:
@@ -38,12 +36,7 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
             _ = allowed_step_kinds
             return PassStepOutcome(kind="pass"), {}
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=NoopExecutor(),
-        )
-    ):
+    with nh.run(NoopExecutor()):
 
         @nh.natural_function
         def f() -> int:
@@ -62,9 +55,7 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
 
 
 def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> None:
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     @dataclass
     class NoopExecutor:
@@ -82,12 +73,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
             _ = allowed_step_kinds
             return PassStepOutcome(kind="pass"), {}
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=NoopExecutor(),
-        )
-    ):
+    with nh.run(NoopExecutor()):
 
         @nh.natural_function
         def f() -> None:
@@ -101,9 +87,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
 
 
 def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval() -> None:
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     GLOBAL_NUMBER = NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER
 
@@ -124,12 +108,7 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
 
             return FakeRunResult(PassStepOutcome(kind="pass"))
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=FakeAgent()),
-        )
-    ):
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
 
         @nh.natural_function
         def f() -> int:
@@ -144,9 +123,7 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
 
 
 def test_agent_backend_commits_only_on_assignment() -> None:
-    configuration = nh.NighthawkConfiguration(
-        run_configuration=nh.RunConfiguration(),
-    )
+    nh.StepExecutorConfiguration()
 
     class FakeRunResult:
         def __init__(self, output: object):
@@ -162,15 +139,10 @@ def test_agent_backend_commits_only_on_assignment() -> None:
 
             return FakeRunResult(PassStepOutcome(kind="pass"))
 
-    with nh.run(
-        nh.Environment(
-            run_configuration=configuration.run_configuration,
-            step_executor=nh.AgentStepExecutor(agent=FakeAgent()),
-        )
-    ):
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
         from nighthawk.runtime.runner import Runner
 
-        runner = Runner.from_environment(nh.get_environment())
+        runner = Runner.from_step_executor(nh.get_step_executor())
         frame = nh.runtime.runner.get_caller_frame()  # type: ignore[attr-defined]
 
         envelope = runner.run_step(
