@@ -73,6 +73,14 @@ def natural_function(func: F | None = None) -> F:
     if func is None:
         return lambda f: natural_function(f)  # type: ignore[return-value]
 
+    if isinstance(func, staticmethod):
+        decorated_static_function = natural_function(func.__func__)
+        return cast(F, staticmethod(decorated_static_function))
+
+    if isinstance(func, classmethod):
+        decorated_class_function = natural_function(func.__func__)
+        return cast(F, classmethod(decorated_class_function))
+
     lines, starting_line_number = inspect.getsourcelines(func)
     source = textwrap.dedent("".join(lines))
 
