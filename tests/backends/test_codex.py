@@ -236,6 +236,51 @@ if __name__ == "__main__":
     return stub_path
 
 
+def _write_executable_codex_retry_once_stub(*, directory: Path) -> Path:
+    stub_path = directory / "codex-cli-retry-once-stub"
+    attempt_count_path = directory / "codex-cli-retry-once-stub.attempt"
+
+    stub_code = (
+        "#!"
+        + sys.executable
+        + "\n"
+        + f"""from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+attempt_count_path = Path({str(attempt_count_path)!r})
+
+_ = sys.stdin.read()
+attempt_count = 0
+if attempt_count_path.exists():
+    try:
+        attempt_count = int(attempt_count_path.read_text(encoding="utf-8"))
+    except Exception:
+        attempt_count = 0
+attempt_count += 1
+attempt_count_path.write_text(str(attempt_count), encoding="utf-8")
+
+if attempt_count == 1:
+    print("Reading prompt from stdin...", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+events = [
+    {{"type": "thread.started", "thread_id": "t_retry"}},
+    {{"type": "item.completed", "item": {{"id": "i1", "type": "agent_message", "text": "ok"}}}},
+    {{"type": "turn.completed", "usage": {{"input_tokens": 1, "cached_input_tokens": 0, "output_tokens": 1}}}},
+]
+for event in events:
+    print(json.dumps(event), flush=True)
+"""
+    )
+
+    stub_path.write_text(stub_code, encoding="utf-8")
+    stub_path.chmod(0o755)
+    return stub_path
+
+
 def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     codex_executable = _write_executable_codex_stub(directory=tmp_path)
 

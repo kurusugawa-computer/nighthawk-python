@@ -32,7 +32,7 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="codex:default",
+        model="codex:gpt-5-mini",
         model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
@@ -61,7 +61,7 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
     _requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="codex:default",
+        model="codex:gpt-5-mini",
         model_settings={
             "working_directory": str(tmp_path.resolve()),
         },

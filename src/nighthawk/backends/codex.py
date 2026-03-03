@@ -305,6 +305,7 @@ async def _wait_for_tcp_listen(host: str, port: int, *, timeout_seconds: float) 
 def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
     output_text: str | None = None
     thread_id: str | None = None
+    most_recent_stream_error_message: str | None = None
 
     usage = RequestUsage()
 
@@ -343,8 +344,11 @@ def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
         elif event_type == "error":
             message_value = event.get("message")
             if isinstance(message_value, str):
-                raise UnexpectedModelBehavior(message_value)
-            raise UnexpectedModelBehavior("Codex CLI reported a fatal stream error")
+                # Codex CLI can emit transient reconnect progress as `error` events.
+                # Preserve the latest message and only fail if no usable response is produced.
+                most_recent_stream_error_message = message_value
+            else:
+                most_recent_stream_error_message = "Codex CLI reported a stream error"
         elif event_type == "item.completed":
             item_value = event.get("item")
             if isinstance(item_value, dict) and item_value.get("type") == "agent_message":
@@ -353,6 +357,8 @@ def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
                     output_text = text_value
 
     if output_text is None:
+        if most_recent_stream_error_message is not None:
+            raise UnexpectedModelBehavior(most_recent_stream_error_message)
         raise UnexpectedModelBehavior("Codex CLI did not produce an agent message")
 
     return {
@@ -486,7 +492,7 @@ class CodexModel(BackendModelBase):
                 codex_arguments = [
                     codex_model_settings.get("codex_executable", "codex"),
                     "exec",
-                    "--json",
+                    "--experimental-json",
                     "--skip-git-repo-check",
                 ]
                 sandbox_mode = codex_model_settings.get("sandbox_mode")
@@ -535,7 +541,20 @@ class CodexModel(BackendModelBase):
 
                 if return_code != 0:
                     stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
-                    detail = stderr_text[:2000] if stderr_text else ""
+                    detail_parts: list[str] = []
+
+                    if stderr_text:
+                        detail_parts.append(f"stderr={stderr_text[:2000]}")
+
+                    recent_jsonl_lines = jsonl_lines[-8:]
+                    if recent_jsonl_lines:
+                        recent_jsonl_text = "\n".join(recent_jsonl_lines)
+                        detail_parts.append(f"recent_jsonl_events={recent_jsonl_text[:4000]}")
+
+                    if not detail_parts:
+                        detail_parts.append("no stderr or JSONL events were captured")
+
+                    detail = " | ".join(detail_parts)
                     raise UnexpectedModelBehavior(f"Codex CLI exited with non-zero status. {detail}")
 
                 turn_outcome = _parse_codex_jsonl_lines(jsonl_lines)
