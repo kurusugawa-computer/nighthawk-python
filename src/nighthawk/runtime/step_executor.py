@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import functools
+import inspect
 import re
 from dataclasses import dataclass, field
-from inspect import signature
 from string import Template
 from typing import Any, Awaitable, Callable, Iterable, Protocol, cast
 
+import logfire
 import tiktoken
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, StructuredDict
@@ -54,8 +56,134 @@ class StepExecutor(Protocol):
         raise NotImplementedError
 
 
+def _resolve_partial_effective_signature(partial_callable: functools.partial[Any]) -> str | None:
+    try:
+        resolved_signature = inspect.signature(partial_callable)
+    except (TypeError, ValueError):
+        return None
+    return str(resolved_signature)
+
+
+def _resolve_callable_signature_text(value: object) -> str | None:
+    if isinstance(value, functools.partial):
+        return _resolve_partial_effective_signature(value)
+
+    try:
+        resolved_signature = inspect.signature(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return str(resolved_signature)
+
+
+def _normalize_usage_intent_text(text: str, *, max_length: int = 72) -> str:
+    normalized_text = " ".join(text.split())
+    if len(normalized_text) <= max_length:
+        return normalized_text
+    return normalized_text[: max_length - 3].rstrip() + "..."
+
+
+def _is_meaningful_usage_intent_hint(usage_intent_hint: str) -> bool:
+    normalized_lower_text = usage_intent_hint.strip().lower()
+    meaningless_usage_intent_hint_set = {
+        "call self as a function.",
+        "create a new function with partial application of the given arguments and keywords.",
+        "create a new function with partial application of the given arguments",
+    }
+    return normalized_lower_text not in meaningless_usage_intent_hint_set
+
+
+def _resolve_callable_usage_intent_hint(*, value: object) -> str | None:
+    documentation_text: str | None = None
+
+    if isinstance(value, functools.partial):
+        documentation_text = inspect.getdoc(value.func)
+    elif not inspect.isroutine(value):
+        call_attribute = getattr(value, "__call__", None)
+        if call_attribute is not None:
+            documentation_text = inspect.getdoc(call_attribute)
+
+    if not documentation_text:
+        documentation_text = inspect.getdoc(value)
+
+    if documentation_text:
+        first_line = documentation_text.splitlines()[0].strip()
+        if first_line:
+            normalized_usage_intent_hint = _normalize_usage_intent_text(first_line)
+            if _is_meaningful_usage_intent_hint(normalized_usage_intent_hint):
+                return normalized_usage_intent_hint
+
+    return None
+
+
+def _is_async_callable_value(value: object) -> bool:
+    if isinstance(value, functools.partial):
+        return _is_async_callable_value(value.func)
+
+    if inspect.iscoroutinefunction(value):
+        return True
+
+    if not inspect.isroutine(value):
+        call_attribute = getattr(value, "__call__", None)
+        if call_attribute is not None and inspect.iscoroutinefunction(call_attribute):
+            return True
+
+    return False
+
+
+def _build_callable_signature_text_to_reference_list(
+    *,
+    reference_and_value_list: list[tuple[str, object]],
+) -> dict[str, list[str]]:
+    callable_signature_text_to_reference_list: dict[str, list[str]] = {}
+    for reference, value in reference_and_value_list:
+        if not callable(value):
+            continue
+
+        callable_signature_text = _resolve_callable_signature_text(value)
+        if callable_signature_text is None:
+            continue
+
+        callable_signature_text_to_reference_list.setdefault(callable_signature_text, []).append(reference)
+
+    return {
+        callable_signature_text: reference_list
+        for callable_signature_text, reference_list in callable_signature_text_to_reference_list.items()
+        if len(reference_list) > 1
+    }
+
+
+def _render_callable_line(
+    *,
+    reference: str,
+    value: object,
+    callable_signature_text_to_reference_list: dict[str, list[str]],
+) -> str:
+    usage_intent_hint = _resolve_callable_usage_intent_hint(value=value)
+    callable_signature_text = _resolve_callable_signature_text(value)
+    if callable_signature_text is None:
+        rendered_text = f"{reference}: <callable; signature-unavailable>"
+        if usage_intent_hint is not None:
+            rendered_text += f"  # intent: {usage_intent_hint}"
+        return rendered_text
+
+    rendered_text = f"{reference}: {callable_signature_text}"
+    metadata_comment_list: list[str] = []
+    if usage_intent_hint is not None:
+        metadata_comment_list.append(f"intent: {usage_intent_hint}")
+    if _is_async_callable_value(value):
+        metadata_comment_list.append("async")
+    if callable_signature_text in callable_signature_text_to_reference_list:
+        metadata_comment_list.append(f"disambiguation: use {reference}")
+
+    if metadata_comment_list:
+        rendered_text += f"  # {'; '.join(metadata_comment_list)}"
+    return rendered_text
+
+
 def _render_reference_and_value_list_section(
     *,
+    section_name: str,
+    step_context: StepContext,
     reference_and_value_list: list[tuple[str, object]],
     max_items: int,
     section_max_tokens: int,
@@ -66,27 +194,38 @@ def _render_reference_and_value_list_section(
     lines: list[str] = []
     total_tokens = 0
     shown_items = 0
+    token_limit_reached = False
+    callable_signature_text_to_reference_list = _build_callable_signature_text_to_reference_list(
+        reference_and_value_list=reference_and_value_list
+    )
 
     for reference, value in reference_and_value_list:
         if shown_items >= max_items:
             break
 
-        reference_type_name = type(value).__name__
-        if reference_type_name == "function":
-            reference_type_name = str(signature(value))  # type: ignore
-        rendered_name_and_type = f"{reference}: {reference_type_name} = "
+        if callable(value):
+            rendered = _render_callable_line(
+                reference=reference,
+                value=value,
+                callable_signature_text_to_reference_list=callable_signature_text_to_reference_list,
+            )
+            rendered_tokens = count_tokens(rendered, token_encoding)
+        else:
+            reference_type_name = type(value).__name__
+            rendered_name_and_type = f"{reference}: {reference_type_name} = "
 
-        rendered_value, rendered_value_tokens = render_json_text(
-            value,
-            max_tokens=value_max_tokens,
-            encoding=token_encoding,
-            style=json_renderer_style,
-        )
+            rendered_value, rendered_value_tokens = render_json_text(
+                value,
+                max_tokens=value_max_tokens,
+                encoding=token_encoding,
+                style=json_renderer_style,
+            )
 
-        rendered = rendered_name_and_type + rendered_value
-        rendered_tokens = count_tokens(rendered_name_and_type, token_encoding) + rendered_value_tokens
+            rendered = rendered_name_and_type + rendered_value
+            rendered_tokens = count_tokens(rendered_name_and_type, token_encoding) + rendered_value_tokens
 
         if total_tokens + rendered_tokens + 1 > section_max_tokens:
+            token_limit_reached = True
             break
 
         lines.append(rendered)
@@ -96,6 +235,22 @@ def _render_reference_and_value_list_section(
     truncated = shown_items < len(reference_and_value_list)
     if truncated:
         lines.append("<snipped>")
+        if token_limit_reached:
+            log_attributes: dict[str, Any] = {
+                STEP_ID: step_context.step_id,
+                "nighthawk.prompt_context.section": section_name,
+                "nighthawk.prompt_context.reason": "token_limit",
+                "nighthawk.prompt_context.rendered_items": shown_items,
+                "nighthawk.prompt_context.total_items": len(reference_and_value_list),
+                "nighthawk.prompt_context.max_tokens": section_max_tokens,
+            }
+            try:
+                execution_context = get_execution_context()
+                log_attributes[RUN_ID] = execution_context.run_id
+                log_attributes[SCOPE_ID] = execution_context.scope_id
+            except Exception:
+                pass
+            logfire.info("nighthawk.prompt_context_truncated", **log_attributes)
 
     return "\n".join(lines)
 
@@ -116,6 +271,8 @@ def _render_locals_section(
         eligible_reference_and_value_list.append((reference, step_context.step_locals[reference]))
 
     return _render_reference_and_value_list_section(
+        section_name="locals",
+        step_context=step_context,
         reference_and_value_list=eligible_reference_and_value_list,
         max_items=context_limits.locals_max_items,
         section_max_tokens=context_limits.locals_max_tokens,
@@ -164,6 +321,8 @@ def _render_globals_section(
         eligible_reference_and_value_list.append((reference, value))
 
     return _render_reference_and_value_list_section(
+        section_name="globals",
+        step_context=step_context,
         reference_and_value_list=eligible_reference_and_value_list,
         max_items=context_limits.globals_max_items,
         section_max_tokens=context_limits.globals_max_tokens,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 
 import nighthawk as nh
+import nighthawk.runtime.step_executor as step_executor_module
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import build_user_prompt
 
@@ -191,3 +192,52 @@ def test_locals_ordering_is_lexicographic_by_name(tmp_path) -> None:
     locals_section = _locals_section(prompt)
     assert locals_section.splitlines()[0].startswith("a:")
     assert locals_section.splitlines()[1].startswith("b:")
+
+
+def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
+    class NoopAgent:
+        def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("Agent should not be invoked by build_user_prompt")
+
+    seen_log_record_list: list[tuple[str, dict[str, object]]] = []
+
+    def fake_info(message_template: str, /, **attributes):  # type: ignore[no-untyped-def]
+        seen_log_record_list.append((message_template, dict(attributes)))
+
+    monkeypatch.setattr(step_executor_module.logfire, "info", fake_info)
+
+    step_context = _build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={
+            "a": "x" * 300,
+            "b": "y" * 300,
+        },
+    )
+    configuration = nh.StepExecutorConfiguration(
+        context_limits=nh.StepContextLimits(
+            locals_max_tokens=10,
+            locals_max_items=80,
+            globals_max_tokens=4_000,
+            globals_max_items=40,
+            value_max_tokens=120,
+            tool_result_max_tokens=1_200,
+        )
+    )
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent(), configuration=configuration)):
+        prompt = build_user_prompt(
+            processed_natural_program="Say hi.",
+            step_context=step_context,
+            configuration=configuration,
+        )
+
+    locals_section = _locals_section(prompt)
+    assert "<snipped>" in locals_section
+
+    truncation_log_record_list = [record for record in seen_log_record_list if record[0] == "nighthawk.prompt_context_truncated"]
+    assert len(truncation_log_record_list) == 1
+    log_attributes = truncation_log_record_list[0][1]
+    assert log_attributes["nighthawk.prompt_context.section"] == "locals"
+    assert log_attributes["nighthawk.prompt_context.reason"] == "token_limit"
+    assert log_attributes["nighthawk.prompt_context.max_tokens"] == 10
+    assert log_attributes["step.id"] == "test"

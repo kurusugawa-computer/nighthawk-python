@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import tiktoken
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE = """\
 You are executing one Nighthawk Natural (NH) DSL block at a specific point inside a running Python function.
@@ -63,14 +63,14 @@ class StepContextLimits(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    locals_max_tokens: int = 25_000
-    locals_max_items: int = 200
+    locals_max_tokens: int = Field(default=8_000, ge=1)
+    locals_max_items: int = Field(default=80, ge=1)
 
-    globals_max_tokens: int = 25_000
-    globals_max_items: int = 200
+    globals_max_tokens: int = Field(default=4_000, ge=1)
+    globals_max_items: int = Field(default=40, ge=1)
 
-    value_max_tokens: int = 200
-    tool_result_max_tokens: int = 2_000
+    value_max_tokens: int = Field(default=200, ge=2)
+    tool_result_max_tokens: int = Field(default=1_200, ge=2)
 
 
 class StepExecutorConfiguration(BaseModel):
