@@ -1,6 +1,7 @@
 import builtins
 import functools
 import textwrap
+from typing import Literal
 
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
@@ -332,3 +333,30 @@ def test_callable_signature_collision_renders_disambiguation_hint_for_each_calla
     locals_section = _locals_section(prompt)
     assert "open_customer: (customer_id)  # disambiguation: use open_customer" in locals_section
     assert "open_order: (customer_id)  # disambiguation: use open_order" in locals_section
+
+
+def test_locals_section_renders_pep695_type_alias_in_function_signature() -> None:
+    type T = Literal["A", "B", "C"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def f(t: T) -> None:
+        _ = t
+
+    def g(l: Literal["A", "B", "C"]) -> None:
+        _ = l
+
+    step_context = _build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"T": T, "f": f, "g": g},
+    )
+
+    prompt = _build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_section = _locals_section(prompt)
+    assert "T: type = typing.Literal['A', 'B', 'C']" in locals_section
+    assert "f: (t: T) -> None" in locals_section
+    assert "g: (l: Literal['A', 'B', 'C']) -> None" in locals_section
+    assert "# intent:" not in locals_section
+    assert "<function>" not in locals_section

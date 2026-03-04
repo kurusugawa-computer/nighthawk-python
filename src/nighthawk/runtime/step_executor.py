@@ -5,7 +5,7 @@ import inspect
 import re
 from dataclasses import dataclass, field
 from string import Template
-from typing import Any, Awaitable, Callable, Iterable, Protocol, cast
+from typing import Any, Awaitable, Callable, Iterable, Protocol, TypeAliasType, cast
 
 import logfire
 import tiktoken
@@ -203,7 +203,10 @@ def _render_reference_and_value_list_section(
         if shown_items >= max_items:
             break
 
-        if callable(value):
+        if isinstance(value, TypeAliasType):
+            rendered = f"{reference}: type = {value.__value__}"
+            rendered_tokens = count_tokens(rendered, token_encoding)
+        elif callable(value):
             rendered = _render_callable_line(
                 reference=reference,
                 value=value,
