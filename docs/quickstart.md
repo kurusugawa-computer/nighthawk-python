@@ -32,7 +32,7 @@ Setup:
 - Install dependencies: `uv sync --all-extras --all-groups`
 - Credentials:
   - `OPENAI_API_KEY` for `openai-responses:*`
-  - `CODEX_API_KEY` for `codex:default`
+  - For other backends, see the model identifiers section in README.md.
 
 ## 1. Authoring Rules (Must-follow)
 

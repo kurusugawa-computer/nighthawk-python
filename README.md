@@ -13,6 +13,7 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 
 ## Read this first
 
+- Quickstart (hands-on): `docs/quickstart.md`
 - Specification (canonical): `docs/design.md`
 - Roadmap (future only): `docs/roadmap.md`
 
@@ -40,8 +41,30 @@ Run:
 ```bash
 git clone https://github.com/kurusugawa-computer/nighthawk-python.git
 cd nighthawk-python
-uv sync
+uv sync --extra openai
 uv run pytest -q
+```
+
+Minimal usage example:
+
+```py
+import nighthawk as nh
+
+step_executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.2")
+)
+
+with nh.run(step_executor):
+
+    @nh.natural_function
+    def summarize_post(post: str) -> str:
+        summary = ""
+        """natural
+        Read <post> and set <:summary> to a concise summary.
+        """
+        return summary
+
+    print(summarize_post("Ship the patch by Friday and include migration notes."))
 ```
 
 ## What is in this repository
