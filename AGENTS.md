@@ -53,7 +53,7 @@ This file provides repository-specific guidance for coding agents and human cont
 - `src/nighthawk/`: The library package.
 - `tests/`: Pytest suite.
 - `docs/`: Product/design documentation.
-  - `docs/README.md`: User-facing overview.
+  - `docs/quickstart.md`: Hands-on guide for writing Natural blocks.
   - `docs/design.md`: Design specification.
   - `docs/roadmap.md`: Not implemented items.
 - `.agents/`: Agent artifacts.

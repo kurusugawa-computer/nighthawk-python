@@ -66,5 +66,4 @@ Non-goals:
 ## Open questions
 
 - How to best represent tool results in the prompt for robust reasoning.
-- Whether to allow statement execution (exec) as a tool.
 - How to test and debug Natural blocks deterministically.

@@ -34,6 +34,53 @@ This file intentionally does not maintain a persistent divergence ledger.
   - commit selected state back into Python locals at Natural block boundaries
 - Provide a coherent execution model where all state is ordinary Python values in step locals, and persistence (if desired) is user-managed via ordinary bindings.
 
+### 1.1 Validation goals
+
+Nighthawk is a research vehicle. The main validation goals are:
+
+1. Hard control + soft reasoning works in practice
+    - Keep loops, conditionals, data plumbing, and "must run exactly N times" logic in Python.
+    - Delegate semantic interpretation to Natural blocks.
+
+2. Reduce "LLM is a black box" by mapping state into the interpreter
+    - Treat the Python interpreter as the primary external memory.
+    - Make intermediate state visible as Python locals / structured objects rather than hidden chat history.
+
+3. Constrain and validate updates at boundaries
+    - Use explicit output bindings (e.g., `<:result>`) so the LLM can only commit specific values.
+    - Optionally use a typed memory model (Pydantic) to force a domain mental model and validate updates.
+
+### 1.2 Workflow styles
+
+Nighthawk supports Python-first alternation: Python controls the steps, and Natural blocks are inserted where semantic interpretation is needed.
+
+**Nightjar style (hard control, embedded Natural blocks)**
+
+Write strict flow in Python, and embed Natural blocks where semantics are needed.
+
+Pros:
+- Hard guarantees: exact loops, strict conditionals, deterministic boundaries.
+- Tools: debuggers, tests, linters, and normal software engineering practices apply.
+- The LLM is constrained to operate on interpreter-visible objects (locals, memory, tool context).
+
+Cons:
+- Knowledge often ends up encoded in code-adjacent artifacts, which can be less maintainable by non-engineers.
+
+**Skills-style / reverse Nightjar (flexible workflow, code snippets as needed)**
+
+Write a natural language workflow first, and embed code only where strict procedures are needed.
+
+Pros:
+- Excellent for strategy, iteration, and human collaboration.
+- Similar spirit to literate programming: readable narrative with precise code where necessary.
+
+Cons:
+- The hard part is state synchronization: how to share and reconcile execution state between the natural language plan/world and the code execution world.
+
+**Hybrid nesting (Python -> Natural -> Python -> ...)**
+
+Nighthawk's execution model enables hybrid nesting: Python controls the steps, Natural blocks interpret semantics, and the LLM can call back into Python functions via tools.
+
 ## 2. Non-goals
 
 - Sandboxing or hard security isolation.
@@ -462,7 +509,22 @@ Decision:
 
 Nighthawk does not define a built-in persistence or memory model.
 
-If you want a long-lived object, define it yourself and bind it as an ordinary Python value (for example, a module global named `memory`). Because expression evaluation and assignment operate on `step_locals`, the value bound to `memory` behaves like any other local: it can be read via expressions and mutated via dotted assignment targets.
+If you want a long-lived object, define it yourself and bind it as an ordinary Python value. Because expression evaluation and assignment operate on `step_locals`, bound values behave like any other local: they can be read via expressions and mutated in-place via `nh_exec`.
+
+### 12.1. Journal pattern
+
+The recommended approach for cross-block context continuity is the journal pattern: pass a mutable object (e.g., `list[str]`) as a read binding (`<journal>`) and instruct the LLM to mutate it in-place via `nh_exec`.
+
+Key properties:
+
+- Read bindings (`<name>`) prevent `nh_assign` from rebinding the name, preserving the caller's reference.
+- In-place mutation via `nh_exec` (e.g., `list.append()`) modifies the original object visible to the caller.
+- Branching is achieved by copying the journal (`journal.copy()`); each copy continues independently.
+- The journal's contents appear in the locals summary on subsequent steps, providing context to the LLM.
+
+This pattern replaces the need for a framework-level session or message history mechanism. The user controls what context is recorded, how it is structured, and when branches diverge.
+
+See `docs/quickstart.md` Section 3 for practical examples.
 
 ## 13. Error handling
 
