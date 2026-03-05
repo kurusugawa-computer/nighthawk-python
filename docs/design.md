@@ -229,15 +229,19 @@ Decision (step_globals):
 
 Expressions are evaluated against `step_globals` + `step_locals`.
 
-Read tools:
+Inspect tool:
 
-- `nh_dir(expression: str) -> str`
-- `nh_help(expression: str) -> str`
 - `nh_eval(expression: str) -> object`
-  - Evaluates a Python expression in `step_globals` and `step_locals`.
+  - Evaluate a Python expression and return the result. Use to inspect values and call functions.
   - If the evaluated expression is awaitable, it is awaited before returning.
 
-Write tool:
+Mutation tool:
+
+- `nh_exec(expression: str) -> object`
+  - Execute a Python expression for its side effect on mutable objects (e.g., `list.append()`, `dict.update()`, `set.add()`).
+  - Returns the expression result.
+
+Binding tool:
 
 - `nh_assign(target_path: str, expression: str) -> object`
 

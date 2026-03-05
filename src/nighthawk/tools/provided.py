@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -38,19 +37,9 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         except Exception as exception:
             raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
-    def nh_dir(run_context: RunContext[StepContext], expression: str) -> str:
+    def nh_exec(run_context: RunContext[StepContext], expression: str) -> object:
         try:
-            value = eval_expression(run_context.deps, expression)
-            return "\n".join(builtins.dir(value))
-        except Exception as exception:
-            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
-
-    def nh_help(run_context: RunContext[StepContext], expression: str) -> str:
-        try:
-            value = eval_expression(run_context.deps, expression)
-            import pydoc
-
-            return pydoc.render_doc(value)
+            return eval_expression(run_context.deps, expression)
         except Exception as exception:
             raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
 
@@ -63,7 +52,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                     nh_assign,
                     name="nh_assign",
                     metadata=metadata,
-                    description=("Assign a computed value to a target in the form name(.field)*. On success, returns a JSON-serializable payload with an `updates` list."),
+                    description="Rebind a name or nested field to a new value. target_path format: name(.field)*.",
                 ),
             ),
         ),
@@ -75,31 +64,19 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                     nh_eval,
                     name="nh_eval",
                     metadata=metadata,
-                    description=("Evaluate a Python expression and return a JSON-serializable value. Use this to inspect values and call functions."),
+                    description="Evaluate a Python expression and return the result.",
                 ),
             ),
         ),
         ProvidedToolDefinition(
-            name="nh_dir",
+            name="nh_exec",
             tool=cast(
                 Tool[StepContext],
                 Tool(
-                    nh_dir,
-                    name="nh_dir",
+                    nh_exec,
+                    name="nh_exec",
                     metadata=metadata,
-                    description=("List available attributes on the evaluated value. Use this to explore Python objects safely without mutating state."),
-                ),
-            ),
-        ),
-        ProvidedToolDefinition(
-            name="nh_help",
-            tool=cast(
-                Tool[StepContext],
-                Tool(
-                    nh_help,
-                    name="nh_help",
-                    metadata=metadata,
-                    description=("Return Python help() text for the evaluated value. Use this to read documentation for objects."),
+                    description="Execute a Python expression for its side effect (e.g., list.append(), dict.update()). Returns the expression result.",
                 ),
             ),
         ),
