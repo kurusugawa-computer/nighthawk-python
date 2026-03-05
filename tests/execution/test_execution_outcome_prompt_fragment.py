@@ -9,10 +9,10 @@ def test_fragment_omits_raise_when_not_allowed() -> None:
         raise_error_type_binding_names=("ValueError",),
     )
 
-    assert "`kind` MUST be one of: `pass`, `return`." in fragment
+    assert "`kind` must be one of: `pass`, `return`." in fragment
 
-    assert "- `raise`:" not in fragment
-    assert "`raise_message`" not in fragment
+    assert "- raise:" not in fragment
+    assert "raise_message" not in fragment
     assert "raise_error_type" not in fragment
 
 
@@ -22,10 +22,9 @@ def test_fragment_includes_raise_without_raise_error_type_enum_when_no_bindings(
         raise_error_type_binding_names=(),
     )
 
-    assert "`kind` MUST be one of: `pass`, `raise`." in fragment
-    assert "- `raise`:" in fragment
-    assert "`raise_message` is required." in fragment
-    assert "Output keys: `kind`, `raise_message`." in fragment
+    assert "`kind` must be one of: `pass`, `raise`." in fragment
+    assert "- raise:" in fragment
+    assert "raise_message: required." in fragment
     assert "raise_error_type" not in fragment
 
 
@@ -35,8 +34,8 @@ def test_fragment_includes_break_and_continue_only_when_allowed() -> None:
         raise_error_type_binding_names=(),
     )
 
-    assert "- `continue`:" in fragment
-    assert "- `break`:" not in fragment
+    assert "- continue:" in fragment
+    assert "- break:" not in fragment
 
 
 def test_fragment_includes_raise_error_type_enum_when_bindings_present() -> None:
@@ -45,5 +44,5 @@ def test_fragment_includes_raise_error_type_enum_when_bindings_present() -> None
         raise_error_type_binding_names=("ValueError", "TypeError"),
     )
 
-    assert "- `raise`:" in fragment
-    assert "If you include `raise_error_type`, it MUST be one of: `ValueError`, `TypeError`." in fragment
+    assert "- raise:" in fragment
+    assert "raise_error_type: optional, must be one of: `ValueError`, `TypeError`." in fragment

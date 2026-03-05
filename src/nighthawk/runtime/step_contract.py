@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import textwrap
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -116,79 +115,45 @@ def build_step_system_prompt_suffix_fragment(
     allowed_kinds_text = ", ".join(f"`{outcome_kind}`" for outcome_kind in allowed_kinds)
 
     sections: list[str] = []
-    sections.append(
-        textwrap.dedent(
-            f"""\
-            Final output (StepOutcome):
-            - Output exactly one JSON object and nothing else.
-            - Purpose: tell the host Python runtime what step to take AFTER this Natural block.
-            - `kind` MUST be one of: {allowed_kinds_text}.
-            - Output only the fields allowed for the chosen `kind`. Do not include other keys.
-            """
-        )
-    )
+    sections.append(f"StepOutcome — output exactly one JSON object. `kind` must be one of: {allowed_kinds_text}.\n")
 
     if "pass" in allowed_kinds:
         sections.append(
-            textwrap.dedent(
-                """
-                - `pass`:
-                  - Use this outcome by default for normal completion.
-                  - Default: choose `pass`.
-                  - Output exactly: {"kind": "pass"}.
-                """
-            )
+            '\nDefault: {"kind": "pass"}\n'
+            "Choose pass after completing the work. Most blocks end with pass.\n"
         )
 
+    alternatives: list[str] = []
+
     if "return" in allowed_kinds:
-        sections.append(
-            textwrap.dedent(
-                """
-                - `return`:
-                  - Use this ONLY when the Natural program explicitly requires an immediate Python `return` from the surrounding function.
-                  - Do NOT use `return` to "return the answer". Most blocks should end with `pass`.
-                  - `return_reference_path` is required and must be a dot-separated identifier path into step locals.
-                  - If you need to return a literal, nh_assign it first, then set `return_reference_path` to that name.
-                """
-            )
+        alternatives.append(
+            "- return: immediately return from the Python function.\n"
+            '  return_reference_path (required): name in step locals holding the value.\n'
+            '  Example: after nh_assign("x", "42"), output {"kind": "return", "return_reference_path": "x"}.\n'
         )
 
     if "break" in allowed_kinds:
-        sections.append(
-            textwrap.dedent(
-                """
-                - `break`:
-                  - Use this only when you must break from the surrounding Python loop immediately.
-                  - Output exactly: {"kind": "break"}.
-                """
-            )
+        alternatives.append(
+            "- break: break from the surrounding Python loop.\n"
         )
 
     if "continue" in allowed_kinds:
-        sections.append(
-            textwrap.dedent(
-                """
-                - `continue`:
-                  - Use this only when you must continue the next iteration of the surrounding Python loop immediately.
-                  - Output exactly: {"kind": "continue"}.
-                """
-            )
+        alternatives.append(
+            "- continue: continue to the next loop iteration.\n"
         )
 
     if "raise" in allowed_kinds:
-        sections.append(
-            textwrap.dedent(
-                """
-                - `raise`:
-                  - Use this only when you must raise an exception.
-                  - `raise_message` is required.
-                  - Output keys: `kind`, `raise_message`.
-                """
-            )
+        raise_text = (
+            "- raise: raise a Python exception.\n"
+            "  raise_message: required.\n"
         )
-
         if raise_error_type_binding_names:
             error_type_names_text = ", ".join(f"`{name}`" for name in raise_error_type_binding_names)
-            sections.append(f"""  - Optional: `raise_error_type`. If you include `raise_error_type`, it MUST be one of: {error_type_names_text}.\n""")
+            raise_text += f"  raise_error_type: optional, must be one of: {error_type_names_text}.\n"
+        alternatives.append(raise_text)
+
+    if alternatives:
+        sections.append("\nAlternatives (use only when the program text explicitly requires it):\n")
+        sections.extend(alternatives)
 
     return "".join(sections)
