@@ -561,7 +561,7 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
             self.seen_model_identifiers: list[str] = []
 
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime.step_contract import PassStepOutcome
+            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
             from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
@@ -574,7 +574,7 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
             self.seen_model_identifiers.append(current_model_identifier)
             assign_tool(deps, "observed_model_identifier", repr(current_model_identifier))
 
-            return FakeRunResult(PassStepOutcome(kind="pass"))
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
 
     initial_model_identifier = "openai-responses:gpt-5-nano"
     overridden_model_identifier = "openai-responses:gpt-5-mini"

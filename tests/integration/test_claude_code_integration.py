@@ -16,9 +16,8 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
     from nighthawk.backends.claude_code import ClaudeCodeModelSettings
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="claude-code:gpt-5.3-codex",
+        model="claude-code:sonnet",
         model_settings=ClaudeCodeModelSettings(
-            claude_max_turns=6,
             working_directory=str(tmp_path.resolve()),
         ),
     )
@@ -57,12 +56,11 @@ def test_claude_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            model="claude-code:gpt-5.3-codex",
+            model="claude-code:sonnet",
             model_settings=ClaudeCodeModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
                 claude_allowed_tool_names=("Skill", "Bash"),
-                claude_max_turns=6,
                 working_directory=str(working_directory.resolve()),
             ),
         )
@@ -79,7 +77,7 @@ def test_claude_skill() -> None:
                 deny: [pass, raise]
                 ---
                 Execute the `hoge` skill.
-                Then, without changing the current working directory, return the result of the `bash -c pwd` command.
+                Then, without changing the current working directory, return the result of the `pwd` command.
                 """
 
             result = test_function()
@@ -103,12 +101,11 @@ def test_claude_skill_calc() -> None:
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     configuration = nh.StepExecutorConfiguration(
-        model="claude-code:gpt-5.3-codex",
+        model="claude-code:haiku",
         model_settings=ClaudeCodeModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
             claude_allowed_tool_names=("Skill", "Bash"),
-            claude_max_turns=6,
             working_directory=str(working_directory.resolve()),
         ),
     )
@@ -127,7 +124,7 @@ def test_claude_skill_calc() -> None:
             ---
             deny: [pass, raise]
             ---
-            Execute the `test` skill and set <:result> to the output.
+            Execute the `test` skill.
             """
 
             return result
@@ -156,12 +153,11 @@ def test_claude_mcp_callback() -> None:
     from nighthawk.backends.claude_code import ClaudeCodeModelSettings
 
     configuration = nh.StepExecutorConfiguration(
-        model="claude-code:gpt-5.3-codex",
+        model="claude-code:haiku",
         model_settings=ClaudeCodeModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
             claude_allowed_tool_names=("Bash",),
-            claude_max_turns=6,
         ),
     )
 

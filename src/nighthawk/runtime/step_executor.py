@@ -32,6 +32,7 @@ from .scoping import (
 from .step_context import StepContext, ToolResultRenderingPolicy, resolve_name_in_step_context, step_context_scope
 from .step_contract import (
     STEP_KINDS,
+    StepFinalResult,
     StepKind,
     StepOutcome,
     build_step_json_schema,
@@ -398,7 +399,7 @@ def _new_agent_step_executor(
 
     agent = Agent(
         model=model,
-        output_type=StepOutcome,  # pyright: ignore
+        output_type=StepFinalResult,
         deps_type=StepContext,
         system_prompt=configuration.prompts.step_system_prompt_template,
         **constructor_arguments,
@@ -545,7 +546,7 @@ class AgentStepExecutor:
                 allowed_kinds=allowed_kinds_typed,
                 raise_error_type_binding_names=raise_error_type_binding_names,
             )
-            structured_output_type = StructuredDict(outcome_json_schema, name="StepOutcome")
+            structured_output_type = StructuredDict(outcome_json_schema, name="StepFinalResult")
 
             execution_context = get_execution_context()
             with span(
@@ -565,7 +566,13 @@ class AgentStepExecutor:
                     )
 
         try:
-            step_outcome = TypeAdapter(StepOutcome).validate_python(result.output)
+            raw_output = result.output
+            if isinstance(raw_output, StepFinalResult):
+                step_outcome = raw_output.result
+            elif isinstance(raw_output, dict) and "result" in raw_output:
+                step_outcome = TypeAdapter(StepOutcome).validate_python(raw_output["result"])
+            else:
+                step_outcome = TypeAdapter(StepOutcome).validate_python(raw_output)
         except Exception as e:
             raise ExecutionError(f"Step produced invalid step outcome: {e}") from e
 

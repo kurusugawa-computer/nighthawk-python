@@ -129,18 +129,18 @@ wheels = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.1.44"
+version = "0.1.46"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "mcp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/40/5661e10daf69ee5c864f82a1888cc33c9378b2d7f7d11db3c2360aef3a30/claude_agent_sdk-0.1.44.tar.gz", hash = "sha256:8629436e7af367a1cbc81aa2a58a93aa68b8b2e4e14b0c5be5ac3627bd462c1b", size = 62439, upload-time = "2026-02-26T01:17:28.118Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cb/c8/27a7838a0c5c05057f2ecce6d5c8ee755d9a854fa46f3003c85d72dfbc12/claude_agent_sdk-0.1.46.tar.gz", hash = "sha256:7c2b6f3062ca6f016dacb8660660b4afe80935f4eabe0db677649edaddeef2ec", size = 86673, upload-time = "2026-03-05T00:36:27.36Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e9/1a/dcde83a6477bfdf8c5510fd84006cca763296e6bc5576e90cd89b97ec034/claude_agent_sdk-0.1.44-py3-none-macosx_11_0_arm64.whl", hash = "sha256:1dd976ad3efb673aefd5037dc75ee7926fb5033c4b9ab7382897ab647fed74e6", size = 55828889, upload-time = "2026-02-26T01:17:15.474Z" },
-    { url = "https://files.pythonhosted.org/packages/4b/33/3b161256956968e18c81e2b2650fed7d2a1144d51042ed6317848643e5d7/claude_agent_sdk-0.1.44-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:d35b38ca40fa28f50fa88705599a298ab30c121c56b53655025eeceb463ac399", size = 70795212, upload-time = "2026-02-26T01:17:18.873Z" },
-    { url = "https://files.pythonhosted.org/packages/17/cb/67af9796dad77a94dfe851138f5ffc9e2e0a14407ba55fea07462c1cc8e5/claude_agent_sdk-0.1.44-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:853c15501f71a913a6cc6b40dc0b24b9505166cad164206b8eab229889e670b8", size = 71424685, upload-time = "2026-02-26T01:17:22.345Z" },
-    { url = "https://files.pythonhosted.org/packages/46/cd/2d3806c791250a76de2c1be863fc01d420729ad61496253e3d3033464c72/claude_agent_sdk-0.1.44-py3-none-win_amd64.whl", hash = "sha256:597e2fcad372086f93e4f6a380d3088ec4dd9b9efce309c5281b52a256fd5d25", size = 73493771, upload-time = "2026-02-26T01:17:25.837Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/16/bb883b6c39d1eba6ffe7cab421f5d91ce1b4937f6222dad3dd73641a40c5/claude_agent_sdk-0.1.46-py3-none-macosx_11_0_arm64.whl", hash = "sha256:66aed2199234d751a0f8c605ba34d1b3d93e94b4e939526ee04ca243ba74cf62", size = 59414852, upload-time = "2026-03-05T00:36:10.715Z" },
+    { url = "https://files.pythonhosted.org/packages/99/f3/0c65254ee57940a17ccff1d9a4291d6f856fbf9f87de108e866c7de2fe86/claude_agent_sdk-0.1.46-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:440f0923811f9e1c6c992655beadb527eb2ed4024059880018fd6ec92846d429", size = 75211569, upload-time = "2026-03-05T00:36:15.222Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/a1/3f34e77042eca1d4a12b90e643f7aa5f64201f9259e138c5ba62751194e4/claude_agent_sdk-0.1.46-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:460ab0ad549331dc35ef1bc212a7cd8e8b4d2876b10df7bfa9f4000c95b94c15", size = 75916106, upload-time = "2026-03-05T00:36:19.651Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/0a/2c2cfd0f39de1bb864d6804db0094453ae4270de4a76e44343459e28b9e8/claude_agent_sdk-0.1.46-py3-none-win_amd64.whl", hash = "sha256:4d0d5b14ad04d6e8fbe5b1ffe3e48d0da38d2602e9efc4f21f0e4593987cf67a", size = 77103700, upload-time = "2026-03-05T00:36:24.449Z" },
 ]
 
 [[package]]
@@ -269,7 +269,7 @@ requests = [
 
 [[package]]
 name = "google-genai"
-version = "1.65.0"
+version = "1.66.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -283,9 +283,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/79/f9/cc1191c2540d6a4e24609a586c4ed45d2db57cfef47931c139ee70e5874a/google_genai-1.65.0.tar.gz", hash = "sha256:d470eb600af802d58a79c7f13342d9ea0d05d965007cae8f76c7adff3d7a4750", size = 497206, upload-time = "2026-02-26T00:20:33.824Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/ba/0b343b0770d4710ad2979fd9301d7caa56c940174d5361ed4a7cc4979241/google_genai-1.66.0.tar.gz", hash = "sha256:ffc01647b65046bca6387320057aa51db0ad64bcc72c8e3e914062acfa5f7c49", size = 504386, upload-time = "2026-03-04T22:15:28.156Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/3c/3fea4e7c91357c71782d7dcaad7a2577d636c90317e003386893c25bc62c/google_genai-1.65.0-py3-none-any.whl", hash = "sha256:68c025205856919bc03edb0155c11b4b833810b7ce17ad4b7a9eeba5158f6c44", size = 724429, upload-time = "2026-02-26T00:20:32.186Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/dd/403949d922d4e261b08b64aaa132af4e456c3b15c8e2a2d9e6ef693f66e2/google_genai-1.66.0-py3-none-any.whl", hash = "sha256:7f127a39cf695277104ce4091bb26e417c59bb46e952ff3699c3a982d9c474ee", size = 732174, upload-time = "2026-03-04T22:15:26.63Z" },
 ]
 
 [[package]]
@@ -799,7 +799,7 @@ wheels = [
 
 [[package]]
 name = "pydantic-ai-slim"
-version = "1.64.0"
+version = "1.66.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "genai-prices" },
@@ -810,9 +810,9 @@ dependencies = [
     { name = "pydantic-graph" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/14/56/629291aafc1271a3643c66fc22a25d737ce9f7a0fbb19eec14feefb4835b/pydantic_ai_slim-1.64.0.tar.gz", hash = "sha256:fc17a6bc307aeeec8d9feb12267bc2e0f1261f169310c185698017b4a507aea4", size = 430974, upload-time = "2026-03-02T23:59:51.32Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/31/1b291e2c169c684290b458a1333d438e34c542d355c60c0bc92866c192a2/pydantic_ai_slim-1.66.0.tar.gz", hash = "sha256:d675f3cf7171c7ea767084a2228d7a2e8eb88e18bfefba71387ed150fcb64069", size = 435408, upload-time = "2026-03-05T00:54:58.587Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/ca/d3a9676e6e94237d5e029fdd684d3aacce2b2ac7726a5fc36ef5bb558c6a/pydantic_ai_slim-1.64.0-py3-none-any.whl", hash = "sha256:8cc79027e63a903837dfcdf6a57e12bce544ec48c460414863ac3e7ae27d39d4", size = 561472, upload-time = "2026-03-02T23:59:43.176Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/c9/098d675eb20863c6c92a23e09b6cc0d10df3f96191f04f3daefb31f180bc/pydantic_ai_slim-1.66.0-py3-none-any.whl", hash = "sha256:59dcccbcbf948d356dd4a03457962b4079db42c56edf8a11113d827015027e66", size = 566105, upload-time = "2026-03-05T00:54:51.611Z" },
 ]
 
 [package.optional-dependencies]
@@ -883,7 +883,7 @@ wheels = [
 
 [[package]]
 name = "pydantic-graph"
-version = "1.64.0"
+version = "1.66.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -891,9 +891,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/45/32c7ac4e0aa777fad08617dbcef23b24517b50dde46dd561d913e20d4680/pydantic_graph-1.64.0.tar.gz", hash = "sha256:172013126a68583558a9a96fc8153c6ac26a10b94827b63ea8b9afbc03b0f7a5", size = 58529, upload-time = "2026-03-02T23:59:53.547Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/25/5e/4a3ed6c4047fd2676b248cee3666299b6214f691c086fd5f9bdda96ace1d/pydantic_graph-1.66.0.tar.gz", hash = "sha256:834df5137098c2c95d2241b98d4dd61af4a3ff24784751c82cc543db46dd29f5", size = 58522, upload-time = "2026-03-05T00:55:01.019Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/03/26/f7d2151a70d00d3df3b76340f3ad152d0ffe5bbc46d1ed56859930a9c712/pydantic_graph-1.64.0-py3-none-any.whl", hash = "sha256:1566906493122682419e4049d7b8a30216684d0f24a53b0c910320ee698bfaae", size = 72351, upload-time = "2026-03-02T23:59:47.645Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/95/22c0ad3f3830d7fdd4dbfdc78548705f6c9ac434ada0d790ffc02491b39e/pydantic_graph-1.66.0-py3-none-any.whl", hash = "sha256:8f75d34efbaa4b65767d39faa2b3270fd321fb4104a66d3773754f4854876739", size = 72351, upload-time = "2026-03-05T00:54:54.661Z" },
 ]
 
 [[package]]

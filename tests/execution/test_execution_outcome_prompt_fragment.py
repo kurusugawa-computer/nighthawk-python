@@ -46,3 +46,14 @@ def test_fragment_includes_raise_error_type_enum_when_bindings_present() -> None
 
     assert "- raise:" in fragment
     assert "raise_error_type: optional, must be one of: `ValueError`, `TypeError`." in fragment
+
+
+def test_fragment_mentions_result_field_and_step_final_result() -> None:
+    fragment = build_step_system_prompt_suffix_fragment(
+        allowed_kinds=("pass",),
+        raise_error_type_binding_names=(),
+    )
+
+    assert "StepFinalResult" in fragment
+    assert "`result`" in fragment
+    assert '{"result": {"kind": "pass"}}' in fragment

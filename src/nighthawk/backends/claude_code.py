@@ -218,7 +218,7 @@ class ClaudeCodeModel(BackendModelBase):
             SdkMcpTool,
             create_sdk_mcp_server,
         )
-        from claude_agent_sdk.types import AssistantMessage, ResultMessage  # pyright: ignore[reportMissingImports]
+        from claude_agent_sdk.types import AssistantMessage, Message, ResultMessage  # pyright: ignore[reportMissingImports]
 
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 
@@ -276,15 +276,13 @@ class ClaudeCodeModel(BackendModelBase):
         working_directory = claude_code_model_settings.get("working_directory") or ""
 
         if allowed_tool_names:
-            system_prompt_text = "\n\n".join(
+            system_prompt_text = "\n".join(
                 [
                     system_prompt_text,
-                    textwrap.dedent("""
-                    Tool access:
-                    - Nighthawk tools are exposed via MCP; tool names are prefixed with: mcp__nighthawk__
-                    - If you want to call nh_eval(...), call: mcp__nighthawk__nh_eval
-                    - If you want to call nh_assign(...), call: mcp__nighthawk__nh_assign
-                    """),
+                    "",
+                    "Tool access:",
+                    "- Nighthawk tools are exposed via MCP; tool names are prefixed with: mcp__nighthawk__",
+                    "- Example: to call nh_exec(...), use: mcp__nighthawk__nh_exec",
                 ]
             )
 
@@ -314,6 +312,7 @@ class ClaudeCodeModel(BackendModelBase):
 
         assistant_model_name: str | None = None
         result_message: ResultMessage | None = None
+        result_messages: list[Message] = []
 
         # Claude Code sets the CLAUDECODE environment variable for nested sessions.
         # When the variable is set, the Claude Code CLI refuses to launch.
@@ -327,6 +326,7 @@ class ClaudeCodeModel(BackendModelBase):
                         assistant_model_name = message.model
                     elif isinstance(message, ResultMessage):
                         result_message = message
+                    result_messages.append(message)
         finally:
             if claude_code_nested_environment_value is not None:
                 os.environ["CLAUDECODE"] = claude_code_nested_environment_value
@@ -336,14 +336,14 @@ class ClaudeCodeModel(BackendModelBase):
 
         if result_message.is_error:
             error_text = result_message.result or "Claude Code backend reported an error"
-            result_message_json = _serialize_result_message_to_json(result_message)
-            raise UnexpectedModelBehavior(f"{error_text}\nresult_message_json={result_message_json}\noutput_format={options_keyword_arguments['output_format']}")
+            result_messages_json = _serialize_result_message_to_json(result_messages)
+            raise UnexpectedModelBehavior(f"{error_text}\nresult_message_json={result_messages_json}\noutput_format={options_keyword_arguments['output_format']}")
 
         structured_output = result_message.structured_output
         if structured_output is None:
             if model_request_parameters.output_object is not None:
-                result_message_json = _serialize_result_message_to_json(result_message)
-                raise UnexpectedModelBehavior(f"Claude Code backend did not return structured output\nresult_message_json={result_message_json}")
+                result_messages_json = _serialize_result_message_to_json(result_messages)
+                raise UnexpectedModelBehavior(f"Claude Code backend did not return structured output\nresult_message_json={result_messages_json}")
 
             if result_message.result is None:
                 raise UnexpectedModelBehavior("Claude Code backend did not return text output")

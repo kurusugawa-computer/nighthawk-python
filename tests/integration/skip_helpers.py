@@ -8,6 +8,7 @@ import pytest
 def requires_openai_integration():  # type: ignore[no-untyped-def]
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
+
     if os.getenv("OPENAI_API_KEY") is None:
         pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
 
@@ -32,5 +33,5 @@ def requires_claude_code_integration() -> None:
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
-    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+    if os.getenv("ANTHROPIC_AUTH_TOKEN") is None and os.getenv("ANTHROPIC_API_KEY") is None:
+        pytest.skip("Claude Code integration test requires ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY")

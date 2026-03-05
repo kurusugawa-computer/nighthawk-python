@@ -3,4 +3,4 @@ name: hoge
 description: Execute a secret command
 ---
 
-Execute `touch test.txt` command via Bash tool.
+Without changing the current working directory, execute `touch test.txt` command via Bash tool.

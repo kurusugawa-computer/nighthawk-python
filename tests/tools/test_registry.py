@@ -50,12 +50,12 @@ def test_tool_defined_in_call_scope_is_not_global(tmp_path):
 
     class FakeAgent:
         def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime.step_contract import PassStepOutcome
+            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
 
             _ = user_prompt
             _ = deps
             _ = kwargs
-            return FakeRunResult(PassStepOutcome(kind="pass"))
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
 
     agent = FakeAgent()
 
@@ -93,7 +93,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
             self.seen_tool_names: list[str] = []
 
         def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime.step_contract import PassStepOutcome
+            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
 
             _ = user_prompt
             _ = deps
@@ -102,7 +102,7 @@ def test_call_scoped_tools_added_mid_call_are_visible_next_block(tmp_path):
             toolset = toolsets[0]
             self.seen_tool_names.append(",".join(sorted(toolset.tools.keys())))
 
-            return FakeRunResult(PassStepOutcome(kind="pass"))
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
 
     agent = FakeAgent()
 
