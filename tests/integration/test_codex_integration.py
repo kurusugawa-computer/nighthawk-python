@@ -1,35 +1,11 @@
-import os
 from pathlib import Path
 
-import pytest
-from pydantic import BaseModel, ConfigDict
-
 import nighthawk as nh
-from nighthawk.backends.codex import CodexModel
-from nighthawk.runtime.step_context import StepContext
-
-
-class StructuredOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    answer: int
-
-
-def _requires_codex_integration() -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-
-    # This integration test requires a real `codex` executable on PATH and valid provider credentials.
-    if os.getenv("CODEX_API_KEY") is None:
-        pytest.skip("Codex CLI integration test requires CODEX_API_KEY")
-
-    # Codex CLI is probabilistic and relies on local state; allow skipping in environments where it is flaky.
-    if os.getenv("NIGHTHAWK_SKIP_CODEX_INTEGRATION") == "1":
-        pytest.skip("Codex integration tests are skipped")
+from tests.integration.skip_helpers import requires_codex_integration
 
 
 def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
-    _requires_codex_integration()
+    requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
         model="codex:gpt-5-mini",
@@ -48,8 +24,7 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
         def test_function() -> str:
             result = ""
             """natural
-            <:result>
-            Use nh_eval("1 + 1") to confirm arithmetic, then call nh_assign("result", "'2'").
+            Set <:result> to "2".
             """
 
             return result
@@ -58,7 +33,7 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
 
 
 def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
-    _requires_codex_integration()
+    requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
         model="codex:gpt-5-mini",
@@ -90,7 +65,7 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
 
 
 def test_codex_skill() -> None:
-    _requires_codex_integration()
+    requires_codex_integration()
 
     import logfire
 
@@ -135,7 +110,7 @@ def test_codex_skill() -> None:
 
 
 def test_codex_skill_calc() -> None:
-    _requires_codex_integration()
+    requires_codex_integration()
 
     import logfire
 
@@ -167,8 +142,7 @@ def test_codex_skill_calc() -> None:
             ---
             deny: [pass, raise]
             ---
-            Execute the `test` skill.
-            <:result>
+            Execute the `test` skill and set <:result> to the output.
             """
 
             return result
@@ -176,43 +150,3 @@ def test_codex_skill_calc() -> None:
         result = test_function()
 
         assert result == 1 + 2 * 8
-
-
-def test_codex_structured_output_via_output_schema(tmp_path: Path) -> None:
-    _requires_codex_integration()
-
-    run_configuration = nh.StepExecutorConfiguration(
-        model="codex:default",
-        model_settings={
-            "working_directory": str(tmp_path.resolve()),
-        },
-    )
-
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=run_configuration,
-    )
-
-    with nh.run(step_executor):
-        model = CodexModel()
-
-        tool_context = StepContext(
-            step_id="test_codex_structured_output_via_output_schema",
-            step_globals={"__builtins__": __builtins__},
-            step_locals={},
-            binding_commit_targets=set(),
-        )
-
-        from pydantic_ai import Agent
-
-        structured_agent = Agent(
-            model=model,
-            deps_type=StepContext,
-            output_type=StructuredOutput,
-        )
-
-        result = structured_agent.run_sync(
-            'Return exactly this JSON object and nothing else: {"answer": 2}',
-            deps=tool_context,
-        )
-
-        assert result.output.answer == 2

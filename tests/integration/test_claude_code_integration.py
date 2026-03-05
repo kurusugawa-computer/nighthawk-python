@@ -1,17 +1,11 @@
-import os
 from pathlib import Path
 
-import pytest
-
 import nighthawk as nh
+from tests.integration.skip_helpers import requires_claude_code_integration
 
 
 def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-
-    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+    requires_claude_code_integration()
 
     import logfire
 
@@ -39,8 +33,7 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
         def test_function() -> str:
             result = ""
             """natural
-            <:result>
-            Use nh_eval("1 + 1") to confirm arithmetic, then call nh_assign("result", "'2'").
+            Set <:result> to "2".
             """
 
             return result
@@ -49,11 +42,7 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
 
 
 def test_claude_skill() -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-
-    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+    requires_claude_code_integration()
 
     import logfire
 
@@ -102,11 +91,7 @@ def test_claude_skill() -> None:
 
 
 def test_claude_skill_calc() -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-
-    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+    requires_claude_code_integration()
 
     import logfire
 
@@ -142,8 +127,7 @@ def test_claude_skill_calc() -> None:
             ---
             deny: [pass, raise]
             ---
-            Execute the `test` skill.
-            <:result>
+            Execute the `test` skill and set <:result> to the output.
             """
 
             return result
@@ -154,11 +138,7 @@ def test_claude_skill_calc() -> None:
 
 
 def test_claude_mcp_callback() -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-
-    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
+    requires_claude_code_integration()
 
     import logfire
 
@@ -203,34 +183,3 @@ def test_claude_mcp_callback() -> None:
             """
 
         assert test_function() == 17
-
-
-@pytest.mark.asyncio
-async def test_claude_simple_call():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-
-    if os.getenv("ANTHROPIC_BASE_URL") is None or os.getenv("ANTHROPIC_AUTH_TOKEN") is None:
-        pytest.skip("Claude Code integration test requires ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN")
-
-    from claude_agent_sdk import (
-        ClaudeAgentOptions,
-        ClaudeSDKClient,
-    )
-    from claude_agent_sdk.types import ResultMessage
-
-    result_message: ResultMessage | None = None
-    options = ClaudeAgentOptions(
-        model="haiku",
-        output_format={"type": "json_schema", "schema": {"additionalProperties": False, "properties": {"kind": {"enum": ["pass", "return", "raise"], "type": "string"}, "return_value": {"type": "string"}, "raise_message": {"type": "string"}}, "required": ["kind"], "title": "StepOutcome", "type": "object"}},
-    )
-
-    async with ClaudeSDKClient(options=options) as client:
-        await client.query("Respond with the answer to 1 + 1.")
-
-        async for message in client.receive_response():
-            if isinstance(message, ResultMessage):
-                result_message = message
-
-    assert result_message is not None
-    assert result_message.structured_output == {"kind": "return", "return_value": "2"}

@@ -3,16 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import PassStepOutcome
-
-
-class RuntimeMemory(BaseModel):
-    pass
-
 
 NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 

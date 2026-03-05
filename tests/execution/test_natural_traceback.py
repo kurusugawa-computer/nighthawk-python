@@ -4,29 +4,12 @@ import logging
 import textwrap
 
 import nighthawk as nh
-
-
-class _FakeRunResult:
-    def __init__(self, output):
-        self.output = output
-
-
-class _FakeAgent:
-    def __init__(self):
-        self.seen_prompts: list[str] = []
-
-    def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.runtime.step_contract import PassStepOutcome
-
-        self.seen_prompts.append(user_prompt)
-        assert deps is not None
-        _ = kwargs
-        return _FakeRunResult(PassStepOutcome(kind="pass"))
+from tests.execution.prompt_test_helpers import FakeAgent
 
 
 def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
     _ = tmp_path
-    agent = _FakeAgent()
+    agent = FakeAgent()
     with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
         @nh.natural_function
@@ -64,7 +47,7 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
 
 def test_natural_traceback_includes_inline_block_line(tmp_path):
     _ = tmp_path
-    agent = _FakeAgent()
+    agent = FakeAgent()
     with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
         @nh.natural_function

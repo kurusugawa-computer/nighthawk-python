@@ -1,25 +1,12 @@
 """Integration tests for the journal pattern: cross-block context continuity via user-managed objects."""
 
-import os
-
-import pytest
-
 import nighthawk as nh
-
-
-def _requires_openai_integration():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-    if os.getenv("OPENAI_API_KEY") is None:
-        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
-
-    openai_module = pytest.importorskip("pydantic_ai.models.openai")
-    return openai_module.OpenAIResponsesModelSettings
+from tests.integration.skip_helpers import requires_openai_integration
 
 
 def test_journal_continuity_across_blocks():
     """Journal list carries context from step 1 into step 2 via in-place mutation."""
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
@@ -63,7 +50,7 @@ def test_journal_continuity_across_blocks():
 
 def test_journal_branching():
     """Branching a journal creates independent continuations."""
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
@@ -125,7 +112,7 @@ def test_journal_branching():
 
 def test_journal_with_fstring_injection():
     """f-string inline block injects journal content directly into the Natural program text."""
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(

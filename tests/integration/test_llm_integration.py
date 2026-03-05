@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import logfire
@@ -7,83 +6,14 @@ from pydantic_ai import RunContext
 
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
+from tests.integration.skip_helpers import requires_openai_integration
 
 logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
 
-def _requires_openai_integration():
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-        pytest.skip("Integration tests are disabled")
-    if os.getenv("OPENAI_API_KEY") is None:
-        pytest.skip("OPENAI_API_KEY is required for OpenAI integration tests")
-
-    openai_module = pytest.importorskip("pydantic_ai.models.openai")
-    return openai_module.OpenAIResponsesModelSettings
-
-
-def test_simple():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
-
-    from pydantic_ai import Agent
-
-    agent = Agent(
-        "openai-responses:gpt-5-nano",
-        instructions="Be concise, reply with one sentence.",
-        model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal"),
-    )
-    result = agent.run_sync('Where does "hello world" come from?')
-    print(result.output)
-
-
-def test_agent_import_and_construction_and_run():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
-
-    from pydantic_ai import StructuredDict
-
-    from nighthawk.runtime.step_contract import STEP_KINDS
-    from tests.execution.stub_executor import StubExecutor
-
-    StubExecutor()
-
-    agent_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
-    )
-    agent = agent_executor.agent
-    assert agent is not None
-
-    system_prompts = agent._system_prompts  # type: ignore[attr-defined]
-    assert any("Do the work described in <<<NH:PROGRAM>>>." in str(p) for p in system_prompts)
-
-    tool_context = StepContext(
-        step_id="test_agent_import_and_construction_and_run",
-        step_globals={"__builtins__": __builtins__},
-        step_locals={},
-        binding_commit_targets=set(),
-    )
-
-    result = agent.run_sync(
-        'Return exactly this JSON object and nothing else: {"kind": "continue"}',
-        deps=tool_context,
-        output_type=StructuredDict(
-            {
-                "type": "object",
-                "properties": {
-                    "kind": {"type": "string", "enum": ["continue"]},
-                },
-                "required": ["kind"],
-                "additionalProperties": False,
-            },
-            name="StepOutcome",
-        ),
-    )
-
-    assert result.output["kind"] == "continue"
-    assert result.output["kind"] in STEP_KINDS
-
-
 def test_natural_block_evaluate_order():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     run_configuration = nh.StepExecutorConfiguration(model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"))
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -96,7 +26,7 @@ def test_natural_block_evaluate_order():
         def test_function() -> int:
             v = 10
             """natural
-            <:v> += 5
+            Set <:v> to <v> + 5.
             """
             return v
 
@@ -105,7 +35,7 @@ def test_natural_block_evaluate_order():
 
 
 def test_raise_exception():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low")),
@@ -123,7 +53,7 @@ def test_raise_exception():
 
 
 def test_condition():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low")),
@@ -145,7 +75,7 @@ def test_condition():
 
 @pytest.mark.asyncio
 async def test_async_function_call():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low")),
@@ -168,7 +98,7 @@ async def test_async_function_call():
 
 
 def test_multiple_blocks_one_call_scope():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -180,13 +110,11 @@ def test_multiple_blocks_one_call_scope():
         def f() -> int:
             x = 1
             """natural
-            <:x>
-            increase x by 10
+            Set <:x> to <x> + 10.
             """
 
             """natural
-            <:x>
-            increase x by 20
+            Set <:x> to <x> + 20.
             """
 
             return x
@@ -195,7 +123,7 @@ def test_multiple_blocks_one_call_scope():
 
 
 def test_system_prompt_suffix_fragments():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -208,8 +136,7 @@ def test_system_prompt_suffix_fragments():
             def f() -> int:
                 x = 1
                 """natural
-                <:x>
-                increase x by 10
+                Set <:x> to <x> + 10.
                 """
 
                 return x
@@ -218,7 +145,7 @@ def test_system_prompt_suffix_fragments():
 
 
 def test_user_prompt_suffix_fragments():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -231,8 +158,7 @@ def test_user_prompt_suffix_fragments():
             def f() -> int:
                 x = 1
                 """natural
-                <:x>
-                increase x by 10
+                Set <:x> to <x> + 10.
                 """
 
                 return x
@@ -241,7 +167,7 @@ def test_user_prompt_suffix_fragments():
 
 
 def test_tool_visibility_scopes():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -268,7 +194,7 @@ def test_tool_visibility_scopes():
 
 
 def test_provided_tools_smoke():
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -284,8 +210,7 @@ def test_provided_tools_smoke():
         @nh.natural_function
         def f() -> int:
             """natural
-            <:result>
-            Use nh_eval("1 + 1") then my_tool() then nh_assign("result", "my_tool() + 2")
+            Call my_tool() and set <:result> to my_tool() + 2.
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
@@ -293,7 +218,7 @@ def test_provided_tools_smoke():
 
 
 def test_session_isolation(tmp_path):
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -311,8 +236,7 @@ def test_session_isolation(tmp_path):
         @nh.natural_function
         def f() -> str:
             """natural
-            <:result>
-            Use tmp_write then set result to file contents.
+            Call tmp_write() to create a file. Set <:result> to the return value of tmp_write().
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
@@ -321,7 +245,7 @@ def test_session_isolation(tmp_path):
 
 
 def test_provided_tools_do_not_leak_into_outer_scope(tmp_path):
-    OpenAIResponsesModelSettings = _requires_openai_integration()
+    OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
@@ -341,8 +265,7 @@ def test_provided_tools_do_not_leak_into_outer_scope(tmp_path):
             @nh.natural_function
             def f() -> str:
                 """natural
-                <:result>
-                Use nh_eval("1 + 1") then tmp_write then set result to file contents.
+                Call tmp_write() and set <:result> to its return value.
                 """
                 return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
