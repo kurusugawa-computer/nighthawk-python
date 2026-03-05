@@ -145,11 +145,7 @@ def _build_callable_signature_text_to_reference_list(
 
         callable_signature_text_to_reference_list.setdefault(callable_signature_text, []).append(reference)
 
-    return {
-        callable_signature_text: reference_list
-        for callable_signature_text, reference_list in callable_signature_text_to_reference_list.items()
-        if len(reference_list) > 1
-    }
+    return {callable_signature_text: reference_list for callable_signature_text, reference_list in callable_signature_text_to_reference_list.items() if len(reference_list) > 1}
 
 
 def _render_callable_line(
@@ -195,9 +191,7 @@ def _render_reference_and_value_list_section(
     total_tokens = 0
     shown_items = 0
     token_limit_reached = False
-    callable_signature_text_to_reference_list = _build_callable_signature_text_to_reference_list(
-        reference_and_value_list=reference_and_value_list
-    )
+    callable_signature_text_to_reference_list = _build_callable_signature_text_to_reference_list(reference_and_value_list=reference_and_value_list)
 
     for reference, value in reference_and_value_list:
         if shown_items >= max_items:
