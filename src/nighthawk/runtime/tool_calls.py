@@ -99,9 +99,3 @@ async def run_tool_instrumented(
         if include_content and span.is_recording():
             span.set_attribute(instrumentation_names.tool_result_attr, result_text)
         return result_text
-
-
-__all__ = [
-    "generate_tool_call_id",
-    "run_tool_instrumented",
-]

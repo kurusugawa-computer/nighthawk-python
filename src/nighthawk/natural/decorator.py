@@ -6,6 +6,8 @@ import textwrap
 from functools import wraps
 from typing import Any, Awaitable, Callable, TypeVar, cast
 
+import logfire
+
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope, python_name_scope
@@ -91,7 +93,8 @@ def natural_function(func: F | None = None) -> F:
                 node.decorator_list = []
                 break
         ast.increment_lineno(original_module, starting_line_number - 1)
-    except Exception:
+    except Exception as exception:
+        logfire.warn("Failed to parse original module AST for {function_name}", function_name=func.__name__, exception=str(exception))
         original_module = ast.Module(body=[], type_ignores=[])
 
     def extract_inline_fstring_name_set(func_source: str, *, function_name: str) -> set[str]:
@@ -142,7 +145,8 @@ def natural_function(func: F | None = None) -> F:
             capture_name_set.update(block.bindings)
 
         capture_name_set.update(extract_inline_fstring_name_set(source, function_name=func.__name__))
-    except Exception:
+    except Exception as exception:
+        logfire.warn("Failed to extract capture names for {function_name}", function_name=func.__name__, exception=str(exception))
         capture_name_set = set()
 
     definition_frame = inspect.currentframe()

@@ -4,9 +4,14 @@ import ast
 import re
 
 from ..errors import NaturalParseError
-from .blocks import extract_bindings, extract_program, is_natural_sentinel
-
-_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER = "\x00"
+from .blocks import (
+    _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
+    _joined_string_is_natural_sentinel,
+    _joined_string_scan_text,
+    extract_bindings,
+    extract_program,
+    is_natural_sentinel,
+)
 
 
 class NaturalTransformer(ast.NodeTransformer):
@@ -275,32 +280,6 @@ class NaturalTransformer(ast.NodeTransformer):
             values.append(binding_name_to_type_expression.get(name, ast.Name(id="object", ctx=ast.Load())))
 
         return ast.Dict(keys=keys, values=values)
-
-
-def _joined_string_first_literal_or_none(joined_string: ast.JoinedStr) -> str | None:
-    if not joined_string.values:
-        return None
-    first = joined_string.values[0]
-    if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
-        return None
-    return first.value
-
-
-def _joined_string_is_natural_sentinel(joined_string: ast.JoinedStr) -> bool:
-    first_literal = _joined_string_first_literal_or_none(joined_string)
-    if first_literal is None:
-        return False
-    return is_natural_sentinel(first_literal)
-
-
-def _joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_placeholder: str) -> str:
-    parts: list[str] = []
-    for part in joined_string.values:
-        if isinstance(part, ast.Constant) and isinstance(part.value, str):
-            parts.append(part.value)
-        else:
-            parts.append(formatted_value_placeholder)
-    return "".join(parts)
 
 
 def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string: ast.JoinedStr) -> None:

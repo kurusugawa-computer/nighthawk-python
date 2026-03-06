@@ -5,12 +5,12 @@ import json
 import pytest
 import tiktoken
 
-from nighthawk.json_renderer import RenderStyle
+from nighthawk.json_renderer import JsonRendererStyle
 from nighthawk.tools import contracts
 from nighthawk.tools.contracts import tool_result_failure_json_text, tool_result_success_json_text
 
 _encoding = tiktoken.get_encoding("o200k_base")
-_style: RenderStyle = "strict"
+_style: JsonRendererStyle = "strict"
 _budget = 2_000
 
 
@@ -53,7 +53,7 @@ def test_tool_result_budget_allocation_is_90_10_and_uses_leftover(monkeypatch: p
         *,
         max_tokens: int,
         encoding: tiktoken.Encoding,
-        style: RenderStyle,
+        style: JsonRendererStyle,
     ) -> tuple[str, int]:
         calls.append(
             {

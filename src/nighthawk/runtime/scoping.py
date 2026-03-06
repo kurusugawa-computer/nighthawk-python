@@ -10,10 +10,15 @@ import logfire
 
 from ..configuration import StepExecutorConfiguration, StepExecutorConfigurationPatch
 from ..errors import NighthawkError
-from .execution_context import ExecutionContext
 
 if TYPE_CHECKING:
     from .step_executor import AgentStepExecutor, StepExecutor
+
+
+@dataclass(frozen=True)
+class ExecutionContext:
+    run_id: str
+    scope_id: str
 
 
 RUN_ID = "run.id"
@@ -220,18 +225,3 @@ def scope(
             _prompt_suffix_fragments_var.reset(prompt_suffix_fragments_token)
             _execution_context_var.reset(execution_context_token)
             _step_executor_var.reset(step_executor_token)
-
-
-__all__ = [
-    "RUN_ID",
-    "SCOPE_ID",
-    "STEP_ID",
-    "TOOL_CALL_ID",
-    "get_step_executor",
-    "get_execution_context",
-    "get_system_prompt_suffix_fragments",
-    "get_user_prompt_suffix_fragments",
-    "run",
-    "scope",
-    "span",
-]

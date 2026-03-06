@@ -129,9 +129,3 @@ async def call_tool_for_low_level_mcp_server(
         )
 
     return [mcp_types.TextContent(type="text", text=result_text)]
-
-
-__all__ = [
-    "call_tool_for_claude_code",
-    "call_tool_for_low_level_mcp_server",
-]

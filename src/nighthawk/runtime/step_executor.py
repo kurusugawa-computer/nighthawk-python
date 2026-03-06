@@ -15,7 +15,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import StepContextLimits, StepExecutorConfiguration
 from ..errors import ExecutionError
-from ..json_renderer import RenderStyle, count_tokens, render_json_text
+from ..json_renderer import JsonRendererStyle, count_tokens, render_json_text
 from ..tools.contracts import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
@@ -186,7 +186,7 @@ def _render_reference_and_value_list_section(
     section_max_tokens: int,
     value_max_tokens: int,
     token_encoding: tiktoken.Encoding,
-    json_renderer_style: RenderStyle,
+    json_renderer_style: JsonRendererStyle,
 ) -> str:
     lines: list[str] = []
     total_tokens = 0
@@ -259,7 +259,7 @@ def _render_locals_section(
     references: Iterable[str],
     token_encoding: tiktoken.Encoding,
     context_limits: StepContextLimits,
-    json_renderer_style: RenderStyle,
+    json_renderer_style: JsonRendererStyle,
 ) -> str:
 
     eligible_reference_and_value_list: list[tuple[str, object]] = []
@@ -304,7 +304,7 @@ def _render_globals_section(
     references: Iterable[str],
     token_encoding: tiktoken.Encoding,
     context_limits: StepContextLimits,
-    json_renderer_style: RenderStyle,
+    json_renderer_style: JsonRendererStyle,
 ) -> str:
 
     eligible_reference_and_value_list: list[tuple[str, object]] = []

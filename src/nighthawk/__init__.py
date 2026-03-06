@@ -8,8 +8,7 @@ from .configuration import (
 )
 from .json_renderer import JsonableValue
 from .natural.decorator import natural_function
-from .runtime.execution_context import ExecutionContext
-from .runtime.scoping import get_execution_context, get_step_executor, run, scope
+from .runtime.scoping import ExecutionContext, get_execution_context, get_step_executor, run, scope
 from .runtime.step_context import get_current_step_context
 from .runtime.step_executor import AgentStepExecutor
 from .tools.registry import tool

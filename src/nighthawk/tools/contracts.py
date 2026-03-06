@@ -10,7 +10,7 @@ from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
 from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 
-from ..json_renderer import JsonableValue, RenderStyle, render_json_text, to_jsonable_value
+from ..json_renderer import JsonableValue, JsonRendererStyle, render_json_text, to_jsonable_value
 
 type ErrorKind = Literal["invalid_input", "resolution", "execution", "transient", "internal"]
 
@@ -43,7 +43,7 @@ def _render_channel_json_text(
     *,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: RenderStyle,
+    style: JsonRendererStyle,
 ) -> tuple[str, int]:
     return render_json_text(
         value,
@@ -59,7 +59,7 @@ def render_tool_result_json_text(
     error: object | None,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: RenderStyle,
+    style: JsonRendererStyle,
 ) -> str:
     if error is None:
         error_text = "null"
@@ -93,7 +93,7 @@ def tool_result_success_json_text(
     value: object,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: RenderStyle,
+    style: JsonRendererStyle,
 ) -> str:
     return render_tool_result_json_text(
         value=value,
@@ -111,7 +111,7 @@ def tool_result_failure_json_text(
     guidance: str | None,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: RenderStyle,
+    style: JsonRendererStyle,
 ) -> str:
     error_payload: dict[str, Any] = {
         "kind": kind,
@@ -154,7 +154,7 @@ def render_tool_result_for_debug(
     *,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: RenderStyle,
+    style: JsonRendererStyle,
 ) -> str:
     return render_tool_result_json_text(
         value=tool_result.value,

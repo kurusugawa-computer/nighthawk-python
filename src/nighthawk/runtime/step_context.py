@@ -6,8 +6,8 @@ from dataclasses import dataclass, field, replace
 from types import CellType
 from typing import Iterator
 
-from ..configuration import JsonRendererStyle
 from ..errors import NighthawkError
+from ..json_renderer import JsonRendererStyle
 
 
 @dataclass(frozen=True)

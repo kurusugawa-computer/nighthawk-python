@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 import tiktoken
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .json_renderer import JsonRendererStyle
 
 DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE = """\
 You are executing one Nighthawk Natural (NH) DSL block at a specific point inside a running Python function.
@@ -44,8 +46,6 @@ $globals
 <<<NH:END_GLOBALS>>>
 """
 
-
-type JsonRendererStyle = Literal["strict", "default", "detailed"]
 
 
 def _validate_model_identifier(model: str) -> str:
