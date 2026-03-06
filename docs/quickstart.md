@@ -4,13 +4,19 @@ This quickstart focuses on the shortest path to running your first Natural block
 
 ## Setup
 
-- Python `3.13+`
-- Install dependencies: `uv sync --all-extras --all-groups`
-- Credentials:
-  - `OPENAI_API_KEY` for `openai-responses:*`
-  - For other backends, see the model identifiers section in README.md.
+Prerequisites: Python 3.13+
 
-## One Executable Example
+Install with the OpenAI backend:
+
+```bash
+pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"
+```
+
+Other available extras: `vertexai`, `claude-code`, `codex`. See [Backends and model identifiers](#backends-and-model-identifiers) below.
+
+## First Example
+
+Save as `quickstart.py`:
 
 ```py
 import nighthawk as nh
@@ -22,14 +28,22 @@ step_executor = nh.AgentStepExecutor.from_configuration(
 with nh.run(step_executor):
 
     @nh.natural_function
-    def summarize_post(post: str) -> str:
-        summary = ""
+    def calculate_total(items: str) -> int:
+        total = 0
         """natural
-        Read <post> and set <:summary> to a concise summary.
+        Read <items> and set <:total> to the sum of all quantities mentioned.
         """
-        return summary
+        return total
 
-    print(summarize_post("Ship the patch by Friday and include migration notes."))
+    print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
+```
+
+Run with your API key:
+
+```bash
+export OPENAI_API_KEY=sk-xxxxxxxxx
+python quickstart.py
+# => 20
 ```
 
 ## Bindings at a Glance
@@ -37,6 +51,37 @@ with nh.run(step_executor):
 - `<name>` — read binding. The value is visible inside the Natural block. Mutable objects can be mutated in-place.
 - `<:name>` — write binding. Use `nh_assign` to set it; the new value is committed back into Python locals.
 
+## Backends and model identifiers
+
+Nighthawk uses the `provider:model` identifier format from [Pydantic AI](https://ai.pydantic.dev/models/overview/). For standard Pydantic AI providers, the identifier is passed directly to Pydantic AI.
+
+| Extra | Pydantic AI provider | Example identifier |
+|---|---|---|
+| `openai` | [OpenAI](https://ai.pydantic.dev/models/openai/) | `openai-responses:gpt-5-mini` |
+| `vertexai` | [Google / Vertex AI](https://ai.pydantic.dev/models/gemini/) | `google-vertex:gemini-3-pro-preview` |
+
+Nighthawk-specific backends (not backed by Pydantic AI):
+
+| Extra | Example identifier |
+|---|---|
+| `claude-code` | `claude-code:default` |
+| `codex` | `codex:default` |
+
+Default model: `openai-responses:gpt-5-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
+
+## Credentials
+
+Credential configuration for Pydantic AI providers follows [Pydantic AI conventions](https://ai.pydantic.dev/models/overview/). Common environment variables:
+
+- `OPENAI_API_KEY` — required for OpenAI models ([details](https://ai.pydantic.dev/models/openai/))
+- `GOOGLE_API_KEY` — required for Google / Vertex AI models ([details](https://ai.pydantic.dev/models/gemini/))
+
+## Safety model
+
+Nighthawk assumes the Natural DSL source and any imported markdown are trusted, repository-managed assets.
+
+Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into Natural blocks or any host-side interpolation helpers you define.
+
 ## Next Steps
 
-For patterns, techniques, and detailed guidance, see `docs/manual.md`.
+For patterns, techniques, and detailed guidance, see [Manual](manual.md).

@@ -1,6 +1,6 @@
 # Nighthawk Manual
 
-This manual covers patterns and techniques for writing effective Natural blocks. For first steps, see `docs/quickstart.md`.
+This manual covers patterns and techniques for writing effective Natural blocks. For first steps, see [Quickstart](quickstart.md).
 
 ## 1. Bindings
 
@@ -264,7 +264,7 @@ Frontmatter rules:
 - Allowed deny values: `pass`, `return`, `break`, `continue`, `raise`.
 - The deny list can only narrow the set allowed by syntactic context — it cannot add outcome kinds that the context does not permit (e.g., `break` outside a loop).
 
-See `docs/design.md` Section 8.4 for the full specification.
+See [design.md Section 8.4](design.md#84-execution-contract-final-json) for the full specification.
 
 ## 6. Discoverability
 
@@ -356,5 +356,5 @@ The context manager yields the resolved `StepExecutor` for the scope.
 
 References:
 
-- `docs/design.md`
-- `docs/roadmap.md`
+- [Design](design.md)
+- [Roadmap](roadmap.md)

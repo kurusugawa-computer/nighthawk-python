@@ -4,30 +4,19 @@
 <img src="docs/assets/nighthawk_logo-128x128.png" alt="logo" width="128px" margin="10px"></img>
 </div>
 
-Nighthawk is an experimental Python library exploring a clear separation:
-
-- Use **hard control** (Python code) for strict procedure, verification, and deterministic flow.
-- Use **soft reasoning** (an LLM) for semantic interpretation inside small embedded "Natural blocks".
-
-This repository is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
+Nighthawk is an experimental Python library exploring a clear separation between **hard control** (Python code) for strict procedure and deterministic flow, and **soft reasoning** (an LLM) for semantic interpretation inside small embedded "Natural blocks". It is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
 
 ## Quickstart
 
-Prerequisites: git, uv, Python 3.13+
+Prerequisites: Python 3.13+
+
+Install with the OpenAI backend:
 
 ```bash
-git clone https://github.com/kurusugawa-computer/nighthawk-python.git
-cd nighthawk-python
-uv sync --extra openai
+pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"
 ```
 
-Create a `.env` file with your API key (gitignored by default):
-
-```bash
-OPENAI_API_KEY=sk-xxxxxxxxx
-```
-
-Minimal example:
+Save as `quickstart.py`:
 
 ```py
 import nighthawk as nh
@@ -39,187 +28,33 @@ step_executor = nh.AgentStepExecutor.from_configuration(
 with nh.run(step_executor):
 
     @nh.natural_function
-    def summarize_post(post: str) -> str:
-        summary = ""
+    def calculate_total(items: str) -> int:
+        total = 0
         """natural
-        Read <post> and set <:summary> to a concise summary.
+        Read <items> and set <:total> to the sum of all quantities mentioned.
         """
-        return summary
+        return total
 
-    print(summarize_post("Ship the patch by Friday and include migration notes."))
+    print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
 ```
+
+Run with your API key:
+
+```bash
+export OPENAI_API_KEY=sk-xxxxxxxxx
+python quickstart.py
+# => 20
+```
+
+For backends, credentials, model identifiers, and detailed guidance, see the [documentation site](https://kurusugawa-computer.github.io/nighthawk-python/).
+
+## Development
 
 Run tests:
 
 ```bash
 uv run pytest -q
 ```
-
-## Natural blocks
-
-A Natural block is a Python docstring or a standalone string literal whose underlying string value begins with `natural\n`.
-
-Bindings:
-
-- `<name>` is a read binding.
-- `<:name>` is a write binding.
-
-Write bindings control which values are committed back into Python locals at Natural block boundaries.
-
-Interpolation:
-
-- Natural blocks are literal by default.
-- Interpolation is opt-in via inline f-string Natural blocks only (standalone f-string expression statements).
-- Docstring Natural blocks are always literal.
-- For f-string blocks, brace escaping follows Python rules: write `{{` / `}}` to produce literal `{` / `}`.
-
-## Documentation
-
-- **Quickstart** (first steps): `docs/quickstart.md`
-- **Manual** (patterns and techniques): `docs/manual.md`
-- **Specification** (canonical): `docs/design.md`
-- **Roadmap** (future only): `docs/roadmap.md`
-
-## What Nighthawk is trying to prove
-
-Nighthawk is a research vehicle. The main validation goals are:
-
-1. Hard control + soft reasoning works in practice
-    - Keep loops, conditionals, data plumbing, and "must run exactly N times" logic in Python.
-    - Delegate semantic interpretation to Natural blocks.
-
-2. Reduce "LLM is a black box" by mapping state into the interpreter
-    - Treat the Python interpreter as the primary external memory.
-    - Make intermediate state visible as Python locals / structured objects rather than hidden chat history.
-
-3. Constrain and validate updates at boundaries
-    - Use explicit write bindings (e.g., `<:result>`) so the LLM can only commit specific values.
-    - Optionally use a typed memory model (Pydantic) to force a domain mental model and validate updates.
-
-4. Explore alternative workflow styles (Nightjar vs Skills-style)
-    - Natural-language-first workflows are attractive, but require solving state synchronization between natural language and code.
-    - Nighthawk starts from the Nightjar side and explores how far we can push interpreter-visible state mapping.
-
-## Workflow styles
-
-This section summarizes the tradeoffs in terms of hard control vs flexibility.
-
-### 1. Nightjar style (hard control, embedded Natural blocks)
-
-You write strict flow in Python, and embed Natural blocks where semantics are needed.
-
-Pros:
-- Hard guarantees: exact loops, strict conditionals, deterministic boundaries.
-- Tools: debuggers, tests, linters, and normal software engineering practices apply.
-- The LLM is "physically constrained" to operate on interpreter-visible objects (locals, memory, tool context).
-
-Cons:
-- Knowledge often ends up encoded in code-adjacent artifacts, which can be less maintainable by non-engineers.
-
-Example:
-
-```py
-@nh.natural_function
-def calculate_average(numbers):
-    """natural
-    Consider the values of <numbers> and compute the semantic average as <:result>
-    """
-    return result
-
-result = calculate_average([1, "2", "three", "cuatro", "五"])
-print(result)  # 3.0
-```
-
-### 2. Skills-style / reverse Nightjar (flexible workflow, code snippets as needed)
-
-You write a natural language workflow first, and embed code only where strict procedures are needed.
-
-Pros:
-- Excellent for strategy, iteration, and human collaboration.
-- Similar spirit to literate programming: readable narrative with precise code where necessary.
-
-Cons:
-- The hard part is state synchronization: how to share and reconcile execution state between
-  - the natural language plan/world, and
-  - the code execution world.
-
-Example:
-
-````md
-Compute the "semantic average" of the target list using the following function.
-However, the target list contains mixed numeric representations, so convert the elements appropriately before calling the function and passing them as the argument.
-
-```py
-def calculate_average(numbers):
-    return sum(numbers) / len(numbers)
-```
-
-Target list: `[1, "2", "three", "cuatro", "五"]`
-````
-
-### 3. Hybrid nesting (Python -> Natural -> Python -> ...)
-
-Nighthawk's execution model is Python-first alternation: Python controls the steps, and Natural blocks are inserted where semantic interpretation is needed.
-
-Example:
-
-```py
-def python_average(numbers):
-    return sum(numbers) / len(numbers)
-
-@nh.natural_function
-def calculate_average(numbers):
-    """natural
-    Normalize <numbers> into python number list (e.g., [1, 2, ...]).
-    Then compute <:result> by calling <python_average>.
-    """
-    return result
-
-calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
-```
-
-## Repository overview
-
-### Layout
-
-- Package: `src/nighthawk/`
-- Tests: `tests/`
-- Design/spec docs: `docs/`
-
-### Defaults
-
-- Supported Python version: 3.13+ (by design).
-- Default model: `openai-responses:gpt-5-nano`.
-- Recommended model (quality): `openai-responses:gpt-5-mini`.
-
-### Backends
-
-Optional backends are installed via extras:
-
-- `openai`: `pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
-- `vertexai`: `pip install "nighthawk[vertexai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
-- `claude-code`: `pip install "nighthawk[claude-code] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
-- `codex`: `pip install "nighthawk[codex] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
-
-### Credentials
-
-- `OPENAI_API_KEY`: Required for `openai-responses:*` models.
-- `GOOGLE_API_KEY`: Required for `vertexai:*` models.
-- `CODEX_API_KEY`: Required for `codex:*` models.
-
-### Model identifiers
-
-- `StepExecutorConfiguration(model=...)` uses `provider:model`.
-- For `claude-code` and `codex`, you can use `:default` to use the backend/provider default model.
-  - Examples: `claude-code:default`, `codex:default`.
-
-## Safety model
-
-This project assumes the Natural DSL source and any imported markdown are trusted, repository-managed assets.
-
-Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into Natural blocks or any host-side interpolation helpers you define.
-
-## Development
 
 Run an OTel collector UI (otel-tui) for observability:
 

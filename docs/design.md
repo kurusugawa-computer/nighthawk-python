@@ -491,7 +491,7 @@ If you want a long-lived object, define it yourself and bind it as an ordinary P
 
 The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_exec`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
 
-For practical examples and design tips, see `docs/manual.md` Section 3.
+For practical examples and design tips, see [manual.md Section 3](manual.md#3-cross-block-context-carry-pattern).
 
 ## 13. Error handling
 

@@ -11,42 +11,114 @@ Nighthawk is an experimental Python library exploring a clear separation:
 
 This repository is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
 
-## Quickstart
+## Documentation
 
-Prerequisites: git, uv, Python 3.13+
+- **[Quickstart](quickstart.md)** — Setup, first example, backends, credentials.
+- **[Manual](manual.md)** — Patterns and techniques for Natural blocks.
+- **[Design](design.md)** — Canonical specification.
+- **[Roadmap](roadmap.md)** — Future directions.
 
-```bash
-git clone https://github.com/kurusugawa-computer/nighthawk-python.git
-cd nighthawk-python
-uv sync --extra openai
-```
+## What Nighthawk is trying to prove
 
-Create a `.env` file with your API key (gitignored by default):
+Nighthawk is a research vehicle. The main validation goals are:
 
-```bash
-OPENAI_API_KEY=sk-xxxxxxxxx
-```
+1. Hard control + soft reasoning works in practice
+    - Keep loops, conditionals, data plumbing, and "must run exactly N times" logic in Python.
+    - Delegate semantic interpretation to Natural blocks.
 
-Minimal example:
+2. Reduce "LLM is a black box" by mapping state into the interpreter
+    - Treat the Python interpreter as the primary external memory.
+    - Make intermediate state visible as Python locals / structured objects rather than hidden chat history.
+
+3. Constrain and validate updates at boundaries
+    - Use explicit write bindings (e.g., `<:result>`) so the LLM can only commit specific values.
+    - Optionally use a typed memory model (Pydantic) to force a domain mental model and validate updates.
+
+4. Explore alternative workflow styles (Nightjar vs Skills-style)
+    - Natural-language-first workflows are attractive, but require solving state synchronization between natural language and code.
+    - Nighthawk starts from the Nightjar side and explores how far we can push interpreter-visible state mapping.
+
+## Workflow styles
+
+This section summarizes the tradeoffs in terms of hard control vs flexibility.
+
+### 1. Nightjar style (hard control, embedded Natural blocks)
+
+You write strict flow in Python, and embed Natural blocks where semantics are needed.
+
+Pros:
+- Hard guarantees: exact loops, strict conditionals, deterministic boundaries.
+- Tools: debuggers, tests, linters, and normal software engineering practices apply.
+- The LLM is "physically constrained" to operate on interpreter-visible objects (locals, memory, tool context).
+
+Cons:
+- Knowledge often ends up encoded in code-adjacent artifacts, which can be less maintainable by non-engineers.
+
+Example:
 
 ```py
-import nighthawk as nh
+@nh.natural_function
+def calculate_average(numbers):
+    """natural
+    Map each element of <numbers> to the number it represents,
+    then compute the arithmetic mean as <:result>.
+    """
+    return result
 
-step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini")
-)
+result = calculate_average([1, "2", "three", "cuatro", "五"])
+print(result)  # 3.0
+```
 
-with nh.run(step_executor):
+### 2. Skills-style / reverse Nightjar (flexible workflow, code snippets as needed)
 
-    @nh.natural_function
-    def summarize_post(post: str) -> str:
-        summary = ""
-        """natural
-        Read <post> and set <:summary> to a concise summary.
-        """
-        return summary
+You write a natural language workflow first, and embed code only where strict procedures are needed.
 
-    print(summarize_post("Ship the patch by Friday and include migration notes."))
+Pros:
+- Excellent for strategy, iteration, and human collaboration.
+- Similar spirit to literate programming: readable narrative with precise code where necessary.
+
+Cons:
+- The hard part is state synchronization: how to share and reconcile execution state between
+  - the natural language plan/world, and
+  - the code execution world.
+
+Example:
+
+````md
+Compute the "semantic average" of the target list using the following function.
+However, the target list contains mixed numeric representations,
+so convert the elements appropriately before calling <calculate_average>
+and passing them as the argument.
+
+```py
+def calculate_average(numbers):
+    return sum(numbers) / len(numbers)
+```
+
+Target list: `[1, "2", "three", "cuatro", "五"]`
+
+Set <:result> to the computed average.
+````
+
+### 3. Hybrid nesting (Python -> Natural -> Python -> ...)
+
+Nighthawk's execution model is Python-first alternation: Python controls the steps, and Natural blocks are inserted where semantic interpretation is needed.
+
+Example:
+
+```py
+def python_average(numbers):
+    return sum(numbers) / len(numbers)
+
+@nh.natural_function
+def calculate_average(numbers):
+    """natural
+    Map each element of <numbers> to the number it represents,
+    then compute <:result> by calling <python_average> with the mapped list.
+    """
+    return result
+
+calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
 ```
 
 ## Natural blocks
@@ -66,15 +138,6 @@ Interpolation:
 - Interpolation is opt-in via inline f-string Natural blocks only (standalone f-string expression statements).
 - Docstring Natural blocks are always literal.
 - For f-string blocks, brace escaping follows Python rules: write `{{` / `}}` to produce literal `{` / `}`.
-
-## What Nighthawk is trying to prove
-
-Nighthawk is a research vehicle. The main validation goals are:
-
-1. Hard control + soft reasoning works in practice
-2. Reduce "LLM is a black box" by mapping state into the interpreter
-3. Constrain and validate updates at boundaries
-4. Explore alternative workflow styles (Nightjar vs Skills-style)
 
 ## References
 
