@@ -296,8 +296,8 @@ def test_locals_section_renders_pep695_type_alias_in_function_signature() -> Non
     def f(t: T) -> None:
         _ = t
 
-    def g(l: Literal["A", "B", "C"]) -> None:
-        _ = l
+    def g(literal_value: Literal["A", "B", "C"]) -> None:
+        _ = literal_value
 
     step_context = build_step_context(
         python_globals={"__builtins__": builtins},
@@ -312,6 +312,6 @@ def test_locals_section_renders_pep695_type_alias_in_function_signature() -> Non
     locals_text = locals_section(prompt)
     assert "T: type = typing.Literal['A', 'B', 'C']" in locals_text
     assert "f: (t: T) -> None" in locals_text
-    assert "g: (l: Literal['A', 'B', 'C']) -> None" in locals_text
+    assert "g: (literal_value: Literal['A', 'B', 'C']) -> None" in locals_text
     assert "# intent:" not in locals_text
     assert "<function>" not in locals_text
