@@ -45,7 +45,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 - Python 3.13+.
 - Default model: `openai-responses:gpt-5-nano`.
-- Recommended model for quality: `openai-responses:gpt-5.2`.
+- Recommended model for quality: `openai-responses:gpt-5.4`.
 - Optional backends are installed via extras: `openai`, `vertexai`, `claude-code`, `codex`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
@@ -80,7 +80,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 - `StepExecutorConfiguration`
   - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
-    - Examples: `openai-responses:gpt-5.2`, `openai-responses:gpt-5-nano`.
+    - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
     - Special cases:
       - `claude-code:default` and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
   - `model_settings`: optional model/backend settings object forwarded to Pydantic AI Agent calls.
@@ -96,6 +96,30 @@ This file intentionally does not maintain a persistent divergence ledger.
 - `StepExecutorConfigurationPatch`
   - Partial override object for scoped configuration updates.
   - Supports patching model, model settings, templates, limits, renderer style, tokenizer encoding, and prompt suffix fragment tuples.
+
+### 5.3. Supporting types
+
+- `StepPromptTemplates`
+  - Prompt templates used for step execution.
+  - `step_system_prompt_template`: system prompt template.
+  - `step_user_prompt_template`: user prompt template.
+
+- `StepContextLimits`
+  - Limits for rendering dynamic context into the LLM prompt.
+  - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `tool_result_max_tokens`.
+
+- `JsonableValue`
+  - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
+
+- `ExecutionContext`
+  - Frozen dataclass representing runtime execution identity.
+  - `run_id`: the Id of the outermost run (trace root).
+  - `scope_id`: the Id of the current scope.
+
+### 5.4. Runtime accessors
+
+- `nighthawk.get_current_step_context() -> StepContext`
+  - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
 ## 6. Natural block detection
 
@@ -151,12 +175,12 @@ Sentinel rules (both docstring and inline):
 
 The Natural program may contain bindings with angle brackets:
 
-- `<name>`: input binding. The current Python value of `name` is made available to the LLM.
-- `<:name>`: writable binding. The LLM may update the value of `name`.
+- `<name>`: read binding. The current Python value of `name` is made available to the LLM.
+- `<:name>`: write binding. The LLM may update the value of `name`.
 
 Resolution note:
 
-- Input binding reads resolve names using Python lexical rules (LEGB: locals, enclosing, globals, builtins).
+- Read binding reads resolve names using Python lexical rules (LEGB: locals, enclosing, globals, builtins).
 - If a name is missing or unbound, the error is surfaced as a Python exception type where feasible (for example `NameError`, `UnboundLocalError`).
 
 Constraints:
@@ -205,7 +229,6 @@ Locals summary:
 
 - The prompt includes a rendered view of selected names from `step_locals`.
 - Rendering is bounded by `context_limits` (approximate token budgeting) and may truncate.
-- Rendering applies `context_redaction` allowlists and masking rules.
 
 
 ### 8.3. Tools available to the LLM
@@ -424,12 +447,12 @@ API:
   - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
   - Always generates a fresh `scope_id`.
   - Can be used even when no step executor is currently set.
-- `nighthawk.scope(...)`
+- `nighthawk.scope(*, step_executor_configuration: StepExecutorConfiguration | None = None, step_executor_configuration_patch: StepExecutorConfigurationPatch | None = None, step_executor: StepExecutor | None = None, system_prompt_suffix_fragment: str | None = None, user_prompt_suffix_fragment: str | None = None) -> Iterator[StepExecutor]`
   - Enter a nested scope within the current run.
   - Requires an existing step executor.
   - Generates a new `scope_id` (keeps the current `run_id`).
   - Only specified fields are overridden for the duration of the `with`.
-  - Supports updating `StepExecutorConfiguration` and appending scoped prompt suffix fragments for system and user prompts.
+  - Yields the resolved `StepExecutor` for the scope.
 - `nighthawk.get_step_executor() -> StepExecutor`
   - Get the current step executor. Raises if unset.
 - `nighthawk.get_execution_context() -> ExecutionContext`
@@ -466,18 +489,9 @@ If you want a long-lived object, define it yourself and bind it as an ordinary P
 
 ### 12.1. Carry pattern
 
-The recommended approach for cross-block context continuity is the carry pattern: pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_exec`.
+The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_exec`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
 
-Key properties:
-
-- Read bindings (`<name>`) prevent `nh_assign` from rebinding the name, preserving the caller's reference.
-- In-place mutation via `nh_exec` (e.g., `list.append()`) modifies the original object visible to the caller.
-- Branching is achieved by copying the carry (`carry.copy()`); each copy continues independently.
-- The carry's contents appear in the locals summary on subsequent steps, providing context to the LLM.
-
-This pattern replaces the need for a framework-level session or message history mechanism. The user controls what context is recorded, how it is structured, and when branches diverge.
-
-See `docs/quickstart.md` Section 3 for practical examples.
+For practical examples and design tips, see `docs/manual.md` Section 3.
 
 ## 13. Error handling
 

@@ -61,10 +61,10 @@ A Natural block is a Python docstring or a standalone string literal whose under
 
 Bindings:
 
-- `<name>` is an input binding.
-- `<:name>` is an output binding.
+- `<name>` is a read binding.
+- `<:name>` is a write binding.
 
-Output bindings control which values are committed back into Python locals at Natural block boundaries.
+Write bindings control which values are committed back into Python locals at Natural block boundaries.
 
 Interpolation:
 
@@ -93,7 +93,7 @@ Nighthawk is a research vehicle. The main validation goals are:
     - Make intermediate state visible as Python locals / structured objects rather than hidden chat history.
 
 3. Constrain and validate updates at boundaries
-    - Use explicit output bindings (e.g., `<:result>`) so the LLM can only commit specific values.
+    - Use explicit write bindings (e.g., `<:result>`) so the LLM can only commit specific values.
     - Optionally use a typed memory model (Pydantic) to force a domain mental model and validate updates.
 
 4. Explore alternative workflow styles (Nightjar vs Skills-style)
@@ -200,6 +200,12 @@ Optional backends are installed via extras:
 - `vertexai`: `pip install "nighthawk[vertexai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
 - `claude-code`: `pip install "nighthawk[claude-code] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
 - `codex`: `pip install "nighthawk[codex] @ git+https://github.com/kurusugawa-computer/nighthawk-python"`
+
+### Credentials
+
+- `OPENAI_API_KEY`: Required for `openai-responses:*` models.
+- `GOOGLE_API_KEY`: Required for `vertexai:*` models.
+- `CODEX_API_KEY`: Required for `codex:*` models.
 
 ### Model identifiers
 

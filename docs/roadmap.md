@@ -54,10 +54,6 @@ Non-goals:
 - A directory structure similar to Claude Skills (SKILL.md, REFERENCE.md, scripts/).
 - Document a minimal "Skills" packaging convention for Nighthawk.
 
-### Provider support (future)
-
-- Support multiple LLM providers beyond OpenAI.
-
 ### Implementation consistency (future)
 
 - Unify Natural DSL binding extraction into a single source of truth.

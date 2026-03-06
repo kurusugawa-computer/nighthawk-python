@@ -238,6 +238,34 @@ def route_message(message: str) -> str:
     return f"NEXT:{result}"  # reached when the block outcome is `pass`
 ```
 
+## 5.1. Frontmatter (Deny Directive)
+
+A Natural block can optionally start with YAML frontmatter to restrict which outcome kinds are allowed. This is useful when you want to prevent the LLM from choosing certain control flow paths.
+
+```py
+@nh.natural_function
+def must_produce_result(text: str) -> str:
+    result = ""
+    """natural
+    ---
+    deny:
+      - raise
+      - return
+    ---
+    Read <text> and set <:result> to a summary.
+    """
+    return result
+```
+
+Frontmatter rules:
+
+- Delimited by `---` lines (no indentation, no trailing whitespace).
+- Must contain a `deny` key with a list of outcome kind names to exclude.
+- Allowed deny values: `pass`, `return`, `break`, `continue`, `raise`.
+- The deny list can only narrow the set allowed by syntactic context — it cannot add outcome kinds that the context does not permit (e.g., `break` outside a loop).
+
+See `docs/design.md` Section 8.4 for the full specification.
+
 ## 6. Discoverability
 
 The LLM discovers callable functions and their signatures from the locals/globals summary. Author for discoverability:
@@ -274,7 +302,39 @@ def compute_score_with_local_function() -> int:
     return result
 ```
 
-## 7. Authoring Rules
+## 7. Scoped Configuration
+
+Use `nh.scope()` to override execution settings for a block of code within an existing run. The scope generates a new `scope_id` while keeping the current `run_id`.
+
+```py
+with nh.run(step_executor):
+
+    # Override model for a specific section
+    with nh.scope(
+        step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
+            model="openai-responses:gpt-5-mini",
+        ),
+    ) as scoped_executor:
+        expensive_analysis(data)
+
+    # Append a system prompt suffix for a section
+    with nh.scope(
+        system_prompt_suffix_fragment="Always respond in formal English.",
+    ):
+        formal_summary(text)
+```
+
+Parameters:
+
+- `step_executor_configuration`: replace the entire configuration.
+- `step_executor_configuration_patch`: partially override specific fields.
+- `step_executor`: replace the step executor entirely.
+- `system_prompt_suffix_fragment`: append text to the system prompt for the scope.
+- `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
+
+The context manager yields the resolved `StepExecutor` for the scope.
+
+## 8. Authoring Rules
 
 1. Keep responsibilities split:
    - Natural: interpretation, synthesis, drafting.
@@ -282,9 +342,9 @@ def compute_score_with_local_function() -> int:
 2. Natural blocks must start with `natural\n` and no leading blank line.
 3. Write one integrated instruction body; do not split into "bindings list" then "instructions".
 4. Cross-block data flow must be explicit. Use Python locals, the carry pattern, or f-string injection.
-5. Writable bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
+5. Write bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
 
-## 8. Review Checklist
+## 9. Review Checklist
 
 - [ ] Natural and Python responsibilities are clearly separated.
 - [ ] Each Natural block is one integrated instruction body.
