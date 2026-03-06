@@ -1,11 +1,11 @@
-"""Integration tests for the journal pattern: cross-block context continuity via user-managed objects."""
+"""Integration tests for the carry pattern: cross-block context continuity via user-managed objects."""
 
 import nighthawk as nh
 from tests.integration.skip_helpers import requires_openai_integration
 
 
-def test_journal_continuity_across_blocks():
-    """Journal list carries context from step 1 into step 2 via in-place mutation."""
+def test_carry_continuity_across_blocks():
+    """Carry list carries context from step 1 into step 2 via in-place mutation."""
     OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -18,38 +18,38 @@ def test_journal_continuity_across_blocks():
     with nh.run(step_executor):
 
         @nh.natural_function
-        def step_1(journal: list[str]) -> int:
+        def step_1(carry: list[str]) -> int:
             result = 0
             """natural
             Set <:result> to 10.
-            Append a one-line summary of what you did to <journal>.
+            Append a one-line summary of what you did to <carry>.
             """
             return result
 
         @nh.natural_function
-        def step_2(journal: list[str]) -> int:
+        def step_2(carry: list[str]) -> int:
             result = 0
             """natural
-            Read <journal> for prior context.
-            The journal says the previous result was 10.
+            Read <carry> for prior context.
+            The carry says the previous result was 10.
             Set <:result> to 20 (previous result plus 10).
-            Append a one-line summary of what you did to <journal>.
+            Append a one-line summary of what you did to <carry>.
             """
             return result
 
-        journal: list[str] = []
+        carry: list[str] = []
 
-        r1 = step_1(journal)
+        r1 = step_1(carry)
         assert r1 == 10
-        assert len(journal) >= 1
+        assert len(carry) >= 1
 
-        r2 = step_2(journal)
+        r2 = step_2(carry)
         assert r2 == 20
-        assert len(journal) >= 2
+        assert len(carry) >= 2
 
 
-def test_journal_branching():
-    """Branching a journal creates independent continuations."""
+def test_carry_branching():
+    """Branching a carry creates independent continuations."""
     OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -62,56 +62,56 @@ def test_journal_branching():
     with nh.run(step_executor):
 
         @nh.natural_function
-        def seed_step(journal: list[str]) -> int:
+        def seed_step(carry: list[str]) -> int:
             result = 0
             """natural
             Set <:result> to 100.
-            Append "seed: set result to 100" to <journal>.
+            Append "seed: set result to 100" to <carry>.
             """
             return result
 
         @nh.natural_function
-        def branch_add(journal: list[str]) -> int:
+        def branch_add(carry: list[str]) -> int:
             result = 0
             """natural
-            Read <journal> for prior context. The seed step set result to 100.
+            Read <carry> for prior context. The seed step set result to 100.
             Set <:result> to 105 (100 + 5).
-            Append "branch_add: added 5" to <journal>.
+            Append "branch_add: added 5" to <carry>.
             """
             return result
 
         @nh.natural_function
-        def branch_multiply(journal: list[str]) -> int:
+        def branch_multiply(carry: list[str]) -> int:
             result = 0
             """natural
-            Read <journal> for prior context. The seed step set result to 100.
+            Read <carry> for prior context. The seed step set result to 100.
             Set <:result> to 200 (100 * 2).
-            Append "branch_multiply: multiplied by 2" to <journal>.
+            Append "branch_multiply: multiplied by 2" to <carry>.
             """
             return result
 
-        journal: list[str] = []
-        seed_result = seed_step(journal)
+        carry: list[str] = []
+        seed_result = seed_step(carry)
         assert seed_result == 100
 
-        # Branch: copy the journal at this point
-        journal_a = journal.copy()
-        journal_b = journal.copy()
+        # Branch: copy the carry at this point
+        carry_a = carry.copy()
+        carry_b = carry.copy()
 
-        result_a = branch_add(journal_a)
+        result_a = branch_add(carry_a)
         assert result_a == 105
 
-        result_b = branch_multiply(journal_b)
+        result_b = branch_multiply(carry_b)
         assert result_b == 200
 
-        # Journals diverged
-        assert journal_a != journal_b
-        assert len(journal_a) >= 2
-        assert len(journal_b) >= 2
+        # Carries diverged
+        assert carry_a != carry_b
+        assert len(carry_a) >= 2
+        assert len(carry_b) >= 2
 
 
-def test_journal_with_fstring_injection():
-    """f-string inline block injects journal content directly into the Natural program text."""
+def test_carry_with_fstring_injection():
+    """f-string inline block injects carry content directly into the Natural program text."""
     OpenAIResponsesModelSettings = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(

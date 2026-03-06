@@ -10,21 +10,21 @@ Bindings connect Python values to Natural blocks. Two kinds:
 
 The value is visible inside the Natural block. The name will not be rebound after the block.
 
-Mutable objects (lists, dicts, etc.) passed as read bindings **can be mutated in-place**. This is the basis of the journal pattern (Section 3).
+Mutable objects (lists, dicts, etc.) passed as read bindings **can be mutated in-place**. This is the basis of the carry pattern (Section 3).
 
 ```py
 @nh.natural_function
-def step(journal: list[str]) -> int:
+def step(carry: list[str]) -> int:
     result = 0
     """natural
-    Read <journal> for prior context.
+    Read <carry> for prior context.
     Set <:result> to 10.
-    Append a one-line summary of what you did to <journal>.
+    Append a one-line summary of what you did to <carry>.
     """
     return result
 ```
 
-Here `journal` is a read binding — the LLM can read it and mutate it in-place, but it cannot rebind the name.
+Here `carry` is a read binding — the LLM can read it and mutate it in-place, but it cannot rebind the name.
 
 ### `<:name>` — write binding
 
@@ -84,7 +84,7 @@ def compute() -> int:
     return result
 ```
 
-## 3. Cross-block Context (Journal Pattern)
+## 3. Cross-block Context (Carry Pattern)
 
 Each Natural block executes independently — there is no implicit message history between blocks. To carry context across blocks, pass a mutable object as a read binding and let the LLM mutate it in-place.
 
@@ -92,52 +92,52 @@ Each Natural block executes independently — there is no implicit message histo
 
 ```py
 @nh.natural_function
-def step_1(journal: list[str]) -> int:
+def step_1(carry: list[str]) -> int:
     result = 0
     """natural
     Set <:result> to 10.
-    Append a one-line summary of what you did to <journal>.
+    Append a one-line summary of what you did to <carry>.
     """
     return result
 
 @nh.natural_function
-def step_2(journal: list[str]) -> int:
+def step_2(carry: list[str]) -> int:
     result = 0
     """natural
-    Read <journal> for prior context.
-    The journal says the previous result was 10.
+    Read <carry> for prior context.
+    The carry says the previous result was 10.
     Set <:result> to 20 (previous result plus 10).
-    Append a one-line summary of what you did to <journal>.
+    Append a one-line summary of what you did to <carry>.
     """
     return result
 
-journal: list[str] = []
-r1 = step_1(journal)   # journal now has 1 entry
-r2 = step_2(journal)   # journal now has 2 entries
+carry: list[str] = []
+r1 = step_1(carry)   # carry now has 1 entry
+r2 = step_2(carry)   # carry now has 2 entries
 ```
 
-The journal is a `list[str]` but any mutable object works — dicts, Pydantic models, custom classes.
+The carry is a `list[str]` but any mutable object works — dicts, Pydantic models, custom classes.
 
 ### Branching
 
-Branch a session by copying the journal. Each branch continues independently.
+Branch a session by copying the carry. Each branch continues independently.
 
 ```py
-journal: list[str] = []
-seed_step(journal)
+carry: list[str] = []
+seed_step(carry)
 
 # Branch at this point
-journal_a = journal.copy()
-journal_b = journal.copy()
+carry_a = carry.copy()
+carry_b = carry.copy()
 
-result_a = branch_add(journal_a)       # diverges from here
-result_b = branch_multiply(journal_b)  # independent path
+result_a = branch_add(carry_a)       # diverges from here
+result_b = branch_multiply(carry_b)  # independent path
 ```
 
 ### Design tips
 
-- Use `<journal>` (read binding), not `<:journal>` (write binding). Read bindings prevent `nh_assign` from rebinding the name, which would break the caller's reference.
-- Keep journal entries concise — they consume tokens in the locals summary on every subsequent step.
+- Use `<carry>` (read binding), not `<:carry>` (write binding). Read bindings prevent `nh_assign` from rebinding the name, which would break the caller's reference.
+- Keep carry entries concise — they consume tokens in the locals summary on every subsequent step.
 
 ## 4. f-string Injection
 
@@ -179,9 +179,9 @@ def generate(config: Config, topic: str) -> str:
     return output
 ```
 
-### Injecting prior context (journal alternative)
+### Injecting prior context (carry alternative)
 
-When context is pre-formatted or the journal's locals summary footprint is too large, inject it directly:
+When context is pre-formatted or the carry's locals summary footprint is too large, inject it directly:
 
 ```py
 @nh.natural_function
@@ -281,14 +281,14 @@ def compute_score_with_local_function() -> int:
    - Python: ordering, loops, validation, reliability boundaries.
 2. Natural blocks must start with `natural\n` and no leading blank line.
 3. Write one integrated instruction body; do not split into "bindings list" then "instructions".
-4. Cross-block data flow must be explicit. Use Python locals, the journal pattern, or f-string injection.
+4. Cross-block data flow must be explicit. Use Python locals, the carry pattern, or f-string injection.
 5. Writable bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
 
 ## 8. Review Checklist
 
 - [ ] Natural and Python responsibilities are clearly separated.
 - [ ] Each Natural block is one integrated instruction body.
-- [ ] Cross-block data flow uses the journal pattern or f-string injection — no implicit continuity.
+- [ ] Cross-block data flow uses the carry pattern or f-string injection — no implicit continuity.
 - [ ] Mutable context objects use `<name>` (read binding), not `<:name>` (write binding).
 - [ ] Side effects are bounded behind explicit, documented tools.
 - [ ] Full coverage requirements are enforced by Python loops.

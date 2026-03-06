@@ -464,16 +464,16 @@ Nighthawk does not define a built-in persistence or memory model.
 
 If you want a long-lived object, define it yourself and bind it as an ordinary Python value. Because expression evaluation and assignment operate on `step_locals`, bound values behave like any other local: they can be read via expressions and mutated in-place via `nh_exec`.
 
-### 12.1. Journal pattern
+### 12.1. Carry pattern
 
-The recommended approach for cross-block context continuity is the journal pattern: pass a mutable object (e.g., `list[str]`) as a read binding (`<journal>`) and instruct the LLM to mutate it in-place via `nh_exec`.
+The recommended approach for cross-block context continuity is the carry pattern: pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_exec`.
 
 Key properties:
 
 - Read bindings (`<name>`) prevent `nh_assign` from rebinding the name, preserving the caller's reference.
 - In-place mutation via `nh_exec` (e.g., `list.append()`) modifies the original object visible to the caller.
-- Branching is achieved by copying the journal (`journal.copy()`); each copy continues independently.
-- The journal's contents appear in the locals summary on subsequent steps, providing context to the LLM.
+- Branching is achieved by copying the carry (`carry.copy()`); each copy continues independently.
+- The carry's contents appear in the locals summary on subsequent steps, providing context to the LLM.
 
 This pattern replaces the need for a framework-level session or message history mechanism. The user controls what context is recorded, how it is structured, and when branches diverge.
 
