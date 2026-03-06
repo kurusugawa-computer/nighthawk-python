@@ -1,7 +1,13 @@
 model_list:
-  - model_name: gpt-5.2
+  - model_name: gpt-5.4
     litellm_params:
-      model: openai/gpt-5.2
+      model: openai/gpt-5.4
+      api_key: os.environ/OPENAI_API_KEY
+      reasoning_effort: "high"
+      additional_drop_params: ["context_management", "output_config"]
+  - model_name: gpt-5.4-codex
+    litellm_params:
+      model: openai/gpt-5.4-codex
       api_key: os.environ/OPENAI_API_KEY
       reasoning_effort: "high"
       additional_drop_params: ["context_management", "output_config"]
@@ -11,21 +17,15 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
       reasoning_effort: "high"
       additional_drop_params: ["context_management", "output_config"]
-  - model_name: gpt-5.2-codex
-    litellm_params:
-      model: openai/gpt-5.2-codex
-      api_key: os.environ/OPENAI_API_KEY
-      reasoning_effort: "high"
-      additional_drop_params: ["context_management", "output_config"]
   - model_name: claude-opus-*
     litellm_params:
-      model: openai/gpt-5.2
+      model: openai/gpt-5.4
       api_key: os.environ/OPENAI_API_KEY
       reasoning_effort: "high"
       additional_drop_params: ["context_management", "output_config"]
   - model_name: claude-sonnet-*
     litellm_params:
-      model: openai/gpt-5.2-codex
+      model: openai/gpt-5.4-codex
       api_key: os.environ/OPENAI_API_KEY
       additional_drop_params: ["context_management", "output_config"]
   - model_name: claude-haiku-*
