@@ -221,14 +221,74 @@ Nighthawk uses multiple state layers.
 - At the end of execution, values for `<:name>` bindings are committed into Python locals.
 
 
-### 8.2. Prompt context: locals summary
+### 8.2. Prompt context
 
-To reduce black-box behavior, Nighthawk includes bounded prompt context sections.
+To reduce black-box behavior, Nighthawk includes bounded prompt context sections in the user prompt.
 
-Locals summary:
+#### 8.2.1. User prompt structure
 
-- The prompt includes a rendered view of selected names from `step_locals`.
-- Rendering is bounded by `context_limits` (approximate token budgeting) and may truncate.
+The default user prompt template renders three delimited sections:
+
+- `<<<NH:PROGRAM>>>` / `<<<NH:END_PROGRAM>>>`: the Natural program text (after sentinel removal, `textwrap.dedent`, and f-string evaluation when applicable).
+- `<<<NH:LOCALS>>>` / `<<<NH:END_LOCALS>>>`: the locals summary (see 8.2.2).
+- `<<<NH:GLOBALS>>>` / `<<<NH:END_GLOBALS>>>`: the globals summary (see 8.2.3).
+
+The template uses `$program`, `$locals`, and `$globals` placeholders, substituted at prompt construction time.
+
+#### 8.2.2. Locals summary
+
+The locals summary renders selected names from `step_locals`.
+
+Selection:
+
+- All names in `step_locals` are eligible, except names starting with `__` (dunder).
+
+Ordering:
+
+- Entries are rendered in lexicographic order by name.
+
+Rendering format:
+
+- Non-callable values: `name: type_name = json_value`, where `json_value` is the compact JSON rendering of the value (bounded by `context_limits.value_max_tokens`).
+- Callable values: `name: (signature)`, where `(signature)` is the result of `inspect.signature`. Type annotations are included when available (e.g., `(base: int, bonus: int) -> int`).
+  - If the callable has a meaningful docstring, the first line is appended as `# intent: first_line`.
+  - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name` to help the LLM distinguish them.
+  - If the signature cannot be resolved (e.g., `__signature__` raises), the entry renders as `name: <callable; signature-unavailable>`.
+- `TypeAliasType` values (PEP 695): `name: type = underlying_type`.
+
+Truncation:
+
+- Rendering is bounded by `context_limits.locals_max_tokens` and `context_limits.locals_max_items`.
+- When the limit is reached before all entries are rendered, a `<snipped>` marker is appended and a diagnostic log message is emitted on the `nighthawk` logger.
+
+#### 8.2.3. Globals summary
+
+The globals summary renders module-level names that are referenced in the Natural program text but are not present in `step_locals`.
+
+Reference extraction:
+
+- The Natural program text is scanned for unescaped `<name>` tokens (both read bindings `<name>` and dotted references `<name.field>`).
+- For dotted references, only the top-level name (before the first `.`) is extracted.
+- Escaped references (`\<name>`) are not extracted. The backslash is removed in the program text passed to the model.
+
+Selection:
+
+- A referenced name is included in the globals summary only if it is NOT present in `step_locals`.
+- The name is resolved from `step_globals` (which contains module globals available to the function).
+- If resolution fails, the name is silently omitted.
+
+Ordering:
+
+- Entries are rendered in lexicographic order by name.
+
+Rendering format:
+
+- Same rules as the locals summary (Section 8.2.2).
+
+Truncation:
+
+- Rendering is bounded by `context_limits.globals_max_tokens` and `context_limits.globals_max_items`.
+- Truncation behavior is the same as the locals summary.
 
 
 ### 8.3. Tools available to the LLM

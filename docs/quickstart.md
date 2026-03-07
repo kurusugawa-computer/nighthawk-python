@@ -84,4 +84,6 @@ Do not feed user-generated content (web forms, chat logs, CLI input, database te
 
 ## Next Steps
 
-For patterns, techniques, and detailed guidance, see [Manual](manual.md).
+- **[Manual](manual.md)** — Patterns and techniques for Natural blocks.
+- **[Design](design.md)** — Canonical specification.
+- **[API Reference](api.md)** — Auto-generated API documentation.

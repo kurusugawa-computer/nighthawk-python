@@ -42,6 +42,31 @@ def classify_priority(text: str) -> str:
     return priority
 ```
 
+### What the LLM receives
+
+When a Natural block executes, Nighthawk assembles a user prompt from three sections: the program text, a locals summary, and a globals summary. Calling `classify_priority("Server is on fire!")` from the example above produces the following user prompt:
+
+<!-- prompt-example:basic-binding -->
+```py
+<<<NH:PROGRAM>>>
+Read <text> and update <:priority> with one of: low, normal, high.
+<<<NH:END_PROGRAM>>>
+
+<<<NH:LOCALS>>>
+priority: str = "normal"
+text: str = "Server is on fire!"
+<<<NH:END_LOCALS>>>
+
+<<<NH:GLOBALS>>>
+
+<<<NH:END_GLOBALS>>>
+```
+<!-- /prompt-example:basic-binding -->
+
+- **`<<<NH:PROGRAM>>>`** contains the Natural program text (after sentinel removal and `textwrap.dedent`).
+- **`<<<NH:LOCALS>>>`** lists all step locals alphabetically, rendered as `name: type = value`.
+- **`<<<NH:GLOBALS>>>`** lists module-level names referenced via `<name>` that are not already in step locals.
+
 Not pre-declared:
 
 ```py
@@ -118,6 +143,30 @@ r2 = step_2(carry)   # carry now has 2 entries
 
 The carry is a `list[str]` but any mutable object works — dicts, Pydantic models, custom classes.
 
+When `step_2(carry)` executes (with `carry` already containing one entry from `step_1`), the LLM receives:
+
+<!-- prompt-example:carry-pattern -->
+```py
+<<<NH:PROGRAM>>>
+Read <carry> for prior context.
+The carry says the previous result was 10.
+Set <:result> to 20 (previous result plus 10).
+Append a one-line summary of what you did to <carry>.
+<<<NH:END_PROGRAM>>>
+
+<<<NH:LOCALS>>>
+carry: list = ["Set result to 10."]
+result: int = 0
+<<<NH:END_LOCALS>>>
+
+<<<NH:GLOBALS>>>
+
+<<<NH:END_GLOBALS>>>
+```
+<!-- /prompt-example:carry-pattern -->
+
+Note how the carry's current contents appear in the locals summary, giving the LLM visibility into prior context.
+
 ### Branching
 
 Branch a session by copying the carry. Each branch continues independently.
@@ -159,6 +208,27 @@ def choose_policy(post: str) -> str:
     return selected_policy
 ```
 
+Calling `choose_policy("Breaking: earthquake hits downtown")` produces the following user prompt. Notice that the f-string `{PROJECT_POLICY}` has already been evaluated into literal text in the program section, while `post` and `selected_policy` appear in the locals summary as bindings:
+
+<!-- prompt-example:fstring-injection -->
+```py
+<<<NH:PROGRAM>>>
+Read <post>.
+Available policies: ['safety-first', 'concise-output', 'cite-assumptions']
+Select the single best policy and set <:selected_policy>.
+<<<NH:END_PROGRAM>>>
+
+<<<NH:LOCALS>>>
+post: str = "Breaking: earthquake hits downtown"
+selected_policy: str = ""
+<<<NH:END_LOCALS>>>
+
+<<<NH:GLOBALS>>>
+
+<<<NH:END_GLOBALS>>>
+```
+<!-- /prompt-example:fstring-injection -->
+
 ### Injecting member accesses and function results
 
 ```py
@@ -199,10 +269,11 @@ def compute_with_context(context_text: str) -> int:
 
 | | f-string injection | `<name>` binding |
 |---|---|---|
-| Evaluation time | At function call (Python-side) | At LLM prompt construction |
+| Evaluation time | When Python evaluates the f-string literal | At LLM prompt construction |
 | Appears in | Natural program text directly | Locals summary |
 | Token control | Full — you decide the exact text | Governed by `context_limits` |
 | LLM can mutate | No (text is baked in) | Yes (via `nh_exec`) |
+| Brace escaping | `{{` / `}}` to produce literal `{` / `}` | N/A |
 | Best for | Static config, pre-formatted context, computed values | Mutable state, objects the LLM needs to inspect or modify |
 
 ## 5. Control Flow
@@ -248,9 +319,7 @@ def must_produce_result(text: str) -> str:
     result = ""
     """natural
     ---
-    deny:
-      - raise
-      - return
+    deny: [raise, return]
     ---
     Read <text> and set <:result> to a summary.
     """
@@ -301,6 +370,63 @@ def compute_score_with_local_function() -> int:
     """
     return result
 ```
+
+When `compute_score_with_local_function()` executes, the LLM sees function signatures and docstrings rendered in the locals summary:
+
+<!-- prompt-example:local-function-signature -->
+```py
+<<<NH:PROGRAM>>>
+Compute <:result> by choosing the most suitable local helper based on its docstring.
+Use base=38 and bonus=4.
+<<<NH:END_PROGRAM>>>
+
+<<<NH:LOCALS>>>
+add_points: (base: int, bonus: int) -> int  # intent: Return a deterministic sum for score calculation.
+result: int = 0
+<<<NH:END_LOCALS>>>
+
+<<<NH:GLOBALS>>>
+
+<<<NH:END_GLOBALS>>>
+```
+<!-- /prompt-example:local-function-signature -->
+
+Callable values are rendered as their signature (with type annotations when available). The `# intent:` comment is the first line of the function's docstring. This is how the LLM discovers which functions are available and what they do.
+
+When a Natural block references a module-level name via `<name>`, it appears in the globals section instead:
+
+```py
+def python_average(numbers):
+    return sum(numbers) / len(numbers)
+
+@nh.natural_function
+def calculate_average(numbers):
+    """natural
+    Map each element of <numbers> to the number it represents,
+    then compute <:result> by calling <python_average> with the mapped list.
+    """
+    return result
+```
+
+Calling `calculate_average([1, "2", "three", "cuatro"])` produces:
+
+<!-- prompt-example:global-function-reference -->
+```py
+<<<NH:PROGRAM>>>
+Map each element of <numbers> to the number it represents,
+then compute <:result> by calling <python_average> with the mapped list.
+<<<NH:END_PROGRAM>>>
+
+<<<NH:LOCALS>>>
+numbers: list = [1,"2","three","cuatro"]
+result: int = 0
+<<<NH:END_LOCALS>>>
+
+<<<NH:GLOBALS>>>
+python_average: (numbers)
+<<<NH:END_GLOBALS>>>
+```
+<!-- /prompt-example:global-function-reference -->
 
 ## 7. Scoped Configuration
 
@@ -356,5 +482,7 @@ The context manager yields the resolved `StepExecutor` for the scope.
 
 References:
 
+- [Quickstart](quickstart.md)
 - [Design](design.md)
+- [API Reference](api.md)
 - [Roadmap](roadmap.md)

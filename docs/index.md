@@ -16,6 +16,7 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 - **[Quickstart](quickstart.md)** — Setup, first example, backends, credentials.
 - **[Manual](manual.md)** — Patterns and techniques for Natural blocks.
 - **[Design](design.md)** — Canonical specification.
+- **[API Reference](api.md)** — Auto-generated API documentation.
 - **[Roadmap](roadmap.md)** — Future directions.
 
 ## What Nighthawk is trying to prove
@@ -137,7 +138,7 @@ Interpolation:
 - Natural blocks are literal by default.
 - Interpolation is opt-in via inline f-string Natural blocks only (standalone f-string expression statements).
 - Docstring Natural blocks are always literal.
-- For f-string blocks, brace escaping follows Python rules: write `{{` / `}}` to produce literal `{` / `}`.
+- See [Manual Section 4](manual.md#4-f-string-injection) for details on f-string injection, brace escaping, and usage guidance.
 
 ## References
 
