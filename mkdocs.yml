@@ -52,7 +52,6 @@ nav:
   - Manual: manual.md
   - Design: design.md
   - API Reference: api.md
-  - Docstring Guide: docstring-guide.md
   - Roadmap: roadmap.md
 
 markdown_extensions:

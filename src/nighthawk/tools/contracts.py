@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Literal
 
 import tiktoken
 from pydantic import BaseModel
@@ -28,29 +28,10 @@ class Error(BaseModel, extra="forbid"):
     guidance: str | None = None
 
 
-ValueType = TypeVar("ValueType")
-DepsType = TypeVar("DepsType")
-
-
-class ToolResult(BaseModel, Generic[ValueType], extra="forbid"):
+class ToolResult[ValueType](BaseModel, extra="forbid"):
     status: Literal["success", "failure"]
     value: ValueType | None
     error: Error | None
-
-
-def _render_channel_json_text(
-    value: object,
-    *,
-    max_tokens: int,
-    encoding: tiktoken.Encoding,
-    style: JsonRendererStyle,
-) -> tuple[str, int]:
-    return render_json_text(
-        value,
-        max_tokens=max_tokens,
-        encoding=encoding,
-        style=style,
-    )
 
 
 def render_tool_result_json_text(
@@ -67,7 +48,7 @@ def render_tool_result_json_text(
         value_max_tokens = max_tokens
     else:
         error_max_tokens = int(max_tokens * 0.9)
-        error_text, error_token_count = _render_channel_json_text(
+        error_text, error_token_count = render_json_text(
             error,
             max_tokens=error_max_tokens,
             encoding=encoding,
@@ -78,7 +59,7 @@ def render_tool_result_json_text(
     if value is None:
         value_text = "null"
     else:
-        value_text, _ = _render_channel_json_text(
+        value_text, _ = render_json_text(
             value,
             max_tokens=value_max_tokens,
             encoding=encoding,
@@ -194,7 +175,7 @@ async def run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> 
     return normalize_tool_success(value)
 
 
-class ToolResultWrapperToolset(WrapperToolset[DepsType], Generic[DepsType]):
+class ToolResultWrapperToolset[DepsType](WrapperToolset[DepsType]):
     def __getattr__(self, name: str) -> object:
         return getattr(self.wrapped, name)
 

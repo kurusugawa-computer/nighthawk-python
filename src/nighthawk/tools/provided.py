@@ -17,6 +17,13 @@ class ProvidedToolDefinition:
     tool: Tool[StepContext]
 
 
+def _eval_expression_or_raise(run_context: RunContext[StepContext], expression: str) -> object:
+    try:
+        return eval_expression(run_context.deps, expression)
+    except Exception as exception:
+        raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
+
+
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     metadata = {"nighthawk.provided": True}
 
@@ -32,16 +39,10 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
         )
 
     def nh_eval(run_context: RunContext[StepContext], expression: str) -> object:
-        try:
-            return eval_expression(run_context.deps, expression)
-        except Exception as exception:
-            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
+        return _eval_expression_or_raise(run_context, expression)
 
     def nh_exec(run_context: RunContext[StepContext], expression: str) -> object:
-        try:
-            return eval_expression(run_context.deps, expression)
-        except Exception as exception:
-            raise ToolBoundaryFailure(kind="execution", message=str(exception), guidance="Fix the expression and retry.")
+        return _eval_expression_or_raise(run_context, expression)
 
     return [
         ProvidedToolDefinition(

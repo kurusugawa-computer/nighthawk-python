@@ -16,7 +16,7 @@ class NaturalBlock:
     kind: str  # 'docstring' | 'inline'
     text: str
     input_bindings: tuple[str, ...]
-    bindings: tuple[str, ...]
+    output_bindings: tuple[str, ...]
     lineno: int
 
 
@@ -57,10 +57,10 @@ def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return deduplicate(inputs), deduplicate(outputs)
 
 
-_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER = "\x00"
+JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER = "\x00"
 
 
-def _joined_string_first_literal_or_none(joined_string: ast.JoinedStr) -> str | None:
+def joined_string_first_literal_or_none(joined_string: ast.JoinedStr) -> str | None:
     if not joined_string.values:
         return None
     first = joined_string.values[0]
@@ -69,14 +69,14 @@ def _joined_string_first_literal_or_none(joined_string: ast.JoinedStr) -> str | 
     return first.value
 
 
-def _joined_string_is_natural_sentinel(joined_string: ast.JoinedStr) -> bool:
-    first_literal = _joined_string_first_literal_or_none(joined_string)
+def joined_string_is_natural_sentinel(joined_string: ast.JoinedStr) -> bool:
+    first_literal = joined_string_first_literal_or_none(joined_string)
     if first_literal is None:
         return False
     return is_natural_sentinel(first_literal)
 
 
-def _joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_placeholder: str) -> str:
+def joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_placeholder: str) -> str:
     parts: list[str] = []
     for part in joined_string.values:
         if isinstance(part, ast.Constant) and isinstance(part.value, str):
@@ -87,15 +87,15 @@ def _joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_pl
 
 
 def _extract_program_and_bindings_from_joined_string(joined_string: ast.JoinedStr) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
-    boundary_marked_text = _joined_string_scan_text(
+    boundary_marked_text = joined_string_scan_text(
         joined_string,
-        formatted_value_placeholder=_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
+        formatted_value_placeholder=JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
     )
 
-    if re.search(r"<[^>]*" + _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
+    if re.search(r"<[^>]*" + JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
         raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
 
-    scan_text = _joined_string_scan_text(joined_string, formatted_value_placeholder="")
+    scan_text = joined_string_scan_text(joined_string, formatted_value_placeholder="")
     program = extract_program(scan_text)
     input_bindings, output_bindings = extract_bindings(program)
     return program, input_bindings, output_bindings
@@ -128,7 +128,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
                 kind="docstring",
                 text=program,
                 input_bindings=input_bindings,
-                bindings=output_bindings,
+                output_bindings=output_bindings,
                 lineno=getattr(func_def, "lineno", 1),
             )
         )
@@ -151,19 +151,19 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
                         kind="inline",
                         text=program,
                         input_bindings=input_bindings,
-                        bindings=output_bindings,
+                        output_bindings=output_bindings,
                         lineno=getattr(statement, "lineno", 1),
                     )
                 )
 
-        if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
+        if isinstance(value, ast.JoinedStr) and joined_string_is_natural_sentinel(value):
             program, input_bindings, output_bindings = _extract_program_and_bindings_from_joined_string(value)
             blocks.append(
                 NaturalBlock(
                     kind="inline",
                     text=program,
                     input_bindings=input_bindings,
-                    bindings=output_bindings,
+                    output_bindings=output_bindings,
                     lineno=getattr(statement, "lineno", 1),
                 )
             )

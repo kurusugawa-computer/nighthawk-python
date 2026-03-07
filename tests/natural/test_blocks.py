@@ -18,7 +18,7 @@ def test_docstring_natural_block_detected_and_bindings_extracted():
     b = blocks[0]
     assert b.kind == "docstring"
     assert b.input_bindings == ("numbers",)
-    assert b.bindings == ("result",)
+    assert b.output_bindings == ("result",)
     assert b.text.splitlines()[0] == "Consider <numbers> and compute <:result>."
 
 
@@ -36,7 +36,7 @@ def test_inline_natural_block_detected():
     blocks = find_natural_blocks(src)
     assert len(blocks) == 1
     assert blocks[0].kind == "inline"
-    assert blocks[0].bindings == ("y",)
+    assert blocks[0].output_bindings == ("y",)
     assert blocks[0].text.splitlines()[0] == "Make <:y> be 1."
 
 
@@ -54,7 +54,7 @@ def test_inline_fstring_natural_block_detected_and_bindings_extracted():
     assert len(blocks) == 1
     assert blocks[0].kind == "inline"
     assert blocks[0].input_bindings == ()
-    assert blocks[0].bindings == ("y",)
+    assert blocks[0].output_bindings == ("y",)
 
 
 def test_inline_ast_shape_must_be_literal_or_fstring():
@@ -131,5 +131,5 @@ def test_natural_inline_parentheses_do_not_matter():
     blocks = find_natural_blocks(src)
     assert len(blocks) == 1
     assert blocks[0].kind == "inline"
-    assert blocks[0].bindings == ("y",)
+    assert blocks[0].output_bindings == ("y",)
     assert blocks[0].text.splitlines()[0] == "Make <:y> be 1."

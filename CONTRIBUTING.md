@@ -1,12 +1,14 @@
-# Docstring Guide
+# Contributing to Nighthawk
+
+## Docstring Guide
 
 This guide defines the docstring conventions for the Nighthawk codebase.
 
-## Style
+### Style
 
 Use [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) docstrings. This is the default style parsed by mkdocstrings.
 
-## Scope
+### Scope
 
 Write docstrings only for public API members exported via `__all__` in `src/nighthawk/__init__.py`, plus public classes and functions in these modules:
 
@@ -17,13 +19,13 @@ Write docstrings only for public API members exported via `__all__` in `src/nigh
 
 Do not write docstrings for names prefixed with `_` (module-private).
 
-## Structure
+### Structure
 
-### Summary line
+#### Summary line
 
 Required. Use imperative mood ("Return ...", "Start ...", "Register ..."). Keep it on one line.
 
-### Sections
+#### Sections
 
 | Section | When to include |
 |---|---|
@@ -32,7 +34,7 @@ Required. Use imperative mood ("Return ...", "Start ...", "Register ..."). Keep 
 | `Raises` | The function raises exceptions that callers are expected to catch. |
 | `Example` | Required for decorators (`natural_function`, `tool`) and context managers (`run`, `scope`). Optional for everything else. |
 
-### Classes
+#### Classes
 
 Write the docstring on the class body, not on `__init__`. mkdocstrings merges `__init__` parameters automatically (`merge_init_into_class: true`).
 
@@ -49,13 +51,13 @@ class StepExecutorConfiguration(BaseModel):
     """
 ```
 
-## What not to write
+### What not to write
 
 - Do not duplicate type annotations in `Args` descriptions.
 - Do not add docstrings just to satisfy a linter; omit them when the signature alone is self-explanatory.
 - Do not document internal implementation details in public docstrings.
 
-## Full example
+### Full example
 
 ```python
 def run(

@@ -214,9 +214,10 @@ Nighthawk uses multiple state layers.
 2) Step locals (`step_locals`)
 
 - `step_locals` is a mapping used as the locals environment for LLM expression evaluation.
-- It is initialized at the start of each Natural block execution:
-  - If nested execution exists, start from the outer execution's `step_locals` values.
-  - Overlay the caller frame's current `python_locals`.
+- It is initialized at the start of each Natural block execution, in the following order:
+  1. If a parent step context exists on the step context stack, start from its `step_locals` values.
+  2. Overlay the caller frame's current `python_locals` (so current Python locals always win over inherited step-context state).
+  3. For each read binding (`<name>`), resolve the name using Python lexical rules (locals, enclosing cell scopes, name scopes, globals, builtins) and place the resolved value into `step_locals`.
 - During execution, the LLM can update `step_locals` via tools (Section 8.3).
 - At the end of execution, values for `<:name>` bindings are committed into Python locals.
 
@@ -308,7 +309,8 @@ Tools operate against `step_locals` and `step_globals`.
 
 Decision (step_globals):
 
-- `step_globals` includes only `__builtins__`.
+- `step_globals` is initialized from the function's Python module globals (`python_globals`), ensuring that module-level names (functions, classes, constants, imports) are available for expression evaluation. This mirrors Python's standard name resolution semantics (LEGB: locals, enclosing, globals, builtins).
+- `__builtins__` is guaranteed to be present in `step_globals`; if missing from the module globals, it is injected.
 
 Expressions are evaluated against `step_globals` + `step_locals`.
 

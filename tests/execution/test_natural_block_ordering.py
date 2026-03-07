@@ -137,7 +137,10 @@ def test_agent_backend_commits_only_on_assignment() -> None:
         from nighthawk.runtime.runner import Runner
 
         runner = Runner.from_step_executor(nh.get_step_executor())
-        frame = nh.runtime.runner.get_caller_frame()  # type: ignore[attr-defined]
+        import inspect
+
+        frame = inspect.currentframe()
+        assert frame is not None
 
         envelope = runner.run_step(
             "Hello.",

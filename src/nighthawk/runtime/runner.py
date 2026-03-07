@@ -257,33 +257,21 @@ class Runner:
 
         raise ExecutionError(f"Execution failed: {raise_message}")
 
-    def _build_envelope_sync(
+    def _build_envelope_common(
         self,
         *,
         step_context: StepContext,
         step_outcome: object,
-        allowed_step_kinds: tuple[str, ...],
+        step_outcome_kind: str,
         bindings: dict[str, object],
         input_bindings: dict[str, object],
         return_annotation: object,
+        resolved_return_value: object | None,
     ) -> dict[str, object]:
-        if not hasattr(step_outcome, "kind"):
-            raise ExecutionError("Step produced invalid step outcome object")
-
-        step_outcome_kind = getattr(step_outcome, "kind")
-        if step_outcome_kind not in allowed_step_kinds:
-            raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
-
-        step_context.step_locals.update(bindings)
-
         return_value: object | None = None
 
         if step_outcome_kind == "return":
-            return_reference_path = getattr(step_outcome, "return_reference_path")
-            resolved = self._resolve_reference_path(step_context, return_reference_path)
-            if inspect.isawaitable(resolved):
-                raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
-            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+            return_value = self._parse_and_coerce_return_value(resolved_return_value, return_annotation)
 
         if step_outcome_kind == "raise":
             self._validate_raise_outcome(
@@ -299,47 +287,41 @@ class Runner:
             "return_value": return_value,
         }
 
-    async def _build_envelope_async(
+    def _apply_bindings_and_validate_kind(
         self,
         *,
         step_context: StepContext,
         step_outcome: object,
-        allowed_step_kinds: tuple[str, ...],
         bindings: dict[str, object],
-        input_bindings: dict[str, object],
-        return_annotation: object,
-    ) -> dict[str, object]:
+        allowed_step_kinds: tuple[str, ...],
+    ) -> str:
         if not hasattr(step_outcome, "kind"):
             raise ExecutionError("Step produced invalid step outcome object")
-
-        step_outcome_kind = getattr(step_outcome, "kind")
+        step_outcome_kind: str = getattr(step_outcome, "kind")
         if step_outcome_kind not in allowed_step_kinds:
             raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
-
         step_context.step_locals.update(bindings)
+        return step_outcome_kind
 
-        return_value: object | None = None
+    def _resolve_return_value_sync(self, step_context: StepContext, step_outcome: object) -> object | None:
+        step_outcome_kind = getattr(step_outcome, "kind", None)
+        if step_outcome_kind != "return":
+            return None
+        return_reference_path = getattr(step_outcome, "return_reference_path")
+        resolved = self._resolve_reference_path(step_context, return_reference_path)
+        if inspect.isawaitable(resolved):
+            raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
+        return resolved
 
-        if step_outcome_kind == "return":
-            return_reference_path = getattr(step_outcome, "return_reference_path")
-            resolved = self._resolve_reference_path(step_context, return_reference_path)
-            if inspect.isawaitable(resolved):
-                resolved = await resolved
-            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
-
-        if step_outcome_kind == "raise":
-            self._validate_raise_outcome(
-                step_context,
-                raise_error_type_name=getattr(step_outcome, "raise_error_type"),
-                raise_message=getattr(step_outcome, "raise_message"),
-            )
-
-        return {
-            "step_outcome": step_outcome,
-            "input_bindings": dict(input_bindings),
-            "bindings": bindings,
-            "return_value": return_value,
-        }
+    async def _resolve_return_value_async(self, step_context: StepContext, step_outcome: object) -> object | None:
+        step_outcome_kind = getattr(step_outcome, "kind", None)
+        if step_outcome_kind != "return":
+            return None
+        return_reference_path = getattr(step_outcome, "return_reference_path")
+        resolved = self._resolve_reference_path(step_context, return_reference_path)
+        if inspect.isawaitable(resolved):
+            resolved = await resolved
+        return resolved
 
     def run_step(
         self,
@@ -404,13 +386,21 @@ class Runner:
                     )
                 )
 
-            return self._build_envelope_sync(
+            step_outcome_kind = self._apply_bindings_and_validate_kind(
                 step_context=step_context,
                 step_outcome=step_outcome,
+                bindings=bindings,
                 allowed_step_kinds=allowed_step_kinds,
+            )
+            resolved_return_value = self._resolve_return_value_sync(step_context, step_outcome)
+            return self._build_envelope_common(
+                step_context=step_context,
+                step_outcome=step_outcome,
+                step_outcome_kind=step_outcome_kind,
                 bindings=bindings,
                 input_bindings=input_bindings,
                 return_annotation=return_annotation,
+                resolved_return_value=resolved_return_value,
             )
 
     async def run_step_async(
@@ -472,18 +462,19 @@ class Runner:
                     allowed_step_kinds=allowed_step_kinds,
                 )
 
-            return await self._build_envelope_async(
+            step_outcome_kind = self._apply_bindings_and_validate_kind(
                 step_context=step_context,
                 step_outcome=step_outcome,
+                bindings=bindings,
                 allowed_step_kinds=allowed_step_kinds,
+            )
+            resolved_return_value = await self._resolve_return_value_async(step_context, step_outcome)
+            return self._build_envelope_common(
+                step_context=step_context,
+                step_outcome=step_outcome,
+                step_outcome_kind=step_outcome_kind,
                 bindings=bindings,
                 input_bindings=input_bindings,
                 return_annotation=return_annotation,
+                resolved_return_value=resolved_return_value,
             )
-
-
-def get_caller_frame() -> FrameType:
-    frame = inspect.currentframe()
-    if frame is None or frame.f_back is None:
-        raise ExecutionError("No caller frame")
-    return frame.f_back

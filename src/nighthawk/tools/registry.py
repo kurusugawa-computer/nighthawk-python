@@ -6,7 +6,6 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator
 
-from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 from ..errors import ToolRegistrationError
@@ -135,7 +134,7 @@ def get_visible_tools() -> list[Tool[StepContext]]:
     return [definition.tool for definition in visible.values()]
 
 
-ToolFunction = Callable[..., Any]
+type ToolFunction = Callable[..., Any]
 
 
 def tool(
@@ -197,8 +196,3 @@ def tool(
 
 def reset_global_tools_for_tests() -> None:
     _global_tool_definitions.clear()
-
-
-def require_tool_signature(_run_context: RunContext[StepContext], /) -> None:
-    _ = _run_context
-    raise NotImplementedError

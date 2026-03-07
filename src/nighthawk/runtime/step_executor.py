@@ -41,8 +41,7 @@ from .step_contract import (
 
 
 class StepExecutionAgent(Protocol):
-    def run_sync(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def run_sync(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class StepExecutor(Protocol):
@@ -53,8 +52,7 @@ class StepExecutor(Protocol):
         step_context: StepContext,
         binding_names: list[str],
         allowed_step_kinds: tuple[str, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
-        raise NotImplementedError
+    ) -> tuple[StepOutcome, dict[str, object]]: ...
 
 
 def _resolve_partial_effective_signature(partial_callable: functools.partial[Any]) -> str | None:

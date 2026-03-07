@@ -70,12 +70,7 @@ def test_basic_binding() -> None:
 def test_carry_pattern() -> None:
     expected = _extract_prompt_example("carry-pattern")
     actual = _build_prompt(
-        processed_natural_program=(
-            "Read <carry> for prior context.\n"
-            "The carry says the previous result was 10.\n"
-            "Set <:result> to 20 (previous result plus 10).\n"
-            "Append a one-line summary of what you did to <carry>."
-        ),
+        processed_natural_program=("Read <carry> for prior context.\nThe carry says the previous result was 10.\nSet <:result> to 20 (previous result plus 10).\nAppend a one-line summary of what you did to <carry>."),
         python_locals={"carry": ["Set result to 10."], "result": 0},
     )
     assert actual == expected
@@ -85,11 +80,7 @@ def test_fstring_injection() -> None:
     expected = _extract_prompt_example("fstring-injection")
     project_policy = ["safety-first", "concise-output", "cite-assumptions"]
     actual = _build_prompt(
-        processed_natural_program=(
-            "Read <post>.\n"
-            f"Available policies: {project_policy}\n"
-            "Select the single best policy and set <:selected_policy>."
-        ),
+        processed_natural_program=(f"Read <post>.\nAvailable policies: {project_policy}\nSelect the single best policy and set <:selected_policy>."),
         python_locals={"post": "Breaking: earthquake hits downtown", "selected_policy": ""},
     )
     assert actual == expected
@@ -103,10 +94,7 @@ def test_local_function_signature() -> None:
         return base + bonus
 
     actual = _build_prompt(
-        processed_natural_program=(
-            "Compute <:result> by choosing the most suitable local helper based on its docstring.\n"
-            "Use base=38 and bonus=4."
-        ),
+        processed_natural_program=("Compute <:result> by choosing the most suitable local helper based on its docstring.\nUse base=38 and bonus=4."),
         python_locals={"add_points": add_points, "result": 0},
     )
     assert actual == expected
@@ -119,10 +107,7 @@ def test_global_function_reference() -> None:
         return sum(numbers) / len(numbers)
 
     actual = _build_prompt(
-        processed_natural_program=(
-            "Map each element of <numbers> to the number it represents,\n"
-            "then compute <:result> by calling <python_average> with the mapped list."
-        ),
+        processed_natural_program=("Map each element of <numbers> to the number it represents,\nthen compute <:result> by calling <python_average> with the mapped list."),
         python_locals={"numbers": [1, "2", "three", "cuatro"], "result": 0},
         python_globals={"__builtins__": builtins, "python_average": python_average},
     )

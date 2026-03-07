@@ -143,12 +143,22 @@ def _build_raise_variant_schema(
     }
 
 
-_KIND_TO_VARIANT_BUILDER: dict[str, object] = {
-    "pass": _build_pass_variant_schema,
-    "return": _build_return_variant_schema,
-    "break": _build_break_variant_schema,
-    "continue": _build_continue_variant_schema,
-}
+def _build_variant_schema(
+    kind: StepKind,
+    *,
+    raise_error_type_binding_names: tuple[str, ...],
+) -> dict[str, object]:
+    match kind:
+        case "pass":
+            return _build_pass_variant_schema()
+        case "return":
+            return _build_return_variant_schema()
+        case "break":
+            return _build_break_variant_schema()
+        case "continue":
+            return _build_continue_variant_schema()
+        case "raise":
+            return _build_raise_variant_schema(raise_error_type_binding_names=raise_error_type_binding_names)
 
 
 def build_step_json_schema(
@@ -159,19 +169,7 @@ def build_step_json_schema(
     if not allowed_kinds:
         raise ValueError("allowed_kinds must not be empty")
 
-    variants: list[dict[str, object]] = []
-    for kind in allowed_kinds:
-        if kind == "raise":
-            variants.append(
-                _build_raise_variant_schema(
-                    raise_error_type_binding_names=raise_error_type_binding_names,
-                )
-            )
-        else:
-            builder = _KIND_TO_VARIANT_BUILDER.get(kind)
-            if builder is None:
-                raise ValueError(f"Unknown step kind: {kind!r}")
-            variants.append(builder())  # type: ignore[operator]
+    variants: list[dict[str, object]] = [_build_variant_schema(kind, raise_error_type_binding_names=raise_error_type_binding_names) for kind in allowed_kinds]
 
     if len(variants) == 1:
         result_schema: dict[str, object] = variants[0]

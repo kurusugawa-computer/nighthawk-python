@@ -32,7 +32,7 @@ def run_coroutine_synchronously(coroutine_call: Callable[[], Coroutine[Any, Any,
 
     exception = exception_container.get("exception")
     if exception is not None:
-        raise exception
+        raise exception.with_traceback(exception.__traceback__)
 
     return result_container["result"]
 

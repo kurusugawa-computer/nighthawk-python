@@ -54,11 +54,6 @@ Non-goals:
 - A directory structure similar to Claude Skills (SKILL.md, REFERENCE.md, scripts/).
 - Document a minimal "Skills" packaging convention for Nighthawk.
 
-### Implementation consistency (future)
-
-- Unify Natural DSL binding extraction into a single source of truth.
-- Strengthen typed binding behavior and reduce duplication across compilation and execution.
-
 ## Open questions
 
 - How to best represent tool results in the prompt for robust reasoning.

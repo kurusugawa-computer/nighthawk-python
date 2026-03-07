@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import tiktoken
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -173,21 +171,4 @@ class StepExecutorConfigurationPatch(BaseModel):
 
     def apply_to(self, configuration: StepExecutorConfiguration) -> StepExecutorConfiguration:
         """Apply non-None fields to the given configuration and return a new copy."""
-        updated_values: dict[str, Any] = {}
-        if self.model is not None:
-            updated_values["model"] = self.model
-        if self.model_settings is not None:
-            updated_values["model_settings"] = self.model_settings
-        if self.prompts is not None:
-            updated_values["prompts"] = self.prompts
-        if self.context_limits is not None:
-            updated_values["context_limits"] = self.context_limits
-        if self.json_renderer_style is not None:
-            updated_values["json_renderer_style"] = self.json_renderer_style
-        if self.tokenizer_encoding is not None:
-            updated_values["tokenizer_encoding"] = self.tokenizer_encoding
-        if self.system_prompt_suffix_fragments is not None:
-            updated_values["system_prompt_suffix_fragments"] = self.system_prompt_suffix_fragments
-        if self.user_prompt_suffix_fragments is not None:
-            updated_values["user_prompt_suffix_fragments"] = self.user_prompt_suffix_fragments
-        return configuration.model_copy(update=updated_values)
+        return configuration.model_copy(update=self.model_dump(exclude_none=True))

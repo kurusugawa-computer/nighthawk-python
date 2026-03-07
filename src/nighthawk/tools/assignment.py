@@ -55,10 +55,6 @@ def _raise_execution(*, message: str, guidance: str) -> NoReturn:
     raise ToolBoundaryFailure(kind="execution", message=message, guidance=guidance)
 
 
-def _to_jsonable_value(value: object) -> object:
-    return to_jsonable_value(value)
-
-
 def _parse_target_path(target_path: str) -> tuple[str, ...] | None:
     if not target_path:
         return None
@@ -123,7 +119,7 @@ def _assign_value_to_target_path(
         step_context.step_locals_revision += 1
 
         update: dict[str, Any] = {"path": target_path}
-        update["value"] = _to_jsonable_value(value)
+        update["value"] = to_jsonable_value(value)
 
         return {
             "target_path": target_path,
@@ -183,7 +179,7 @@ def _assign_value_to_target_path(
     step_context.step_locals_revision += 1
 
     update: dict[str, Any] = {"path": target_path}
-    update["value"] = _to_jsonable_value(value)
+    update["value"] = to_jsonable_value(value)
 
     return {
         "target_path": target_path,

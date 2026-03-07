@@ -17,14 +17,14 @@ from pydantic_ai.usage import RequestUsage
 from ..json_renderer import to_jsonable_value
 from ..tools.mcp_boundary import call_tool_for_claude_code
 from ..tools.registry import get_visible_tools
-from . import BackendModelBase, ToolHandler
+from .base import BackendModelBase, ToolHandler
 
 PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
 
 type SettingSource = Literal["user", "project", "local"]
 
 
-def _normalize_timestamp_or_none(value: object) -> datetime:
+def _normalize_timestamp(value: object) -> datetime:
     if isinstance(value, datetime):
         return value
     return datetime.now(tz=datetime.now().astimezone().tzinfo)
@@ -328,20 +328,17 @@ class ClaudeCodeModel(BackendModelBase):
 
         # Claude Code sets the CLAUDECODE environment variable for nested sessions.
         # When the variable is set, the Claude Code CLI refuses to launch.
-        claude_code_nested_environment_value = os.environ.pop("CLAUDECODE", None)
-        try:
-            async with ClaudeSDKClient(options=options) as client:
-                await client.query(user_prompt_text)
+        os.environ.pop("CLAUDECODE", None)
 
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        assistant_model_name = message.model
-                    elif isinstance(message, ResultMessage):
-                        result_message = message
-                    result_messages.append(message)
-        finally:
-            if claude_code_nested_environment_value is not None:
-                os.environ["CLAUDECODE"] = claude_code_nested_environment_value
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(user_prompt_text)
+
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    assistant_model_name = message.model
+                elif isinstance(message, ResultMessage):
+                    result_message = message
+                result_messages.append(message)
 
         if result_message is None:
             raise UnexpectedModelBehavior("Claude Code backend did not produce a result message")
@@ -366,6 +363,6 @@ class ClaudeCodeModel(BackendModelBase):
         return ModelResponse(
             parts=[TextPart(content=output_text)],
             model_name=assistant_model_name,
-            timestamp=_normalize_timestamp_or_none(getattr(result_message, "timestamp", None)),
+            timestamp=_normalize_timestamp(getattr(result_message, "timestamp", None)),
             usage=_normalize_claude_code_usage_to_request_usage(getattr(result_message, "usage", None)),
         )

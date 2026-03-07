@@ -5,12 +5,12 @@ import re
 
 from ..errors import NaturalParseError
 from .blocks import (
-    _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
-    _joined_string_is_natural_sentinel,
-    _joined_string_scan_text,
+    JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
     extract_bindings,
     extract_program,
     is_natural_sentinel,
+    joined_string_is_natural_sentinel,
+    joined_string_scan_text,
 )
 
 
@@ -201,12 +201,12 @@ class NaturalTransformer(ast.NodeTransformer):
 
                 return [ast.copy_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
-        if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
+        if isinstance(value, ast.JoinedStr) and joined_string_is_natural_sentinel(value):
             _validate_joined_string_bindings_do_not_span_formatted_values(value)
             return_annotation = self._current_return_annotation_expression()
             is_in_loop = self._loop_depth > 0
 
-            scan_text = _joined_string_scan_text(value, formatted_value_placeholder="")
+            scan_text = joined_string_scan_text(value, formatted_value_placeholder="")
             program = extract_program(scan_text)
             input_bindings, output_bindings = extract_bindings(program)
             binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
@@ -283,12 +283,12 @@ class NaturalTransformer(ast.NodeTransformer):
 
 
 def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string: ast.JoinedStr) -> None:
-    boundary_marked_text = _joined_string_scan_text(
+    boundary_marked_text = joined_string_scan_text(
         joined_string,
-        formatted_value_placeholder=_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
+        formatted_value_placeholder=JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
     )
 
-    if re.search(r"<[^>]*" + _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
+    if re.search(r"<[^>]*" + JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
         raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
 
 

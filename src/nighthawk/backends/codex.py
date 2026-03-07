@@ -29,7 +29,7 @@ from pydantic_ai.usage import RequestUsage
 from ..runtime.step_context import StepContext, ToolResultRenderingPolicy
 from ..tools.mcp_boundary import call_tool_for_low_level_mcp_server
 from ..tools.registry import get_visible_tools
-from . import BackendModelBase
+from .base import BackendModelBase
 
 
 class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):

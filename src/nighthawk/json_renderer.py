@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections.abc import Mapping, Sequence
-from typing import Literal, Tuple
+from typing import Literal
 
 import headson
 import tiktoken
@@ -28,7 +28,7 @@ def render_json_text(
     max_tokens: int,
     encoding: tiktoken.Encoding,
     style: JsonRendererStyle,
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
     """Render a JSON-like Python value to JSON-family text under a token budget.
 
     The value is converted into a JSONable value (JSON-compatible Python types plus sentinel strings for cycles and non-serializable values), then rendered to compact JSON. That compact JSON is summarized with headson under a byte budget chosen to
@@ -169,7 +169,7 @@ def _maximize_headson_output_under_max_tokens(
     max_tokens: int,
     encoding: tiktoken.Encoding,
     style: JsonRendererStyle,
-) -> Tuple[str | None, int]:
+) -> tuple[str | None, int]:
     best_output: str | None = None
     best_output_token_count = 0
 
