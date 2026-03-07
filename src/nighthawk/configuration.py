@@ -55,6 +55,14 @@ def _validate_model_identifier(model: str) -> str:
 
 
 class StepPromptTemplates(BaseModel):
+    """Prompt templates for step execution.
+
+    Attributes:
+        step_system_prompt_template: System prompt template sent to the LLM.
+        step_user_prompt_template: User prompt template with $program, $locals,
+            and $globals placeholders.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     step_system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
@@ -62,7 +70,16 @@ class StepPromptTemplates(BaseModel):
 
 
 class StepContextLimits(BaseModel):
-    """Limits for rendering dynamic context into the LLM prompt."""
+    """Limits for rendering dynamic context into the LLM prompt.
+
+    Attributes:
+        locals_max_tokens: Maximum tokens for the locals section.
+        locals_max_items: Maximum items rendered in the locals section.
+        globals_max_tokens: Maximum tokens for the globals section.
+        globals_max_items: Maximum items rendered in the globals section.
+        value_max_tokens: Maximum tokens for a single value rendering.
+        tool_result_max_tokens: Maximum tokens for a tool result rendering.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -77,6 +94,21 @@ class StepContextLimits(BaseModel):
 
 
 class StepExecutorConfiguration(BaseModel):
+    """Configuration for a step executor.
+
+    Attributes:
+        model: Model identifier in "provider:model" format (e.g. "openai:gpt-4o").
+        model_settings: Provider-specific model settings.
+        prompts: Prompt templates for step execution.
+        context_limits: Token and item limits for context rendering.
+        json_renderer_style: Headson rendering style for JSON summarization.
+        tokenizer_encoding: Explicit tiktoken encoding name. If not set, inferred
+            from the model.
+        system_prompt_suffix_fragments: Additional fragments appended to the system
+            prompt.
+        user_prompt_suffix_fragments: Additional fragments appended to the user prompt.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str = "openai-responses:gpt-5-nano"
@@ -95,6 +127,11 @@ class StepExecutorConfiguration(BaseModel):
         return _validate_model_identifier(value)
 
     def resolve_token_encoding(self) -> tiktoken.Encoding:
+        """Return the tiktoken encoding for this configuration.
+
+        Uses tokenizer_encoding if set explicitly, otherwise infers from the
+        model name. Falls back to o200k_base if the model name is not recognized.
+        """
         if self.tokenizer_encoding is not None:
             return tiktoken.get_encoding(self.tokenizer_encoding)
 
@@ -108,6 +145,21 @@ class StepExecutorConfiguration(BaseModel):
 
 
 class StepExecutorConfigurationPatch(BaseModel):
+    """Partial override for StepExecutorConfiguration.
+
+    Non-None fields replace the corresponding fields in the target configuration.
+
+    Attributes:
+        model: Model identifier override.
+        model_settings: Model settings override.
+        prompts: Prompt templates override.
+        context_limits: Context limits override.
+        json_renderer_style: JSON renderer style override.
+        tokenizer_encoding: Tokenizer encoding override.
+        system_prompt_suffix_fragments: System prompt suffix fragments override.
+        user_prompt_suffix_fragments: User prompt suffix fragments override.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str | None = None
@@ -120,6 +172,7 @@ class StepExecutorConfigurationPatch(BaseModel):
     user_prompt_suffix_fragments: tuple[str, ...] | None = None
 
     def apply_to(self, configuration: StepExecutorConfiguration) -> StepExecutorConfiguration:
+        """Apply non-None fields to the given configuration and return a new copy."""
         updated_values: dict[str, Any] = {}
         if self.model is not None:
             updated_values["model"] = self.model

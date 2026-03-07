@@ -103,6 +103,11 @@ def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:
 
 
 def get_current_step_context() -> StepContext:
+    """Return the innermost active step context.
+
+    Raises:
+        NighthawkError: If no step context is set (i.e. called outside step execution).
+    """
     stack = _step_execution_stack_var.get()
     if not stack:
         raise NighthawkError("StepContext is not set")

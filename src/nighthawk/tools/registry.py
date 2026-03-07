@@ -147,6 +147,27 @@ def tool(
     description: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> Any:
+    """Register a Python function as a Nighthawk tool visible to Natural blocks.
+
+    Args:
+        func: The function to register. Can be omitted for use as a bare decorator.
+        name: Tool name override. Defaults to the function name.
+        overwrite: If True, replace any existing tool with the same name.
+        description: Tool description override. Defaults to the function docstring.
+        metadata: Arbitrary metadata attached to the tool definition.
+
+    Raises:
+        ToolRegistrationError: If the name conflicts with an existing tool and
+            overwrite is False.
+
+    Example:
+        ```python
+        @nighthawk.tool
+        def lookup_user(user_id: str) -> dict:
+            return {"user_id": user_id, "name": "Alice"}
+        ```
+    """
+
     def decorator(inner: ToolFunction) -> ToolFunction:
         ensure_builtin_tools_registered()
 

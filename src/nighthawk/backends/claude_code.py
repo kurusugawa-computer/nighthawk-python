@@ -31,6 +31,17 @@ def _normalize_timestamp_or_none(value: object) -> datetime:
 
 
 class ClaudeCodeModelSettings(TypedDict, total=False):
+    """Settings for the Claude Code backend.
+
+    Attributes:
+        permission_mode: Claude Code permission mode.
+        setting_sources: Configuration sources to load.
+        allowed_tool_names: Nighthawk tool names exposed to the model.
+        claude_allowed_tool_names: Additional Claude Code native tool names to allow.
+        claude_max_turns: Maximum conversation turns.
+        working_directory: Absolute path to the working directory for Claude Code.
+    """
+
     permission_mode: PermissionMode
     setting_sources: list[SettingSource] | None
     allowed_tool_names: tuple[str, ...] | None
@@ -183,6 +194,8 @@ def _serialize_result_message_to_json(result_message: object) -> str:
 
 
 class ClaudeCodeModel(BackendModelBase):
+    """Pydantic AI model that delegates to Claude Code via the Claude Agent SDK."""
+
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
             backend_label="Claude Code backend",

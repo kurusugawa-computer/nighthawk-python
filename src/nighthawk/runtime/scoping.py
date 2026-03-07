@@ -17,6 +17,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ExecutionContext:
+    """Immutable snapshot of the current execution context.
+
+    Attributes:
+        run_id: Unique identifier for the run.
+        scope_id: Unique identifier for the current scope.
+    """
+
     run_id: str
     scope_id: str
 
@@ -64,6 +71,11 @@ _prompt_suffix_fragments_var: ContextVar[_PromptSuffixFragments] = ContextVar(
 
 
 def get_step_executor() -> StepExecutor:
+    """Return the active step executor.
+
+    Raises:
+        NighthawkError: If no step executor is set (i.e. called outside a run context).
+    """
     step_executor = _step_executor_var.get()
     if step_executor is None:
         raise NighthawkError("StepExecutor is not set")
@@ -71,6 +83,11 @@ def get_step_executor() -> StepExecutor:
 
 
 def get_execution_context() -> ExecutionContext:
+    """Return the active execution context.
+
+    Raises:
+        NighthawkError: If no execution context is set (i.e. called outside a run context).
+    """
     execution_context = _execution_context_var.get()
     if execution_context is None:
         raise NighthawkError("ExecutionContext is not set")
@@ -118,6 +135,28 @@ def run(
     *,
     run_id: str | None = None,
 ) -> Iterator[None]:
+    """Start an execution run with the given step executor.
+
+    Establishes a run-scoped context that makes the step executor
+    available to all Natural blocks executed within this scope.
+
+    Args:
+        step_executor: The step executor to use for Natural block execution.
+        run_id: Optional identifier for the run. If not provided, a UUID is
+            generated automatically.
+
+    Yields:
+        None
+
+    Example:
+        ```python
+        executor = AgentStepExecutor.from_configuration(
+            configuration=StepExecutorConfiguration(model="openai:gpt-4o"),
+        )
+        with nighthawk.run(executor):
+            result = my_natural_function()
+        ```
+    """
     execution_context = ExecutionContext(
         run_id=run_id or _generate_id(),
         scope_id=_generate_id(),
@@ -153,6 +192,34 @@ def scope(
     system_prompt_suffix_fragment: str | None = None,
     user_prompt_suffix_fragment: str | None = None,
 ) -> Iterator[StepExecutor]:
+    """Open a nested scope that can override the step executor or its configuration.
+
+    Must be called inside an active run context. Creates a new scope_id while
+    inheriting the run_id from the parent context.
+
+    Args:
+        step_executor_configuration: Full replacement configuration for the step
+            executor.
+        step_executor_configuration_patch: Partial override applied on top of the
+            current configuration.
+        step_executor: Replacement step executor for this scope.
+        system_prompt_suffix_fragment: Additional text appended to the system prompt.
+        user_prompt_suffix_fragment: Additional text appended to the user prompt.
+
+    Yields:
+        The step executor active within this scope.
+
+    Example:
+        ```python
+        with nighthawk.run(executor):
+            with nighthawk.scope(
+                step_executor_configuration_patch=StepExecutorConfigurationPatch(
+                    model="openai:gpt-4o-mini",
+                ),
+            ) as scoped_executor:
+                result = my_natural_function()
+        ```
+    """
     current_step_executor = get_step_executor()
     current_execution_context = get_execution_context()
 

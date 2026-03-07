@@ -71,6 +71,26 @@ class _RunnerProxy:
 
 
 def natural_function(func: F | None = None) -> F:
+    """Transform a function containing Natural blocks into an executable Natural function.
+
+    Parses the function source to find Natural blocks, rewrites the AST to
+    delegate block execution to the active step executor at runtime.
+
+    Args:
+        func: The function to transform. Can be omitted for use as a bare
+            decorator.
+
+    Example:
+        ```python
+        @nighthawk.natural_function
+        def summarize(text: str) -> str:
+            '''natural
+            Summarize <text> in one sentence.
+            -> <:result>
+            '''
+            return result
+        ```
+    """
     if func is None:
         return lambda f: natural_function(f)  # type: ignore[return-value]
 

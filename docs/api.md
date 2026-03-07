@@ -1,0 +1,39 @@
+# API Reference
+
+## Top-level API
+
+::: nighthawk
+    options:
+      members:
+        - natural_function
+        - tool
+        - run
+        - scope
+        - AgentStepExecutor
+        - StepExecutorConfiguration
+        - StepExecutorConfigurationPatch
+        - StepPromptTemplates
+        - StepContextLimits
+        - JsonableValue
+        - ExecutionContext
+        - get_current_step_context
+        - get_execution_context
+        - get_step_executor
+
+## Errors
+
+::: nighthawk.errors
+
+## Configuration
+
+::: nighthawk.configuration
+
+## Backends
+
+### Claude Code
+
+::: nighthawk.backends.claude_code
+
+### Codex
+
+::: nighthawk.backends.codex

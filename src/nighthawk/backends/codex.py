@@ -51,6 +51,16 @@ type ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 
 
 class CodexModelSettings(TypedDict, total=False):
+    """Settings for the Codex backend.
+
+    Attributes:
+        allowed_tool_names: Nighthawk tool names exposed to the model.
+        codex_executable: Path or name of the Codex CLI executable.
+        model_reasoning_effort: Reasoning effort level for the model.
+        sandbox_mode: Codex sandbox isolation mode.
+        working_directory: Absolute path to the working directory for Codex.
+    """
+
     allowed_tool_names: tuple[str, ...] | None
     codex_executable: str
     model_reasoning_effort: ModelReasoningEffort | None
@@ -411,6 +421,8 @@ async def _mcp_tool_server_if_needed(
 
 
 class CodexModel(BackendModelBase):
+    """Pydantic AI model that delegates to the Codex CLI."""
+
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
             backend_label="Codex backend",

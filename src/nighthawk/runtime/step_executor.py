@@ -420,6 +420,14 @@ def _new_agent_step_executor(
 
 @dataclass(frozen=True)
 class AgentStepExecutor:
+    """Step executor that delegates Natural block execution to a Pydantic AI agent.
+
+    Attributes:
+        configuration: The step executor configuration.
+        agent: The underlying agent instance. If not provided, one is created
+            from the configuration.
+    """
+
     configuration: StepExecutorConfiguration = field(default_factory=StepExecutorConfiguration)
     agent: StepExecutionAgent | None = None
     token_encoding: tiktoken.Encoding = field(init=False)
@@ -450,6 +458,13 @@ class AgentStepExecutor:
         agent: StepExecutionAgent,
         configuration: StepExecutorConfiguration | None = None,
     ) -> AgentStepExecutor:
+        """Create an executor wrapping an existing agent.
+
+        Args:
+            agent: A pre-configured agent to use for step execution.
+            configuration: Optional configuration. Defaults to
+                StepExecutorConfiguration().
+        """
         resolved_configuration = configuration if configuration is not None else StepExecutorConfiguration()
         return cls(configuration=resolved_configuration, agent=agent)
 
@@ -459,6 +474,7 @@ class AgentStepExecutor:
         *,
         configuration: StepExecutorConfiguration,
     ) -> AgentStepExecutor:
+        """Create an executor from a configuration, building a managed agent internally."""
         return cls(configuration=configuration)
 
     async def _run_agent(
