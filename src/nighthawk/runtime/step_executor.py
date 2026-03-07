@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import functools
 import inspect
+import logging
 import re
 from dataclasses import dataclass, field
 from string import Template
 from typing import Any, Awaitable, Callable, Iterable, Protocol, TypeAliasType, cast
 
-import logfire
 import tiktoken
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, StructuredDict
@@ -248,7 +248,7 @@ def _render_reference_and_value_list_section(
                 log_attributes[SCOPE_ID] = execution_context.scope_id
             except Exception:
                 pass
-            logfire.info("nighthawk.prompt_context_truncated", **log_attributes)
+            logging.getLogger("nighthawk").info("prompt_context_truncated %s", log_attributes)
 
     return "\n".join(lines)
 

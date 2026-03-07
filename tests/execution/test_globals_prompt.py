@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import builtins
+import logging
 
 import nighthawk as nh
-import nighthawk.runtime.step_executor as step_executor_module
 from nighthawk.runtime.step_executor import build_user_prompt
 from tests.execution.prompt_test_helpers import build_step_context, build_user_prompt_text, globals_section, locals_section
 
@@ -172,12 +172,18 @@ def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("Agent should not be invoked by build_user_prompt")
 
-    seen_log_record_list: list[tuple[str, dict[str, object]]] = []
+    seen_log_record_list: list[logging.LogRecord] = []
 
-    def fake_info(message_template: str, /, **attributes):  # type: ignore[no-untyped-def]
-        seen_log_record_list.append((message_template, dict(attributes)))
+    class _Handler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen_log_record_list.append(record)
 
-    monkeypatch.setattr(step_executor_module.logfire, "info", fake_info)
+    logger = logging.getLogger("nighthawk")
+    handler = _Handler()
+    logger.addHandler(handler)
+    original_level = logger.level
+    logger.setLevel(logging.DEBUG)
+    monkeypatch.setattr(logger, "level", logging.DEBUG)
 
     step_context = build_step_context(
         python_globals={"__builtins__": builtins},
@@ -204,13 +210,16 @@ def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
             configuration=configuration,
         )
 
+    logger.removeHandler(handler)
+    logger.setLevel(original_level)
+
     locals_text = locals_section(prompt)
     assert "<snipped>" in locals_text
 
-    truncation_log_record_list = [record for record in seen_log_record_list if record[0] == "nighthawk.prompt_context_truncated"]
+    truncation_log_record_list = [record for record in seen_log_record_list if "prompt_context_truncated" in record.getMessage()]
     assert len(truncation_log_record_list) == 1
-    log_attributes = truncation_log_record_list[0][1]
-    assert log_attributes["nighthawk.prompt_context.section"] == "locals"
-    assert log_attributes["nighthawk.prompt_context.reason"] == "token_limit"
-    assert log_attributes["nighthawk.prompt_context.max_tokens"] == 10
-    assert log_attributes["step.id"] == "test"
+    message = truncation_log_record_list[0].getMessage()
+    assert "'nighthawk.prompt_context.section': 'locals'" in message
+    assert "'nighthawk.prompt_context.reason': 'token_limit'" in message
+    assert "'nighthawk.prompt_context.max_tokens': 10" in message
+    assert "'step.id': 'test'" in message

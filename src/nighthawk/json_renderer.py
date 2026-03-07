@@ -206,5 +206,3 @@ def _render_compact_json(value: JsonableValue) -> str:
 
 def count_tokens(text: str, encoding: tiktoken.Encoding) -> int:
     return len(encoding.encode(text))
-
-

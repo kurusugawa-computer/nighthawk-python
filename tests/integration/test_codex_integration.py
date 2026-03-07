@@ -142,7 +142,7 @@ def test_codex_skill_calc() -> None:
             ---
             deny: [pass, raise]
             ---
-            Execute the `test` skill and set <:result> to the output.
+            Execute the `test` skill.
             """
 
             return result

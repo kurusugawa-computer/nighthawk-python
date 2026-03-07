@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import ast
 import inspect
+import logging
 import textwrap
 from functools import wraps
 from typing import Any, Awaitable, Callable, TypeVar, cast
-
-import logfire
 
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
@@ -94,7 +93,7 @@ def natural_function(func: F | None = None) -> F:
                 break
         ast.increment_lineno(original_module, starting_line_number - 1)
     except Exception as exception:
-        logfire.warn("Failed to parse original module AST for {function_name}", function_name=func.__name__, exception=str(exception))
+        logging.getLogger("nighthawk").warning("Failed to parse original module AST for %s: %s", func.__name__, exception)
         original_module = ast.Module(body=[], type_ignores=[])
 
     def extract_inline_fstring_name_set(func_source: str, *, function_name: str) -> set[str]:
@@ -146,7 +145,7 @@ def natural_function(func: F | None = None) -> F:
 
         capture_name_set.update(extract_inline_fstring_name_set(source, function_name=func.__name__))
     except Exception as exception:
-        logfire.warn("Failed to extract capture names for {function_name}", function_name=func.__name__, exception=str(exception))
+        logging.getLogger("nighthawk").warning("Failed to extract capture names for %s: %s", func.__name__, exception)
         capture_name_set = set()
 
     definition_frame = inspect.currentframe()

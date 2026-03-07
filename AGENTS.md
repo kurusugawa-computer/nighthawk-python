@@ -15,9 +15,7 @@ This file provides repository-specific guidance for coding agents and human cont
 - Avoid premature abstraction: Do not add classes/parameters/utilities for hypothetical reuse; any new abstraction must be used by code in `src/` or `tests/` in the same change (docs examples do not count).
 - Keep identifiers module-private until they are clearly used from outside the module in non-test code. Prefer a leading underscore for internal names; only make names public when there is a real external caller, and export intentionally (for example via __all__).
 - Pydantic-first dependencies: The core library may depend on Pydantic and Pydantic AI as required (non-optional) dependencies.
-- Observability-first dependencies: Prefer `logfire` for tracing and structured observability.
-  - `logfire` is a first-class, non-optional dependency for the core library (same priority as Pydantic/PydanticAI).
-  - Use `logfire.span(...)` for run/scope/step/tool boundaries; do not add other tracing frameworks without explicit approval.
+- Observability: Use OpenTelemetry standard API (`opentelemetry.trace`) for span instrumentation at run/scope/step/tool boundaries. Use Python standard `logging` (logger name `"nighthawk"`) for diagnostic messages (warnings, info). Do not import `logfire` in library code under `src/`; `logfire` is a dev-only dependency for integration tests.
 - Prefer built-ins over reimplementation: Use `pydantic.BaseModel` and built-in features from Pydantic and Pydantic AI aggressively. Avoid re-implementing functionality that either library already provides (e.g., validation, coercion, parsing, schema/serialization, agent/tool abstractions).
 - Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
   - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.

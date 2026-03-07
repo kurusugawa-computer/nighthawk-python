@@ -47,7 +47,6 @@ $globals
 """
 
 
-
 def _validate_model_identifier(model: str) -> str:
     parts = model.split(":")
     if len(parts) != 2 or not parts[0] or not parts[1]:

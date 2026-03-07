@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Iterator
 
-import logfire
+from opentelemetry.trace import get_tracer_provider
 
 from ..configuration import StepExecutorConfiguration, StepExecutorConfigurationPatch
 from ..errors import NighthawkError
@@ -27,9 +27,12 @@ STEP_ID = "step.id"
 TOOL_CALL_ID = "tool_call.id"
 
 
+_tracer = get_tracer_provider().get_tracer("nighthawk")
+
+
 @contextmanager
 def span(span_name: str, /, **attributes: Any) -> Iterator[None]:
-    with logfire.span(span_name, **attributes):
+    with _tracer.start_as_current_span(span_name, attributes=attributes):
         yield
 
 
