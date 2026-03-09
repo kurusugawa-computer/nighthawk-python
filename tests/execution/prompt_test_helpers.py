@@ -33,6 +33,7 @@ def build_step_context(*, python_globals: dict[str, object], python_locals: dict
         step_globals=python_globals,
         step_locals=python_locals,
         binding_commit_targets=set(),
+        read_binding_names=frozenset(),
     )
 
 

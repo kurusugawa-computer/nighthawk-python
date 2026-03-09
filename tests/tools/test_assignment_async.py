@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.tools.assignment import assign_tool_async, eval_expression_async
+from nighthawk.tools.assignment import assign_tool, assign_tool_async, eval_expression_async
+from nighthawk.tools.contracts import ToolBoundaryFailure
 
 
 def _new_step_context() -> StepContext:
@@ -12,6 +15,7 @@ def _new_step_context() -> StepContext:
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),
+        read_binding_names=frozenset(),
     )
 
 
@@ -48,3 +52,50 @@ def test_assign_tool_async_assigns_awaited_result() -> None:
 
     assert update["updates"][0]["value"] == 17
     assert step_context.step_locals["result"] == 17
+
+
+def test_assign_rejects_rebind_of_read_binding() -> None:
+    step_context = StepContext(
+        step_id="test_read_guard",
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"data": {"key": "old"}},
+        binding_commit_targets=set(),
+        read_binding_names=frozenset({"data"}),
+    )
+
+    with pytest.raises(ToolBoundaryFailure):
+        assign_tool(step_context, "data", "{'key': 'new'}")
+
+    assert step_context.step_locals["data"] == {"key": "old"}
+
+
+def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
+    step_context = StepContext(
+        step_id="test_read_write",
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"data": {"key": "old"}},
+        binding_commit_targets={"data"},
+        read_binding_names=frozenset(),
+    )
+
+    result = assign_tool(step_context, "data", "{'key': 'new'}")
+
+    assert result["updates"][0]["value"] == {"key": "new"}
+    assert step_context.step_locals["data"] == {"key": "new"}
+    assert "data" in step_context.assigned_binding_names
+
+
+def test_assign_allows_multiple_rebinds_of_new_local() -> None:
+    step_context = StepContext(
+        step_id="test_new_local",
+        step_globals={"__builtins__": __builtins__},
+        step_locals={},
+        binding_commit_targets=set(),
+        read_binding_names=frozenset(),
+    )
+
+    assign_tool(step_context, "temp", "1")
+    assert step_context.step_locals["temp"] == 1
+
+    assign_tool(step_context, "temp", "2")
+    assert step_context.step_locals["temp"] == 2

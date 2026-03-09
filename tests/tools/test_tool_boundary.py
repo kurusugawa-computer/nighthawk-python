@@ -33,6 +33,7 @@ def _new_step_context() -> StepContext:
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),
+        read_binding_names=frozenset(),
     )
 
 

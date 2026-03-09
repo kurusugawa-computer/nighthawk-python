@@ -52,7 +52,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                     nh_assign,
                     name="nh_assign",
                     metadata=metadata,
-                    description="Rebind a name or nested field to a new value. target_path format: name(.field)*.",
+                    description="Rebind a name or set a nested field to a new value. target_path format: name(.field)*.",
                 ),
             ),
         ),

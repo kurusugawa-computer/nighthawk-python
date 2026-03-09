@@ -25,6 +25,7 @@ class StepContext:
     step_locals: dict[str, object]
 
     binding_commit_targets: set[str]
+    read_binding_names: frozenset[str]
 
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 

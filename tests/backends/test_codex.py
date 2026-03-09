@@ -299,6 +299,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             step_globals={"__builtins__": __builtins__},
             step_locals={},
             binding_commit_targets=set(),
+            read_binding_names=frozenset(),
         )
 
         from typing import cast

@@ -232,11 +232,14 @@ class Runner:
         if tool_result_rendering_policy is not None and not isinstance(tool_result_rendering_policy, ToolResultRenderingPolicy):
             raise ExecutionError("Step executor tool_result_rendering_policy must be ToolResultRenderingPolicy when provided")
 
+        read_binding_names = frozenset(input_binding_names) - binding_commit_targets
+
         step_context = StepContext(
             step_id=str(uuid.uuid4()),
             step_globals=step_globals,
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
+            read_binding_names=read_binding_names,
             binding_name_to_type=binding_name_to_type,
             tool_result_rendering_policy=tool_result_rendering_policy,
         )

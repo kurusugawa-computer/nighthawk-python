@@ -99,6 +99,13 @@ def _assign_value_to_target_path(
 ) -> dict[str, Any]:
     if len(parsed_target_path) == 1:
         name = parsed_target_path[0]
+
+        if name in step_context.read_binding_names:
+            _raise_invalid_input(
+                message=f"Cannot rebind read binding '{name}' with nh_assign.",
+                guidance=f"'{name}' is a read binding (<{name}>). To mutate it in-place, use nh_exec (e.g. {name}.update(...)). To rebind, declare it as a write binding (<:{name}>).",
+            )
+
         expected_type = step_context.binding_name_to_type.get(name)
 
         if expected_type is not None:
