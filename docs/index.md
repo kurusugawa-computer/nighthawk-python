@@ -14,7 +14,8 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 ## Documentation
 
 - **[Quickstart](quickstart.md)** — Setup, first example, backends, credentials.
-- **[Manual](manual.md)** — Patterns and techniques for Natural blocks.
+- **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
+- **[Providers](providers.md)** — LLM providers and configuration.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
 - **[Roadmap](roadmap.md)** — Future directions.
@@ -138,7 +139,7 @@ Interpolation:
 - Natural blocks are literal by default.
 - Interpolation is opt-in via inline f-string Natural blocks only (standalone f-string expression statements).
 - Docstring Natural blocks are always literal.
-- See [Manual Section 4](manual.md#4-f-string-injection) for details on f-string injection, brace escaping, and usage guidance.
+- See [Tutorial Section 2](tutorial.md#2-providing-data-to-a-block) for details on f-string injection, brace escaping, and usage guidance.
 
 ## References
 

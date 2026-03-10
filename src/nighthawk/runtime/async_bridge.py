@@ -4,7 +4,8 @@ import asyncio
 import contextvars
 import inspect
 import threading
-from typing import Any, Awaitable, Callable, Coroutine, cast
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import Any, cast
 
 
 def run_coroutine_synchronously(coroutine_call: Callable[[], Coroutine[Any, Any, Any]]) -> Any:
@@ -43,7 +44,7 @@ def run_awaitable_value_synchronously(value: object) -> object:
 
     typed_awaitable_value = cast(Awaitable[Any], value)
 
-    async def run_awaitable() -> Any:
+    async def _await_value() -> Any:
         return await typed_awaitable_value
 
-    return run_coroutine_synchronously(lambda: cast(Coroutine[Any, Any, Any], run_awaitable()))
+    return run_coroutine_synchronously(_await_value)

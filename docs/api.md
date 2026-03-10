@@ -33,6 +33,10 @@
 
 ## Backends
 
+### Base
+
+::: nighthawk.backends.base
+
 ### Claude Code
 
 ::: nighthawk.backends.claude_code
@@ -40,3 +44,44 @@
 ### Codex
 
 ::: nighthawk.backends.codex
+
+## Step Context
+
+::: nighthawk.runtime.step_context
+    options:
+      members:
+        - StepContext
+        - ToolResultRenderingPolicy
+        - get_current_step_context
+        - step_context_scope
+
+## Tool Contracts
+
+::: nighthawk.tools.contracts
+    options:
+      members:
+        - ToolResult
+        - ToolBoundaryError
+        - Error
+        - ErrorKind
+        - ToolResultWrapperToolset
+
+## Backend Settings
+
+### Codex Settings
+
+::: nighthawk.backends.codex
+    options:
+      members:
+        - CodexModelSettings
+        - SandboxMode
+        - ModelReasoningEffort
+
+### Claude Code Settings
+
+::: nighthawk.backends.claude_code
+    options:
+      members:
+        - ClaudeCodeModelSettings
+        - PermissionMode
+        - SettingSource

@@ -13,9 +13,9 @@ logfire.instrument_pydantic_ai()
 
 
 def test_natural_block_evaluate_order():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
-    run_configuration = nh.StepExecutorConfiguration(model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"))
+    run_configuration = nh.StepExecutorConfiguration(model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"))
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=run_configuration,
     )
@@ -35,10 +35,12 @@ def test_natural_block_evaluate_order():
 
 
 def test_raise_exception():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
+        ),
     )
     with nh.run(step_executor):
 
@@ -53,10 +55,10 @@ def test_raise_exception():
 
 
 def test_condition():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low")),
+        configuration=nh.StepExecutorConfiguration(model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")),
     )
     with nh.run(step_executor):
 
@@ -75,10 +77,12 @@ def test_condition():
 
 @pytest.mark.asyncio
 async def test_async_function_call():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
+        ),
     )
     with nh.run(step_executor):
 
@@ -98,10 +102,12 @@ async def test_async_function_call():
 
 
 def test_multiple_blocks_one_call_scope():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
     with nh.run(step_executor):
@@ -123,54 +129,58 @@ def test_multiple_blocks_one_call_scope():
 
 
 def test_system_prompt_suffix_fragments():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
-    with nh.run(step_executor):
-        with nh.scope(system_prompt_suffix_fragment="Hello suffix"):
+    with nh.run(step_executor), nh.scope(system_prompt_suffix_fragment="Hello suffix"):
 
-            @nh.natural_function
-            def f() -> int:
-                x = 1
-                """natural
+        @nh.natural_function
+        def f() -> int:
+            x = 1
+            """natural
                 Set <:x> to <x> + 10.
                 """
 
-                return x
+            return x
 
-            assert f() == 11
+        assert f() == 11
 
 
 def test_user_prompt_suffix_fragments():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
-    with nh.run(step_executor):
-        with nh.scope(user_prompt_suffix_fragment="Hello suffix"):
+    with nh.run(step_executor), nh.scope(user_prompt_suffix_fragment="Hello suffix"):
 
-            @nh.natural_function
-            def f() -> int:
-                x = 1
-                """natural
+        @nh.natural_function
+        def f() -> int:
+            x = 1
+            """natural
                 Set <:x> to <x> + 10.
                 """
 
-                return x
+            return x
 
-            assert f() == 11
+        assert f() == 11
 
 
 def test_tool_visibility_scopes():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
     with nh.run(step_executor):
@@ -180,24 +190,25 @@ def test_tool_visibility_scopes():
             _ = run_context
             return "hello"
 
-        with nh.scope():
-            with nh.scope():
+        with nh.scope(), nh.scope():
 
-                @nh.natural_function
-                def f() -> str:
-                    """natural
-                    Call hello.
-                    """
-                    return ""
+            @nh.natural_function
+            def f() -> str:
+                """natural
+                Call hello.
+                """
+                return ""
 
-                f()
+            f()
 
 
 def test_provided_tools_smoke():
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
     with nh.run(step_executor):
@@ -218,10 +229,12 @@ def test_provided_tools_smoke():
 
 
 def test_session_isolation(tmp_path):
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
     with nh.run(step_executor):
@@ -245,10 +258,12 @@ def test_session_isolation(tmp_path):
 
 
 def test_provided_tools_do_not_leak_into_outer_scope(tmp_path):
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini", model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="minimal")),
+        configuration=nh.StepExecutorConfiguration(
+            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+        ),
     )
 
     with nh.run(step_executor):

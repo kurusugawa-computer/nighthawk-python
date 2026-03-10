@@ -74,48 +74,48 @@ def test_parse_codex_jsonl_lines_fails_closed_on_stream_error_event() -> None:
 
 def test_get_codex_model_settings_default_sandbox_mode_is_none() -> None:
     settings = _get_codex_model_settings(None)
-    assert settings.get("sandbox_mode") is None
+    assert settings.sandbox_mode is None
 
 
 def test_get_codex_model_settings_default_model_reasoning_effort_is_none() -> None:
     settings = _get_codex_model_settings(None)
-    assert settings.get("model_reasoning_effort") is None
+    assert settings.model_reasoning_effort is None
 
 
 def test_get_codex_model_settings_accepts_none_sandbox_mode() -> None:
     model_settings = cast(ModelSettings, {"sandbox_mode": None})
     settings = _get_codex_model_settings(model_settings)
-    assert settings.get("sandbox_mode") is None
+    assert settings.sandbox_mode is None
 
 
 def test_get_codex_model_settings_accepts_none_model_reasoning_effort() -> None:
     model_settings = cast(ModelSettings, {"model_reasoning_effort": None})
     settings = _get_codex_model_settings(model_settings)
-    assert settings.get("model_reasoning_effort") is None
+    assert settings.model_reasoning_effort is None
 
 
 def test_get_codex_model_settings_accepts_model_reasoning_effort() -> None:
     model_settings = cast(ModelSettings, {"model_reasoning_effort": "high"})
     settings = _get_codex_model_settings(model_settings)
-    assert settings.get("model_reasoning_effort") == "high"
+    assert settings.model_reasoning_effort == "high"
 
 
 def test_get_codex_model_settings_uses_default_when_sandbox_mode_key_is_omitted() -> None:
     model_settings = cast(ModelSettings, {"codex_executable": "codex"})
     settings = _get_codex_model_settings(model_settings)
-    assert settings.get("sandbox_mode") is None
-    assert settings.get("model_reasoning_effort") is None
+    assert settings.sandbox_mode is None
+    assert settings.model_reasoning_effort is None
 
 
 def test_get_codex_model_settings_rejects_invalid_sandbox_mode() -> None:
     model_settings = cast(ModelSettings, {"sandbox_mode": "invalid-mode"})
-    with pytest.raises(UserError, match="sandbox_mode must be one of"):
+    with pytest.raises(UserError, match="sandbox_mode"):
         _get_codex_model_settings(model_settings)
 
 
 def test_get_codex_model_settings_rejects_invalid_model_reasoning_effort() -> None:
     model_settings = cast(ModelSettings, {"model_reasoning_effort": "extreme"})
-    with pytest.raises(UserError, match="model_reasoning_effort must be one of"):
+    with pytest.raises(UserError, match="model_reasoning_effort"):
         _get_codex_model_settings(model_settings)
 
 

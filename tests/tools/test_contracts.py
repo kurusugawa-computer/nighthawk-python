@@ -7,7 +7,7 @@ import tiktoken
 
 from nighthawk.json_renderer import JsonRendererStyle
 from nighthawk.tools import contracts
-from nighthawk.tools.contracts import tool_result_failure_json_text, tool_result_success_json_text
+from nighthawk.tools.contracts import render_tool_result_json_text
 
 _encoding = tiktoken.get_encoding("o200k_base")
 _style: JsonRendererStyle = "strict"
@@ -15,7 +15,7 @@ _budget = 2_000
 
 
 def test_tool_result_success_is_valid_json_and_has_expected_shape() -> None:
-    text = tool_result_success_json_text(value={"a": 1}, max_tokens=_budget, encoding=_encoding, style=_style)
+    text = render_tool_result_json_text(value={"a": 1}, error=None, max_tokens=_budget, encoding=_encoding, style=_style)
     payload = json.loads(text)
 
     assert payload["value"] == {"a": 1}
@@ -23,7 +23,13 @@ def test_tool_result_success_is_valid_json_and_has_expected_shape() -> None:
 
 
 def test_tool_result_failure_is_valid_json_and_has_expected_shape() -> None:
-    text = tool_result_failure_json_text(kind="execution", message="nope", guidance="retry", max_tokens=_budget, encoding=_encoding, style=_style)
+    text = render_tool_result_json_text(
+        value=None,
+        error={"kind": "execution", "message": "nope", "guidance": "retry"},
+        max_tokens=_budget,
+        encoding=_encoding,
+        style=_style,
+    )
     payload = json.loads(text)
 
     assert payload["value"] is None
@@ -38,7 +44,7 @@ def test_tool_result_success_never_raises_for_unknown_value() -> None:
     class NotJson:
         pass
 
-    text = tool_result_success_json_text(value=NotJson(), max_tokens=_budget, encoding=_encoding, style=_style)
+    text = render_tool_result_json_text(value=NotJson(), error=None, max_tokens=_budget, encoding=_encoding, style=_style)
     payload = json.loads(text)
 
     assert payload["error"] is None

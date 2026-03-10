@@ -47,7 +47,9 @@ def test_globals_selection_escaping_and_omission(tmp_path) -> None:
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent())):
         prompt = build_user_prompt_text(
-            processed_natural_program=("Use <module.attr>.\nDo not select \\u005c<module.attr>.\nAlso mention <module.missing>.\n").encode("utf-8").decode("unicode_escape"),
+            processed_natural_program=(b"Use <module.attr>.\nDo not select \\u005c<module.attr>.\nAlso mention <module.missing>.\n").decode(
+                "unicode_escape"
+            ),
             step_context=step_context,
         )
 

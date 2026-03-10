@@ -1,7 +1,7 @@
 [project]
 name = "nighthawk"
 version = "0.1.0"
-description = "Compact reimplementation of nightjarpy-like Natural blocks in Python."
+description = "An experimental Python library that embeds Natural blocks inside Python functions and executes them using an LLM."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -48,10 +48,10 @@ packages = ["src/nighthawk"]
 
 [tool.ruff]
 target-version = "py313"
-line-length = 320
+line-length = 150
 
 [tool.ruff.lint]
-extend-select = ["I"]
+extend-select = ["I", "UP", "B", "SIM", "N"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nighthawk"]

@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
-import socket
 import tempfile
-import threading
-import time
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
-from contextvars import copy_context
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Literal, TypedDict, cast
+from typing import IO, Any, Literal, TypedDict
 
-import tiktoken
-from opentelemetry import context as otel_context
-from pydantic_ai import RunContext
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -23,13 +16,11 @@ from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.profiles import InlineDefsJsonSchemaTransformer, ModelProfile
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
 from pydantic_ai.settings import ModelSettings
-from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
 
-from ..runtime.step_context import StepContext, ToolResultRenderingPolicy
-from ..tools.mcp_boundary import call_tool_for_low_level_mcp_server
 from ..tools.registry import get_visible_tools
 from .base import BackendModelBase
+from .mcp_server import mcp_server_if_needed
 
 
 class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
@@ -50,7 +41,7 @@ type SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
 type ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 
 
-class CodexModelSettings(TypedDict, total=False):
+class CodexModelSettings(BaseModel):
     """Settings for the Codex backend.
 
     Attributes:
@@ -61,75 +52,36 @@ class CodexModelSettings(TypedDict, total=False):
         working_directory: Absolute path to the working directory for Codex.
     """
 
-    allowed_tool_names: tuple[str, ...] | None
-    codex_executable: str
-    model_reasoning_effort: ModelReasoningEffort | None
-    sandbox_mode: SandboxMode | None
-    working_directory: str
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_tool_names: tuple[str, ...] | None = None
+    codex_executable: str = "codex"
+    model_reasoning_effort: ModelReasoningEffort | None = None
+    sandbox_mode: SandboxMode | None = None
+    working_directory: str = ""
+
+    @field_validator("codex_executable")
+    @classmethod
+    def _validate_codex_executable(cls, value: str) -> str:
+        if value.strip() == "":
+            raise ValueError("codex_executable must be a non-empty string")
+        return value
+
+    @field_validator("working_directory")
+    @classmethod
+    def _validate_working_directory(cls, value: str) -> str:
+        if value and not Path(value).is_absolute():
+            raise ValueError("working_directory must be an absolute path")
+        return value
 
 
 def _get_codex_model_settings(model_settings: ModelSettings | None) -> CodexModelSettings:
-    default_settings: CodexModelSettings = {
-        "allowed_tool_names": None,
-        "codex_executable": "codex",
-        "model_reasoning_effort": None,
-        "sandbox_mode": None,
-        "working_directory": "",
-    }
     if model_settings is None:
-        return default_settings
-
-    allowed_tool_names_value = model_settings.get("allowed_tool_names")
-    if allowed_tool_names_value is None:
-        allowed_tool_names = None
-    else:
-        if not isinstance(allowed_tool_names_value, (list, tuple)) or not all(isinstance(name, str) for name in allowed_tool_names_value):
-            raise UserError("allowed_tool_names must be a list[str], tuple[str, ...], or None")
-        allowed_tool_names = tuple(allowed_tool_names_value)
-
-    codex_executable_value = model_settings.get("codex_executable")
-    if codex_executable_value is None:
-        codex_executable = "codex"
-    else:
-        if not isinstance(codex_executable_value, str) or codex_executable_value.strip() == "":
-            raise UserError("codex_executable must be a non-empty string")
-        codex_executable = codex_executable_value
-
-    sandbox_mode_value = model_settings.get("sandbox_mode")
-    if sandbox_mode_value is None:
-        sandbox_mode: SandboxMode | None = None
-    else:
-        allowed_sandbox_modes: tuple[SandboxMode, ...] = ("read-only", "workspace-write", "danger-full-access")
-        if sandbox_mode_value not in allowed_sandbox_modes:
-            raise UserError("sandbox_mode must be one of: 'read-only', 'workspace-write', 'danger-full-access', or None")
-        sandbox_mode = sandbox_mode_value
-
-    model_reasoning_effort_value = model_settings.get("model_reasoning_effort")
-    if model_reasoning_effort_value is None:
-        model_reasoning_effort: ModelReasoningEffort | None = None
-    else:
-        allowed_model_reasoning_efforts: tuple[ModelReasoningEffort, ...] = ("minimal", "low", "medium", "high", "xhigh")
-        if model_reasoning_effort_value not in allowed_model_reasoning_efforts:
-            raise UserError("model_reasoning_effort must be one of: 'minimal', 'low', 'medium', 'high', 'xhigh', or None")
-        model_reasoning_effort = model_reasoning_effort_value
-
-    working_directory_value = model_settings.get("working_directory")
-    if working_directory_value is None:
-        working_directory = ""
-    else:
-        if not isinstance(working_directory_value, str) or working_directory_value.strip() == "":
-            raise UserError("working_directory must be a non-empty string")
-        if not Path(working_directory_value).is_absolute():
-            raise UserError("working_directory must be an absolute path")
-        working_directory = working_directory_value
-
-    return {
-        "allowed_tool_names": allowed_tool_names,
-        "codex_executable": codex_executable,
-        "model_reasoning_effort": model_reasoning_effort,
-        "sandbox_mode": sandbox_mode,
-        "working_directory": working_directory,
-    }
+        return CodexModelSettings()
+    try:
+        return CodexModelSettings.model_validate(model_settings)
+    except Exception as exception:
+        raise UserError(str(exception)) from exception
 
 
 class _CodexTurnOutcome(TypedDict):
@@ -138,7 +90,7 @@ class _CodexTurnOutcome(TypedDict):
     usage: RequestUsage
 
 
-def _toml_value_text(value: object) -> str:
+def _render_toml_value_text(value: object) -> str:
     # Codex CLI accepts `--config key=value` where values are TOML literals.
     # Using JSON serialization for strings/arrays produces TOML-compatible literals for the cases we need here.
     if isinstance(value, str):
@@ -157,159 +109,8 @@ def _toml_value_text(value: object) -> str:
 def _build_codex_config_arguments(configuration_overrides: dict[str, object]) -> list[str]:
     arguments: list[str] = []
     for key, value in configuration_overrides.items():
-        arguments.extend(["--config", f"{key}={_toml_value_text(value)}"])
+        arguments.extend(["--config", f"{key}={_render_toml_value_text(value)}"])
     return arguments
-
-
-class _McpToolServer:
-    def __init__(
-        self,
-        *,
-        tool_name_to_tool_definition: dict[str, ToolDefinition],
-        tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
-        tool_result_rendering_policy: ToolResultRenderingPolicy,
-        parent_otel_context: Any,
-    ) -> None:
-        self._tool_name_to_tool_definition = tool_name_to_tool_definition
-        self._tool_name_to_handler = tool_name_to_handler
-        self._tool_result_rendering_policy = tool_result_rendering_policy
-        self._parent_otel_context = parent_otel_context
-
-        self._server: Any | None = None
-        self._server_thread: threading.Thread | None = None
-        self._listening_socket: socket.socket | None = None
-        self._url: str | None = None
-
-    @property
-    def url(self) -> str:
-        if self._url is None:
-            raise RuntimeError("MCP tool server is not started")
-        return self._url
-
-    def start(self) -> None:
-        if self._server_thread is not None:
-            raise RuntimeError("MCP tool server is already started")
-
-        import uvicorn
-        from mcp.server.fastmcp.server import StreamableHTTPASGIApp
-        from mcp.server.lowlevel.server import Server as McpLowLevelServer
-        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-        from starlette.applications import Starlette
-        from starlette.routing import Route
-
-        mcp_server = McpLowLevelServer("nighthawk")
-
-        @mcp_server.list_tools()
-        async def list_tools() -> list[Any]:
-            from mcp import types as mcp_types
-
-            tools: list[mcp_types.Tool] = []
-            for tool_name in sorted(self._tool_name_to_handler.keys()):
-                tool_definition = self._tool_name_to_tool_definition.get(tool_name)
-                if tool_definition is None:
-                    raise RuntimeError(f"Tool definition missing for {tool_name!r}")
-
-                tools.append(
-                    mcp_types.Tool(
-                        name=tool_name,
-                        description=tool_definition.description or "",
-                        inputSchema=tool_definition.parameters_json_schema,
-                    )
-                )
-            return tools
-
-        @mcp_server.call_tool(validate_input=False)
-        async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
-            from mcp import types as mcp_types
-
-            from ..tools.contracts import tool_result_failure_json_text
-
-            handler = self._tool_name_to_handler.get(name)
-            if handler is None:
-                tool_result_rendering_policy = self._tool_result_rendering_policy
-                result_text = tool_result_failure_json_text(
-                    kind="resolution",
-                    message=f"Unknown tool: {name}",
-                    guidance="Choose a visible tool name and retry.",
-                    max_tokens=tool_result_rendering_policy.tool_result_max_tokens,
-                    encoding=tiktoken.get_encoding(tool_result_rendering_policy.tokenizer_encoding_name),
-                    style=tool_result_rendering_policy.json_renderer_style,
-                )
-                return [mcp_types.TextContent(type="text", text=result_text)]
-
-            return await call_tool_for_low_level_mcp_server(
-                tool_name=name,
-                arguments=arguments,
-                tool_handler=handler,
-                parent_otel_context=self._parent_otel_context,
-            )
-
-        session_manager = StreamableHTTPSessionManager(app=mcp_server)
-        streamable_http_asgi = StreamableHTTPASGIApp(session_manager)
-
-        starlette_application = Starlette(
-            routes=[Route("/mcp", endpoint=streamable_http_asgi)],
-            lifespan=lambda _app: session_manager.run(),
-        )
-
-        listening_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listening_socket.bind(("127.0.0.1", 0))
-        listening_socket.listen(128)
-        host, port = listening_socket.getsockname()
-
-        configuration = uvicorn.Config(
-            starlette_application,
-            host=str(host),
-            port=int(port),
-            log_level="warning",
-            lifespan="on",
-        )
-        server = uvicorn.Server(configuration)
-
-        def run_server() -> None:
-            server.run(sockets=[listening_socket])
-
-        context = copy_context()
-        server_thread = threading.Thread(target=context.run, args=(run_server,), name="nighthawk-mcp-server", daemon=True)
-        server_thread.start()
-
-        self._server = server
-        self._server_thread = server_thread
-        self._listening_socket = listening_socket
-        self._url = f"http://127.0.0.1:{port}/mcp"
-
-    async def stop(self) -> None:
-        if self._server is None or self._server_thread is None:
-            return
-
-        self._server.should_exit = True
-        await asyncio.to_thread(self._server_thread.join, 5)
-
-        if self._listening_socket is not None:
-            try:
-                self._listening_socket.close()
-            except Exception:
-                pass
-
-        self._server = None
-        self._server_thread = None
-        self._listening_socket = None
-        self._url = None
-
-
-async def _wait_for_tcp_listen(host: str, port: int, *, timeout_seconds: float) -> None:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        try:
-            reader, writer = await asyncio.open_connection(host, port)
-        except OSError:
-            await asyncio.sleep(0.01)
-            continue
-        else:
-            writer.close()
-            await writer.wait_closed()
-            return
-    raise UnexpectedModelBehavior("Timed out waiting for MCP tool server to start")
 
 
 def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
@@ -352,13 +153,10 @@ def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
                 raise UnexpectedModelBehavior(str(error_value.get("message")))
             raise UnexpectedModelBehavior("Codex CLI reported a failed turn")
         elif event_type == "error":
+            # Codex CLI can emit transient reconnect progress as `error` events.
+            # Preserve the latest message and only fail if no usable response is produced.
             message_value = event.get("message")
-            if isinstance(message_value, str):
-                # Codex CLI can emit transient reconnect progress as `error` events.
-                # Preserve the latest message and only fail if no usable response is produced.
-                most_recent_stream_error_message = message_value
-            else:
-                most_recent_stream_error_message = "Codex CLI reported a stream error"
+            most_recent_stream_error_message = message_value if isinstance(message_value, str) else "Codex CLI reported a stream error"
         elif event_type == "item.completed":
             item_value = event.get("item")
             if isinstance(item_value, dict) and item_value.get("type") == "agent_message":
@@ -376,48 +174,6 @@ def _parse_codex_jsonl_lines(jsonl_lines: list[str]) -> _CodexTurnOutcome:
         "thread_id": thread_id,
         "usage": usage,
     }
-
-
-@asynccontextmanager
-async def _mcp_tool_server_if_needed(
-    *,
-    tool_name_to_tool_definition: dict[str, ToolDefinition],
-    tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
-) -> AsyncIterator[str | None]:
-    if not tool_name_to_handler:
-        yield None
-        return
-
-    from pydantic_ai._run_context import get_current_run_context
-
-    parent_otel_context = otel_context.get_current()
-    parent_run_context = get_current_run_context()
-    if parent_run_context is None:
-        raise RuntimeError("Codex MCP tool server requires an active RunContext")
-    typed_parent_run_context = cast(RunContext[StepContext], parent_run_context)
-    tool_result_rendering_policy = typed_parent_run_context.deps.tool_result_rendering_policy
-    if tool_result_rendering_policy is None:
-        tool_result_rendering_policy = ToolResultRenderingPolicy(
-            tokenizer_encoding_name="o200k_base",
-            tool_result_max_tokens=2_000,
-            json_renderer_style="strict",
-        )
-
-    server = _McpToolServer(
-        tool_name_to_tool_definition=tool_name_to_tool_definition,
-        tool_name_to_handler=tool_name_to_handler,
-        tool_result_rendering_policy=tool_result_rendering_policy,
-        parent_otel_context=parent_otel_context,
-    )
-    server.start()
-
-    try:
-        url = server.url
-        port = int(url.split(":")[2].split("/", 1)[0])
-        await _wait_for_tcp_listen("127.0.0.1", port, timeout_seconds=2.0)
-        yield url
-    finally:
-        await server.stop()
 
 
 class CodexModel(BackendModelBase):
@@ -459,10 +215,10 @@ class CodexModel(BackendModelBase):
             )
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 
-        output_schema_file: tempfile._TemporaryFileWrapper | None = None
+        output_schema_file: IO[str] | None = None
 
         try:
-            _most_recent_request, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
+            _, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
                 messages=messages,
                 model_request_parameters=model_request_parameters,
             )
@@ -474,7 +230,7 @@ class CodexModel(BackendModelBase):
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
-                configured_allowed_tool_names=codex_model_settings.get("allowed_tool_names"),
+                configured_allowed_tool_names=codex_model_settings.allowed_tool_names,
                 visible_tools=get_visible_tools(),
             )
 
@@ -482,10 +238,10 @@ class CodexModel(BackendModelBase):
             if output_object is None:
                 output_schema_file = None
             else:
-                output_schema_file = tempfile.NamedTemporaryFile(mode="wt", encoding="utf-8", prefix="nighthawk-codex-output-schema-", suffix=".json")
+                output_schema_file = tempfile.NamedTemporaryFile(mode="wt", encoding="utf-8", prefix="nighthawk-codex-output-schema-", suffix=".json")  # noqa: SIM115
                 output_schema_file.write(json.dumps(dict(output_object.json_schema)))
                 output_schema_file.flush()
-            async with _mcp_tool_server_if_needed(
+            async with mcp_server_if_needed(
                 tool_name_to_tool_definition=tool_name_to_tool_definition,
                 tool_name_to_handler=tool_name_to_handler,
             ) as mcp_server_url:
@@ -497,17 +253,17 @@ class CodexModel(BackendModelBase):
                 if mcp_server_url is not None:
                     configuration_overrides["mcp_servers.nighthawk.url"] = mcp_server_url
                     configuration_overrides["mcp_servers.nighthawk.enabled_tools"] = list(allowed_tool_names)
-                model_reasoning_effort = codex_model_settings.get("model_reasoning_effort")
+                model_reasoning_effort = codex_model_settings.model_reasoning_effort
                 if model_reasoning_effort is not None:
                     configuration_overrides["model_reasoning_effort"] = model_reasoning_effort
 
                 codex_arguments = [
-                    codex_model_settings.get("codex_executable", "codex"),
+                    codex_model_settings.codex_executable,
                     "exec",
                     "--experimental-json",
                     "--skip-git-repo-check",
                 ]
-                sandbox_mode = codex_model_settings.get("sandbox_mode")
+                sandbox_mode = codex_model_settings.sandbox_mode
                 if sandbox_mode is not None:
                     codex_arguments.extend(["--sandbox", sandbox_mode])
                 codex_arguments.extend(_build_codex_config_arguments(configuration_overrides))
@@ -515,7 +271,7 @@ class CodexModel(BackendModelBase):
                 if output_schema_file is not None:
                     codex_arguments.extend(["--output-schema", output_schema_file.name])
 
-                working_directory = codex_model_settings.get("working_directory") or ""
+                working_directory = codex_model_settings.working_directory
                 if working_directory:
                     codex_arguments.extend(["--cd", working_directory])
 
@@ -525,9 +281,8 @@ class CodexModel(BackendModelBase):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                assert process.stdin is not None
-                assert process.stdout is not None
-                assert process.stderr is not None
+                if process.stdin is None or process.stdout is None or process.stderr is None:
+                    raise UnexpectedModelBehavior("Codex CLI subprocess streams are unexpectedly None")
 
                 process.stdin.write(prompt_text.encode("utf-8"))
                 await process.stdin.drain()
@@ -538,7 +293,8 @@ class CodexModel(BackendModelBase):
                 process_stderr = process.stderr
 
                 async def read_stderr() -> bytes:
-                    assert process_stderr is not None
+                    if process_stderr is None:
+                        return b""
                     return await process_stderr.read()
 
                 stderr_task = asyncio.create_task(read_stderr())
@@ -592,7 +348,5 @@ class CodexModel(BackendModelBase):
             raise UnexpectedModelBehavior("Codex backend failed") from exception
         finally:
             if output_schema_file is not None:
-                try:
+                with contextlib.suppress(Exception):
                     output_schema_file.close()
-                except Exception:
-                    pass

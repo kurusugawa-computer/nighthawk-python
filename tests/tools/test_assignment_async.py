@@ -6,7 +6,7 @@ import pytest
 
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.assignment import assign_tool, assign_tool_async, eval_expression_async
-from nighthawk.tools.contracts import ToolBoundaryFailure
+from nighthawk.tools.contracts import ToolBoundaryError
 
 
 def _new_step_context() -> StepContext:
@@ -63,7 +63,7 @@ def test_assign_rejects_rebind_of_read_binding() -> None:
         read_binding_names=frozenset({"data"}),
     )
 
-    with pytest.raises(ToolBoundaryFailure):
+    with pytest.raises(ToolBoundaryError):
         assign_tool(step_context, "data", "{'key': 'new'}")
 
     assert step_context.step_locals["data"] == {"key": "old"}

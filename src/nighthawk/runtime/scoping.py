@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry.trace import get_tracer_provider
 
 from ..configuration import StepExecutorConfiguration, StepExecutorConfigurationPatch
 from ..errors import NighthawkError
+from ..tools.registry import tool_scope
 
 if TYPE_CHECKING:
     from .step_executor import AgentStepExecutor, StepExecutor
@@ -58,15 +60,14 @@ _execution_context_var: ContextVar[ExecutionContext | None] = ContextVar(
 )
 
 
-@dataclass(frozen=True)
-class _PromptSuffixFragments:
-    system_prompt_suffix_fragments: tuple[str, ...] = ()
-    user_prompt_suffix_fragments: tuple[str, ...] = ()
+_system_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
+    "nighthawk_system_prompt_suffix_fragments",
+    default=(),
+)
 
-
-_prompt_suffix_fragments_var: ContextVar[_PromptSuffixFragments] = ContextVar(
-    "nighthawk_prompt_suffix_fragments",
-    default=_PromptSuffixFragments(),
+_user_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
+    "nighthawk_user_prompt_suffix_fragments",
+    default=(),
 )
 
 
@@ -95,11 +96,11 @@ def get_execution_context() -> ExecutionContext:
 
 
 def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
-    return _prompt_suffix_fragments_var.get().system_prompt_suffix_fragments
+    return _system_prompt_suffix_fragments_var.get()
 
 
 def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
-    return _prompt_suffix_fragments_var.get().user_prompt_suffix_fragments
+    return _user_prompt_suffix_fragments_var.get()
 
 
 def _resolve_agent_step_executor(step_executor: StepExecutor) -> AgentStepExecutor:
@@ -122,7 +123,8 @@ def _replace_step_executor_with_configuration(
     if current_step_executor.agent_is_managed:
         return AgentStepExecutor.from_configuration(configuration=configuration)
 
-    assert current_step_executor.agent is not None
+    if current_step_executor.agent is None:
+        raise NighthawkError("AgentStepExecutor.agent is not initialized")
     return AgentStepExecutor.from_agent(
         agent=current_step_executor.agent,
         configuration=configuration,
@@ -162,12 +164,11 @@ def run(
         scope_id=_generate_id(),
     )
 
-    from ..tools.registry import tool_scope
-
     with tool_scope():
         step_executor_token = _step_executor_var.set(step_executor)
         execution_context_token = _execution_context_var.set(execution_context)
-        prompt_suffix_fragments_token = _prompt_suffix_fragments_var.set(_PromptSuffixFragments())
+        system_fragments_token = _system_prompt_suffix_fragments_var.set(())
+        user_fragments_token = _user_prompt_suffix_fragments_var.set(())
         try:
             with span(
                 "nighthawk.run",
@@ -178,7 +179,8 @@ def run(
             ):
                 yield
         finally:
-            _prompt_suffix_fragments_var.reset(prompt_suffix_fragments_token)
+            _user_prompt_suffix_fragments_var.reset(user_fragments_token)
+            _system_prompt_suffix_fragments_var.reset(system_fragments_token)
             _execution_context_var.reset(execution_context_token)
             _step_executor_var.reset(step_executor_token)
 
@@ -255,33 +257,21 @@ def scope(
         current_execution_context,
         scope_id=_generate_id(),
     )
-    current_prompt_suffix_fragments = _prompt_suffix_fragments_var.get()
-    next_prompt_suffix_fragments = current_prompt_suffix_fragments
+
+    next_system_fragments = _system_prompt_suffix_fragments_var.get()
+    next_user_fragments = _user_prompt_suffix_fragments_var.get()
 
     if system_prompt_suffix_fragment is not None:
-        next_prompt_suffix_fragments = replace(
-            next_prompt_suffix_fragments,
-            system_prompt_suffix_fragments=(
-                *next_prompt_suffix_fragments.system_prompt_suffix_fragments,
-                system_prompt_suffix_fragment,
-            ),
-        )
+        next_system_fragments = (*next_system_fragments, system_prompt_suffix_fragment)
 
     if user_prompt_suffix_fragment is not None:
-        next_prompt_suffix_fragments = replace(
-            next_prompt_suffix_fragments,
-            user_prompt_suffix_fragments=(
-                *next_prompt_suffix_fragments.user_prompt_suffix_fragments,
-                user_prompt_suffix_fragment,
-            ),
-        )
-
-    from ..tools.registry import tool_scope
+        next_user_fragments = (*next_user_fragments, user_prompt_suffix_fragment)
 
     with tool_scope():
         step_executor_token = _step_executor_var.set(next_step_executor)
         execution_context_token = _execution_context_var.set(next_execution_context)
-        prompt_suffix_fragments_token = _prompt_suffix_fragments_var.set(next_prompt_suffix_fragments)
+        system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_fragments)
+        user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_fragments)
         try:
             with span(
                 "nighthawk.scope",
@@ -292,6 +282,7 @@ def scope(
             ):
                 yield next_step_executor
         finally:
-            _prompt_suffix_fragments_var.reset(prompt_suffix_fragments_token)
+            _user_prompt_suffix_fragments_var.reset(user_fragments_token)
+            _system_prompt_suffix_fragments_var.reset(system_fragments_token)
             _execution_context_var.reset(execution_context_token)
             _step_executor_var.reset(step_executor_token)

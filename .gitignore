@@ -1,8 +1,6 @@
 .agents/
 .claude/
 .vscode/
-docs/claude/
-docs/logfire/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

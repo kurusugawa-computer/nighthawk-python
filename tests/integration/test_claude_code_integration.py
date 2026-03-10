@@ -19,7 +19,7 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
         model="claude-code:sonnet",
         model_settings=ClaudeCodeModelSettings(
             working_directory=str(tmp_path.resolve()),
-        ),
+        ).model_dump(),
     )
 
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -62,7 +62,7 @@ def test_claude_skill() -> None:
                 setting_sources=["project"],
                 claude_allowed_tool_names=("Skill", "Bash"),
                 working_directory=str(working_directory.resolve()),
-            ),
+            ).model_dump(),
         )
 
         step_executor = nh.AgentStepExecutor.from_configuration(
@@ -107,7 +107,7 @@ def test_claude_skill_calc() -> None:
             setting_sources=["project"],
             claude_allowed_tool_names=("Skill", "Bash"),
             working_directory=str(working_directory.resolve()),
-        ),
+        ).model_dump(),
     )
 
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -158,7 +158,7 @@ def test_claude_mcp_callback() -> None:
             permission_mode="bypassPermissions",
             setting_sources=["project"],
             claude_allowed_tool_names=("Bash",),
-        ),
+        ).model_dump(),
     )
 
     step_executor = nh.AgentStepExecutor.from_configuration(

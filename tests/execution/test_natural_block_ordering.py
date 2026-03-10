@@ -83,7 +83,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
 def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval() -> None:
     nh.StepExecutorConfiguration()
 
-    GLOBAL_NUMBER = NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER
+    GLOBAL_NUMBER = NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER  # noqa: N806
 
     class FakeRunResult:
         def __init__(self, output: object):
@@ -136,7 +136,7 @@ def test_agent_backend_commits_only_on_assignment() -> None:
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
         from nighthawk.runtime.runner import Runner
 
-        runner = Runner.from_step_executor(nh.get_step_executor())
+        runner = Runner(nh.get_step_executor())
         import inspect
 
         frame = inspect.currentframe()

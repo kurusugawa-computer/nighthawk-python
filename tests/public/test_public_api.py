@@ -73,9 +73,8 @@ def test_scope_keeps_run_id_and_generates_new_scope_id() -> None:
 
 
 def test_scope_requires_existing_step_executor():
-    with pytest.raises(NighthawkError):
-        with nh.scope():
-            pass
+    with pytest.raises(NighthawkError), nh.scope():
+        pass
 
 
 def test_run_configuration_model_default_applies():
@@ -114,7 +113,7 @@ def test_decorated_function_requires_step_executor():
         f"""natural
         <:result>
         {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
-        """
+        """  # noqa: B021
         return result  # type: ignore # noqa: F821
 
     with pytest.raises(NighthawkError):
@@ -127,7 +126,7 @@ def test_async_decorated_function_requires_step_executor():
         f"""natural
         <:result>
         {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
-        """
+        """  # noqa: B021
         return result  # type: ignore # noqa: F821
 
     with pytest.raises(NighthawkError):

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator
+from typing import Any, overload
 
 from pydantic_ai.tools import Tool
 
@@ -19,22 +20,22 @@ class ToolDefinition:
     tool: Tool[StepContext]
 
 
-_builtin_tool_definitions: dict[str, ToolDefinition] = {}
+_builtin_tool_name_to_definition: dict[str, ToolDefinition] = {}
 _builtin_tools_registered = False
 
-_global_tool_definitions: dict[str, ToolDefinition] = {}
+_global_tool_name_to_definition: dict[str, ToolDefinition] = {}
 
-_tool_scope_stack_var: ContextVar[list[dict[str, ToolDefinition]]] = ContextVar(
+_tool_scope_stack_var: ContextVar[tuple[dict[str, ToolDefinition], ...]] = ContextVar(
     "nighthawk_tool_scope_stack",
-    default=[],
+    default=(),
 )
 
-_call_scope_stack_var: ContextVar[list[dict[str, ToolDefinition]]] = ContextVar(
+_call_scope_stack_var: ContextVar[tuple[dict[str, ToolDefinition], ...]] = ContextVar(
     "nighthawk_call_tool_scope_stack",
-    default=[],
+    default=(),
 )
 
-_VALID_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_VALID_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _validate_tool_name(name: str) -> None:
@@ -43,7 +44,7 @@ def _validate_tool_name(name: str) -> None:
     except UnicodeEncodeError as e:
         raise ToolRegistrationError(f"Tool name must be ASCII: {name!r}") from e
 
-    if not _VALID_NAME_RE.fullmatch(name):
+    if not _VALID_NAME_PATTERN.fullmatch(name):
         raise ToolRegistrationError(f"Tool name must match ^[A-Za-z_][A-Za-z0-9_]*$: {name!r}")
 
 
@@ -55,9 +56,9 @@ def ensure_builtin_tools_registered() -> None:
 
     for builtin_definition in build_provided_tool_definitions():
         _validate_tool_name(builtin_definition.name)
-        if builtin_definition.name in _builtin_tool_definitions:
+        if builtin_definition.name in _builtin_tool_name_to_definition:
             raise ToolRegistrationError(f"Duplicate builtin tool name: {builtin_definition.name!r}")
-        _builtin_tool_definitions[builtin_definition.name] = ToolDefinition(
+        _builtin_tool_name_to_definition[builtin_definition.name] = ToolDefinition(
             name=builtin_definition.name,
             tool=builtin_definition.tool,
         )
@@ -68,8 +69,8 @@ def ensure_builtin_tools_registered() -> None:
 def _visible_tool_definitions() -> dict[str, ToolDefinition]:
     ensure_builtin_tools_registered()
 
-    merged: dict[str, ToolDefinition] = dict(_builtin_tool_definitions)
-    merged.update(_global_tool_definitions)
+    merged: dict[str, ToolDefinition] = dict(_builtin_tool_name_to_definition)
+    merged.update(_global_tool_name_to_definition)
 
     for scope in _tool_scope_stack_var.get():
         merged.update(scope)
@@ -91,27 +92,21 @@ def _register_tool_definition(tool_definition: ToolDefinition, *, overwrite: boo
 
     call_scope_stack = _call_scope_stack_var.get()
     if call_scope_stack:
-        current_scope = dict(call_scope_stack[-1])
-        current_scope[name] = tool_definition
-        next_stack = [*call_scope_stack[:-1], current_scope]
-        _call_scope_stack_var.set(next_stack)
+        call_scope_stack[-1][name] = tool_definition
         return
 
     tool_scope_stack = _tool_scope_stack_var.get()
     if tool_scope_stack:
-        current_scope = dict(tool_scope_stack[-1])
-        current_scope[name] = tool_definition
-        next_stack = [*tool_scope_stack[:-1], current_scope]
-        _tool_scope_stack_var.set(next_stack)
+        tool_scope_stack[-1][name] = tool_definition
         return
 
-    _global_tool_definitions[name] = tool_definition
+    _global_tool_name_to_definition[name] = tool_definition
 
 
 @contextmanager
 def tool_scope() -> Iterator[None]:
     current = _tool_scope_stack_var.get()
-    token = _tool_scope_stack_var.set([*current, {}])
+    token = _tool_scope_stack_var.set((*current, {}))
     try:
         yield
     finally:
@@ -121,7 +116,7 @@ def tool_scope() -> Iterator[None]:
 @contextmanager
 def call_scope() -> Iterator[None]:
     current = _call_scope_stack_var.get()
-    token = _call_scope_stack_var.set([*current, {}])
+    token = _call_scope_stack_var.set((*current, {}))
     try:
         yield
     finally:
@@ -137,6 +132,22 @@ def get_visible_tools() -> list[Tool[StepContext]]:
 type ToolFunction = Callable[..., Any]
 
 
+@overload
+def tool(func: ToolFunction, /) -> ToolFunction: ...
+
+
+@overload
+def tool(
+    func: None = None,
+    /,
+    *,
+    name: str | None = None,
+    overwrite: bool = False,
+    description: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Callable[[ToolFunction], ToolFunction]: ...
+
+
 def tool(
     func: ToolFunction | None = None,
     /,
@@ -145,7 +156,7 @@ def tool(
     overwrite: bool = False,
     description: str | None = None,
     metadata: dict[str, Any] | None = None,
-) -> Any:
+) -> ToolFunction | Callable[[ToolFunction], ToolFunction]:
     """Register a Python function as a Nighthawk tool visible to Natural blocks.
 
     Args:
@@ -194,5 +205,8 @@ def tool(
     return decorator
 
 
-def reset_global_tools_for_tests() -> None:
-    _global_tool_definitions.clear()
+def _reset_all_tools_for_tests() -> None:
+    global _builtin_tools_registered
+    _global_tool_name_to_definition.clear()
+    _builtin_tool_name_to_definition.clear()
+    _builtin_tools_registered = False

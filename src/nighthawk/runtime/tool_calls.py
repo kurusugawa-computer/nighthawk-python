@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -62,7 +62,7 @@ def _start_tool_span(
     attributes: dict[str, Any],
     instrumentation_names: InstrumentationNames,
     run_context: RunContext[Any],
-) -> Any:
+) -> Iterator[Any]:
     span_name = instrumentation_names.get_tool_span_name(tool_name)
     with run_context.tracer.start_as_current_span(span_name, attributes=attributes) as span:
         yield span

@@ -121,6 +121,27 @@ This file intentionally does not maintain a persistent divergence ledger.
 - `nighthawk.get_current_step_context() -> StepContext`
   - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
+### 5.5. Backend-specific settings
+
+Backend-specific settings are passed via `model_settings` in `StepExecutorConfiguration`. Each backend validates and applies its own settings.
+
+#### CodexModelSettings (for `codex:*` models)
+
+- `allowed_tool_names`: Nighthawk tool names exposed to the model.
+- `codex_executable`: Path or name of the Codex CLI executable. Default: `"codex"`.
+- `model_reasoning_effort`: Reasoning effort level (`"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`).
+- `sandbox_mode`: Codex sandbox isolation mode (`"read-only"`, `"workspace-write"`, `"danger-full-access"`).
+- `working_directory`: Absolute path to the working directory for Codex.
+
+#### ClaudeCodeModelSettings (for `claude-code:*` models)
+
+- `permission_mode`: Claude Code permission mode (`"default"`, `"acceptEdits"`, `"plan"`, `"bypassPermissions"`). Default: `"default"`.
+- `setting_sources`: Configuration sources to load (`"user"`, `"project"`, `"local"`).
+- `allowed_tool_names`: Nighthawk tool names exposed to the model.
+- `claude_allowed_tool_names`: Additional Claude Code native tool names to allow.
+- `claude_max_turns`: Maximum conversation turns. Default: `50`.
+- `working_directory`: Absolute path to the working directory for Claude Code.
+
 ## 6. Natural block detection
 
 Nighthawk recognizes Natural blocks in two places.
@@ -192,7 +213,7 @@ Constraints:
 Type note:
 
 - Nighthawk extracts type information for `<:name>` bindings from the function source AST at compile time.
-- If no type annotation is found, the type is treated as `Any`.
+- If no type annotation is found, the type is treated as `object`.
 
 Clarifying note (bindings vs tool targets):
 
@@ -300,6 +321,22 @@ User-defined tools:
 
 - The host defines tools using the `@nighthawk.tool` decorator.
 
+Registration API:
+
+- `@nighthawk.tool`: Decorator that registers a callable as a Nighthawk tool.
+  - `name`: Optional name override. Defaults to the function `__name__`.
+  - `overwrite`: If True, replaces any existing tool with the same name.
+  - `description`: Optional description override. Defaults to the function docstring.
+  - `metadata`: Arbitrary metadata dict attached to the tool definition.
+- Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
+- Tool registration targets the innermost active scope (call scope > tool scope > global).
+- Name conflicts raise `ToolRegistrationError` unless `overwrite=True`.
+
+Scoping:
+
+- `nighthawk.run()` and `nighthawk.scope()` each open a nested tool scope.
+- Tools registered inside a scope are visible only within that scope.
+
 Provided tools (built-in):
 
 - Provided tools are always available by default.
@@ -325,6 +362,8 @@ Mutation tool:
 - `nh_exec(expression: str) -> object`
   - Execute a Python expression for its side effect on mutable objects (e.g., `list.append()`, `dict.update()`, `set.add()`).
   - Returns the expression result.
+
+Implementation note: `nh_eval` and `nh_exec` share the same underlying implementation (Python `eval()`). The two-tool split exists as a semantic signal to the LLM (inspect intent vs mutate intent), not a runtime distinction.
 
 Binding tool:
 
@@ -368,6 +407,17 @@ Write tool return value:
   - a bounded summary of the updated value (on success)
   - validation details (when relevant)
   - error details (on failure)
+
+Tool result JSON format:
+
+All tool results are wrapped in a JSON envelope with the following structure:
+
+- Success: `{"value": <bounded JSON rendering>, "error": null}`
+- Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
+
+Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`.
+
+The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using headson (head-of-JSON) truncation when the full rendering exceeds the token budget.
 
 Atomicity requirement:
 
@@ -464,19 +514,6 @@ Implementation note:
 
 - Frontmatter is stripped from the program text before it is placed into the model-facing prompt.
 
-### 8.5. Stub executor (test-only)
-
-Nighthawk previously supported a "stub backend" as a library feature. This has been removed.
-
-For tests, this repo includes a test-only `StubExecutor` under `tests/execution/stub_executor.py`. It does not call an LLM. Instead, it reads a step envelope from the Natural program text.
-
-- Parsing rule: inside the Natural block text, stub mode finds the first `{` character and parses the substring starting there as a JSON object.
-- The JSON object must be an envelope with:
-  - `step_outcome`: an object matching the StepOutcome schema
-  - `bindings`: an object mapping names to values
-- The stub executor returns `step_outcome` from the envelope.
-- The stub executor returns a bindings object filtered to include only names present in the `<:name>` binding list for that Natural block.
-
 ## 9. Return value
 
 In the simplest docstring pattern, the Python function body returns a variable that is updated by execution:
@@ -514,6 +551,8 @@ API:
   - Requires an existing step executor.
   - Generates a new `scope_id` (keeps the current `run_id`).
   - Only specified fields are overridden for the duration of the `with`.
+  - `system_prompt_suffix_fragment`: optional string appended to the system prompt for the duration of the scope.
+  - `user_prompt_suffix_fragment`: optional string appended to the user prompt for the duration of the scope.
   - Yields the resolved `StepExecutor` for the scope.
 - `nighthawk.get_step_executor() -> StepExecutor`
   - Get the current step executor. Raises if unset.
@@ -553,14 +592,41 @@ If you want a long-lived object, define it yourself and bind it as an ordinary P
 
 The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_exec`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
 
-For practical examples and design tips, see [manual.md Section 3](manual.md#3-cross-block-context-carry-pattern).
+For practical examples and design tips, see [Tutorial Section 5](tutorial.md#5-cross-block-composition).
 
 ## 13. Error handling
 
-Nighthawk distinguishes:
+Nighthawk defines a hierarchy of exceptions rooted at `NighthawkError`.
 
-- Parse errors: invalid or non-JSON LLM output.
-- Tool evaluation errors: invalid expressions, runtime errors from expression evaluation.
-- Tool validation errors: type validation/coercion fails for `nh_assign`.
+Exception hierarchy:
 
-All errors are surfaced as Python exceptions.
+- `NighthawkError`: Base class for all Nighthawk exceptions.
+  - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
+- `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
+  - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
+- `ExecutionError(NighthawkError)`: Natural block execution failed.
+  - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
+- `ToolEvaluationError(NighthawkError)`: Expression evaluation inside a tool call failed.
+  - Raised when: `eval()` raises during `nh_eval`, `nh_exec`, or `nh_assign` expression evaluation.
+- `ToolValidationError(NighthawkError)`: Type validation/coercion failed during `nh_assign`.
+  - Raised when: the assigned value does not match the expected binding type.
+- `ToolRegistrationError(NighthawkError)`: Tool registration failed.
+  - Raised when: a tool name is invalid, or a name conflict occurs without `overwrite=True`.
+
+All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.
+
+## 14. Tool result contract
+
+All tool results returned to the LLM are wrapped in a JSON envelope:
+
+- Success: `{"value": <bounded JSON rendering>, "error": null}`
+- Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
+
+Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`.
+
+The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using headson (head-of-JSON) truncation when the full rendering exceeds the token budget.
+
+Supporting types (internal):
+
+- `ToolBoundaryError`: Exception carrying `kind` (ErrorKind), `message`, and optional `guidance`. Raised by tool implementations to signal structured failures.
+- `ToolResultRenderingPolicy`: Frozen dataclass controlling how tool results are rendered (tokenizer encoding name, max tokens, JSON renderer style).

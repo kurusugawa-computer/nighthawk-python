@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-STEP_KINDS: tuple[str, ...] = ("pass", "return", "break", "continue", "raise")
-
-STEP_KINDS_NON_LOOP: tuple[str, ...] = ("pass", "return", "raise")
-
-
 type StepKind = Literal["pass", "return", "break", "continue", "raise"]
+
+STEP_KINDS: tuple[StepKind, ...] = get_args(StepKind.__value__)
 
 
 _REFERENCE_PATH_PATTERN = r"^(?!__)[A-Za-z_][A-Za-z0-9_]*(?:\.(?!__)[A-Za-z_][A-Za-z0-9_]*)*$"
@@ -169,7 +166,9 @@ def build_step_json_schema(
     if not allowed_kinds:
         raise ValueError("allowed_kinds must not be empty")
 
-    variants: list[dict[str, object]] = [_build_variant_schema(kind, raise_error_type_binding_names=raise_error_type_binding_names) for kind in allowed_kinds]
+    variants: list[dict[str, object]] = [
+        _build_variant_schema(kind, raise_error_type_binding_names=raise_error_type_binding_names) for kind in allowed_kinds
+    ]
 
     if len(variants) == 1:
         result_schema: dict[str, object] = variants[0]
@@ -198,7 +197,9 @@ def build_step_system_prompt_suffix_fragment(
     allowed_kinds_text = ", ".join(f"`{outcome_kind}`" for outcome_kind in allowed_kinds)
 
     sections: list[str] = []
-    sections.append(f"StepFinalResult — output exactly one JSON object with a `result` field. Inside `result`, `kind` must be one of: {allowed_kinds_text}.\n")
+    sections.append(
+        f"StepFinalResult — output exactly one JSON object with a `result` field. Inside `result`, `kind` must be one of: {allowed_kinds_text}.\n"
+    )
 
     if "pass" in allowed_kinds:
         sections.append('\nDefault: {"result": {"kind": "pass"}}\nChoose pass after completing the work. Most blocks end with pass.\n')
@@ -206,7 +207,9 @@ def build_step_system_prompt_suffix_fragment(
     alternatives: list[str] = []
 
     if "return" in allowed_kinds:
-        alternatives.append('- return: immediately return from the Python function.\n  return_reference_path (required): name in step locals holding the value.\n  Example: after nh_assign("x", "42"), output {"result": {"kind": "return", "return_reference_path": "x"}}.\n')
+        alternatives.append(
+            '- return: immediately return from the Python function.\n  return_reference_path (required): name in step locals holding the value.\n  Example: after nh_assign("x", "42"), output {"result": {"kind": "return", "return_reference_path": "x"}}.\n'
+        )
 
     if "break" in allowed_kinds:
         alternatives.append("- break: break from the surrounding Python loop.\n")

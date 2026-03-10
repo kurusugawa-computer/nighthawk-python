@@ -2,39 +2,39 @@ from __future__ import annotations
 
 import ast
 import inspect
+import types
 from typing import Any, NoReturn
 
 from pydantic import BaseModel, TypeAdapter
 
 from ..errors import ToolEvaluationError
+from ..identifier_path import parse_identifier_path
 from ..json_renderer import to_jsonable_value
 from ..runtime.async_bridge import run_awaitable_value_synchronously
 from ..runtime.step_context import StepContext
-from .contracts import ToolBoundaryFailure
+from .contracts import ToolBoundaryError
 
 
-def eval_expression(step_context: StepContext, expression: str) -> object:
-    try:
-        compiled_expression = compile(
-            expression,
-            "<nighthawk-eval>",
-            "eval",
-            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-        )
-        value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
-        return run_awaitable_value_synchronously(value)
-    except Exception as e:
-        raise ToolEvaluationError(str(e)) from e
+def _compile_expression(expression: str) -> types.CodeType:
+    """Compile a Python expression with top-level await support."""
+    return compile(
+        expression,
+        "<nighthawk-eval>",
+        "eval",
+        flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+    )
 
 
 async def eval_expression_async(step_context: StepContext, expression: str) -> object:
+    """Evaluate a Python expression inside the step execution environment (async canonical).
+
+    Security note: This uses ``eval()`` with ``ast.PyCF_ALLOW_TOP_LEVEL_AWAIT``
+    to execute LLM-generated expressions against ``step_globals`` and ``step_locals``.
+    Natural DSL sources are trusted, repository-managed assets.
+    Do not wire untrusted user input into expressions evaluated here.
+    """
     try:
-        compiled_expression = compile(
-            expression,
-            "<nighthawk-eval>",
-            "eval",
-            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-        )
+        compiled_expression = _compile_expression(expression)
         value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
         if inspect.isawaitable(value):
             return await value
@@ -43,37 +43,26 @@ async def eval_expression_async(step_context: StepContext, expression: str) -> o
         raise ToolEvaluationError(str(e)) from e
 
 
+def eval_expression(step_context: StepContext, expression: str) -> object:
+    """Evaluate a Python expression inside the step execution environment (sync wrapper)."""
+    try:
+        compiled_expression = _compile_expression(expression)
+        value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
+        return run_awaitable_value_synchronously(value)
+    except Exception as e:
+        raise ToolEvaluationError(str(e)) from e
+
+
 def _raise_invalid_input(*, message: str, guidance: str) -> NoReturn:
-    raise ToolBoundaryFailure(kind="invalid_input", message=message, guidance=guidance)
+    raise ToolBoundaryError(kind="invalid_input", message=message, guidance=guidance)
 
 
 def _raise_resolution(*, message: str, guidance: str) -> NoReturn:
-    raise ToolBoundaryFailure(kind="resolution", message=message, guidance=guidance)
+    raise ToolBoundaryError(kind="resolution", message=message, guidance=guidance)
 
 
 def _raise_execution(*, message: str, guidance: str) -> NoReturn:
-    raise ToolBoundaryFailure(kind="execution", message=message, guidance=guidance)
-
-
-def _parse_target_path(target_path: str) -> tuple[str, ...] | None:
-    if not target_path:
-        return None
-
-    parts = target_path.split(".")
-    if any(part == "" for part in parts):
-        return None
-
-    for part in parts:
-        try:
-            part.encode("ascii")
-        except UnicodeEncodeError:
-            return None
-        if not part.isidentifier():
-            return None
-        if part.startswith("__"):
-            return None
-
-    return tuple(parts)
+    raise ToolBoundaryError(kind="execution", message=message, guidance=guidance)
 
 
 def _get_pydantic_field_type(model: BaseModel, field_name: str) -> object | None:
@@ -114,17 +103,12 @@ def _assign_value_to_target_path(
                     guidance="Fix the value to match the expected type and retry.",
                 )
 
-        step_context.step_locals[name] = value
-        step_context.assigned_binding_names.add(name)
-        step_context.step_locals_revision += 1
-
-        update: dict[str, Any] = {"path": target_path}
-        update["value"] = to_jsonable_value(value)
+        step_context.record_assignment(name, value)
 
         return {
             "target_path": target_path,
             "step_locals_revision": step_context.step_locals_revision,
-            "updates": [update],
+            "updates": [{"path": target_path, "value": to_jsonable_value(value)}],
         }
 
     root_name = parsed_target_path[0]
@@ -176,16 +160,46 @@ def _assign_value_to_target_path(
             guidance="Fix the target path so the referenced attributes are assignable, then retry.",
         )
 
+    # Dotted mutation bypasses record_assignment because commit selection is
+    # controlled only by <:name> bindings (top-level names).  See design.md
+    # Section 8.3 "Commit and mutation notes" for the distinction.
     step_context.step_locals_revision += 1
-
-    update: dict[str, Any] = {"path": target_path}
-    update["value"] = to_jsonable_value(value)
 
     return {
         "target_path": target_path,
         "step_locals_revision": step_context.step_locals_revision,
-        "updates": [update],
+        "updates": [{"path": target_path, "value": to_jsonable_value(value)}],
     }
+
+
+def _resolve_value_for_assignment(step_context: StepContext, expression: str) -> object:
+    try:
+        return eval_expression(step_context, expression)
+    except Exception as e:
+        _raise_execution(
+            message=str(e),
+            guidance="Fix the expression and retry.",
+        )
+
+
+async def _resolve_value_for_assignment_async(step_context: StepContext, expression: str) -> object:
+    try:
+        return await eval_expression_async(step_context, expression)
+    except Exception as e:
+        _raise_execution(
+            message=str(e),
+            guidance="Fix the expression and retry.",
+        )
+
+
+def _validated_target_path(target_path: str) -> tuple[str, ...]:
+    parsed = parse_identifier_path(target_path)
+    if parsed is None:
+        _raise_invalid_input(
+            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
+            guidance="Fix target_path to match name(.field)* with ASCII identifiers and retry.",
+        )
+    return parsed
 
 
 def assign_tool(
@@ -201,24 +215,11 @@ def assign_tool(
     Notes:
     - Any segment starting with "__" is forbidden.
     - On success, returns a JSON-serializable payload with keys `target_path`, `step_locals_revision`, and `updates`.
-    - On failure, raises ToolBoundaryFailure.
+    - On failure, raises ToolBoundaryError.
     - The operation is atomic: on any failure, no updates are performed.
     """
-
-    parsed_target_path = _parse_target_path(target_path)
-    if parsed_target_path is None:
-        _raise_invalid_input(
-            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
-            guidance="Fix target_path to match name(.field)* with ASCII identifiers and retry.",
-        )
-
-    try:
-        value = eval_expression(step_context, expression)
-    except Exception as e:
-        _raise_execution(
-            message=str(e),
-            guidance="Fix the expression and retry.",
-        )
+    parsed_target_path = _validated_target_path(target_path)
+    value = _resolve_value_for_assignment(step_context, expression)
 
     return _assign_value_to_target_path(
         step_context=step_context,
@@ -233,20 +234,9 @@ async def assign_tool_async(
     target_path: str,
     expression: str,
 ) -> dict[str, Any]:
-    parsed_target_path = _parse_target_path(target_path)
-    if parsed_target_path is None:
-        _raise_invalid_input(
-            message="Invalid target_path; expected name(.field)* with ASCII identifiers",
-            guidance="Fix target_path to match name(.field)* with ASCII identifiers and retry.",
-        )
-
-    try:
-        value = await eval_expression_async(step_context, expression)
-    except Exception as e:
-        _raise_execution(
-            message=str(e),
-            guidance="Fix the expression and retry.",
-        )
+    """Async version of assign_tool."""
+    parsed_target_path = _validated_target_path(target_path)
+    value = await _resolve_value_for_assignment_async(step_context, expression)
 
     return _assign_value_to_target_path(
         step_context=step_context,

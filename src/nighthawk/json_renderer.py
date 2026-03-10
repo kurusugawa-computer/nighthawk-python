@@ -19,7 +19,10 @@ _SENTINEL_FUNCTION = "<function>"
 _SENTINEL_EXCEPTION = "<exception>"
 
 _MINIMUM_OUTPUT = "{}"
-_MINIMUM_OUTPUT_TOKEN_COUNT = len(_MINIMUM_OUTPUT)  # estimate token count roughly
+# Approximate token count for _MINIMUM_OUTPUT. The actual count is 1 token for
+# most encodings, but varies by encoding. This constant is a fixed lower bound
+# used for budget arithmetic; the real token count is always recomputed when needed.
+_MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT = 1
 
 
 def render_json_text(
@@ -46,8 +49,8 @@ def render_json_text(
         A tuple of (rendered text, token count of rendered text).
     """
 
-    if max_tokens < _MINIMUM_OUTPUT_TOKEN_COUNT:
-        raise ValueError(f"max_tokens must be >= {_MINIMUM_OUTPUT_TOKEN_COUNT}")
+    if max_tokens < _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT:
+        raise ValueError(f"max_tokens must be >= {_MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT}")
 
     jsonable = to_jsonable_value(value)
     compact_json_input = _render_compact_json(jsonable)
@@ -63,7 +66,7 @@ def render_json_text(
     )
 
     if summarized is None:
-        return _MINIMUM_OUTPUT, _MINIMUM_OUTPUT_TOKEN_COUNT
+        return _MINIMUM_OUTPUT, _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT
 
     return summarized, summarized_token_count
 
@@ -129,29 +132,33 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
 
 
 def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set: set[int]) -> JsonableValue:
-    items: list[tuple[str, str, object]] = []
-
+    # Entries: (sort_key, display_key, raw_value). Sort by the compact JSON
+    # rendering of the key so that ordering is stable regardless of special chars.
+    keyed_entries: list[tuple[str, str, object]] = []
     for key, item_value in value.items():
-        key_jsonable = _to_jsonable_value_inner(key, active_object_id_set=active_object_id_set)
-        key_json_text = _render_compact_json(key_jsonable)
-        key_text = key if isinstance(key, str) else key_json_text
-        items.append((key_json_text, key_text, item_value))
+        if isinstance(key, str):
+            sort_key = _render_compact_json(key)
+            display_key = key
+        else:
+            display_key = _render_compact_json(_to_jsonable_value_inner(key, active_object_id_set=active_object_id_set))
+            sort_key = display_key
+        keyed_entries.append((sort_key, display_key, item_value))
 
-    items.sort(key=lambda item: (item[0], item[1]))
+    keyed_entries.sort(key=lambda entry: entry[0])
 
-    key_to_value: dict[str, JsonableValue] = {}
-    for _, key_text, item_value in items:
-        key_to_value[key_text] = _to_jsonable_value_inner(item_value, active_object_id_set=active_object_id_set)
-
-    return key_to_value
+    return {
+        display_key: _to_jsonable_value_inner(item_value, active_object_id_set=active_object_id_set) for _, display_key, item_value in keyed_entries
+    }
 
 
 def _set_to_jsonable(value: set[object] | frozenset[object], *, active_object_id_set: set[int]) -> JsonableValue:
-    converted: list[JsonableValue] = []
+    converted: list[tuple[str, JsonableValue]] = []
     for item_value in value:
-        converted.append(_to_jsonable_value_inner(item_value, active_object_id_set=active_object_id_set))
+        jsonable = _to_jsonable_value_inner(item_value, active_object_id_set=active_object_id_set)
+        converted.append((_render_compact_json(jsonable), jsonable))
 
-    return converted
+    converted.sort(key=lambda pair: pair[0])
+    return [jsonable for _, jsonable in converted]
 
 
 def _sequence_to_jsonable(value: Sequence[object], *, active_object_id_set: set[int]) -> JsonableValue:
@@ -173,7 +180,7 @@ def _maximize_headson_output_under_max_tokens(
     best_output: str | None = None
     best_output_token_count = 0
 
-    lower = _MINIMUM_OUTPUT_TOKEN_COUNT
+    lower = _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT
     high = len(compact_json_input.encode("utf-8"))
     while lower <= high:
         trial = (lower + high) // 2

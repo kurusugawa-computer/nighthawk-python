@@ -1,51 +1,22 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from dataclasses import replace
-from typing import Any, cast
+from typing import Any
 
-import tiktoken
-from pydantic_ai import RunContext
-from pydantic_ai._run_context import set_current_run_context
-from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
+from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, SystemPromptPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model, ModelRequestParameters
-from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..runtime.step_context import StepContext, ToolResultRenderingPolicy
-from ..runtime.tool_calls import run_tool_instrumented
-from ..tools.contracts import (
-    ToolBoundaryFailure,
-    ToolResult,
-    ToolResultWrapperToolset,
-    tool_result_failure_json_text,
-    tool_result_success_json_text,
-)
-
-type ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
-
-_DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
-    tokenizer_encoding_name="o200k_base",
-    tool_result_max_tokens=2_000,
-    json_renderer_style="strict",
-)
+from .tool_bridge import ToolHandler, prepare_allowed_tools
 
 
-def _resolve_tool_result_rendering_policy(run_context: RunContext[StepContext]) -> ToolResultRenderingPolicy:
-    policy = run_context.deps.tool_result_rendering_policy
-    if policy is None:
-        return _DEFAULT_TOOL_RESULT_RENDERING_POLICY
-    return policy
-
-
-def find_most_recent_model_request(messages: list[ModelMessage]) -> ModelRequest:
+def _find_most_recent_model_request(messages: list[ModelMessage]) -> ModelRequest:
     for message in reversed(messages):
         if isinstance(message, ModelRequest):
             return message
     raise UnexpectedModelBehavior("No ModelRequest found in message history")
 
 
-def collect_system_prompt_text(model_request: ModelRequest) -> str:
+def _collect_system_prompt_text(model_request: ModelRequest) -> str:
     parts: list[str] = []
     for part in model_request.parts:
         if isinstance(part, SystemPromptPart) and part.content:
@@ -53,7 +24,7 @@ def collect_system_prompt_text(model_request: ModelRequest) -> str:
     return "\n\n".join(parts)
 
 
-def collect_user_prompt_text(model_request: ModelRequest, *, backend_label: str) -> str:
+def _collect_user_prompt_text(model_request: ModelRequest, *, backend_label: str) -> str:
     parts: list[str] = []
     for part in model_request.parts:
         if isinstance(part, UserPromptPart):
@@ -67,180 +38,6 @@ def collect_user_prompt_text(model_request: ModelRequest, *, backend_label: str)
             raise UserError(f"{backend_label} does not support tool-return parts")
 
     return "\n\n".join(p for p in parts if p)
-
-
-def get_current_run_context_or_none() -> RunContext[StepContext] | None:
-    from pydantic_ai._run_context import get_current_run_context
-
-    run_context = get_current_run_context()
-    if run_context is None:
-        return None
-    return cast(RunContext[StepContext], run_context)
-
-
-def get_current_run_context_required() -> RunContext[StepContext]:
-    from pydantic_ai._run_context import get_current_run_context
-
-    run_context = get_current_run_context()
-    if run_context is None:
-        raise RuntimeError("Nighthawk tool boundaries require an active RunContext")
-    return cast(RunContext[StepContext], run_context)
-
-
-def generate_tool_call_id() -> str:
-    from ..runtime.tool_calls import generate_tool_call_id as _generate_tool_call_id
-
-    return _generate_tool_call_id()
-
-
-def replace_run_context_for_tool(
-    run_context: RunContext[StepContext],
-    *,
-    tool_name: str,
-    tool_call_id: str,
-) -> RunContext[StepContext]:
-    return replace(
-        run_context,
-        tool_name=tool_name,
-        tool_call_id=tool_call_id,
-    )
-
-
-def resolve_allowed_tool_names(
-    *,
-    model_request_parameters: ModelRequestParameters,
-    configured_allowed_tool_names: tuple[str, ...] | None,
-    available_tool_names: tuple[str, ...],
-) -> tuple[str, ...]:
-    if configured_allowed_tool_names is None:
-        return tuple(name for name in (tool_definition.name for tool_definition in model_request_parameters.function_tools) if name in available_tool_names)
-
-    unknown = [name for name in configured_allowed_tool_names if name not in available_tool_names]
-    if unknown:
-        unknown_list = ", ".join(repr(name) for name in unknown)
-        raise ValueError(f"Configured allowed_tool_names includes unknown tools: {unknown_list}")
-
-    return configured_allowed_tool_names
-
-
-async def build_tool_name_to_handler(
-    *,
-    model_request_parameters: ModelRequestParameters,
-    visible_tools: list[Any],
-    backend_label: str,
-) -> dict[str, ToolHandler]:
-    run_context = get_current_run_context_required()
-
-    toolset = ToolResultWrapperToolset(FunctionToolset(visible_tools))
-
-    tool_name_to_tool = await toolset.get_tools(run_context)
-
-    function_tool_names = {tool_definition.name for tool_definition in model_request_parameters.function_tools}
-
-    tool_name_to_handler: dict[str, ToolHandler] = {}
-
-    for tool_name, tool in tool_name_to_tool.items():
-        if tool_name not in function_tool_names:
-            continue
-
-        async def handler(
-            arguments: dict[str, Any],
-            *,
-            tool_name: str = tool_name,
-            tool: Any = tool,
-        ) -> str:
-            tool_call_id = generate_tool_call_id()
-            tool_run_context = replace_run_context_for_tool(
-                run_context,
-                tool_name=tool_name,
-                tool_call_id=tool_call_id,
-            )
-
-            rendering_policy = _resolve_tool_result_rendering_policy(run_context)
-            encoding = tiktoken.get_encoding(rendering_policy.tokenizer_encoding_name)
-
-            async def call() -> str:
-                with set_current_run_context(tool_run_context):
-                    try:
-                        validated_arguments = tool.args_validator.validate_python(arguments)
-                    except Exception as exception:
-                        errors_method = getattr(exception, "errors", None)
-                        if callable(errors_method):
-                            try:
-                                error_details = errors_method(include_url=False, include_context=False)
-                                if isinstance(error_details, list):
-                                    return RetryPromptPart(
-                                        tool_name=tool_name,
-                                        content=error_details,
-                                        tool_call_id=tool_call_id,
-                                    ).model_response()
-                            except Exception:
-                                pass
-
-                        return RetryPromptPart(
-                            tool_name=tool_name,
-                            content=str(exception) or "Invalid tool arguments",
-                            tool_call_id=tool_call_id,
-                        ).model_response()
-
-                    try:
-                        tool_result = await tool.toolset.call_tool(tool_name, validated_arguments, tool_run_context, tool)
-                    except (ModelRetry, CallDeferred, ApprovalRequired):
-                        raise
-                    except ToolBoundaryFailure as exception:
-                        return tool_result_failure_json_text(
-                            kind=exception.kind,
-                            message=str(exception),
-                            guidance=exception.guidance,
-                            max_tokens=rendering_policy.tool_result_max_tokens,
-                            encoding=encoding,
-                            style=rendering_policy.json_renderer_style,
-                        )
-                    except (UserError, UnexpectedModelBehavior) as exception:
-                        return tool_result_failure_json_text(
-                            kind="internal",
-                            message=str(exception),
-                            guidance="The tool backend failed. Retry or report this error.",
-                            max_tokens=rendering_policy.tool_result_max_tokens,
-                            encoding=encoding,
-                            style=rendering_policy.json_renderer_style,
-                        )
-                    except Exception as exception:
-                        return tool_result_failure_json_text(
-                            kind="internal",
-                            message=str(exception) or "Tool execution failed",
-                            guidance="The tool execution raised an unexpected error. Retry or report this error.",
-                            max_tokens=rendering_policy.tool_result_max_tokens,
-                            encoding=encoding,
-                            style=rendering_policy.json_renderer_style,
-                        )
-
-                if isinstance(tool_result, ToolResult):
-                    return tool_result_success_json_text(
-                        value=tool_result.value,
-                        max_tokens=rendering_policy.tool_result_max_tokens,
-                        encoding=encoding,
-                        style=rendering_policy.json_renderer_style,
-                    )
-
-                return tool_result_success_json_text(
-                    value=tool_result,
-                    max_tokens=rendering_policy.tool_result_max_tokens,
-                    encoding=encoding,
-                    style=rendering_policy.json_renderer_style,
-                )
-
-            return await run_tool_instrumented(
-                tool_name=tool_name,
-                arguments=arguments,
-                call=call,
-                run_context=tool_run_context,
-                tool_call_id=tool_call_id,
-            )
-
-        tool_name_to_handler[tool_name] = handler
-
-    return tool_name_to_handler
 
 
 class BackendModelBase(Model):
@@ -270,18 +67,15 @@ class BackendModelBase(Model):
         if model_request_parameters.allow_image_output:
             raise UserError(f"{self.backend_label} does not support image output")
 
-        model_request = find_most_recent_model_request(messages)
+        model_request = _find_most_recent_model_request(messages)
 
-        system_prompt_text = collect_system_prompt_text(model_request)
+        system_prompt_text = _collect_system_prompt_text(model_request)
 
         instructions = self._get_instructions(messages, model_request_parameters)
         if instructions:
-            if system_prompt_text:
-                system_prompt_text = "\n\n".join([system_prompt_text, instructions])
-            else:
-                system_prompt_text = instructions
+            system_prompt_text = "\n\n".join([system_prompt_text, instructions]) if system_prompt_text else instructions
 
-        user_prompt_text = collect_user_prompt_text(model_request, backend_label=self.backend_label)
+        user_prompt_text = _collect_user_prompt_text(model_request, backend_label=self.backend_label)
         if user_prompt_text.strip() == "":
             raise UserError(f"{self.backend_label} requires a non-empty user prompt")
 
@@ -294,20 +88,8 @@ class BackendModelBase(Model):
         configured_allowed_tool_names: tuple[str, ...] | None,
         visible_tools: list[Any],
     ) -> tuple[dict[str, Any], dict[str, ToolHandler], tuple[str, ...]]:
-        tool_name_to_handler = await build_tool_name_to_handler(
-            model_request_parameters=model_request_parameters,
-            visible_tools=visible_tools,
-            backend_label=self.backend_label,
-        )
-        available_tool_names = tuple(tool_name_to_handler.keys())
-
-        allowed_tool_names = resolve_allowed_tool_names(
+        return await prepare_allowed_tools(
             model_request_parameters=model_request_parameters,
             configured_allowed_tool_names=configured_allowed_tool_names,
-            available_tool_names=available_tool_names,
+            visible_tools=visible_tools,
         )
-
-        tool_name_to_tool_definition = {name: tool_definition for name, tool_definition in model_request_parameters.tool_defs.items() if name in allowed_tool_names}
-        tool_name_to_handler = {name: tool_name_to_handler[name] for name in allowed_tool_names}
-
-        return tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names

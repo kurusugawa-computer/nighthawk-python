@@ -6,12 +6,12 @@ from tests.integration.skip_helpers import requires_openai_integration
 
 def test_carry_continuity_across_blocks():
     """Carry list carries context from step 1 into step 2 via in-place mutation."""
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
             model="openai-responses:gpt-5-mini",
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+            model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
 
@@ -50,12 +50,12 @@ def test_carry_continuity_across_blocks():
 
 def test_carry_branching():
     """Branching a carry creates independent continuations."""
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
             model="openai-responses:gpt-5-mini",
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+            model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
 
@@ -112,12 +112,12 @@ def test_carry_branching():
 
 def test_carry_with_fstring_injection():
     """f-string inline block injects carry content directly into the Natural program text."""
-    OpenAIResponsesModelSettings = requires_openai_integration()
+    openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
             model="openai-responses:gpt-5-mini",
-            model_settings=OpenAIResponsesModelSettings(openai_reasoning_effort="low"),
+            model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
 

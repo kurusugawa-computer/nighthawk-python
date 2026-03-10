@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import tiktoken
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -26,7 +28,7 @@ Trust boundaries:
 
 Notes:
 - In async Natural functions, expressions may use `await`.
-- Tool calls return JSON: {"status":"success"|"failure",...}. Always check "status".
+- Tool calls return JSON: {"value": ..., "error": ...}. Check "error" for failures.
 """
 
 
@@ -87,8 +89,8 @@ class StepContextLimits(BaseModel):
     globals_max_tokens: int = Field(default=4_000, ge=1)
     globals_max_items: int = Field(default=40, ge=1)
 
-    value_max_tokens: int = Field(default=200, ge=2)
-    tool_result_max_tokens: int = Field(default=1_200, ge=2)
+    value_max_tokens: int = Field(default=200, ge=1)
+    tool_result_max_tokens: int = Field(default=1_200, ge=1)
 
 
 class StepExecutorConfiguration(BaseModel):
@@ -110,7 +112,7 @@ class StepExecutorConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str = "openai-responses:gpt-5-nano"
-    model_settings: object | None = None
+    model_settings: dict[str, Any] | None = None
 
     prompts: StepPromptTemplates = StepPromptTemplates()
     context_limits: StepContextLimits = StepContextLimits()
@@ -127,17 +129,17 @@ class StepExecutorConfiguration(BaseModel):
     def resolve_token_encoding(self) -> tiktoken.Encoding:
         """Return the tiktoken encoding for this configuration.
 
-        Uses tokenizer_encoding if set explicitly, otherwise infers from the
-        model name. Falls back to o200k_base if the model name is not recognized.
+        Uses tokenizer_encoding if set explicitly (raises on invalid encoding),
+        otherwise infers from the model name.  Falls back to o200k_base if the
+        model name is not recognized by tiktoken.
         """
         if self.tokenizer_encoding is not None:
             return tiktoken.get_encoding(self.tokenizer_encoding)
 
-        _provider, model_name = self.model.split(":", 1)
-        candidate_model_name = model_name
+        _, model_name = self.model.split(":", 1)
 
         try:
-            return tiktoken.encoding_for_model(candidate_model_name)
+            return tiktoken.encoding_for_model(model_name)
         except Exception:
             return tiktoken.get_encoding("o200k_base")
 
@@ -161,7 +163,7 @@ class StepExecutorConfigurationPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str | None = None
-    model_settings: object | None = None
+    model_settings: dict[str, Any] | None = None
     prompts: StepPromptTemplates | None = None
     context_limits: StepContextLimits | None = None
     json_renderer_style: JsonRendererStyle | None = None

@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import inspect
 import uuid
+from dataclasses import dataclass
 from types import FrameType
-from typing import Any, Awaitable, Callable, Coroutine, cast
+from typing import TypedDict
 
-import yaml
 from pydantic import TypeAdapter
 
-from ..errors import ExecutionError
+from ..errors import ExecutionError, NaturalParseError
+from ..identifier_path import parse_identifier_path
+from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
 from .async_bridge import run_coroutine_synchronously
 from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_execution_context, span
 from .step_context import (
+    _MISSING,
     StepContext,
     ToolResultRenderingPolicy,
     get_python_cell_scope_stack,
@@ -19,83 +22,142 @@ from .step_context import (
     get_step_context_stack,
     resolve_name_in_step_context,
 )
-from .step_contract import STEP_KINDS, StepOutcome
+from .step_contract import (
+    RaiseStepOutcome,
+    ReturnStepOutcome,
+    StepOutcome,
+)
+from .step_executor import AsyncStepExecutor, StepExecutor, SyncStepExecutor
 
 
-def _split_frontmatter_or_none(processed_natural_program: str) -> tuple[str, tuple[str, ...]]:
-    lines = processed_natural_program.splitlines(keepends=True)
-    if not lines:
-        return processed_natural_program, ()
-
-    start_index: int | None = None
-    for i, line in enumerate(lines):
-        if line.strip(" \t\r\n") == "":
-            continue
-        start_index = i
-        break
-
-    if start_index is None:
-        return processed_natural_program, ()
-
-    first_line = lines[start_index]
-    if first_line not in ("---\n", "---"):
-        return processed_natural_program, ()
-
-    closing_index: int | None = None
-    for i, line in enumerate(lines[start_index + 1 :], start=start_index + 1):
-        if line in ("---\n", "---"):
-            closing_index = i
-            break
-
-    if closing_index is None:
-        return processed_natural_program, ()
-
-    yaml_text = "".join(lines[start_index + 1 : closing_index])
-    if yaml_text.strip() == "":
-        return processed_natural_program, ()
-
+def _split_frontmatter(
+    processed_natural_program: str,
+) -> tuple[str, tuple[str, ...]]:
+    """Parse frontmatter, validate deny directives, and return stripped program + denied kinds."""
     try:
-        loaded = yaml.safe_load(yaml_text)
-    except Exception as e:
-        raise ExecutionError(f"Frontmatter YAML parsing failed: {e}") from e
+        program_without_frontmatter, frontmatter = parse_frontmatter(processed_natural_program)
+    except NaturalParseError as e:
+        raise ExecutionError(str(e)) from e
+    try:
+        denied_step_kinds = validate_frontmatter_deny(frontmatter)
+    except NaturalParseError as e:
+        raise ExecutionError(str(e)) from e
+    return program_without_frontmatter, denied_step_kinds
 
-    if not isinstance(loaded, dict):
-        raise ExecutionError("Frontmatter YAML must be a mapping")
 
-    allowed_keys = {"deny"}
-    unknown_keys = set(loaded.keys()) - allowed_keys
-    if unknown_keys:
-        unknown_key_list = ", ".join(sorted(str(k) for k in unknown_keys))
-        raise ExecutionError(f"Unknown frontmatter keys: {unknown_key_list}")
+def _compute_allowed_step_kinds(is_in_loop: bool, denied_step_kinds: tuple[str, ...]) -> tuple[str, ...]:
+    base_allowed_kinds: list[str] = ["pass", "return", "raise"]
+    if is_in_loop:
+        base_allowed_kinds.extend(["break", "continue"])
+    return tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
 
-    if "deny" not in loaded:
-        raise ExecutionError("Frontmatter must include 'deny'")
 
-    deny_value = loaded["deny"]
-    if not isinstance(deny_value, list) or not all(isinstance(item, str) for item in deny_value):
-        raise ExecutionError("Frontmatter 'deny' must be a YAML sequence of strings")
+def _build_step_globals(
+    python_globals: dict[str, object],
+) -> dict[str, object]:
+    step_globals: dict[str, object] = dict(python_globals)
+    if "__builtins__" not in step_globals:
+        step_globals["__builtins__"] = __builtins__
+    return step_globals
 
-    if len(deny_value) == 0:
-        raise ExecutionError("Frontmatter 'deny' must not be empty")
 
-    denied: list[str] = []
-    for item in deny_value:
-        if item not in STEP_KINDS:
-            raise ExecutionError(f"Unknown denied step kind: {item}")
-        if item not in denied:
-            denied.append(item)
+def _build_step_locals(
+    python_locals: dict[str, object],
+) -> dict[str, object]:
+    step_locals: dict[str, object] = {}
+    step_context_stack = get_step_context_stack()
+    if step_context_stack:
+        step_locals.update(step_context_stack[-1].step_locals)
+    step_locals.update(python_locals)
+    return step_locals
 
-    instructions_without_frontmatter = "".join(lines[closing_index + 1 :])
-    return instructions_without_frontmatter, tuple(denied)
+
+def _resolve_input_bindings(
+    input_binding_names: list[str],
+    *,
+    python_locals: dict[str, object],
+    python_globals: dict[str, object],
+    caller_frame: FrameType,
+) -> dict[str, tuple[object, str]]:
+    """Resolve each input binding using Python LEGB rules.
+
+    Returns a mapping of binding name to (resolved_value, resolution_kind).
+    """
+    local_variable_name_set = set(caller_frame.f_code.co_varnames)
+    local_variable_name_set.update(caller_frame.f_code.co_cellvars)
+    free_variable_name_set = set(caller_frame.f_code.co_freevars)
+
+    python_cell_scope_stack = get_python_cell_scope_stack()
+    python_name_scope_stack = get_python_name_scope_stack()
+
+    python_builtins = python_globals.get("__builtins__", __builtins__)
+
+    def resolve_one(binding_name: str) -> tuple[object, str]:
+        if binding_name in python_locals:
+            return python_locals[binding_name], "locals"
+
+        for scope in reversed(python_cell_scope_stack):
+            if binding_name not in scope:
+                continue
+            cell = scope[binding_name]
+            try:
+                return cell.cell_contents, "cell_scope"
+            except ValueError:
+                break
+
+        if binding_name in local_variable_name_set:
+            raise UnboundLocalError(f"cannot access local variable {binding_name!r} where it is not associated with a value")
+
+        if binding_name in free_variable_name_set:
+            error = NameError(f"cannot access free variable {binding_name!r} where it is not associated with a value in enclosing scope")
+            error.name = binding_name
+            raise error
+
+        for scope in reversed(python_name_scope_stack):
+            if binding_name in scope:
+                return scope[binding_name], "name_scope"
+
+        if binding_name in python_globals:
+            return python_globals[binding_name], "globals"
+
+        if isinstance(python_builtins, dict) and binding_name in python_builtins:
+            return python_builtins[binding_name], "builtins"
+
+        if hasattr(python_builtins, binding_name):
+            return getattr(python_builtins, binding_name), "builtins"
+
+        error = NameError(f"name {binding_name!r} is not defined")
+        error.name = binding_name
+        raise error
+
+    binding_name_to_value_and_resolution_kind: dict[str, tuple[object, str]] = {}
+    for binding_name in input_binding_names:
+        binding_name_to_value_and_resolution_kind[binding_name] = resolve_one(binding_name)
+    return binding_name_to_value_and_resolution_kind
+
+
+class StepEnvelope(TypedDict):
+    """Envelope returned by Runner.run_step / run_step_async."""
+
+    step_outcome: StepOutcome
+    input_bindings: dict[str, object]
+    bindings: dict[str, object]
+    return_value: object | None
+
+
+@dataclass(frozen=True)
+class _StepPreparation:
+    """Result of preparing a Natural block for execution."""
+
+    processed_program: str
+    allowed_step_kinds: tuple[str, ...]
+    step_context: StepContext
+    input_binding_name_to_value: dict[str, object]
 
 
 class Runner:
-    def __init__(self, step_executor: object) -> None:
+    def __init__(self, step_executor: StepExecutor) -> None:
         self.step_executor = step_executor
-
-    @classmethod
-    def from_step_executor(cls, step_executor: object) -> "Runner":
-        return cls(step_executor)
 
     def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
         try:
@@ -105,27 +167,16 @@ class Runner:
             raise ExecutionError(f"Return value validation failed: {e}") from e
 
     def _resolve_reference_path(self, step_context: StepContext, return_reference_path: str) -> object:
-        parts = return_reference_path.split(".")
-        if any(part == "" for part in parts):
+        parsed_path = parse_identifier_path(return_reference_path)
+        if parsed_path is None:
             raise ExecutionError(f"Invalid return_reference_path: {return_reference_path!r}")
 
-        for part in parts:
-            try:
-                part.encode("ascii")
-            except UnicodeEncodeError:
-                raise ExecutionError(f"Invalid return_reference_path segment (non-ASCII): {part!r}")
-            if not part.isidentifier():
-                raise ExecutionError(f"Invalid return_reference_path segment (not identifier): {part!r}")
-            if part.startswith("__"):
-                raise ExecutionError(f"Invalid return_reference_path segment (dunder): {part!r}")
-
-        root_name = parts[0]
+        root_name = parsed_path[0]
         if root_name not in step_context.step_locals:
             raise ExecutionError(f"Unknown root name in return_reference_path: {root_name}")
         current = step_context.step_locals[root_name]
-        remaining = parts[1:]
 
-        for part in remaining:
+        for part in parsed_path[1:]:
             try:
                 current = getattr(current, part)
             except Exception as e:
@@ -142,96 +193,34 @@ class Runner:
         is_in_loop: bool,
         *,
         caller_frame: FrameType,
-    ) -> tuple[str, tuple[str, ...], StepContext, dict[str, object]]:
+    ) -> _StepPreparation:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
 
-        processed_without_frontmatter, denied_step_kinds = _split_frontmatter_or_none(natural_program)
+        processed_without_frontmatter, denied_step_kinds = _split_frontmatter(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
 
-        base_allowed_kinds: list[str] = ["pass", "return", "raise"]
-        if is_in_loop:
-            base_allowed_kinds.extend(["break", "continue"])
+        allowed_step_kinds = _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
 
-        allowed_step_kinds = tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
+        step_globals = _build_step_globals(python_globals)
+        step_locals = _build_step_locals(python_locals)
 
-        step_globals: dict[str, object] = dict(python_globals)
-        if "__builtins__" not in step_globals:
-            step_globals["__builtins__"] = __builtins__
+        resolved_bindings = _resolve_input_bindings(
+            input_binding_names,
+            python_locals=python_locals,
+            python_globals=python_globals,
+            caller_frame=caller_frame,
+        )
 
-        step_locals: dict[str, object] = {}
-
-        step_context_stack = get_step_context_stack()
-        if step_context_stack:
-            step_locals.update(step_context_stack[-1].step_locals)
-
-        step_locals.update(python_locals)
-
-        binding_commit_targets = set(output_binding_names)
-
-        local_variable_name_set = set(caller_frame.f_code.co_varnames)
-        local_variable_name_set.update(caller_frame.f_code.co_cellvars)
-        free_variable_name_set = set(caller_frame.f_code.co_freevars)
-
-        python_cell_scope_stack = get_python_cell_scope_stack()
-        python_name_scope_stack = get_python_name_scope_stack()
-
-        python_builtins = python_globals.get("__builtins__", __builtins__)
-
-        def resolve_input_binding_value(binding_name: str) -> tuple[object, str]:
-            if binding_name in python_locals:
-                return python_locals[binding_name], "locals"
-
-            for scope in reversed(python_cell_scope_stack):
-                if binding_name not in scope:
-                    continue
-                cell = scope[binding_name]
-                try:
-                    return cell.cell_contents, "cell_scope"
-                except ValueError:
-                    break
-
-            if binding_name in local_variable_name_set:
-                raise UnboundLocalError(f"cannot access local variable {binding_name!r} where it is not associated with a value")
-
-            if binding_name in free_variable_name_set:
-                error = NameError(f"cannot access free variable {binding_name!r} where it is not associated with a value in enclosing scope")
-                error.name = binding_name
-                raise error
-
-            for scope in reversed(python_name_scope_stack):
-                if binding_name in scope:
-                    return scope[binding_name], "name_scope"
-
-            if binding_name in python_globals:
-                return python_globals[binding_name], "globals"
-
-            if isinstance(python_builtins, dict) and binding_name in python_builtins:
-                return python_builtins[binding_name], "builtins"
-
-            if hasattr(python_builtins, binding_name):
-                return getattr(python_builtins, binding_name), "builtins"
-
-            error = NameError(f"name {binding_name!r} is not defined")
-            error.name = binding_name
-            raise error
-
-        resolved_input_binding_name_to_value: dict[str, object] = {}
-        resolved_input_binding_name_to_resolution_kind: dict[str, str] = {}
-        for binding_name in input_binding_names:
-            value, resolution_kind = resolve_input_binding_value(binding_name)
-            resolved_input_binding_name_to_value[binding_name] = value
-            resolved_input_binding_name_to_resolution_kind[binding_name] = resolution_kind
-
-        for binding_name, resolution_kind in resolved_input_binding_name_to_resolution_kind.items():
+        for binding_name, (value, resolution_kind) in resolved_bindings.items():
             if resolution_kind in ("locals", "cell_scope", "name_scope"):
-                step_locals[binding_name] = resolved_input_binding_name_to_value[binding_name]
+                step_locals[binding_name] = value
 
-        step_executor = self.step_executor
-        tool_result_rendering_policy = getattr(step_executor, "tool_result_rendering_policy", None)
+        tool_result_rendering_policy = getattr(self.step_executor, "tool_result_rendering_policy", None)
         if tool_result_rendering_policy is not None and not isinstance(tool_result_rendering_policy, ToolResultRenderingPolicy):
             raise ExecutionError("Step executor tool_result_rendering_policy must be ToolResultRenderingPolicy when provided")
 
+        binding_commit_targets = set(output_binding_names)
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets
 
         step_context = StepContext(
@@ -244,84 +233,157 @@ class Runner:
             tool_result_rendering_policy=tool_result_rendering_policy,
         )
 
-        return processed_without_frontmatter, allowed_step_kinds, step_context, dict(resolved_input_binding_name_to_value)
+        input_binding_name_to_value = {name: value for name, (value, _) in resolved_bindings.items()}
+        return _StepPreparation(
+            processed_program=processed_without_frontmatter,
+            allowed_step_kinds=allowed_step_kinds,
+            step_context=step_context,
+            input_binding_name_to_value=input_binding_name_to_value,
+        )
 
-    def _validate_raise_outcome(self, step_context: StepContext, *, raise_error_type_name: str | None, raise_message: str) -> None:
-        if raise_error_type_name is not None:
-            resolved_raise_error_type = resolve_name_in_step_context(step_context, raise_error_type_name)
-            if resolved_raise_error_type is None:
-                raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
-            if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
-                raise ExecutionError(f"Invalid raise_error_type: {raise_error_type_name!r}")
-            raise resolved_raise_error_type(raise_message)
-
-        raise ExecutionError(f"Execution failed: {raise_message}")
-
-    def _build_envelope_common(
+    def _validate_raise_outcome(
         self,
-        *,
         step_context: StepContext,
-        step_outcome: object,
-        step_outcome_kind: str,
-        bindings: dict[str, object],
-        input_bindings: dict[str, object],
-        return_annotation: object,
-        resolved_return_value: object | None,
-    ) -> dict[str, object]:
-        return_value: object | None = None
+        step_outcome: RaiseStepOutcome,
+    ) -> None:
+        if step_outcome.raise_error_type is not None:
+            resolved_raise_error_type = resolve_name_in_step_context(step_context, step_outcome.raise_error_type)
+            if resolved_raise_error_type is _MISSING:
+                raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}: {step_outcome.raise_message}")
+            if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
+                raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}: {step_outcome.raise_message}")
+            raise resolved_raise_error_type(step_outcome.raise_message)
 
-        if step_outcome_kind == "return":
-            return_value = self._parse_and_coerce_return_value(resolved_return_value, return_annotation)
-
-        if step_outcome_kind == "raise":
-            self._validate_raise_outcome(
-                step_context,
-                raise_error_type_name=getattr(step_outcome, "raise_error_type"),
-                raise_message=getattr(step_outcome, "raise_message"),
-            )
-
-        return {
-            "step_outcome": step_outcome,
-            "input_bindings": dict(input_bindings),
-            "bindings": bindings,
-            "return_value": return_value,
-        }
+        raise ExecutionError(f"Execution failed: {step_outcome.raise_message}")
 
     def _apply_bindings_and_validate_kind(
         self,
         *,
         step_context: StepContext,
-        step_outcome: object,
+        step_outcome: StepOutcome,
         bindings: dict[str, object],
         allowed_step_kinds: tuple[str, ...],
     ) -> str:
-        if not hasattr(step_outcome, "kind"):
-            raise ExecutionError("Step produced invalid step outcome object")
-        step_outcome_kind: str = getattr(step_outcome, "kind")
+        step_outcome_kind = step_outcome.kind
         if step_outcome_kind not in allowed_step_kinds:
             raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
         step_context.step_locals.update(bindings)
         return step_outcome_kind
 
-    def _resolve_return_value_sync(self, step_context: StepContext, step_outcome: object) -> object | None:
-        step_outcome_kind = getattr(step_outcome, "kind", None)
-        if step_outcome_kind != "return":
-            return None
-        return_reference_path = getattr(step_outcome, "return_reference_path")
-        resolved = self._resolve_reference_path(step_context, return_reference_path)
-        if inspect.isawaitable(resolved):
-            raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
-        return resolved
+    def _finalize_step(
+        self,
+        *,
+        preparation: _StepPreparation,
+        step_outcome: StepOutcome,
+        bindings: dict[str, object],
+        return_annotation: object,
+    ) -> StepEnvelope:
+        """Sync finalization: validate kind, resolve return value, handle raise."""
+        step_outcome_kind = self._apply_bindings_and_validate_kind(
+            step_context=preparation.step_context,
+            step_outcome=step_outcome,
+            bindings=bindings,
+            allowed_step_kinds=preparation.allowed_step_kinds,
+        )
 
-    async def _resolve_return_value_async(self, step_context: StepContext, step_outcome: object) -> object | None:
-        step_outcome_kind = getattr(step_outcome, "kind", None)
-        if step_outcome_kind != "return":
-            return None
-        return_reference_path = getattr(step_outcome, "return_reference_path")
-        resolved = self._resolve_reference_path(step_context, return_reference_path)
-        if inspect.isawaitable(resolved):
-            resolved = await resolved
-        return resolved
+        return_value: object | None = None
+        if step_outcome_kind == "return":
+            assert isinstance(step_outcome, ReturnStepOutcome)
+            resolved = self._resolve_reference_path(
+                preparation.step_context,
+                step_outcome.return_reference_path,
+            )
+            if inspect.isawaitable(resolved):
+                raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
+            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+
+        if step_outcome_kind == "raise":
+            assert isinstance(step_outcome, RaiseStepOutcome)
+            self._validate_raise_outcome(preparation.step_context, step_outcome)
+
+        return StepEnvelope(
+            step_outcome=step_outcome,
+            input_bindings=dict(preparation.input_binding_name_to_value),
+            bindings=bindings,
+            return_value=return_value,
+        )
+
+    async def _run_step_async_impl(
+        self,
+        natural_program: str,
+        input_binding_names: list[str],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        return_annotation: object,
+        is_in_loop: bool,
+        *,
+        caller_frame: FrameType,
+    ) -> StepEnvelope:
+        preparation = self._prepare_step_execution(
+            natural_program,
+            input_binding_names,
+            output_binding_names,
+            binding_name_to_type,
+            is_in_loop,
+            caller_frame=caller_frame,
+        )
+        execution_context = get_execution_context()
+
+        with span(
+            "nighthawk.step",
+            **{
+                RUN_ID: execution_context.run_id,
+                SCOPE_ID: execution_context.scope_id,
+                STEP_ID: preparation.step_context.step_id,
+            },
+        ):
+            step_executor = self.step_executor
+
+            if isinstance(step_executor, AsyncStepExecutor):
+                step_outcome, bindings = await step_executor.run_step_async(
+                    processed_natural_program=preparation.processed_program,
+                    step_context=preparation.step_context,
+                    binding_names=output_binding_names,
+                    allowed_step_kinds=preparation.allowed_step_kinds,
+                )
+            elif isinstance(step_executor, SyncStepExecutor):
+                step_outcome, bindings = step_executor.run_step(
+                    processed_natural_program=preparation.processed_program,
+                    step_context=preparation.step_context,
+                    binding_names=output_binding_names,
+                    allowed_step_kinds=preparation.allowed_step_kinds,
+                )
+            else:
+                raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
+
+            step_outcome_kind = self._apply_bindings_and_validate_kind(
+                step_context=preparation.step_context,
+                step_outcome=step_outcome,
+                bindings=bindings,
+                allowed_step_kinds=preparation.allowed_step_kinds,
+            )
+
+            return_value: object | None = None
+            if step_outcome_kind == "return":
+                assert isinstance(step_outcome, ReturnStepOutcome)
+                resolved = self._resolve_reference_path(
+                    preparation.step_context,
+                    step_outcome.return_reference_path,
+                )
+                if inspect.isawaitable(resolved):
+                    resolved = await resolved
+                return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+
+            if step_outcome_kind == "raise":
+                assert isinstance(step_outcome, RaiseStepOutcome)
+                self._validate_raise_outcome(preparation.step_context, step_outcome)
+
+            return StepEnvelope(
+                step_outcome=step_outcome,
+                input_bindings=dict(preparation.input_binding_name_to_value),
+                bindings=bindings,
+                return_value=return_value,
+            )
 
     def run_step(
         self,
@@ -333,8 +395,8 @@ class Runner:
         is_in_loop: bool,
         *,
         caller_frame: FrameType,
-    ) -> dict[str, object]:
-        processed_without_frontmatter, allowed_step_kinds, step_context, input_bindings = self._prepare_step_execution(
+    ) -> StepEnvelope:
+        preparation = self._prepare_step_execution(
             natural_program,
             input_binding_names,
             output_binding_names,
@@ -342,66 +404,41 @@ class Runner:
             is_in_loop,
             caller_frame=caller_frame,
         )
-        execution_context = get_execution_context()
 
-        with span(
-            "nighthawk.step",
-            **{
-                RUN_ID: execution_context.run_id,
-                SCOPE_ID: execution_context.scope_id,
-                STEP_ID: step_context.step_id,
-            },
-        ):
-            step_executor = self.step_executor
-
-            run_step_method = getattr(step_executor, "run_step", None)
-            if callable(run_step_method):
-                run_step_method_typed = cast(
-                    Callable[..., tuple[StepOutcome, dict[str, object]]],
-                    run_step_method,
-                )
-                step_outcome, bindings = run_step_method_typed(
-                    processed_natural_program=processed_without_frontmatter,
-                    step_context=step_context,
+        if isinstance(self.step_executor, SyncStepExecutor):
+            execution_context = get_execution_context()
+            with span(
+                "nighthawk.step",
+                **{
+                    RUN_ID: execution_context.run_id,
+                    SCOPE_ID: execution_context.scope_id,
+                    STEP_ID: preparation.step_context.step_id,
+                },
+            ):
+                step_outcome, bindings = self.step_executor.run_step(
+                    processed_natural_program=preparation.processed_program,
+                    step_context=preparation.step_context,
                     binding_names=output_binding_names,
-                    allowed_step_kinds=allowed_step_kinds,
+                    allowed_step_kinds=preparation.allowed_step_kinds,
                 )
-            else:
-                run_step_async_method = getattr(step_executor, "run_step_async", None)
-                if not callable(run_step_async_method):
-                    raise ExecutionError("Step executor must define run_step(...) or run_step_async(...)")
-                run_step_async_method_typed = cast(
-                    Callable[..., Awaitable[tuple[StepOutcome, dict[str, object]]]],
-                    run_step_async_method,
-                )
-                step_outcome, bindings = run_coroutine_synchronously(
-                    lambda: cast(
-                        Coroutine[Any, Any, tuple[StepOutcome, dict[str, object]]],
-                        run_step_async_method_typed(
-                            processed_natural_program=processed_without_frontmatter,
-                            step_context=step_context,
-                            binding_names=output_binding_names,
-                            allowed_step_kinds=allowed_step_kinds,
-                        ),
-                    )
+                return self._finalize_step(
+                    preparation=preparation,
+                    step_outcome=step_outcome,
+                    bindings=bindings,
+                    return_annotation=return_annotation,
                 )
 
-            step_outcome_kind = self._apply_bindings_and_validate_kind(
-                step_context=step_context,
-                step_outcome=step_outcome,
-                bindings=bindings,
-                allowed_step_kinds=allowed_step_kinds,
+        return run_coroutine_synchronously(
+            lambda: self._run_step_async_impl(
+                natural_program,
+                input_binding_names,
+                output_binding_names,
+                binding_name_to_type,
+                return_annotation,
+                is_in_loop,
+                caller_frame=caller_frame,
             )
-            resolved_return_value = self._resolve_return_value_sync(step_context, step_outcome)
-            return self._build_envelope_common(
-                step_context=step_context,
-                step_outcome=step_outcome,
-                step_outcome_kind=step_outcome_kind,
-                bindings=bindings,
-                input_bindings=input_bindings,
-                return_annotation=return_annotation,
-                resolved_return_value=resolved_return_value,
-            )
+        )
 
     async def run_step_async(
         self,
@@ -413,68 +450,13 @@ class Runner:
         is_in_loop: bool,
         *,
         caller_frame: FrameType,
-    ) -> dict[str, object]:
-        processed_without_frontmatter, allowed_step_kinds, step_context, input_bindings = self._prepare_step_execution(
+    ) -> StepEnvelope:
+        return await self._run_step_async_impl(
             natural_program,
             input_binding_names,
             output_binding_names,
             binding_name_to_type,
+            return_annotation,
             is_in_loop,
             caller_frame=caller_frame,
         )
-        execution_context = get_execution_context()
-
-        with span(
-            "nighthawk.step",
-            **{
-                RUN_ID: execution_context.run_id,
-                SCOPE_ID: execution_context.scope_id,
-                STEP_ID: step_context.step_id,
-            },
-        ):
-            step_executor = self.step_executor
-
-            run_step_async_method = getattr(step_executor, "run_step_async", None)
-            if callable(run_step_async_method):
-                run_step_async_method_typed = cast(
-                    Callable[..., Awaitable[tuple[StepOutcome, dict[str, object]]]],
-                    run_step_async_method,
-                )
-                step_outcome, bindings = await run_step_async_method_typed(
-                    processed_natural_program=processed_without_frontmatter,
-                    step_context=step_context,
-                    binding_names=output_binding_names,
-                    allowed_step_kinds=allowed_step_kinds,
-                )
-            else:
-                run_step_method = getattr(step_executor, "run_step", None)
-                if not callable(run_step_method):
-                    raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
-
-                run_step_method_typed = cast(
-                    Callable[..., tuple[StepOutcome, dict[str, object]]],
-                    run_step_method,
-                )
-                step_outcome, bindings = run_step_method_typed(
-                    processed_natural_program=processed_without_frontmatter,
-                    step_context=step_context,
-                    binding_names=output_binding_names,
-                    allowed_step_kinds=allowed_step_kinds,
-                )
-
-            step_outcome_kind = self._apply_bindings_and_validate_kind(
-                step_context=step_context,
-                step_outcome=step_outcome,
-                bindings=bindings,
-                allowed_step_kinds=allowed_step_kinds,
-            )
-            resolved_return_value = await self._resolve_return_value_async(step_context, step_outcome)
-            return self._build_envelope_common(
-                step_context=step_context,
-                step_outcome=step_outcome,
-                step_outcome_kind=step_outcome_kind,
-                bindings=bindings,
-                input_bindings=input_bindings,
-                return_annotation=return_annotation,
-                resolved_return_value=resolved_return_value,
-            )

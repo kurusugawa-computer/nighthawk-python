@@ -82,8 +82,26 @@ Nighthawk assumes the Natural DSL source and any imported markdown are trusted, 
 
 Do not feed user-generated content (web forms, chat logs, CLI input, database text, external API responses) into Natural blocks or any host-side interpolation helpers you define.
 
+## Troubleshooting
+
+**`NighthawkError: StepExecutor is not set`**
+
+Natural functions must be called inside a `with nh.run(step_executor):` context. Ensure your call site is wrapped in a run context.
+
+**`ValueError: Invalid model identifier`**
+
+The model identifier must be in `provider:model` format (e.g., `openai-responses:gpt-5-mini`). Check for typos or missing provider prefix.
+
+**`OPENAI_API_KEY` not set**
+
+Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx`. For other providers, see the credentials section above.
+
+**`ModuleNotFoundError` for a provider**
+
+Install the corresponding extra: `pip install "nighthawk[openai]"`, `pip install "nighthawk[claude-code]"`, etc.
+
 ## Next Steps
 
-- **[Manual](manual.md)** — Patterns and techniques for Natural blocks.
+- **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.

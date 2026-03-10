@@ -3,6 +3,8 @@ import inspect
 import logging
 import textwrap
 
+import pytest
+
 import nighthawk as nh
 from tests.execution.prompt_test_helpers import FakeAgent
 
@@ -20,7 +22,7 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
 
         try:
             f()
-            assert False, "Expected NameError"
+            pytest.fail("Expected NameError")
         except NameError as e:
             error = e
 
@@ -65,7 +67,7 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
 
         try:
             f()
-            assert False, "Expected NameError"
+            pytest.fail("Expected NameError")
         except NameError as e:
             error = e
 
@@ -81,7 +83,14 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
 
     function_def = next(node for node in module.body if isinstance(node, ast.FunctionDef) and node.name == "f")
 
-    inline_natural_line_numbers = [statement.lineno for statement in function_def.body if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str) and statement.value.value.startswith("natural\n")]
+    inline_natural_line_numbers = [
+        statement.lineno
+        for statement in function_def.body
+        if isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Constant)
+        and isinstance(statement.value.value, str)
+        and statement.value.value.startswith("natural\n")
+    ]
     assert len(inline_natural_line_numbers) >= 2
 
     # The second Natural block contains the missing binding reference.
@@ -128,7 +137,7 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
 
         try:
             f()
-            assert False, "Expected RuntimeError"
+            pytest.fail("Expected RuntimeError")
         except RuntimeError as e:
             error = e
 

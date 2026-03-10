@@ -12,7 +12,7 @@ def test_readme_quick_example_style(tmp_path):
             <numbers>
             <:result>
             {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {sum(numbers) / len(numbers)}}}}}
-            """
+            """  # noqa: B021
             return result  # type: ignore  # noqa: F821
 
         assert calculate_average([1, 2, 3, 4]) == 2.5

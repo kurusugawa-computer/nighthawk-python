@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import ast
-import re
 
-from ..errors import NaturalParseError
 from .blocks import (
-    JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
+    _joined_string_is_natural_sentinel,
+    _joined_string_scan_text,
+    _validate_joined_string_bindings_do_not_span_formatted_values,
     extract_bindings,
     extract_program,
     is_natural_sentinel,
-    joined_string_is_natural_sentinel,
-    joined_string_scan_text,
 )
 
 
@@ -32,10 +30,14 @@ class NaturalTransformer(ast.NodeTransformer):
         try:
             if node.body:
                 first_statement = node.body[0]
-                if isinstance(first_statement, ast.Expr) and isinstance(first_statement.value, ast.Constant) and isinstance(first_statement.value.value, str):
-                    doc = first_statement.value.value
-                    if is_natural_sentinel(doc):
-                        program = extract_program(doc)
+                if (
+                    isinstance(first_statement, ast.Expr)
+                    and isinstance(first_statement.value, ast.Constant)
+                    and isinstance(first_statement.value.value, str)
+                ):
+                    docstring_text = first_statement.value.value
+                    if is_natural_sentinel(docstring_text):
+                        program = extract_program(docstring_text)
                         input_bindings, output_bindings = extract_bindings(program)
                         return_annotation = self._current_return_annotation_expression()
                         binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
@@ -201,12 +203,12 @@ class NaturalTransformer(ast.NodeTransformer):
 
                 return [ast.copy_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
-        if isinstance(value, ast.JoinedStr) and joined_string_is_natural_sentinel(value):
+        if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
             _validate_joined_string_bindings_do_not_span_formatted_values(value)
             return_annotation = self._current_return_annotation_expression()
             is_in_loop = self._loop_depth > 0
 
-            scan_text = joined_string_scan_text(value, formatted_value_placeholder="")
+            scan_text = _joined_string_scan_text(value, formatted_value_placeholder="")
             program = extract_program(scan_text)
             input_bindings, output_bindings = extract_bindings(program)
             binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
@@ -282,16 +284,6 @@ class NaturalTransformer(ast.NodeTransformer):
         return ast.Dict(keys=keys, values=values)
 
 
-def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string: ast.JoinedStr) -> None:
-    boundary_marked_text = joined_string_scan_text(
-        joined_string,
-        formatted_value_placeholder=JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
-    )
-
-    if re.search(r"<[^>]*" + JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
-        raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
-
-
 def build_runtime_call_and_assignments(
     natural_program_expression: ast.expr,
     input_binding_names: tuple[str, ...],
@@ -302,11 +294,14 @@ def build_runtime_call_and_assignments(
     is_in_loop: bool,
     is_async_function: bool,
 ) -> list[ast.stmt]:
-    envelope_variable = ast.Name(id="__nh_envelope__", ctx=ast.Store())
+    # Build the runner method call (the only part requiring hand-built AST
+    # because natural_program_expression, binding_types_dict_expression, and
+    # return_annotation are dynamic AST nodes from the source).
+    method_name = "run_step_async" if is_async_function else "run_step"
     call_expression = ast.Call(
         func=ast.Attribute(
             value=ast.Name(id="__nighthawk_runner__", ctx=ast.Load()),
-            attr="run_step_async" if is_async_function else "run_step",
+            attr=method_name,
             ctx=ast.Load(),
         ),
         args=[
@@ -319,145 +314,33 @@ def build_runtime_call_and_assignments(
         ],
         keywords=[],
     )
-    envelope_value_expression: ast.expr = call_expression
-    if is_async_function:
-        envelope_value_expression = ast.Await(value=envelope_value_expression)
-    assign_envelope = ast.Assign(targets=[envelope_variable], value=envelope_value_expression)
+    envelope_value: ast.expr = ast.Await(value=call_expression) if is_async_function else call_expression
 
-    assigns: list[ast.stmt] = [assign_envelope]
+    # Parse template for the common envelope-unpacking structure.
+    statements: list[ast.stmt] = ast.parse('__nh_envelope__ = None\n__nh_bindings__ = __nh_envelope__["bindings"]\n').body
+    # Replace the None placeholder with the actual call expression.
+    statements[0].value = envelope_value  # type: ignore[attr-defined]
 
-    assigns.append(
-        ast.Assign(
-            targets=[ast.Name(id="__nh_bindings__", ctx=ast.Store())],
-            value=ast.Subscript(
-                value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                slice=ast.Constant("bindings"),
-                ctx=ast.Load(),
-            ),
-        )
-    )
-
+    # Add binding commit assignments (dynamic per output binding).
     for name in output_binding_names:
-        assigns.append(
-            ast.If(
-                test=ast.Compare(
-                    left=ast.Constant(name),
-                    ops=[ast.In()],
-                    comparators=[ast.Name(id="__nh_bindings__", ctx=ast.Load())],
-                ),
-                body=[
-                    ast.Assign(
-                        targets=[ast.Name(id=name, ctx=ast.Store())],
-                        value=ast.Subscript(
-                            value=ast.Name(id="__nh_bindings__", ctx=ast.Load()),
-                            slice=ast.Constant(name),
-                            ctx=ast.Load(),
-                        ),
-                    )
-                ],
-                orelse=[],
-            )
-        )
+        statements.extend(ast.parse(f'if "{name}" in __nh_bindings__:\n    {name} = __nh_bindings__["{name}"]\n').body)
 
-    assigns.append(
-        ast.Assign(
-            targets=[ast.Name(id="__nh_step_outcome__", ctx=ast.Store())],
-            value=ast.Subscript(
-                value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                slice=ast.Constant("step_outcome"),
-                ctx=ast.Load(),
-            ),
-        )
+    # Add outcome extraction and dispatch.
+    statements.extend(ast.parse('__nh_step_outcome__ = __nh_envelope__["step_outcome"]').body)
+
+    outcome_source = (
+        'if __nh_step_outcome__ is not None:\n    if __nh_step_outcome__.kind == "return":\n        return __nh_envelope__["return_value"]\n'
     )
-
-    outcome_statements: list[ast.stmt] = [
-        ast.If(
-            test=ast.Compare(
-                left=ast.Attribute(
-                    value=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
-                    attr="kind",
-                    ctx=ast.Load(),
-                ),
-                ops=[ast.Eq()],
-                comparators=[ast.Constant("return")],
-            ),
-            body=[
-                ast.Return(
-                    value=ast.Subscript(
-                        value=ast.Name(id="__nh_envelope__", ctx=ast.Load()),
-                        slice=ast.Constant("return_value"),
-                        ctx=ast.Load(),
-                    )
-                )
-            ],
-            orelse=[],
-        )
-    ]
-
     if is_in_loop:
-        outcome_statements.extend(
-            [
-                ast.If(
-                    test=ast.Compare(
-                        left=ast.Attribute(
-                            value=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
-                            attr="kind",
-                            ctx=ast.Load(),
-                        ),
-                        ops=[ast.Eq()],
-                        comparators=[ast.Constant("break")],
-                    ),
-                    body=[ast.Break()],
-                    orelse=[],
-                ),
-                ast.If(
-                    test=ast.Compare(
-                        left=ast.Attribute(
-                            value=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
-                            attr="kind",
-                            ctx=ast.Load(),
-                        ),
-                        ops=[ast.Eq()],
-                        comparators=[ast.Constant("continue")],
-                    ),
-                    body=[ast.Continue()],
-                    orelse=[],
-                ),
-            ]
+        outcome_source += (
+            '    if __nh_step_outcome__.kind == "break":\n        break\n    if __nh_step_outcome__.kind == "continue":\n        continue\n'
         )
+    statements.extend(ast.parse(outcome_source).body)
 
-    assigns.append(
-        ast.If(
-            test=ast.Compare(
-                left=ast.Name(id="__nh_step_outcome__", ctx=ast.Load()),
-                ops=[ast.IsNot()],
-                comparators=[ast.Constant(None)],
-            ),
-            body=outcome_statements,
-            orelse=[],
-        )
-    )
-
-    return assigns
+    return statements
 
 
 def transform_module_ast(module: ast.Module, *, captured_name_tuple: tuple[str, ...] = ()) -> ast.Module:
     module = NaturalTransformer(captured_name_tuple=captured_name_tuple).visit(module)  # type: ignore[assignment]
     ast.fix_missing_locations(module)
     return module
-
-
-def transform_function_source(func_source: str, *, captured_name_tuple: tuple[str, ...] = ()) -> str:
-    """Return a rewritten module source with Natural blocks rewritten."""
-
-    try:
-        module = ast.parse(func_source)
-    except SyntaxError as e:
-        raise NaturalParseError(str(e)) from e
-
-    module = transform_module_ast(module, captured_name_tuple=captured_name_tuple)
-
-    try:
-        return ast.unparse(module)
-    except Exception as e:
-        raise NaturalParseError(f"Failed to unparse transformed AST: {e}") from e

@@ -52,7 +52,7 @@ This file provides repository-specific guidance for coding agents and human cont
 - `tests/`: Pytest suite.
 - `docs/`: Product/design documentation.
   - `docs/quickstart.md`: First steps (minimal setup and first example).
-  - `docs/manual.md`: Patterns and techniques for Natural blocks.
+  - `docs/tutorial.md`: Learn Nighthawk from first principles (bindings, tools, control flow, composition).
   - `docs/design.md`: Design specification.
   - `docs/roadmap.md`: Not implemented items.
 - `.agents/`: Agent artifacts.

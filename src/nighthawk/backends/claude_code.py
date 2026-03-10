@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from datetime import datetime
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal
 
 from opentelemetry import context as otel_context
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -15,11 +17,12 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..json_renderer import to_jsonable_value
-from ..tools.mcp_boundary import call_tool_for_claude_code
 from ..tools.registry import get_visible_tools
-from .base import BackendModelBase, ToolHandler
+from .base import BackendModelBase
+from .mcp_boundary import call_tool_for_claude_code
+from .tool_bridge import ToolHandler
 
-PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
+type PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
 
 type SettingSource = Literal["user", "project", "local"]
 
@@ -30,7 +33,7 @@ def _normalize_timestamp(value: object) -> datetime:
     return datetime.now(tz=datetime.now().astimezone().tzinfo)
 
 
-class ClaudeCodeModelSettings(TypedDict, total=False):
+class ClaudeCodeModelSettings(BaseModel):
     """Settings for the Claude Code backend.
 
     Attributes:
@@ -42,94 +45,37 @@ class ClaudeCodeModelSettings(TypedDict, total=False):
         working_directory: Absolute path to the working directory for Claude Code.
     """
 
-    permission_mode: PermissionMode
-    setting_sources: list[SettingSource] | None
-    allowed_tool_names: tuple[str, ...] | None
-    claude_allowed_tool_names: tuple[str, ...] | None
-    claude_max_turns: int
-    working_directory: str
+    model_config = ConfigDict(extra="forbid")
+
+    permission_mode: PermissionMode = "default"
+    setting_sources: list[SettingSource] | None = None
+    allowed_tool_names: tuple[str, ...] | None = None
+    claude_allowed_tool_names: tuple[str, ...] | None = None
+    claude_max_turns: int = 50
+    working_directory: str = ""
+
+    @field_validator("claude_max_turns")
+    @classmethod
+    def _validate_claude_max_turns(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("claude_max_turns must be greater than 0")
+        return value
+
+    @field_validator("working_directory")
+    @classmethod
+    def _validate_working_directory(cls, value: str) -> str:
+        if value and not os.path.isabs(value):
+            raise ValueError("working_directory must be an absolute path")
+        return value
 
 
 def _get_claude_code_model_settings(model_settings: ModelSettings | None) -> ClaudeCodeModelSettings:
-    default_settings: ClaudeCodeModelSettings = {
-        "permission_mode": "default",
-        "setting_sources": None,
-        "allowed_tool_names": None,
-        "claude_allowed_tool_names": None,
-        "claude_max_turns": 50,
-        "working_directory": "",
-    }
     if model_settings is None:
-        return default_settings
-
-    model_settings_dict = cast(dict[str, Any], model_settings)
-
-    permission_mode = model_settings_dict.get("permission_mode", "default")
-    setting_sources_value = model_settings_dict.get("setting_sources")
-    allowed_tool_names_value = model_settings_dict.get("allowed_tool_names")
-    claude_allowed_tool_names_value = model_settings_dict.get("claude_allowed_tool_names")
-    claude_max_turns_value = model_settings_dict.get("claude_max_turns")
-    working_directory_value = model_settings_dict.get("working_directory")
-
-    if not isinstance(permission_mode, str):
-        raise UserError("permission_mode must be a string")
-
-    if permission_mode not in {"default", "acceptEdits", "plan", "bypassPermissions"}:
-        raise UserError("permission_mode must be one of: default, acceptEdits, plan, bypassPermissions")
-
-    setting_sources: list[SettingSource] | None
-    if setting_sources_value is None:
-        setting_sources = None
-    else:
-        if not isinstance(setting_sources_value, (list, tuple)) or not all(isinstance(source, str) for source in setting_sources_value):
-            raise UserError("setting_sources must be a list[SettingSource], tuple[SettingSource, ...], or None")
-        allowed_setting_sources = {"user", "project", "local"}
-        if not all(source in allowed_setting_sources for source in setting_sources_value):
-            raise UserError("setting_sources must contain only: user, project, local")
-        setting_sources = list(cast(tuple[SettingSource, ...], tuple(setting_sources_value)))
-
-    allowed_tool_names: tuple[str, ...] | None
-    if allowed_tool_names_value is None:
-        allowed_tool_names = None
-    else:
-        if not isinstance(allowed_tool_names_value, (list, tuple)) or not all(isinstance(name, str) for name in allowed_tool_names_value):
-            raise UserError("allowed_tool_names must be a list[str], tuple[str, ...], or None")
-        allowed_tool_names = tuple(allowed_tool_names_value)
-
-    claude_allowed_tool_names: tuple[str, ...] | None
-    if claude_allowed_tool_names_value is None:
-        claude_allowed_tool_names = None
-    else:
-        if not isinstance(claude_allowed_tool_names_value, (list, tuple)) or not all(isinstance(name, str) for name in claude_allowed_tool_names_value):
-            raise UserError("claude_allowed_tool_names must be a list[str], tuple[str, ...], or None")
-        claude_allowed_tool_names = tuple(claude_allowed_tool_names_value)
-
-    if claude_max_turns_value is None:
-        claude_max_turns = 50
-    else:
-        if not isinstance(claude_max_turns_value, int) or isinstance(claude_max_turns_value, bool):
-            raise UserError("claude_max_turns must be an int")
-        if claude_max_turns_value <= 0:
-            raise UserError("claude_max_turns must be greater than 0")
-        claude_max_turns = claude_max_turns_value
-
-    if working_directory_value is None:
-        working_directory = ""
-    else:
-        if not isinstance(working_directory_value, str) or working_directory_value.strip() == "":
-            raise UserError("working_directory must be a non-empty string")
-        if not os.path.isabs(working_directory_value):
-            raise UserError("working_directory must be an absolute path")
-        working_directory = working_directory_value
-
-    return {
-        "permission_mode": cast(PermissionMode, permission_mode),
-        "setting_sources": setting_sources,
-        "allowed_tool_names": allowed_tool_names,
-        "claude_allowed_tool_names": claude_allowed_tool_names,
-        "claude_max_turns": claude_max_turns,
-        "working_directory": working_directory,
-    }
+        return ClaudeCodeModelSettings()
+    try:
+        return ClaudeCodeModelSettings.model_validate(model_settings)
+    except Exception as exception:
+        raise UserError(str(exception)) from exception
 
 
 def _build_json_schema_output_format(model_request_parameters: ModelRequestParameters) -> dict[str, Any] | None:
@@ -182,10 +128,8 @@ def _serialize_result_message_to_json(result_message: object) -> str:
 
     result_message_model_dump = getattr(result_message, "model_dump", None)
     if callable(result_message_model_dump):
-        try:
+        with contextlib.suppress(Exception):
             result_message = result_message_model_dump()
-        except Exception:
-            pass
 
     try:
         return json.dumps(to_jsonable_value(result_message), ensure_ascii=False)
@@ -236,7 +180,7 @@ class ClaudeCodeModel(BackendModelBase):
 
         parent_otel_context = otel_context.get_current()
 
-        _most_recent_request, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
+        _, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
             messages=messages,
             model_request_parameters=model_request_parameters,
         )
@@ -245,7 +189,7 @@ class ClaudeCodeModel(BackendModelBase):
 
         tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
             model_request_parameters=model_request_parameters,
-            configured_allowed_tool_names=claude_code_model_settings.get("allowed_tool_names"),
+            configured_allowed_tool_names=claude_code_model_settings.allowed_tool_names,
             visible_tools=get_visible_tools(),
         )
 
@@ -255,9 +199,14 @@ class ClaudeCodeModel(BackendModelBase):
             if tool_definition is None:
                 raise UnexpectedModelBehavior(f"Tool definition missing for {tool_name!r}")
 
-            async def wrapped_handler(arguments: dict[str, Any], *, tool_handler: ToolHandler = handler) -> dict[str, Any]:
+            async def wrapped_handler(
+                arguments: dict[str, Any],
+                *,
+                tool_handler: ToolHandler = handler,
+                bound_tool_name: str = tool_name,
+            ) -> dict[str, Any]:
                 return await call_tool_for_claude_code(
-                    tool_name=tool_name,
+                    tool_name=bound_tool_name,
                     arguments=arguments,
                     tool_handler=tool_handler,
                     parent_otel_context=parent_otel_context,
@@ -276,7 +225,7 @@ class ClaudeCodeModel(BackendModelBase):
 
         allowed_tools_for_claude = [f"mcp__nighthawk__{tool_name}" for tool_name in allowed_tool_names]
 
-        claude_allowed_tool_names = claude_code_model_settings.get("claude_allowed_tool_names") or ()
+        claude_allowed_tool_names = claude_code_model_settings.claude_allowed_tool_names or ()
         merged_allowed_tools: list[str] = []
         seen_allowed_tools: set[str] = set()
         for tool_name in [*claude_allowed_tool_names, *allowed_tools_for_claude]:
@@ -285,7 +234,7 @@ class ClaudeCodeModel(BackendModelBase):
             merged_allowed_tools.append(tool_name)
             seen_allowed_tools.add(tool_name)
 
-        working_directory = claude_code_model_settings.get("working_directory") or ""
+        working_directory = claude_code_model_settings.working_directory
 
         if allowed_tool_names:
             system_prompt_text = "\n".join(
@@ -310,10 +259,10 @@ class ClaudeCodeModel(BackendModelBase):
                 "append": system_prompt_text,
             },
             "mcp_servers": {"nighthawk": sdk_server},
-            "permission_mode": claude_code_model_settings.get("permission_mode", "default"),
+            "permission_mode": claude_code_model_settings.permission_mode,
             "model": self._model_name,
-            "setting_sources": claude_code_model_settings.get("setting_sources"),
-            "max_turns": claude_code_model_settings.get("claude_max_turns", 50),
+            "setting_sources": claude_code_model_settings.setting_sources,
+            "max_turns": claude_code_model_settings.claude_max_turns,
             "output_format": _build_json_schema_output_format(model_request_parameters),
         }
 
@@ -328,17 +277,23 @@ class ClaudeCodeModel(BackendModelBase):
 
         # Claude Code sets the CLAUDECODE environment variable for nested sessions.
         # When the variable is set, the Claude Code CLI refuses to launch.
-        os.environ.pop("CLAUDECODE", None)
+        # This modifies the process-global environment, which is unavoidable because
+        # the Claude Agent SDK inherits environment variables from the parent process.
+        saved_claudecode_value = os.environ.pop("CLAUDECODE", None)
 
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(user_prompt_text)
+        try:
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(user_prompt_text)
 
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    assistant_model_name = message.model
-                elif isinstance(message, ResultMessage):
-                    result_message = message
-                result_messages.append(message)
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        assistant_model_name = message.model
+                    elif isinstance(message, ResultMessage):
+                        result_message = message
+                    result_messages.append(message)
+        finally:
+            if saved_claudecode_value is not None:
+                os.environ["CLAUDECODE"] = saved_claudecode_value
 
         if result_message is None:
             raise UnexpectedModelBehavior("Claude Code backend did not produce a result message")
@@ -346,7 +301,9 @@ class ClaudeCodeModel(BackendModelBase):
         if result_message.is_error:
             error_text = result_message.result or "Claude Code backend reported an error"
             result_messages_json = _serialize_result_message_to_json(result_messages)
-            raise UnexpectedModelBehavior(f"{error_text}\nresult_message_json={result_messages_json}\noutput_format={options_keyword_arguments['output_format']}")
+            raise UnexpectedModelBehavior(
+                f"{error_text}\nresult_message_json={result_messages_json}\noutput_format={options_keyword_arguments['output_format']}"
+            )
 
         structured_output = result_message.structured_output
         if structured_output is None:

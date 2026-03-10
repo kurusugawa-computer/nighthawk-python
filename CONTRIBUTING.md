@@ -1,5 +1,52 @@
 # Contributing to Nighthawk
 
+## Prerequisites
+
+- Python 3.13+
+- [uv](https://docs.astral.sh/uv/) for dependency management
+
+## Setup
+
+```bash
+# Clone the repository and install all dependencies
+uv sync --all-extras --all-groups
+```
+
+If you see a `uv` warning about hardlinking (common in containers or cross-filesystem workspaces), suppress it with:
+
+```bash
+export UV_LINK_MODE=copy
+```
+
+## Development commands
+
+```bash
+# Run Python
+uv run python
+
+# Format code
+uv run ruff format .
+
+# Lint (check / auto-fix)
+uv run ruff check .
+uv run ruff check --fix .
+
+# Type check
+uv run pyright
+
+# Run tests
+uv run pytest          # full suite
+uv run pytest -q       # quiet output
+
+# Integration tests (requires API keys in .env)
+set -a; source .env; set +a; uv run pytest -q
+```
+
+### Environment variables
+
+- `OPENAI_API_KEY`: Required for OpenAI integration tests.
+- `CODEX_API_KEY`: Required for Codex integration tests.
+
 ## Docstring Guide
 
 This guide defines the docstring conventions for the Nighthawk codebase.

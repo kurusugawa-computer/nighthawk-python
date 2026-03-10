@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import anyio
 import pytest
 from opentelemetry import context as otel_context
 from pydantic_ai import Agent, RunContext
 from pydantic_ai._run_context import set_current_run_context
-from pydantic_ai.messages import tool_return_ta
+from pydantic_ai.messages import ToolReturnPart, tool_return_ta
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import ToolDefinition
@@ -15,16 +16,16 @@ from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
-from nighthawk.backends import build_tool_name_to_handler
+from nighthawk.backends.mcp_boundary import call_tool_for_claude_code, call_tool_for_low_level_mcp_server
+from nighthawk.backends.tool_bridge import build_tool_name_to_handler
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.tools.contracts import ToolResultWrapperToolset
-from nighthawk.tools.mcp_boundary import call_tool_for_claude_code, call_tool_for_low_level_mcp_server
-from nighthawk.tools.registry import get_visible_tools, reset_global_tools_for_tests
+from nighthawk.tools.execution import ToolResultWrapperToolset
+from nighthawk.tools.registry import _reset_all_tools_for_tests, get_visible_tools
 
 
 @pytest.fixture(autouse=True)
 def _reset_tools() -> None:
-    reset_global_tools_for_tests()
+    _reset_all_tools_for_tests()
 
 
 def _new_step_context() -> StepContext:
@@ -37,12 +38,12 @@ def _new_step_context() -> StepContext:
     )
 
 
-def _tool_return_parts(result) -> list[object]:  # type: ignore[no-untyped-def]
+def _tool_return_parts(result) -> list[ToolReturnPart]:  # type: ignore[no-untyped-def]
     messages = result.all_messages()
-    parts: list[object] = []
+    parts: list[ToolReturnPart] = []
     for message in messages:
         for part in getattr(message, "parts", []):
-            if getattr(part, "part_kind", None) == "tool-return":
+            if isinstance(part, ToolReturnPart):
                 parts.append(part)
     return parts
 
@@ -71,7 +72,7 @@ def test_wrapper_returns_toolresult_success_with_placeholder_for_unknown_value()
     assert len(tool_return_parts) == 1
 
     tool_return_part = tool_return_parts[0]
-    content = getattr(tool_return_part, "content")
+    content = tool_return_part.content
 
     dumped = tool_return_ta.dump_python(content, mode="json")
     assert dumped["error"] is None
@@ -99,7 +100,7 @@ def test_wrapper_converts_tool_exception_to_toolresult_failure() -> None:
     assert len(tool_return_parts) == 1
 
     tool_return_part = tool_return_parts[0]
-    content = getattr(tool_return_part, "content")
+    content = tool_return_part.content
 
     dumped = tool_return_ta.dump_python(content, mode="json")
     assert dumped["value"] is None
@@ -137,7 +138,6 @@ def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
             return await build_tool_name_to_handler(
                 model_request_parameters=model_request_parameters,
                 visible_tools=visible_tools,
-                backend_label="test",
             )
 
     handlers = anyio.run(build_handlers)
@@ -171,8 +171,9 @@ def test_mcp_boundary_low_level_mcp_server_returns_text_content_and_propagates_o
     content = anyio.run(call_boundary)
     assert isinstance(content, list)
     assert len(content) == 1
-    assert getattr(content[0], "type") == "text"
-    assert getattr(content[0], "text") == '{"value":2,"error":null}'
+    item: Any = content[0]
+    assert item.type == "text"
+    assert item.text == '{"value":2,"error":null}'
 
 
 def test_mcp_boundary_claude_code_returns_text_content() -> None:

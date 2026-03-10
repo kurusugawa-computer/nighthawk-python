@@ -83,7 +83,7 @@ def test_codex_skill() -> None:
             model="codex:default",
             model_settings=CodexModelSettings(
                 working_directory=str(working_directory.resolve()),
-            ),
+            ).model_dump(),
         )
 
         step_executor = nh.AgentStepExecutor.from_configuration(
@@ -125,7 +125,7 @@ def test_codex_skill_calc() -> None:
         model="codex:default",
         model_settings=CodexModelSettings(
             working_directory=str(working_directory.resolve()),
-        ),
+        ).model_dump(),
     )
 
     step_executor = nh.AgentStepExecutor.from_configuration(
