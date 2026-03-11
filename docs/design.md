@@ -315,6 +315,13 @@ Truncation:
 
 ### 8.3. Tools available to the LLM
 
+Nighthawk exposes two paths for the LLM to call Python functions:
+
+1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_eval` or `nh_exec`.
+2. **User-defined tools** (`@nighthawk.tool`): Registered callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
+
+Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
+
 Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 
 User-defined tools:
@@ -331,6 +338,18 @@ Registration API:
 - Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
 - Tool registration targets the innermost active scope (call scope > tool scope > global).
 - Name conflicts raise `ToolRegistrationError` unless `overwrite=True`.
+
+Example:
+
+```py
+@nighthawk.tool(name="add_points")
+def add_points(run_context, *, base: int, bonus: int) -> int:
+    """Return a deterministic sum for score calculation."""
+    _ = run_context
+    return base + bonus
+```
+
+The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument.
 
 Scoping:
 

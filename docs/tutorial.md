@@ -287,27 +287,13 @@ python_average: (numbers)
 ```
 <!-- /prompt-example:global-function-reference -->
 
-### Custom tools with `@nh.tool`
-
-For boundary-crossing side effects, register tools explicitly:
-
-```py
-@nh.tool(name="add_points")
-def add_points(run_context, *, base: int, bonus: int) -> int:
-    """Return a deterministic sum for score calculation."""
-    _ = run_context
-    return base + bonus
-```
-
-The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument.
-
-`@nh.tool` uses [Pydantic AI's tool mechanism](https://ai.pydantic.dev/tools/). Tools are presented to the LLM via the model's native tool-calling interface, not through the user prompt LOCALS/GLOBALS sections.
-
-Author for discoverability:
+### Discoverability tips
 
 - Use clear function names.
 - Keep type annotations accurate.
 - Write short docstrings that explain intent and boundaries.
+
+**Note:** Nighthawk also provides `@nh.tool`, which registers functions via the model's native tool-calling interface. This path is reserved for cases that require `RunContext[StepContext]` access. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [design.md Section 8.3](design.md#83-tools-available-to-the-llm) for the `@nh.tool` specification.
 
 ## 4. Control Flow and Error Handling
 
@@ -627,7 +613,7 @@ Inside async natural functions:
 3. Cross-block data flow must be explicit. Use Python locals, the carry pattern, or f-string injection.
 4. Write bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
 5. Mutable context objects use `<name>` (read binding), not `<:name>` (write binding).
-6. Side effects are bounded behind explicit, documented tools.
+6. Prefer binding functions (local or module-level) for all callable needs. Reserve `@nh.tool` for cases that require `RunContext[StepContext]` access.
 7. Full coverage requirements are enforced by Python loops.
 8. Error behavior is explicit at the correct boundary.
 
