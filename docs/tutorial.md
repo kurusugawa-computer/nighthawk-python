@@ -50,6 +50,23 @@ Three sections:
 
 Each Natural block executes independently. There is no implicit message history between blocks. The LLM sees only the prompt assembled for that specific block. Cross-block context must be explicit (see [Section 5](#5-cross-block-composition)).
 
+### Running the examples
+
+All examples in this tutorial assume the following setup (see [Quickstart](quickstart.md) for details):
+
+```py
+import nighthawk as nh
+
+step_executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
+)
+
+with nh.run(step_executor):
+    ...  # Call natural functions here
+```
+
+Model identifiers use the `provider:model` format. See [Providers](providers.md) for available backends and configuration.
+
 ## 2. Providing Data to a Block
 
 Two mechanisms supply data to a Natural block: **bindings** and **f-string injection**.
@@ -60,47 +77,63 @@ A read binding makes a Python value visible in the LOCALS section. The name cann
 
 ```py
 @nh.natural_function
-def step(carry: list[str]) -> int:
-    result = 0
+def greet(user_name: str, language: str) -> str:
+    greeting = ""
     """natural
-    Read <carry> for prior context.
-    Set <:result> to 10.
-    Append a one-line summary of what you did to <carry>.
+    Compose a short greeting for <user_name> in <language> and set <:greeting>.
     """
-    return result
+    return greeting
 ```
 
-`carry` is a read binding — the LLM can read it and mutate it in-place (e.g., `list.append()`), but it cannot rebind the name.
+`user_name` and `language` are read bindings — the LLM can read their values, but it cannot rebind the names. If a read binding holds a mutable object (e.g., a `list`), the LLM can mutate it in-place (see [Section 5](#the-carry-pattern)).
 
 ### Write bindings (`<:name>`)
 
-A write binding allows the LLM to set a new value via `nh_assign`. The value is committed back into Python locals after the block.
+A write binding allows the LLM to set a new value. The value is committed back into Python locals after the block.
 
-Pre-declared (with type annotation):
+Pre-declared (with type annotation and initial value):
 
 ```py
 @nh.natural_function
-def classify_priority(text: str) -> str:
-    priority: str = "normal"
+def extract_sentiment(review: str) -> str:
+    sentiment: str = "neutral"
     """natural
-    Read <text> and update <:priority> with one of: low, normal, high.
+    Read <review> and update <:sentiment> with one of: positive, neutral, negative.
     """
-    return priority
+    return sentiment
+```
+
+Annotation only (type without initial value):
+
+```py
+@nh.natural_function
+def extract_topic(article: str) -> str:
+    topic: str
+    """natural
+    Read <article> and set <:topic> to the main topic.
+    """
+    return topic
 ```
 
 Not pre-declared:
 
 ```py
 @nh.natural_function
-def classify_priority(text: str):
+def detect_language(text: str):
     """natural
-    Read <text> and set <:priority>.
+    Read <text> and set <:language> to the detected language code.
     """
-    # `priority` is intentionally introduced by <:priority>.
-    return priority
+    # `language` is intentionally introduced by <:language>.
+    return language
 ```
 
 Type annotations on write bindings enable validation and coercion at commit time.
+
+**How write bindings appear in the prompt.** A pre-declared write binding with an initial value appears in LOCALS like any other local (e.g., `sentiment: str = "neutral"`). An annotation-only or undeclared write binding does not appear in LOCALS — the LLM discovers it from the `<:name>` reference in the program text.
+
+### Prompt appearance of bindings
+
+Read and write bindings are rendered identically in the LOCALS section (e.g., `name: type = value`). The `<name>` vs `<:name>` distinction in the Natural program text is the signal that tells the LLM which names it may update. At runtime, Nighthawk enforces the distinction: read bindings block rebinding, while write bindings allow rebinding and commit values back to Python locals.
 
 ### f-string injection
 
@@ -163,14 +196,16 @@ def generate(config: Config, topic: str) -> str:
     return output
 ```
 
+**Note:** To use literal angle brackets in program text without creating a binding, escape with a backslash: `\<name>` renders as `<name>` in the prompt without binding resolution. See [design.md Section 8.2.3](design.md#823-globals-summary) for details.
+
 ### Choosing between bindings and injection
 
 | | f-string injection | `<name>` binding |
 |---|---|---|
 | Evaluation time | When Python evaluates the f-string literal | At LLM prompt construction |
 | Appears in | Natural program text directly | Locals summary |
-| Token control | Full — you decide the exact text | Governed by `context_limits` |
-| LLM can mutate | No (text is baked in) | Yes (via `nh_exec`) |
+| Token control | Full — you decide the exact text | Governed by `context_limits` ([Section 6](#context-limits)) |
+| LLM can mutate | No (text is baked in) | In-place only (e.g., `list.append()`) |
 | Brace escaping | `{{` / `}}` to produce literal `{` / `}` | N/A |
 | Best for | Static config, pre-formatted context, computed values | Mutable state, objects the LLM needs to inspect or modify |
 
@@ -264,7 +299,9 @@ def add_points(run_context, *, base: int, bonus: int) -> int:
     return base + bonus
 ```
 
-The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument. See [Pydantic AI Tools documentation](https://ai.pydantic.dev/tools/) for details.
+The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument.
+
+`@nh.tool` uses [Pydantic AI's tool mechanism](https://ai.pydantic.dev/tools/). Tools are presented to the LLM via the model's native tool-calling interface, not through the user prompt LOCALS/GLOBALS sections.
 
 Author for discoverability:
 
@@ -292,6 +329,7 @@ def process_posts(posts: list[str]) -> list[str]:
     summaries: list[str] = []
 
     for post in posts:
+        summary: str
         """natural
         Evaluate <post>.
         If this post means "stop now", break.
@@ -302,6 +340,8 @@ def process_posts(posts: list[str]) -> list[str]:
 
     return summaries
 ```
+
+`summary: str` declares a type annotation without an initial value. The variable does not appear in the LOCALS section — the LLM discovers the binding from `<:summary>` in the program text. The type annotation enables validation when the LLM assigns a value.
 
 ```py
 @nh.natural_function
@@ -376,6 +416,18 @@ try:
 except InputError as e:
     print(f"Input error: {e}")
 ```
+
+### Error types
+
+All Nighthawk exceptions inherit from `NighthawkError`:
+
+| Exception | Raised when |
+|---|---|
+| `ExecutionError` | Invalid outcome, disallowed outcome type, or validation failure |
+| `NaturalParseError` | Natural block parsing or frontmatter errors |
+| `ToolEvaluationError` | Expression evaluation fails inside a tool call |
+| `ToolValidationError` | Type validation/coercion fails during assignment |
+| `ToolRegistrationError` | Invalid tool name or name conflict during `@nh.tool` registration |
 
 ## 5. Cross-block Composition
 
@@ -468,7 +520,7 @@ def compute_with_context(context_text: str) -> int:
 
 ### Design tips
 
-- Use `<carry>` (read binding), not `<:carry>` (write binding). Read bindings prevent `nh_assign` from rebinding the name, which would break the caller's reference.
+- Use `<carry>` (read binding), not `<:carry>` (write binding). Read bindings prevent rebinding the name, which would break the caller's reference.
 - Keep carry entries concise — they consume tokens in the locals summary on every subsequent step.
 
 ## 6. Execution Configuration
@@ -493,6 +545,10 @@ with nh.run(step_executor):
         system_prompt_suffix_fragment="Always respond in formal English.",
     ):
         formal_summary(text)
+
+    # Replace the step executor entirely for a section
+    with nh.scope(step_executor=another_executor):
+        specialized_step(data)
 ```
 
 Parameters:
@@ -504,6 +560,22 @@ Parameters:
 - `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
 
 The context manager yields the resolved `StepExecutor` for the scope.
+
+### Context limits
+
+The LOCALS and GLOBALS sections are bounded by token and item limits configured via `StepContextLimits`. When a limit is reached, remaining entries are omitted and a `<snipped>` marker is appended.
+
+```py
+configuration = nh.StepExecutorConfiguration(
+    model="openai-responses:gpt-5-mini",
+    context_limits=nh.StepContextLimits(
+        locals_max_tokens=4096,
+        locals_max_items=50,
+    ),
+)
+```
+
+See [design.md Section 8.2](design.md#82-prompt-context) for the full specification.
 
 ### Async natural functions
 
@@ -531,13 +603,27 @@ Inside async natural functions:
 
 ### Responsibility split
 
-- **Natural**: interpretation, synthesis, drafting.
-- **Python**: ordering, loops, validation, reliability boundaries.
+**Use Natural when the task requires judgment** — decisions that depend on interpretation, world knowledge, or subjective evaluation:
+
+- Classification and routing (e.g., categorize a support ticket).
+- Text generation (e.g., summarize, draft, translate, reformulate).
+- Interpretation of ambiguous or unstructured input.
+- Selection among options based on context (e.g., choose the best policy).
+
+**Use Python for everything deterministic** — operations whose result is fully determined by the input:
+
+- Computation (arithmetic, string manipulation, data transformation).
+- Control flow (loops, conditionals, sequencing of Natural blocks).
+- I/O and side effects (file operations, API calls, database queries).
+- Validation, type enforcement, and error recovery.
+- State management and data flow between Natural blocks.
+
+**Decision rule:** if the correct output can be computed without an LLM, use Python. Natural blocks add latency, cost, and non-determinism — reserve them for tasks that genuinely require LLM capabilities.
 
 ### Rules
 
-1. Natural blocks must start with `natural\n` and no leading blank line.
-2. Write one integrated instruction body; do not split into "bindings list" then "instructions".
+1. Write one integrated instruction body per block; do not split into a "bindings list" then "instructions".
+2. One judgment per block. If a block makes two independent decisions, split it into two blocks connected by Python.
 3. Cross-block data flow must be explicit. Use Python locals, the carry pattern, or f-string injection.
 4. Write bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
 5. Mutable context objects use `<name>` (read binding), not `<:name>` (write binding).

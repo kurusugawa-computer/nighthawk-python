@@ -1,119 +1,63 @@
 # AI Agent instructions for nighthawk-python
 
-This file provides repository-specific guidance for coding agents and human contributors.
-
 ## NON-NEGOTIABLE REQUIREMENTS
 
 - Do not edit files until all questions in the current chat session are resolved and explicit user permission is granted (except ExecPlans, Ideal State documents).
 - In chat sessions, communicate in Japanese; when writing to files, use English; internal reasoning may use any language.
-- When listing questions, confirmations, or proposed decisions for the user, assign a short stable Id to each item so the user can respond inline.
-  - Required format: `Q-SLUG-001` (questions), `C-SLUG-001` (confirmations), `P-SLUG-001` (proposals). For follow-ups, append a suffix like `Q-SLUG-001A`.
-  - Each item must be answerable on its own and must include its Id in the text.
+- When listing questions, confirmations, or proposed decisions, assign a short stable Id to each item so the user can respond inline.
+  - Format: `Q-SLUG-001` (questions), `C-SLUG-001` (confirmations), `P-SLUG-001` (proposals). Follow-ups: append suffix like `Q-SLUG-001A`.
+  - Each item must be answerable on its own and must include its Id.
+- When the user requests "radical" changes, prioritize extensive, global, disruptive, and thorough edits over minimal fixes.
 
-## Design principles
+## Naming and terminology
 
-- Avoid premature abstraction: Do not add classes/parameters/utilities for hypothetical reuse; any new abstraction must be used by code in `src/` or `tests/` in the same change (docs examples do not count).
-- Keep identifiers module-private until they are clearly used from outside the module in non-test code. Prefer a leading underscore for internal names; only make names public when there is a real external caller, and export intentionally (for example via __all__).
-- Pydantic-first dependencies: The core library may depend on Pydantic and Pydantic AI as required (non-optional) dependencies.
-- Observability: Use OpenTelemetry standard API (`opentelemetry.trace`) for span instrumentation at run/scope/step/tool boundaries. Use Python standard `logging` (logger name `"nighthawk"`) for diagnostic messages (warnings, info). Do not import `logfire` in library code under `src/`; `logfire` is a dev-only dependency for integration tests.
-- Prefer built-ins over reimplementation: Use `pydantic.BaseModel` and built-in features from Pydantic and Pydantic AI aggressively. Avoid re-implementing functionality that either library already provides (e.g., validation, coercion, parsing, schema/serialization, agent/tool abstractions).
-- Naming: Use full words in identifiers (function names, parameter names, return names, class/attribute names, and local variable names) unless defined in the Glossary.
-  - Disallowed abbreviations include: `ctx`, `cfg`, `repo`, `opts`, `ref`.
-  - Prefer: `context`, `configuration`, `repository`, `options`, `reference`.
-  - Map/Dict naming: For mapping-shaped values, use `(adjective + "_")* + key + "_to_" + value`.
-    - Do not pluralize `value` just because the container is a mapping.
-    - If the value is actually a collection, name it explicitly (for example `_list`, `_set`, `_tuple`).
-    - Existing code that violates this rule may be left as-is until the next time that area is edited; fix naming opportunistically when you touch it.
-    - Examples:
-      - `binding_name_to_type` (binding name -> type object)
-      - `binding_name_to_field_name_to_value` (nested mapping: binding name -> field name -> value)
-      - `binding_types_dict_expression` (a dict-literal expression used to construct a mapping)
-  - If existing code violates these naming rules, ask the user how to proceed before doing broad renames across a file or the codebase.
-- Avoid unnecessary subdirectories under `src`; do not add one-off folders that only hold `__init__.py` + a single class without maintainer buy-in.
-- Type aliases: Prefer PEP 695 `type` aliases when introducing new type aliases.
-- When the user requests "radical" changes, prioritize extensive, global, disruptive, and thorough edits to the entire codebase and documentation over minimal fixes.
-- ASCII punctuation only: Use `'` (U+0027) and `"` (U+0022). Do not use smart quotes.
+### Allowed abbreviations (Glossary)
 
-## Glossary
+`Id` (Identifier), `DSL` (Domain Specific Language), `LLM` (Large Language Model), `NH`/`nh` (Nighthawk), `max` (maximum), `min` (minimum), loop indices `i`/`j`/`k`.
 
-- `Id` = Identifier
-- `DSL` = Domain Specific Language
-- `LLM` = Large Language Model
-- `NH` / `nh` = Nighthawk
-- `max` = maximum
-- `min` = minimum
-- Loop indices: `i`, `j`, `k` (e.g., `for i in range(n): ...`).
+### Rules
 
-## Context and orientation
+- Use full words in all identifiers unless listed above.
+- Disallowed abbreviations: `ctx` -> `context`, `cfg` -> `configuration`, `repo` -> `repository`, `opts` -> `options`, `ref` -> `reference`.
+- Map/Dict: `(adjective + "_")* + key + "_to_" + value`.
+  - Do not pluralize `value`; collections use explicit suffix (`_list`, `_set`, `_tuple`).
+  - Examples: `binding_name_to_type`, `binding_name_to_field_name_to_value`.
+  - Counter-example: `binding_types_dict_expression` (dict-literal expression, not a lookup).
+  - Fix violations opportunistically when touching the code.
+- Ask the user before doing broad renames across a file or the codebase.
+- ASCII punctuation only: `'` (U+0027) and `"` (U+0022). No smart quotes.
+
+## Project orientation
+
+A Python 3.13+ library embedding a "Natural" DSL inside Python functions, executed using an LLM. Provider dependencies are installed via extras. No CLI entry point.
+
+Natural DSL sources and included markdown are trusted, repository-managed assets. Do not wire untrusted user input into Natural blocks or template preprocessing.
 
 ### Repository layout
 
-- `src/nighthawk/`: The library package.
+- `src/nighthawk/`: Library package.
 - `tests/`: Pytest suite.
-- `docs/`: Product/design documentation.
-  - `docs/quickstart.md`: First steps (minimal setup and first example).
-  - `docs/tutorial.md`: Learn Nighthawk from first principles (bindings, tools, control flow, composition).
-  - `docs/design.md`: Design specification.
-  - `docs/roadmap.md`: Not implemented items.
-- `.agents/`: Agent artifacts.
-  - `.agents/execplans/`: ExecPlans (only when explicitly requested).
-  - `.agents/PLANS.md`: The ExecPlan format and requirements.
-- `.devcontainer/`: Devcontainer definition (Python base image).
-- `pyproject.toml`, `uv.lock`: Project metadata and locked dependencies.
-
-### What this repo is
-
-- A Python 3.13+ library that embeds a small "Natural" DSL inside Python functions and executes it using an LLM (provider dependencies are installed via extras).
-- There is no CLI entry point currently.
-
-### Safety model
-
-- Assume Natural DSL sources and any included markdown are trusted, repository-managed assets.
-- Do not wire untrusted user input into Natural blocks or template preprocessing.
+- `docs/`: `quickstart.md` (first steps), `tutorial.md` (first principles), `design.md` (specification), `roadmap.md` (future items).
+- `.agents/`: `execplans/` (on request only), `PLANS.md` (format spec).
+- `.devcontainer/`: Devcontainer definition.
+- `pyproject.toml`, `uv.lock`: Metadata and locked dependencies.
 
 ## Development workflow
 
-### Tooling
+Python 3.13+, `uv` for dependencies, `pytest` for tests. Prefer LSP-based tooling for code analysis.
 
-- Python: 3.13+.
-- Dependency management: `uv`.
-- Tests: `pytest`.
-- When performing code analysis (type errors, symbol navigation, call graph understanding), prefer LSP-based tooling first.
+| Command | Purpose |
+|---|---|
+| `uv run python` | Investigate interactively |
+| `uv sync --all-extras --all-groups` | Install/sync dependencies |
+| `uv run ruff format .` | Format |
+| `uv run ruff check .` | Lint |
+| `uv run ruff check --fix .` | Auto-fix lint |
+| `uv run pyright` | Type check |
+| `uv run pytest` | Full test suite |
+| `uv run pytest -q` | Tests (quiet) |
+| `set -a; source .env; set +a; uv run pytest -q` | Integration tests |
 
-### Common commands (run from repo root)
+`uv` hardlinking warnings do not indicate failure. Suppress: `export UV_LINK_MODE=copy`.
 
-- Run python for investigating:
-  - `uv run python`
-
-- Install/sync dependencies:
-  - `uv sync --all-extras --all-groups`
-
-- Format code:
-  - `uv run ruff format .`
-
-- Run lint checks:
-  - `uv run ruff check .`
-
-- Auto-fix lint issues:
-  - `uv run ruff check --fix .`
-
-- Run type checks:
-  - `uv run pyright`
-
-- Run the full test suite:
-  - `uv run pytest`
-
-- Run tests quietly:
-  - `uv run pytest -q`
-
-- Enable and run integration tests:
-  - `set -a; source .env; set +a; uv run pytest -q`
-
-If you see an `uv` warning about hardlinking (common in containers / cross-filesystem workspaces), it does not indicate test failure. If you want to suppress it:
-
-- `export UV_LINK_MODE=copy`
-
-### Environment variables
-
-- `OPENAI_API_KEY`: Required for any OpenAI integration.
-- `CODEX_API_KEY`: Required for any Codex integration.
+Environment: `OPENAI_API_KEY` (OpenAI), `CODEX_API_KEY` (Codex).
