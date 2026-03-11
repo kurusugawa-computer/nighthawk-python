@@ -293,6 +293,56 @@ python_average: (numbers)
 - Keep type annotations accurate.
 - Write short docstrings that explain intent and boundaries.
 
+### Keep locals minimal
+
+Function parameters and local variables appear in LOCALS. Module-level names referenced via `<name>` that are _not_ in locals appear in GLOBALS. Nighthawk renders callable entries with their full signature and docstring intent — but only when type information is available.
+
+When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type.
+
+Wrong — `fetch_data` loses its signature in LOCALS:
+
+```py
+from myapp import fetch_data
+
+@nh.natural_function
+async def summarize(query: str, fetch_data: object) -> str:
+    result = ""
+    """natural
+    Use <fetch_data> to get data for <query> and set <:result>.
+    """
+    return result
+```
+
+```
+<<<NH:LOCALS>>>
+fetch_data: object = <non-serializable>
+query: str = "latest news"
+result: str = ""
+<<<NH:END_LOCALS>>>
+```
+
+Correct — `fetch_data` keeps its full signature in GLOBALS:
+
+```py
+from myapp import fetch_data
+
+@nh.natural_function
+async def summarize(query: str) -> str:
+    result = ""
+    """natural
+    Use <fetch_data> to get data for <query> and set <:result>.
+    """
+    return result
+```
+
+```
+<<<NH:GLOBALS>>>
+fetch_data: (query: str, max_results: int = 10) -> list[str]  # intent: Fetch data matching the query.
+<<<NH:END_GLOBALS>>>
+```
+
+This principle extends beyond callables. Any module-level name that is stable across invocations — constants, classes, utility functions — should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
+
 **Note:** Nighthawk also provides `@nh.tool`, which registers functions via the model's native tool-calling interface. This path is reserved for cases that require `RunContext[StepContext]` access. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [design.md Section 8.3](design.md#83-tools-available-to-the-llm) for the `@nh.tool` specification.
 
 ## 4. Control Flow and Error Handling
@@ -613,9 +663,10 @@ Inside async natural functions:
 3. Cross-block data flow must be explicit. Use Python locals, the carry pattern, or f-string injection.
 4. Write bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
 5. Mutable context objects use `<name>` (read binding), not `<:name>` (write binding).
-6. Prefer binding functions (local or module-level) for all callable needs. Reserve `@nh.tool` for cases that require `RunContext[StepContext]` access.
-7. Full coverage requirements are enforced by Python loops.
-8. Error behavior is explicit at the correct boundary.
+6. Keep function parameters and locals minimal — only bind invocation-specific data. Reference module-level names via `<name>` read bindings so they appear in GLOBALS with full type information ([Section 3](#keep-locals-minimal)).
+7. Prefer binding functions (local or module-level) for all callable needs. Reserve `@nh.tool` for cases that require `RunContext[StepContext]` access.
+8. Full coverage requirements are enforced by Python loops.
+9. Error behavior is explicit at the correct boundary.
 
 ## 8. Testing Natural Functions
 
