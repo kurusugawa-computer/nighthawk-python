@@ -16,6 +16,7 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 - **[Quickstart](quickstart.md)** — Setup, first example, backends, credentials.
 - **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
 - **[Providers](providers.md)** — LLM providers and configuration.
+- **[Coding agents](coding-agents.md)** — Claude Code and Codex backend configuration, skills, and MCP tool exposure.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
 - **[Roadmap](roadmap.md)** — Future directions.

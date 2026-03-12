@@ -10,12 +10,25 @@ configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
 
 The default model is `openai-responses:gpt-5-nano`.
 
-There are two categories of providers:
+## Choosing a provider
 
-| Category | Examples | How it works |
+There are three ways to connect Nighthawk to a model:
+
+| Approach | When to use |
+|---|---|
+| Pydantic AI provider | Broad model choice, standard Pydantic AI configuration |
+| Coding agent backend | Skill execution, project-scoped files, or MCP tool exposure |
+| Custom backend | Full control over step execution |
+
+### Capability matrix
+
+| Capability | Pydantic AI provider | Coding agent backend |
 |---|---|---|
-| Pydantic AI provider | OpenAI, Anthropic, Bedrock, Vertex AI, Groq, Mistral, ... | Model identifier passed directly to Pydantic AI |
-| Nighthawk backend | Claude Code, Codex | Custom `Model` implementation in Nighthawk |
+| Natural block execution | Yes | Yes |
+| Skill execution | No | Yes |
+| MCP tool exposure | No | Yes (automatic) |
+| Project-scoped files (CLAUDE.md, AGENTS.md) | No | Yes |
+| Model settings | Pydantic AI standard | Backend-specific |
 
 ## Pydantic AI providers
 
@@ -70,66 +83,25 @@ configuration = StepExecutorConfiguration(
 )
 ```
 
-## Nighthawk backends
+## Coding agent backends
 
-The `claude-code` and `codex` providers are Nighthawk-specific backends. They implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the underlying CLI via MCP.
-
-### Claude Code backend
-
-The `claude-code` backend uses the Claude Agent SDK to delegate Natural block execution to Claude Code.
-
-```python
-configuration = StepExecutorConfiguration(model="claude-code:default")
-```
-
-Environment:
-
-- Requires `ANTHROPIC_API_KEY` or an active Claude Code session.
-- Nighthawk tools are exposed to Claude Code via an embedded MCP server.
-- Tool names are prefixed with `mcp__nighthawk__` in the Claude Code environment.
-
-Install the Nighthawk extra:
-
-```bash
-pip install nighthawk[claude-code]
-```
-
-Settings are controlled via `ClaudeCodeModelSettings`:
-
-```python
-configuration = StepExecutorConfiguration(
-    model="claude-code:default",
-    model_settings={
-        "permission_mode": "bypassPermissions",
-        "claude_max_turns": 50,
-        "working_directory": "/path/to/project",
-    },
-)
-```
-
-### Codex backend
-
-The `codex` backend runs Codex as a subprocess and communicates via an embedded MCP tool server.
-
-```python
-configuration = StepExecutorConfiguration(model="codex:default")
-```
-
-Environment:
-
-- Requires `CODEX_API_KEY`.
-- An HTTP MCP server is started in a background thread on a random local port.
-- The Codex CLI connects to this server to access Nighthawk tools.
-
-Install the Nighthawk extra:
-
-```bash
-pip install nighthawk[codex]
-```
+The `claude-code` and `codex` backends delegate to a coding agent CLI instead of Pydantic AI. Install with `nighthawk[claude-code]` or `nighthawk[codex]`. See [Coding agents](coding-agents.md) for configuration, skill behavior, and backend-specific settings.
 
 ## Custom backends
 
-Nighthawk's step executor protocol allows custom backends. Implement either `SyncStepExecutor` or `AsyncStepExecutor`:
+Nighthawk's `SyncStepExecutor` and `AsyncStepExecutor` protocols define the step execution interface. Any object implementing one of these protocols can serve as a backend.
+
+For most cases, wrap a Pydantic AI `Agent` using `AgentStepExecutor`:
+
+```python
+from pydantic_ai import Agent
+from nighthawk.runtime.step_executor import AgentStepExecutor
+
+agent = Agent(model="openai-responses:gpt-5-nano", ...)
+executor = AgentStepExecutor.from_agent(agent=agent)
+```
+
+For full control, implement `AsyncStepExecutor` (or `SyncStepExecutor` for synchronous use) directly:
 
 ```python
 from nighthawk.runtime.step_executor import AsyncStepExecutor
@@ -145,16 +117,7 @@ class MyBackend:
         binding_names: list[str],
         allowed_step_kinds: tuple[str, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
-        # Implement provider-specific execution
         ...
 ```
 
-Alternatively, wrap a Pydantic AI `Agent` using `AgentStepExecutor.from_agent(...)`:
-
-```python
-from pydantic_ai import Agent
-from nighthawk.runtime.step_executor import AgentStepExecutor
-
-agent = Agent(model="openai-responses:gpt-5-nano", ...)
-executor = AgentStepExecutor.from_agent(agent=agent)
-```
+See the [Pydantic AI Model documentation](https://ai.pydantic.dev/models/overview/) for extending `Agent` with custom models, and the [Pydantic AI tools documentation](https://ai.pydantic.dev/tools/) for tool integration patterns.
