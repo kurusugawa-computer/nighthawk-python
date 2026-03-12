@@ -85,7 +85,7 @@ configuration = StepExecutorConfiguration(
 
 ## Coding agent backends
 
-The `claude-code` and `codex` backends delegate to a coding agent CLI instead of Pydantic AI. Install with `nighthawk[claude-code]` or `nighthawk[codex]`. See [Coding agents](coding-agents.md) for configuration, skill behavior, and backend-specific settings.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate to a coding agent CLI instead of Pydantic AI. Install with `nighthawk[claude-code-sdk]`, `nighthawk[claude-code-cli]`, or `nighthawk[codex]`. See [Coding agents](coding-agents.md) for configuration, skill behavior, and backend-specific settings.
 
 ## Custom backends
 

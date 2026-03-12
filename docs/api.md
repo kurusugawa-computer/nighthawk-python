@@ -37,9 +37,13 @@
 
 ::: nighthawk.backends.base
 
-### Claude Code
+### Claude Code (SDK)
 
-::: nighthawk.backends.claude_code
+::: nighthawk.backends.claude_code_sdk
+
+### Claude Code (CLI)
+
+::: nighthawk.backends.claude_code_cli
 
 ### Codex
 
@@ -77,11 +81,20 @@
         - SandboxMode
         - ModelReasoningEffort
 
-### Claude Code Settings
+### Claude Code SDK Settings
 
-::: nighthawk.backends.claude_code
+::: nighthawk.backends.claude_code_sdk
     options:
       members:
-        - ClaudeCodeModelSettings
+        - ClaudeCodeSdkModelSettings
+        - PermissionMode
+        - SettingSource
+
+### Claude Code CLI Settings
+
+::: nighthawk.backends.claude_code_cli
+    options:
+      members:
+        - ClaudeCodeCliModelSettings
         - PermissionMode
         - SettingSource

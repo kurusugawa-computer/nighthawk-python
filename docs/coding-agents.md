@@ -1,14 +1,17 @@
 # Coding agents
 
-The `claude-code` and `codex` backends delegate Natural block execution to a coding agent CLI. Both implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [Providers](providers.md) for the full provider landscape and capability matrix.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural block execution to a coding agent CLI. All three implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [Providers](providers.md) for the full provider landscape and capability matrix.
 
 Minimal configuration:
 
 ```python
 from nighthawk.configuration import StepExecutorConfiguration
 
-# Claude Code
-configuration = StepExecutorConfiguration(model="claude-code:default")
+# Claude Code (SDK)
+configuration = StepExecutorConfiguration(model="claude-code-sdk:default")
+
+# Claude Code (CLI)
+configuration = StepExecutorConfiguration(model="claude-code-cli:default")
 
 # Codex
 configuration = StepExecutorConfiguration(model="codex:default")
@@ -32,14 +35,14 @@ Both backends accept `working_directory` in their model settings. This absolute 
 - Where the CLI resolves project-scoped files (CLAUDE.md, AGENTS.md, skills, settings)
 - The working directory for CLI execution
 
-## Claude Code
+## Claude Code (SDK)
 
-The `claude-code` backend uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) to run Claude Code as a subprocess.
+The `claude-code-sdk` backend uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) to run Claude Code as a subprocess.
 
 ### Installation
 
 ```bash
-pip install nighthawk[claude-code]
+pip install nighthawk[claude-code-sdk]
 ```
 
 ### Environment
@@ -52,11 +55,11 @@ pip install nighthawk[claude-code]
 ### Settings
 
 ```python
-from nighthawk.backends.claude_code import ClaudeCodeModelSettings
+from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
 configuration = StepExecutorConfiguration(
-    model="claude-code:sonnet",
-    model_settings=ClaudeCodeModelSettings(
+    model="claude-code-sdk:sonnet",
+    model_settings=ClaudeCodeSdkModelSettings(
         permission_mode="bypassPermissions",
         setting_sources=["project"],
         claude_allowed_tool_names=("Skill", "Bash"),
@@ -73,6 +76,53 @@ configuration = StepExecutorConfiguration(
 | `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
 | `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow |
 | `claude_max_turns` | `int` | `50` | Maximum conversation turns |
+| `working_directory` | `str` | `""` | Absolute path to the project directory |
+
+## Claude Code (CLI)
+
+The `claude-code-cli` backend invokes `claude -p` directly as a subprocess, without the Claude Agent SDK. It communicates via JSON output and exposes Nighthawk tools via an HTTP MCP server on a random local port.
+
+### Installation
+
+```bash
+pip install nighthawk[claude-code-cli]
+```
+
+The `claude` CLI must be installed separately (it is a system tool, not a Python package).
+
+### Environment
+
+- **Authentication:** Requires `ANTHROPIC_API_KEY` or an active Claude Code session.
+- **CLI invocation:** Nighthawk invokes `claude -p --output-format json --no-session-persistence` as a subprocess. Additional flags (`--model`, `--system-prompt-file`, `--permission-mode`, `--max-turns`, `--max-budget-usd`, `--mcp-config`, `--json-schema`, `--allowedTools`) are appended based on `ClaudeCodeCliModelSettings`.
+- **MCP tool exposure:** An HTTP MCP server is started in a background thread on a random local port. The Claude Code CLI connects via `--mcp-config`. Tool names are prefixed with `mcp__nighthawk__` in the Claude Code environment.
+- **Working directory:** Passed as the `cwd` parameter to `create_subprocess_exec`.
+- **Project-scoped files:** Resolved from `working_directory` following Claude Code's own rules (CLAUDE.md, .claude/CLAUDE.md, .claude/settings.json, .claude/skills/).
+
+### Settings
+
+```python
+from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
+
+configuration = StepExecutorConfiguration(
+    model="claude-code-cli:sonnet",
+    model_settings=ClaudeCodeCliModelSettings(
+        permission_mode="bypassPermissions",
+        setting_sources=["project"],
+        claude_max_turns=50,
+        max_budget_usd=5.0,
+        working_directory="/abs/path/to/project",
+    ).model_dump(),
+)
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
+| `claude_executable` | `str` | `"claude"` | Path or name of the Claude Code CLI executable |
+| `claude_max_turns` | `int` \| `None` | `None` | Maximum conversation turns |
+| `max_budget_usd` | `float` \| `None` | `None` | Maximum dollar amount to spend on API calls |
+| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode |
+| `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load |
 | `working_directory` | `str` | `""` | Absolute path to the project directory |
 
 ## Codex
@@ -175,5 +225,6 @@ Callable discoverability in skills follows the same rules as regular Natural fun
 
 ### Integration tests
 
-- `tests/integration/test_claude_code_integration.py::test_claude_skill_calc`
+- `tests/integration/test_claude_code_sdk_integration.py::test_claude_skill_calc`
+- `tests/integration/test_claude_code_cli_integration.py::test_claude_code_cli_skill_calc`
 - `tests/integration/test_codex_integration.py::test_codex_skill_calc`

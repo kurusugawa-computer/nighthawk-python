@@ -16,7 +16,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
-from nighthawk.backends.mcp_boundary import call_tool_for_claude_code, call_tool_for_low_level_mcp_server
+from nighthawk.backends.mcp_boundary import call_tool_for_claude_code_sdk, call_tool_for_low_level_mcp_server
 from nighthawk.backends.tool_bridge import build_tool_name_to_handler
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.execution import ToolResultWrapperToolset
@@ -182,7 +182,7 @@ def test_mcp_boundary_claude_code_returns_text_content() -> None:
         return '{"value":2,"error":null}'
 
     async def call_boundary() -> dict[str, object]:
-        return await call_tool_for_claude_code(
+        return await call_tool_for_claude_code_sdk(
             tool_name="stub_tool",
             arguments={"x": 1},
             tool_handler=tool_handler,
@@ -199,7 +199,7 @@ def test_mcp_boundary_converts_boundary_exception_to_json_failure_text_without_r
         raise RuntimeError("boom")
 
     async def call_boundary() -> dict[str, object]:
-        return await call_tool_for_claude_code(
+        return await call_tool_for_claude_code_sdk(
             tool_name="stub_tool",
             arguments={},
             tool_handler=tool_handler,

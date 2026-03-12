@@ -46,7 +46,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Python 3.13+.
 - Default model: `openai-responses:gpt-5-nano`.
 - Recommended model for quality: `openai-responses:gpt-5.4`.
-- Optional backends are installed via extras: `openai`, `vertexai`, `claude-code`, `codex`.
+- Optional backends are installed via extras: `openai`, `vertexai`, `claude-code-sdk`, `claude-code-cli`, `codex`.
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
 ## 4. Terminology
@@ -82,7 +82,7 @@ This file intentionally does not maintain a persistent divergence ledger.
   - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
     - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
     - Special cases:
-      - `claude-code:default` and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
+      - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
   - `model_settings`: optional model/backend settings object forwarded to Pydantic AI Agent calls.
   - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
   - `prompts`: prompt templates used for execution.
@@ -133,7 +133,7 @@ Backend-specific settings are passed via `model_settings` in `StepExecutorConfig
 - `sandbox_mode`: Codex sandbox isolation mode (`"read-only"`, `"workspace-write"`, `"danger-full-access"`).
 - `working_directory`: Absolute path to the working directory for Codex.
 
-#### ClaudeCodeModelSettings (for `claude-code:*` models)
+#### ClaudeCodeSdkModelSettings (for `claude-code-sdk:*` models)
 
 - `permission_mode`: Claude Code permission mode (`"default"`, `"acceptEdits"`, `"plan"`, `"bypassPermissions"`). Default: `"default"`.
 - `setting_sources`: Configuration sources to load (`"user"`, `"project"`, `"local"`).
@@ -141,6 +141,16 @@ Backend-specific settings are passed via `model_settings` in `StepExecutorConfig
 - `claude_allowed_tool_names`: Additional Claude Code native tool names to allow.
 - `claude_max_turns`: Maximum conversation turns. Default: `50`.
 - `working_directory`: Absolute path to the working directory for Claude Code.
+
+#### ClaudeCodeCliModelSettings (for `claude-code-cli:*` models)
+
+- `allowed_tool_names`: Nighthawk tool names exposed to the model.
+- `claude_executable`: Path or name of the Claude Code CLI executable. Default: `"claude"`.
+- `claude_max_turns`: Maximum conversation turns.
+- `max_budget_usd`: Maximum dollar amount to spend on API calls.
+- `permission_mode`: Claude Code permission mode (`"default"`, `"acceptEdits"`, `"plan"`, `"bypassPermissions"`).
+- `setting_sources`: Configuration sources to load (`"user"`, `"project"`, `"local"`).
+- `working_directory`: Absolute path to the working directory for Claude Code CLI.
 
 ## 6. Natural block detection
 
@@ -321,6 +331,8 @@ Nighthawk exposes two paths for the LLM to call Python functions:
 2. **User-defined tools** (`@nighthawk.tool`): Registered callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
+
+Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Tutorial Section 7](tutorial.md#designing-binding-functions-for-llm-consumption) for practical design patterns.
 
 Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 

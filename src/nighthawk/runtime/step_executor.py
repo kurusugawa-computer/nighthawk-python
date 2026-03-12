@@ -93,10 +93,14 @@ def _new_agent_step_executor(
     provider, provider_model_name = model_identifier.split(":", 1)
 
     match provider:
-        case "claude-code":
-            from ..backends.claude_code import ClaudeCodeModel
+        case "claude-code-sdk":
+            from ..backends.claude_code_sdk import ClaudeCodeSdkModel
 
-            model: object = ClaudeCodeModel(model_name=(provider_model_name if provider_model_name != "default" else None))
+            model: object = ClaudeCodeSdkModel(model_name=(provider_model_name if provider_model_name != "default" else None))
+        case "claude-code-cli":
+            from ..backends.claude_code_cli import ClaudeCodeCliModel
+
+            model = ClaudeCodeCliModel(model_name=(provider_model_name if provider_model_name != "default" else None))
         case "codex":
             from ..backends.codex import CodexModel
 

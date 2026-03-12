@@ -12,7 +12,7 @@ Install with the OpenAI backend:
 pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"
 ```
 
-Other available extras: `vertexai`, `claude-code`, `codex`. See [Backends and model identifiers](#backends-and-model-identifiers) below.
+Other available extras: `vertexai`, `claude-code-sdk`, `claude-code-cli`, `codex`. See [Backends and model identifiers](#backends-and-model-identifiers) below.
 
 ## First Example
 
@@ -64,7 +64,8 @@ Nighthawk-specific backends (not backed by Pydantic AI):
 
 | Extra | Example identifier |
 |---|---|
-| `claude-code` | `claude-code:default` |
+| `claude-code-sdk` | `claude-code-sdk:default` |
+| `claude-code-cli` | `claude-code-cli:default` |
 | `codex` | `codex:default` |
 
 Default model: `openai-responses:gpt-5-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
@@ -98,7 +99,7 @@ Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx
 
 **`ModuleNotFoundError` for a provider**
 
-Install the corresponding extra: `pip install "nighthawk[openai]"`, `pip install "nighthawk[claude-code]"`, etc.
+Install the corresponding extra: `pip install "nighthawk[openai]"`, `pip install "nighthawk[claude-code-sdk]"`, etc.
 
 ## Next Steps
 

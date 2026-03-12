@@ -29,9 +29,19 @@ def requires_codex_integration() -> None:
         pytest.skip("Codex integration tests are skipped")
 
 
-def requires_claude_code_integration() -> None:
+def requires_claude_code_sdk_integration() -> None:
     if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
     if os.getenv("ANTHROPIC_AUTH_TOKEN") is None and os.getenv("ANTHROPIC_API_KEY") is None:
         pytest.skip("Claude Code integration test requires ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY")
+
+
+def requires_claude_code_cli_integration() -> None:
+    import shutil
+
+    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+        pytest.skip("Integration tests are disabled")
+
+    if shutil.which("claude") is None:
+        pytest.skip("Claude Code CLI integration test requires 'claude' on PATH")

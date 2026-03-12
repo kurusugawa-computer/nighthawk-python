@@ -95,7 +95,7 @@ async def _get_safe_tool_result_text(
         )
 
 
-async def call_tool_for_claude_code(
+async def call_tool_for_claude_code_sdk(
     *,
     tool_name: str,
     arguments: dict[str, object],

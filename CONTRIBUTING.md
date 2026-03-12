@@ -61,7 +61,8 @@ Write docstrings only for public API members exported via `__all__` in `src/nigh
 
 - `nighthawk.errors`
 - `nighthawk.configuration`
-- `nighthawk.backends.claude_code`
+- `nighthawk.backends.claude_code_sdk`
+- `nighthawk.backends.claude_code_cli`
 - `nighthawk.backends.codex`
 
 Do not write docstrings for names prefixed with `_` (module-private).

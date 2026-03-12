@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from nighthawk.backends.claude_code import _serialize_result_message_to_json
+from nighthawk.backends.claude_code_sdk import _serialize_result_message_to_json
 
 
 @dataclass

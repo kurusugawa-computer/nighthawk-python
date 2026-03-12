@@ -1,23 +1,17 @@
 from pathlib import Path
 
 import nighthawk as nh
-from tests.integration.skip_helpers import requires_claude_code_integration
+from tests.integration.skip_helpers import requires_claude_code_cli_integration
 
 
-def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
-    requires_claude_code_integration()
+def test_claude_code_cli_natural_step_uses_tool(tmp_path: Path) -> None:
+    requires_claude_code_cli_integration()
 
-    import logfire
-
-    logfire.configure(send_to_logfire="if-token-present")
-    logfire.instrument_mcp()
-    logfire.instrument_pydantic_ai()
-
-    from nighthawk.backends.claude_code import ClaudeCodeModelSettings
+    from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="claude-code:sonnet",
-        model_settings=ClaudeCodeModelSettings(
+        model="claude-code-cli:sonnet",
+        model_settings=ClaudeCodeCliModelSettings(
             working_directory=str(tmp_path.resolve()),
         ).model_dump(),
     )
@@ -40,15 +34,10 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
         assert test_function() == "2"
 
 
-def test_claude_skill() -> None:
-    requires_claude_code_integration()
+def test_claude_code_cli_skill() -> None:
+    requires_claude_code_cli_integration()
 
-    import logfire
-
-    logfire.configure(send_to_logfire="if-token-present", console=logfire.ConsoleOptions(verbose=True))
-    logfire.instrument_pydantic_ai()
-
-    from nighthawk.backends.claude_code import ClaudeCodeModelSettings
+    from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
@@ -56,11 +45,10 @@ def test_claude_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            model="claude-code:sonnet",
-            model_settings=ClaudeCodeModelSettings(
+            model="claude-code-cli:sonnet",
+            model_settings=ClaudeCodeCliModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
-                claude_allowed_tool_names=("Skill", "Bash"),
                 working_directory=str(working_directory.resolve()),
             ).model_dump(),
         )
@@ -88,24 +76,18 @@ def test_claude_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
 
-def test_claude_skill_calc() -> None:
-    requires_claude_code_integration()
+def test_claude_code_cli_skill_calc() -> None:
+    requires_claude_code_cli_integration()
 
-    import logfire
-
-    logfire.configure(send_to_logfire="if-token-present", console=logfire.ConsoleOptions(verbose=True))
-    logfire.instrument_pydantic_ai()
-
-    from nighthawk.backends.claude_code import ClaudeCodeModelSettings
+    from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     configuration = nh.StepExecutorConfiguration(
-        model="claude-code:haiku",
-        model_settings=ClaudeCodeModelSettings(
+        model="claude-code-cli:haiku",
+        model_settings=ClaudeCodeCliModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
-            claude_allowed_tool_names=("Skill", "Bash"),
             working_directory=str(working_directory.resolve()),
         ).model_dump(),
     )
@@ -134,30 +116,16 @@ def test_claude_skill_calc() -> None:
         assert result == 1 + 2 * 8
 
 
-def test_claude_mcp_callback() -> None:
-    requires_claude_code_integration()
+def test_claude_code_cli_mcp_callback() -> None:
+    requires_claude_code_cli_integration()
 
-    import logfire
-
-    logfire.configure(
-        send_to_logfire="if-token-present",
-        console=logfire.ConsoleOptions(
-            verbose=True,
-        ),
-    )
-    logfire.instrument_mcp()
-    logfire.instrument_pydantic_ai(
-        event_mode="logs",
-    )
-
-    from nighthawk.backends.claude_code import ClaudeCodeModelSettings
+    from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
     configuration = nh.StepExecutorConfiguration(
-        model="claude-code:haiku",
-        model_settings=ClaudeCodeModelSettings(
+        model="claude-code-cli:haiku",
+        model_settings=ClaudeCodeCliModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
-            claude_allowed_tool_names=("Bash",),
         ).model_dump(),
     )
 

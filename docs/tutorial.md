@@ -656,6 +656,48 @@ Inside async natural functions:
 
 **Decision rule:** if the correct output can be computed without an LLM, use Python. Natural blocks add latency, cost, and non-determinism — reserve them for tasks that genuinely require LLM capabilities.
 
+### Type boundary placement
+
+The responsibility split above determines *what* goes into a Natural block. A related question is *where* the typed input boundary sits.
+
+For deterministic functions (no Natural blocks), the boundary is at the function entry point — use typed inputs:
+
+```py
+from pydantic import BaseModel
+
+class ScoreInput(BaseModel):
+    base: int
+    bonus: int
+    multiplier: float = 1.0
+
+def compute_score(score_input: ScoreInput) -> int:
+    return int((score_input.base + score_input.bonus) * score_input.multiplier)
+```
+
+For judgment-heavy functions (containing Natural blocks), the boundary moves *inside* the function. Accept flexible inputs at the entry point and let the Natural block interpret them into typed intermediates:
+
+```py
+from pydantic import BaseModel
+from nighthawk import JsonableValue
+
+class ReviewVerdict(BaseModel):
+    approved: bool
+    reason: str
+    risk_level: str
+
+@nh.natural_function
+def judge_review(review_data: str | JsonableValue) -> ReviewVerdict:
+    verdict: ReviewVerdict
+    """natural
+    Analyze <review_data> and produce a structured <:verdict>.
+    """
+    return verdict
+```
+
+Here, `review_data` accepts flexible input because the Natural block handles interpretation. The type boundary is at `<:verdict>` — the write binding where the LLM commits a typed `ReviewVerdict`.
+
+When designing function contracts, document where the type boundary lies. Do not assume it is always at the function signature.
+
 ### Rules
 
 1. Write one integrated instruction body per block; do not split into a "bindings list" then "instructions".
@@ -667,6 +709,64 @@ Inside async natural functions:
 7. Prefer binding functions (local or module-level) for all callable needs. Reserve `@nh.tool` for cases that require `RunContext[StepContext]` access.
 8. Full coverage requirements are enforced by Python loops.
 9. Error behavior is explicit at the correct boundary.
+
+### Designing binding functions for LLM consumption
+
+Rules 6 and 7 say to keep locals minimal and prefer binding functions. This subsection explains *how* to design those binding functions.
+
+Each parameter in a binding function signature is a decision point the LLM must evaluate. Fewer parameters mean lower cognitive load and more reliable tool use.
+
+**Principle:** justify each parameter against LLM cognitive load. Simple writes (e.g., setting a value at creation) are acceptable. Complex reads (e.g., multi-predicate queries) are not — compose those in Python.
+
+Wrong — too many parameters force the LLM to construct a complex query:
+
+```py
+def find_items(
+    category: str,
+    min_score: float,
+    max_score: float,
+    tags: list[str],
+    created_after: str,
+    sort_by: str,
+) -> list[dict]:
+    """Find items matching all filter criteria."""
+    ...
+```
+
+Correct — compose the complex query in Python, expose a simple binding function:
+
+```py
+def find_top_items(category: str) -> list[dict]:
+    """Return the highest-scored recent items in a category."""
+    return query_items(
+        category=category,
+        min_score=0.8,
+        tags=get_relevant_tags(category),
+        created_after=recent_cutoff(),
+        sort_by="score_desc",
+    )
+```
+
+The LLM sees a one-parameter function with a clear intent. The filtering logic lives in Python where it can be tested and debugged.
+
+This principle extends to project architecture: compose domain-specific helper functions in Python and expose them to Natural blocks as binding functions.
+
+```py
+# Python API — full flexibility, tested independently
+def get_feedback_summary(topic: str, max_items: int = 10) -> str:
+    items = fetch_feedback(topic=topic, limit=max_items)
+    return format_summary(items)
+
+# Natural block sees only what it needs
+@nh.natural_function
+def analyze_feedback(topic: str) -> str:
+    result = ""
+    """natural
+    Call <get_feedback_summary> for <topic> and set <:result>
+    to an actionable recommendation.
+    """
+    return result
+```
 
 ## 8. Testing Natural Functions
 

@@ -19,7 +19,7 @@ from pydantic_ai.usage import RequestUsage
 from ..json_renderer import to_jsonable_value
 from ..tools.registry import get_visible_tools
 from .base import BackendModelBase
-from .mcp_boundary import call_tool_for_claude_code
+from .mcp_boundary import call_tool_for_claude_code_sdk
 from .tool_bridge import ToolHandler
 
 type PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
@@ -33,8 +33,8 @@ def _normalize_timestamp(value: object) -> datetime:
     return datetime.now(tz=datetime.now().astimezone().tzinfo)
 
 
-class ClaudeCodeModelSettings(BaseModel):
-    """Settings for the Claude Code backend.
+class ClaudeCodeSdkModelSettings(BaseModel):
+    """Settings for the Claude Code SDK backend.
 
     Attributes:
         permission_mode: Claude Code permission mode.
@@ -69,11 +69,11 @@ class ClaudeCodeModelSettings(BaseModel):
         return value
 
 
-def _get_claude_code_model_settings(model_settings: ModelSettings | None) -> ClaudeCodeModelSettings:
+def _get_claude_code_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeCodeSdkModelSettings:
     if model_settings is None:
-        return ClaudeCodeModelSettings()
+        return ClaudeCodeSdkModelSettings()
     try:
-        return ClaudeCodeModelSettings.model_validate(model_settings)
+        return ClaudeCodeSdkModelSettings.model_validate(model_settings)
     except Exception as exception:
         raise UserError(str(exception)) from exception
 
@@ -92,7 +92,7 @@ def _build_json_schema_output_format(model_request_parameters: ModelRequestParam
     return {"type": "json_schema", "schema": schema}
 
 
-def _normalize_claude_code_usage_to_request_usage(usage: object) -> RequestUsage:
+def _normalize_claude_code_sdk_usage_to_request_usage(usage: object) -> RequestUsage:
     request_usage = RequestUsage()
     if not isinstance(usage, dict):
         return request_usage
@@ -137,12 +137,12 @@ def _serialize_result_message_to_json(result_message: object) -> str:
         return json.dumps({"result_message_repr": repr(result_message)}, ensure_ascii=False)
 
 
-class ClaudeCodeModel(BackendModelBase):
+class ClaudeCodeSdkModel(BackendModelBase):
     """Pydantic AI model that delegates to Claude Code via the Claude Agent SDK."""
 
     def __init__(self, *, model_name: str | None = None) -> None:
         super().__init__(
-            backend_label="Claude Code backend",
+            backend_label="Claude Code SDK backend",
             profile=ModelProfile(
                 supports_tools=True,
                 supports_json_schema_output=True,
@@ -156,7 +156,7 @@ class ClaudeCodeModel(BackendModelBase):
 
     @property
     def model_name(self) -> str:
-        return f"claude-code:{self._model_name or 'default'}"
+        return f"claude-code-sdk:{self._model_name or 'default'}"
 
     @property
     def system(self) -> str:
@@ -185,7 +185,7 @@ class ClaudeCodeModel(BackendModelBase):
             model_request_parameters=model_request_parameters,
         )
 
-        claude_code_model_settings = _get_claude_code_model_settings(model_settings)
+        claude_code_model_settings = _get_claude_code_sdk_model_settings(model_settings)
 
         tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
             model_request_parameters=model_request_parameters,
@@ -205,7 +205,7 @@ class ClaudeCodeModel(BackendModelBase):
                 tool_handler: ToolHandler = handler,
                 bound_tool_name: str = tool_name,
             ) -> dict[str, Any]:
-                return await call_tool_for_claude_code(
+                return await call_tool_for_claude_code_sdk(
                     tool_name=bound_tool_name,
                     arguments=arguments,
                     tool_handler=tool_handler,
@@ -321,5 +321,5 @@ class ClaudeCodeModel(BackendModelBase):
             parts=[TextPart(content=output_text)],
             model_name=assistant_model_name,
             timestamp=_normalize_timestamp(getattr(result_message, "timestamp", None)),
-            usage=_normalize_claude_code_usage_to_request_usage(getattr(result_message, "usage", None)),
+            usage=_normalize_claude_code_sdk_usage_to_request_usage(getattr(result_message, "usage", None)),
         )
