@@ -9,7 +9,7 @@ Prerequisites: Python 3.13+
 Install Nighthawk and a provider:
 
 ```bash
-pip install "nighthawk @ git+https://github.com/kurusugawa-computer/nighthawk-python" pydantic-ai-slim[openai]
+pip install nighthawk-python pydantic-ai-slim[openai]
 ```
 
 For other providers, see [Backends and model identifiers](#backends-and-model-identifiers) below.
@@ -67,9 +67,9 @@ Nighthawk-specific backends (not backed by Pydantic AI):
 
 | Extra | Install | Example identifier |
 |---|---|---|
-| `claude-code-sdk` | `pip install nighthawk[claude-code-sdk]` | `claude-code-sdk:default` |
-| `claude-code-cli` | `pip install nighthawk[claude-code-cli]` | `claude-code-cli:default` |
-| `codex` | `pip install nighthawk[codex]` | `codex:default` |
+| `claude-code-sdk` | `pip install nighthawk-python[claude-code-sdk]` | `claude-code-sdk:default` |
+| `claude-code-cli` | `pip install nighthawk-python[claude-code-cli]` | `claude-code-cli:default` |
+| `codex` | `pip install nighthawk-python[codex]` | `codex:default` |
 
 See [Providers](providers.md) for the default and recommended models.
 
@@ -103,7 +103,7 @@ Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx
 
 **`ModuleNotFoundError` for a provider**
 
-Install the required provider package. For Pydantic AI providers: `pip install pydantic-ai-slim[openai]`. For coding agent backends: `pip install nighthawk[claude-code-sdk]`.
+Install the required provider package. For Pydantic AI providers: `pip install pydantic-ai-slim[openai]`. For coding agent backends: `pip install nighthawk-python[claude-code-sdk]`.
 
 ## Next Steps
 

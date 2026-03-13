@@ -50,7 +50,7 @@ The `claude-code-sdk` backend uses the [Claude Agent SDK](https://docs.anthropic
 ### Installation
 
 ```bash
-pip install nighthawk[claude-code-sdk]
+pip install nighthawk-python[claude-code-sdk]
 ```
 
 ### Environment
@@ -93,7 +93,7 @@ The `claude-code-cli` backend invokes `claude -p` directly as a subprocess, with
 ### Installation
 
 ```bash
-pip install nighthawk[claude-code-cli]
+pip install nighthawk-python[claude-code-cli]
 ```
 
 The `claude` CLI must be installed separately (it is a system tool, not a Python package).
@@ -140,7 +140,7 @@ The `codex` backend runs Codex CLI as a subprocess via `codex exec` and communic
 ### Installation
 
 ```bash
-pip install nighthawk[codex]
+pip install nighthawk-python[codex]
 ```
 
 ### Environment

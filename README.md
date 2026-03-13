@@ -1,7 +1,12 @@
+[![PyPI](https://img.shields.io/pypi/v/nighthawk-python)](https://pypi.org/project/nighthawk-python)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/nighthawk-python)
+[![license](https://img.shields.io/github/license/psg-mit/nighthawk-python.svg)](https://github.com/kurusugawa-computer/nighthawk-python/tree/main/LICENSE)
+[![issue resolution](https://img.shields.io/github/issues-closed-raw/kurusugawa-computer/nighthawk-python)](https://github.com/kurusugawa-computer/nighthawk-python/issues)
+
 # Nighthawk
 
 <div align="center">
-<img src="docs/assets/nighthawk_logo-128x128.png" alt="logo" width="128px" margin="10px"></img>
+<img src="https://github.com/kurusugawa-computer/nighthawk-python/raw/main/docs/assets/nighthawk_logo-128x128.png" alt="nighthawk-logo" width="128px" margin="10px"></img>
 </div>
 
 Nighthawk is an experimental Python library exploring a clear separation between **hard control** (Python code) for strict procedure and deterministic flow, and **soft reasoning** (an LLM) for semantic interpretation inside small embedded "Natural blocks". It is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
@@ -13,7 +18,7 @@ Prerequisites: Python 3.13+
 Install Nighthawk and a provider:
 
 ```bash
-pip install "nighthawk @ git+https://github.com/kurusugawa-computer/nighthawk-python" pydantic-ai-slim[openai]
+pip install nighthawk-python pydantic-ai-slim[openai]
 ```
 
 Save as `quickstart.py`:
