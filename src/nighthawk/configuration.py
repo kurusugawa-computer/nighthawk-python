@@ -180,6 +180,7 @@ class StepExecutorConfigurationPatch(BaseModel):
         if isinstance(value, BaseModel):
             return value.model_dump()
         return value
+
     prompts: StepPromptTemplates | None = None
     context_limits: StepContextLimits | None = None
     json_renderer_style: JsonRendererStyle | None = None
