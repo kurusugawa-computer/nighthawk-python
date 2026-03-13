@@ -112,5 +112,5 @@ Install the required provider package. For Pydantic AI providers: `pip install p
 - **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex backend configuration.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
-- **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).
 - **[Roadmap](roadmap.md)** — Future directions.
+- **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).

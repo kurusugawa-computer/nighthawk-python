@@ -1,7 +1,6 @@
 # Nighthawk development guide for coding agents
 
 > **For coding agents.** Give this document to your coding agent (e.g., via `@docs/for-coding-agents.md` in CLAUDE.md or AGENTS.md) to enable Nighthawk-aware development.
-> [Copy raw content](https://raw.githubusercontent.com/kurusugawa-computer/nighthawk-python/main/docs/for-coding-agents.md)
 
 You are expected to behave as a senior software engineer with deep Nighthawk experience. This document contains the knowledge you need to write, review, and debug Nighthawk code. Apply these principles without prompting.
 
@@ -224,7 +223,15 @@ with nh.run(step_executor):
 
 ### Scoped overrides
 
-Use `nh.scope()` to override model, prompt suffix, or step executor within an existing run:
+Use `nh.scope()` to override execution settings within an existing run. Each scope generates a new `scope_id` while keeping the current `run_id`.
+
+Parameters:
+
+- `step_executor_configuration`: replace the entire configuration.
+- `step_executor_configuration_patch`: partially override specific fields.
+- `step_executor`: replace the step executor entirely.
+- `system_prompt_suffix_fragment`: append text to the system prompt for the scope.
+- `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
 
 ```python
 with nh.scope(

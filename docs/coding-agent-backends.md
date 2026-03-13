@@ -19,6 +19,8 @@ configuration = StepExecutorConfiguration(model="codex:default")
 
 The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:o3-pro`). Available aliases depend on the backend CLI version.
 
+Backend-specific settings are configured via the `model_settings` field of `StepExecutorConfiguration`. Each backend provides a settings class (`ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`, `CodexModelSettings`) that can be passed directly — `StepExecutorConfiguration` auto-converts `BaseModel` instances to dicts internally.
+
 ## Shared capabilities
 
 All three backends provide features that are not available with Pydantic AI providers:
@@ -71,7 +73,7 @@ configuration = StepExecutorConfiguration(
         claude_allowed_tool_names=("Skill", "Bash"),
         claude_max_turns=50,
         working_directory="/abs/path/to/project",
-    ).model_dump(),
+    ),
 )
 ```
 
@@ -117,7 +119,7 @@ configuration = StepExecutorConfiguration(
         claude_max_turns=50,
         max_budget_usd=5.0,
         working_directory="/abs/path/to/project",
-    ).model_dump(),
+    ),
 )
 ```
 
@@ -127,7 +129,7 @@ configuration = StepExecutorConfiguration(
 | `claude_executable` | `str` | `"claude"` | Path or name of the Claude Code CLI executable |
 | `claude_max_turns` | `int` \| `None` | `None` | Maximum conversation turns |
 | `max_budget_usd` | `float` \| `None` | `None` | Maximum dollar amount to spend on API calls |
-| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode |
+| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode. `None` delegates to the CLI default. |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load |
 | `working_directory` | `str` | `""` | Absolute path to the project directory |
 
@@ -158,7 +160,7 @@ configuration = StepExecutorConfiguration(
     model="codex:default",
     model_settings=CodexModelSettings(
         working_directory="/abs/path/to/project",
-    ).model_dump(),
+    ),
 )
 ```
 
@@ -192,7 +194,10 @@ Each backend reads skills from its own directory convention:
 
 The symlink approach above lets a single skill definition serve both backends.
 
-Skill configuration differs between backends. Claude Code supports SKILL.md frontmatter fields such as `context`, `agent`, `allowed-tools`, and `disable-model-invocation`. Codex uses a separate `agents/openai.yaml` file for invocation policy and tool dependencies. Consult each backend CLI's documentation for available options.
+Skill configuration differs between backends:
+
+- **Claude Code** (SDK and CLI): supports SKILL.md frontmatter fields such as `context`, `agent`, `allowed-tools`, and `disable-model-invocation`. See the [Claude Code skills documentation](https://code.claude.com/docs/skills) for available options.
+- **Codex**: uses a separate `agents/openai.yaml` file for invocation policy and tool dependencies. See the [Codex skills documentation](https://developers.openai.com/codex/guides/skills) for available options.
 
 Example `SKILL.md`:
 

@@ -676,6 +676,8 @@ def compute_score(score_input: ScoreInput) -> int:
 
 For judgment-heavy functions (containing Natural blocks), the boundary moves *inside* the function. Accept flexible inputs at the entry point and let the Natural block interpret them into typed intermediates:
 
+`JsonableValue` is a type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`). See [design.md Section 5.3](design.md#53-supporting-types) for the full definition.
+
 ```py
 from pydantic import BaseModel
 from nighthawk import JsonableValue
@@ -786,12 +788,44 @@ with nh.run(executor):
     ...
 ```
 
+### Concrete test example
+
+`TestModel` produces deterministic responses by generating default values for the expected output type. This means Natural function calls always succeed with predictable results, allowing you to test the surrounding Python logic:
+
+```py
+import nighthawk as nh
+from nighthawk.runtime.step_executor import AgentStepExecutor
+from nighthawk.configuration import StepExecutorConfiguration
+from pydantic_ai.models.test import TestModel
+
+
+@nh.natural_function
+def classify(text: str) -> str:
+    label: str = ""
+    """natural
+    Read <text> and set <:label> to one of: positive, negative, neutral.
+    """
+    return label
+
+
+def test_classify_returns_string():
+    configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
+    executor = AgentStepExecutor(configuration=configuration, agent=TestModel())
+
+    with nh.run(executor):
+        result = classify("Great product!")
+        assert isinstance(result, str)
+```
+
+`TestModel` does not produce semantically meaningful results — it returns structurally valid defaults. Use it to verify that Natural functions integrate correctly with surrounding Python logic (types, control flow, error handling), not to test LLM reasoning quality.
+
 ## References
 
 - [Quickstart](quickstart.md)
-- [Design](design.md)
-- [API Reference](api.md)
+- [Tutorial](tutorial.md)
 - [Providers](providers.md)
 - [Coding agent backends](coding-agent-backends.md)
-- [For coding agents](for-coding-agents.md)
+- [Design](design.md)
+- [API Reference](api.md)
 - [Roadmap](roadmap.md)
+- [For coding agents](for-coding-agents.md)

@@ -14,7 +14,7 @@ from .errors import (
     ToolRegistrationError,
     ToolValidationError,
 )
-from .json_renderer import JsonableValue
+from .json_renderer import JsonableValue, to_jsonable_value
 from .natural.decorator import natural_function
 from .runtime.scoping import ExecutionContext, get_execution_context, get_step_executor, run, scope
 from .runtime.step_context import StepContext, get_current_step_context
@@ -43,5 +43,6 @@ __all__ = [
     "natural_function",
     "run",
     "scope",
+    "to_jsonable_value",
     "tool",
 ]

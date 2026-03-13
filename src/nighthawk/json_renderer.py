@@ -72,6 +72,7 @@ def render_json_text(
 
 
 def to_jsonable_value(value: object) -> JsonableValue:
+    """Convert a Python value to a JsonableValue, replacing non-serializable values with sentinels."""
     active_object_id_set: set[int] = set()
     return _to_jsonable_value_inner(value, active_object_id_set=active_object_id_set)
 

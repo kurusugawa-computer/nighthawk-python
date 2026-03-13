@@ -98,7 +98,8 @@ class StepExecutorConfiguration(BaseModel):
 
     Attributes:
         model: Model identifier in "provider:model" format (e.g. "openai:gpt-4o").
-        model_settings: Provider-specific model settings.
+        model_settings: Provider-specific model settings. Accepts a dict or a
+            backend-specific BaseModel instance (auto-converted to dict).
         prompts: Prompt templates for step execution.
         context_limits: Token and item limits for context rendering.
         json_renderer_style: Headson rendering style for JSON summarization.
@@ -112,7 +113,14 @@ class StepExecutorConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str = "openai-responses:gpt-5-nano"
-    model_settings: dict[str, Any] | None = None
+    model_settings: dict[str, Any] | BaseModel | None = None
+
+    @field_validator("model_settings", mode="before")
+    @classmethod
+    def _normalize_model_settings(cls, value: Any) -> dict[str, Any] | None:
+        if isinstance(value, BaseModel):
+            return value.model_dump()
+        return value
 
     prompts: StepPromptTemplates = StepPromptTemplates()
     context_limits: StepContextLimits = StepContextLimits()
@@ -151,7 +159,8 @@ class StepExecutorConfigurationPatch(BaseModel):
 
     Attributes:
         model: Model identifier override.
-        model_settings: Model settings override.
+        model_settings: Model settings override. Accepts a dict or a
+            backend-specific BaseModel instance (auto-converted to dict).
         prompts: Prompt templates override.
         context_limits: Context limits override.
         json_renderer_style: JSON renderer style override.
@@ -163,7 +172,14 @@ class StepExecutorConfigurationPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str | None = None
-    model_settings: dict[str, Any] | None = None
+    model_settings: dict[str, Any] | BaseModel | None = None
+
+    @field_validator("model_settings", mode="before")
+    @classmethod
+    def _normalize_model_settings(cls, value: Any) -> dict[str, Any] | None:
+        if isinstance(value, BaseModel):
+            return value.model_dump()
+        return value
     prompts: StepPromptTemplates | None = None
     context_limits: StepContextLimits | None = None
     json_renderer_style: JsonRendererStyle | None = None

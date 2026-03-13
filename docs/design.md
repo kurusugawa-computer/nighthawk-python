@@ -82,13 +82,13 @@ This file intentionally does not maintain a persistent divergence ledger.
     - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
     - Special cases:
       - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-  - `model_settings`: optional model/backend settings object forwarded to Pydantic AI Agent calls.
+  - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls.
   - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
   - `prompts`: prompt templates used for execution.
     - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
     - `step_user_prompt_template`: full user prompt template including section delimiters.
   - `context_limits`: limits for rendering dynamic context into the prompt.
-  - `json_renderer_style`: JSON rendering style used in prompt context and tool result envelopes.
+  - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
   - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
   - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 
@@ -424,7 +424,7 @@ All tool results are wrapped in a JSON envelope with the following structure:
 
 Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`.
 
-The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using headson (head-of-JSON) truncation when the full rendering exceeds the token budget.
+The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
 
 Atomicity requirement:
 
