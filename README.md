@@ -1,6 +1,6 @@
 [![PyPI](https://img.shields.io/pypi/v/nighthawk-python)](https://pypi.org/project/nighthawk-python)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/nighthawk-python)
-[![license](https://img.shields.io/github/license/psg-mit/nighthawk-python.svg)](https://github.com/kurusugawa-computer/nighthawk-python/tree/main/LICENSE)
+[![license](https://img.shields.io/github/license/kurusugawa-computer/nighthawk-python.svg)](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/LICENSE)
 [![issue resolution](https://img.shields.io/github/issues-closed-raw/kurusugawa-computer/nighthawk-python)](https://github.com/kurusugawa-computer/nighthawk-python/issues)
 
 # Nighthawk
@@ -53,25 +53,9 @@ python quickstart.py
 
 For backends, credentials, model identifiers, and detailed guidance, see the [documentation site](https://kurusugawa-computer.github.io/nighthawk-python/).
 
-## Development
+## Development & Contributing
 
-Run tests:
-
-```bash
-uv run pytest -q
-```
-
-Run an OTel collector UI (otel-tui) for observability:
-
-```bash
-docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
-```
-
-Then run integration tests with `OTEL_EXPORTER_OTLP_ENDPOINT` set:
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run pytest -q tests/integration/test_llm_integration.py
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, development commands, and contribution guidelines.
 
 ## References
 
