@@ -62,10 +62,6 @@ The `run_coroutine_synchronously` bridge copies `contextvars` into a background 
 
 The f-string binding span validation uses a NUL byte (`\x00`) as a placeholder for formatted-value boundaries. This is safe in practice but could theoretically be confused by f-string expressions that produce NUL bytes. A more robust approach would use AST position information instead of string scanning.
 
-### Reference manual (future)
-
-Add a topic-organized reference manual (`docs/manual.md`) as a lookup-oriented companion to the tutorial. The tutorial (`docs/tutorial.md`) teaches concepts in learning order; the reference manual would organize the same material by topic for quick lookup by users who already understand the system. Candidate sections: Bindings, f-string Injection, Prompt Structure, Built-in Tools, Custom Tools, Control Flow, Carry Pattern, Scoped Configuration, Async.
-
 ### Documentation improvements (future)
 
 - Reduce quickstart setup boilerplate (consider a convenience wrapper for the common `AgentStepExecutor.from_configuration` + `nh.run` pattern).
@@ -74,4 +70,4 @@ Add a topic-organized reference manual (`docs/manual.md`) as a lookup-oriented c
 ## Open questions
 
 - How to best represent tool results in the prompt for robust reasoning.
-- How to test and debug Natural blocks deterministically.
+- How to debug Natural blocks deterministically (unit testing is addressed via `TestModel`; debugging the LLM's reasoning path remains open).

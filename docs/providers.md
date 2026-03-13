@@ -8,7 +8,7 @@ from nighthawk.configuration import StepExecutorConfiguration
 configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
 ```
 
-The default model is `openai-responses:gpt-5-nano`.
+The default model is `openai-responses:gpt-5-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
 
 ## Choosing a provider
 
@@ -22,13 +22,13 @@ There are three ways to connect Nighthawk to a model:
 
 ### Capability matrix
 
-| Capability | Pydantic AI provider | Coding agent backend |
-|---|---|---|
-| Natural block execution | Yes | Yes |
-| Skill execution | No | Yes |
-| MCP tool exposure | No | Yes (automatic) |
-| Project-scoped files (CLAUDE.md, AGENTS.md) | No | Yes |
-| Model settings | Pydantic AI standard | Backend-specific |
+| Capability | Pydantic AI provider | Coding agent backend | Custom backend |
+|---|---|---|---|
+| Natural block execution | Yes | Yes | Yes |
+| Skill execution | No | Yes | Depends on implementation |
+| MCP tool exposure | No | Yes (automatic) | Depends on implementation |
+| Project-scoped files (CLAUDE.md, AGENTS.md) | No | Yes | Depends on implementation |
+| Model settings | Pydantic AI standard | Backend-specific | User-defined |
 
 ## Pydantic AI providers
 
@@ -85,7 +85,7 @@ configuration = StepExecutorConfiguration(
 
 ## Coding agent backends
 
-The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate to a coding agent CLI instead of Pydantic AI. Install with `nighthawk[claude-code-sdk]`, `nighthawk[claude-code-cli]`, or `nighthawk[codex]`. See [Coding agents](coding-agents.md) for configuration, skill behavior, and backend-specific settings.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate to a coding agent CLI instead of Pydantic AI. Install with `nighthawk[claude-code-sdk]`, `nighthawk[claude-code-cli]`, or `nighthawk[codex]`. See [Coding agent backends](coding-agent-backends.md) for configuration, skill behavior, and backend-specific settings.
 
 ## Custom backends
 

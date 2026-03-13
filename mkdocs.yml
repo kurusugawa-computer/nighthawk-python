@@ -51,9 +51,11 @@ nav:
   - Quickstart: quickstart.md
   - Tutorial: tutorial.md
   - Providers: providers.md
+  - Coding agent backends: coding-agent-backends.md
   - Design: design.md
   - API Reference: api.md
   - Roadmap: roadmap.md
+  - For coding agents (LLM reference): for-coding-agents.md
 
 markdown_extensions:
   - admonition

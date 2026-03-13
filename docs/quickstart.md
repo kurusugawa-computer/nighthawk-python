@@ -49,7 +49,7 @@ python quickstart.py
 ## Bindings at a Glance
 
 - `<name>` — read binding. The value is visible inside the Natural block. Mutable objects can be mutated in-place.
-- `<:name>` — write binding. Use `nh_assign` to set it; the new value is committed back into Python locals.
+- `<:name>` — write binding. The LLM can set a new value, which is committed back into Python locals.
 
 ## Backends and model identifiers
 
@@ -104,5 +104,8 @@ Install the corresponding extra: `pip install "nighthawk[openai]"`, `pip install
 ## Next Steps
 
 - **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
+- **[Providers](providers.md)** — LLM providers and configuration.
+- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex backend configuration.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
+- **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).

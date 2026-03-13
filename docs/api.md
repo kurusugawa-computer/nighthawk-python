@@ -40,14 +40,32 @@
 ### Claude Code (SDK)
 
 ::: nighthawk.backends.claude_code_sdk
+    options:
+      members:
+        - ClaudeCodeSdkModel
+        - ClaudeCodeSdkModelSettings
+        - PermissionMode
+        - SettingSource
 
 ### Claude Code (CLI)
 
 ::: nighthawk.backends.claude_code_cli
+    options:
+      members:
+        - ClaudeCodeCliModel
+        - ClaudeCodeCliModelSettings
+        - PermissionMode
+        - SettingSource
 
 ### Codex
 
 ::: nighthawk.backends.codex
+    options:
+      members:
+        - CodexModel
+        - CodexModelSettings
+        - SandboxMode
+        - ModelReasoningEffort
 
 ## Step Context
 
@@ -70,31 +88,3 @@
         - ErrorKind
         - ToolResultWrapperToolset
 
-## Backend Settings
-
-### Codex Settings
-
-::: nighthawk.backends.codex
-    options:
-      members:
-        - CodexModelSettings
-        - SandboxMode
-        - ModelReasoningEffort
-
-### Claude Code SDK Settings
-
-::: nighthawk.backends.claude_code_sdk
-    options:
-      members:
-        - ClaudeCodeSdkModelSettings
-        - PermissionMode
-        - SettingSource
-
-### Claude Code CLI Settings
-
-::: nighthawk.backends.claude_code_cli
-    options:
-      members:
-        - ClaudeCodeCliModelSettings
-        - PermissionMode
-        - SettingSource

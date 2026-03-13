@@ -16,10 +16,11 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 - **[Quickstart](quickstart.md)** — Setup, first example, backends, credentials.
 - **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
 - **[Providers](providers.md)** — LLM providers and configuration.
-- **[Coding agents](coding-agents.md)** — Claude Code and Codex backend configuration, skills, and MCP tool exposure.
+- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex backend configuration, skills, and MCP tool exposure.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
 - **[Roadmap](roadmap.md)** — Future directions.
+- **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).
 
 ## What Nighthawk is trying to prove
 
@@ -137,10 +138,8 @@ Write bindings control which values are committed back into Python locals at Nat
 
 Interpolation:
 
-- Natural blocks are literal by default.
-- Interpolation is opt-in via inline f-string Natural blocks only (standalone f-string expression statements).
-- Docstring Natural blocks are always literal.
-- See [Tutorial Section 2](tutorial.md#2-providing-data-to-a-block) for details on f-string injection, brace escaping, and usage guidance.
+- Natural blocks are literal by default. Interpolation is opt-in via f-string syntax.
+- See [Tutorial Section 2](tutorial.md#2-providing-data-to-a-block) for details.
 
 ## References
 

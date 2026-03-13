@@ -123,34 +123,9 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 ### 5.5. Backend-specific settings
 
-Backend-specific settings are passed via `model_settings` in `StepExecutorConfiguration`. Each backend validates and applies its own settings.
+Backend-specific settings are passed via `model_settings` in `StepExecutorConfiguration`. Each backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) that validates and applies its own fields.
 
-#### CodexModelSettings (for `codex:*` models)
-
-- `allowed_tool_names`: Nighthawk tool names exposed to the model.
-- `codex_executable`: Path or name of the Codex CLI executable. Default: `"codex"`.
-- `model_reasoning_effort`: Reasoning effort level (`"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`).
-- `sandbox_mode`: Codex sandbox isolation mode (`"read-only"`, `"workspace-write"`, `"danger-full-access"`).
-- `working_directory`: Absolute path to the working directory for Codex.
-
-#### ClaudeCodeSdkModelSettings (for `claude-code-sdk:*` models)
-
-- `permission_mode`: Claude Code permission mode (`"default"`, `"acceptEdits"`, `"plan"`, `"bypassPermissions"`). Default: `"default"`.
-- `setting_sources`: Configuration sources to load (`"user"`, `"project"`, `"local"`).
-- `allowed_tool_names`: Nighthawk tool names exposed to the model.
-- `claude_allowed_tool_names`: Additional Claude Code native tool names to allow.
-- `claude_max_turns`: Maximum conversation turns. Default: `50`.
-- `working_directory`: Absolute path to the working directory for Claude Code.
-
-#### ClaudeCodeCliModelSettings (for `claude-code-cli:*` models)
-
-- `allowed_tool_names`: Nighthawk tool names exposed to the model.
-- `claude_executable`: Path or name of the Claude Code CLI executable. Default: `"claude"`.
-- `claude_max_turns`: Maximum conversation turns.
-- `max_budget_usd`: Maximum dollar amount to spend on API calls.
-- `permission_mode`: Claude Code permission mode (`"default"`, `"acceptEdits"`, `"plan"`, `"bypassPermissions"`).
-- `setting_sources`: Configuration sources to load (`"user"`, `"project"`, `"local"`).
-- `working_directory`: Absolute path to the working directory for Claude Code CLI.
+For field-level documentation and usage examples, see [Coding agent backends](coding-agent-backends.md).
 
 ## 6. Natural block detection
 
@@ -648,14 +623,7 @@ All exceptions are surfaced as Python exceptions and can be caught with standard
 
 ## 14. Tool result contract
 
-All tool results returned to the LLM are wrapped in a JSON envelope:
-
-- Success: `{"value": <bounded JSON rendering>, "error": null}`
-- Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
-
-Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`.
-
-The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using headson (head-of-JSON) truncation when the full rendering exceeds the token budget.
+The tool result JSON envelope is specified in [Section 8.3](#83-tools-available-to-the-llm). This section documents additional supporting types used internally.
 
 Supporting types (internal):
 

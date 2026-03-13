@@ -1,6 +1,6 @@
-# Coding agents
+# Coding agent backends
 
-The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural block execution to a coding agent CLI. All three implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [Providers](providers.md) for the full provider landscape and capability matrix.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural block execution to a coding agent CLI. All three implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [Providers](providers.md) for the full provider landscape and capability matrix. See [For coding agents](for-coding-agents.md) for a development guide targeting coding agents working on Nighthawk projects.
 
 Minimal configuration:
 
@@ -17,9 +17,11 @@ configuration = StepExecutorConfiguration(model="claude-code-cli:default")
 configuration = StepExecutorConfiguration(model="codex:default")
 ```
 
+The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:o3-pro`). Available aliases depend on the backend CLI version.
+
 ## Shared capabilities
 
-Both backends provide features that are not available with Pydantic AI providers:
+All three backends provide features that are not available with Pydantic AI providers:
 
 | Capability | How it works |
 |---|---|
@@ -30,10 +32,14 @@ Both backends provide features that are not available with Pydantic AI providers
 
 ### Working directory
 
-Both backends accept `working_directory` in their model settings. This absolute path determines:
+All three backends accept `working_directory` in their model settings. This absolute path determines:
 
 - Where the CLI resolves project-scoped files (CLAUDE.md, AGENTS.md, skills, settings)
 - The working directory for CLI execution
+
+### Error handling
+
+If a backend CLI process fails (e.g., crashes, times out, or returns an invalid response), Nighthawk surfaces the failure as an `ExecutionError`. See [Tutorial Section 4](tutorial.md#4-control-flow-and-error-handling) for error handling patterns.
 
 ## Claude Code (SDK)
 
@@ -141,7 +147,7 @@ pip install nighthawk[codex]
 - **CLI invocation:** Nighthawk invokes `codex exec --experimental-json --skip-git-repo-check` as a subprocess. Additional flags (`--sandbox`, `--config`, `--output-schema`, `--cd`) are appended based on `CodexModelSettings`.
 - **MCP tool exposure:** An HTTP MCP server is started in a background thread on a random local port. The Codex CLI connects to this server via `--config mcp_servers.nighthawk.url=<url>`. Tool names follow the `mcp_servers.nighthawk.*` namespace.
 - **Working directory:** Passed to Codex CLI via `--cd`.
-- **Project-scoped files:** Instruction-file and skill-loading behavior is defined by Codex CLI, not by Nighthawk.
+- **Project-scoped files:** Codex CLI loads its own instruction files (AGENTS.md) and skills from `.agents/skills/`. The loading rules are defined by Codex CLI, not by Nighthawk.
 
 ### Settings
 
@@ -166,7 +172,7 @@ configuration = StepExecutorConfiguration(
 
 ## Skills
 
-Both backends can execute skills. A skill is a directory with a `SKILL.md` file that the CLI loads from its standard skill directories. You can share one skill definition across both backends using symlinks:
+All three backends can execute skills. A skill is a directory with a `SKILL.md` file that the CLI loads from its standard skill directories. You can share one skill definition across both backends using symlinks:
 
 ```text
 project-root/
@@ -178,6 +184,15 @@ project-root/
 `-- .agents/
     `-- skills -> ../skills
 ```
+
+Each backend reads skills from its own directory convention:
+
+- **Claude Code** (SDK and CLI): `.claude/skills/`
+- **Codex**: `.agents/skills/`
+
+The symlink approach above lets a single skill definition serve both backends.
+
+Skill configuration differs between backends. Claude Code supports SKILL.md frontmatter fields such as `context`, `agent`, `allowed-tools`, and `disable-model-invocation`. Codex uses a separate `agents/openai.yaml` file for invocation policy and tool dependencies. Consult each backend CLI's documentation for available options.
 
 Example `SKILL.md`:
 

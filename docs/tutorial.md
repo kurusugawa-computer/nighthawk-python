@@ -792,4 +792,5 @@ with nh.run(executor):
 - [Design](design.md)
 - [API Reference](api.md)
 - [Providers](providers.md)
+- [Coding agent backends](coding-agent-backends.md)
 - [Roadmap](roadmap.md)

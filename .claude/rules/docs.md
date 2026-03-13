@@ -15,8 +15,9 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 | `quickstart.md` | New users | Shortest path to running a Natural block | Setup, first example, backends table, credentials, troubleshooting. No deep explanations. |
 | `tutorial.md` | Users learning the system | Build understanding from first principles | Bindings, tools, control flow, composition, configuration, guidelines. Assumes quickstart is done. |
 | `design.md` | Implementors and advanced users | Canonical specification (target behavior) | Full technical detail: syntax rules, state layers, prompt rendering, tool contracts, outcome schema, frontmatter. |
-| `providers.md` | Users choosing and configuring models | Provider selection, Pydantic AI setup, custom backends | Provider categories, capability matrix, model identifiers, Pydantic AI model settings, step executor protocols. No coding-agent-specific content. |
-| `coding-agents.md` | Users of Claude Code or Codex backends | Coding agent backend configuration and features | Backend-specific settings, skills, MCP tool exposure, working directory, project-scoped files. |
+| `providers.md` | Users choosing and configuring models | Provider selection, Pydantic AI setup, custom backends | Provider categories, capability matrix, model identifiers, Pydantic AI model settings, step executor protocols. No coding-agent-backend-specific content. |
+| `coding-agent-backends.md` | Users of Claude Code or Codex backends | Coding agent backend configuration and features | Backend-specific settings, skills, MCP tool exposure, working directory, project-scoped files. |
+| `for-coding-agents.md` | Coding agents (LLMs) working on Nighthawk projects | Condensed development knowledge base | Nighthawk mental model, Natural block writing, binding function design, control flow, composition, testing, common mistakes. Not a human tutorial; an LLM reference. |
 | `api.md` | Developers using the library | Auto-generated API reference (mkdocstrings) | Public API surface only. Content comes from source docstrings; do not hand-edit. |
 | `roadmap.md` | Contributors and planners | Future directions | Ideas and desired directions only. Must not restate what is already implemented. |
 
@@ -25,11 +26,12 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - **Syntax rule or runtime contract?** -> `design.md`
 - **How to use a feature with examples?** -> `tutorial.md`
 - **Provider selection, Pydantic AI settings, or custom step executor?** -> `providers.md`
-- **Coding agent settings, skills, MCP, or working directory?** -> `coding-agents.md`
+- **Coding agent backend settings, skills, MCP, or working directory?** -> `coding-agent-backends.md`
 - **Backend-agnostic concept that applies across all providers?** -> `tutorial.md` (or `design.md` for strict contracts)
 - **First-time setup or "just make it work"?** -> `quickstart.md`
 - **Not yet implemented?** -> `roadmap.md`
 - **Public API signature or docstring?** -> `api.md` (edit the source docstring, not api.md)
+- **Knowledge a coding agent needs to develop Nighthawk code?** -> `for-coding-agents.md`
 
 ## Writing guidelines for docs/
 
@@ -46,7 +48,7 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - `<!-- prompt-example:name -->` markers are test anchors verified by `tests/docs/test_prompt_examples.py`. Never modify the content between a marker pair without updating the corresponding test.
 - Avoid exposing built-in tool names (`nh_eval`, `nh_exec`, `nh_assign`) in tutorial text. These are implementation details covered by design.md. Describe behavior instead (e.g., "the LLM can mutate the object in-place").
 - Keep tutorial content backend-agnostic. Do not document backend-specific file layouts, provider credentials, or backend initialization variants here.
-- If a concept needs backend-specific setup, add a short pointer to `providers.md` or `coding-agents.md` instead of duplicating configuration details.
+- If a concept needs backend-specific setup, add a short pointer to `providers.md` or `coding-agent-backends.md` instead of duplicating configuration details.
 
 ### providers.md specifics
 
@@ -54,13 +56,21 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - Prefer concise, runnable setup snippets over conceptual narrative; link to `tutorial.md` for concept-first explanations.
 - For custom backends, show the recommended path (`AgentStepExecutor.from_agent`) first, then the direct protocol implementation as an alternative.
 
-### coding-agents.md specifics
+### coding-agent-backends.md specifics
 
 - Document shared capabilities (skills, MCP, working directory) once in a shared section, then keep per-backend sections focused on differences.
 - For external CLI integrations, separate:
   - what Nighthawk configures and guarantees, and
   - what is delegated to backend CLI rules.
 - Include a settings field table for each backend with type, default, and description columns.
+
+### for-coding-agents.md specifics
+
+- The reader is a coding agent (LLM), not a human. Write for immediate applicability, not progressive learning.
+- Condense principles from tutorial.md, design.md, and writing guidelines into actionable rules. Do not duplicate prose; distill into decision rules and patterns.
+- Include runnable code templates the agent can adapt directly.
+- Keep the "common mistakes" table current; add entries when recurring issues are observed.
+- This file should be self-contained: a coding agent reading only this file should be able to write correct Nighthawk code without consulting other docs.
 
 ### design.md specifics
 
