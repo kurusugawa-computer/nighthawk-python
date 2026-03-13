@@ -26,12 +26,12 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 - Provide a compact reimplementation of nightjarpy-like Natural blocks in Python.
 - Support a hybrid style where Python controls flow, while the LLM executes a Natural DSL embedded as:
-  - Function docstring Natural blocks
-  - Inline Natural blocks (standalone string literal statements)
+    - Function docstring Natural blocks
+    - Inline Natural blocks (standalone string literal statements)
 - Reduce the "LLM is a black box" problem by actively mapping LLM-relevant state into the Python interpreter:
-  - expose a summary of step locals to the LLM
-  - allow the LLM to synchronize intermediate state into a step locals mapping during reasoning
-  - commit selected state back into Python locals at Natural block boundaries
+    - expose a summary of step locals to the LLM
+    - allow the LLM to synchronize intermediate state into a step locals mapping during reasoning
+    - commit selected state back into Python locals at Natural block boundaries
 - Provide a coherent execution model where all state is ordinary Python values in step locals, and persistence (if desired) is user-managed via ordinary bindings.
 
 ## 2. Non-goals
@@ -57,8 +57,8 @@ This file intentionally does not maintain a persistent divergence ledger.
 - Step locals (`step_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
 - Step globals (`step_globals`): a limited globals mapping used as the execution environment for LLM expressions.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
-  - Required fields include `step_id` (unique Id for the step).
-  - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
+    - Required fields include `step_id` (unique Id for the step).
+    - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
 - Locals summary: a bounded text rendering of selected values from `step_locals`, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Outcome: the single, unambiguous result of executing a Natural block.
@@ -71,54 +71,50 @@ This file intentionally does not maintain a persistent divergence ledger.
 ### 5.1. Decorator
 
 - `nighthawk.natural_function`
-  - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
-  - Compilation happens at decoration time, and Natural blocks are executed at function call time.
-  - Note: The decorator requires the function source to be available for inspection.
+    - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
+    - Compilation happens at decoration time, and Natural blocks are executed at function call time.
+    - Note: The decorator requires the function source to be available for inspection.
 
 ### 5.2. Configuration
 
 - `StepExecutorConfiguration`
-  - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano` (see [Providers](providers.md)).
-    - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
-    - Special cases:
-      - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-  - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls.
-  - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
-  - `prompts`: prompt templates used for execution.
-    - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
-    - `step_user_prompt_template`: full user prompt template including section delimiters.
-  - `context_limits`: limits for rendering dynamic context into the prompt.
-  - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
-  - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
-  - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
-
+    - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano` (see [Providers](providers.md)).
+        - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
+        - Special cases:
+            - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
+    - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls.
+    - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
+    - `prompts`: prompt templates used for execution.
+        - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
+        - `step_user_prompt_template`: full user prompt template including section delimiters.
+    - `context_limits`: limits for rendering dynamic context into the prompt.
+    - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
+    - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
+    - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 - `StepExecutorConfigurationPatch`
-  - Partial override object for scoped configuration updates.
-  - Supports patching model, model settings, templates, limits, renderer style, tokenizer encoding, and prompt suffix fragment tuples.
+    - Partial override object for scoped configuration updates.
+    - Supports patching model, model settings, templates, limits, renderer style, tokenizer encoding, and prompt suffix fragment tuples.
 
 ### 5.3. Supporting types
 
 - `StepPromptTemplates`
-  - Prompt templates used for step execution.
-  - `step_system_prompt_template`: system prompt template.
-  - `step_user_prompt_template`: user prompt template.
-
+    - Prompt templates used for step execution.
+    - `step_system_prompt_template`: system prompt template.
+    - `step_user_prompt_template`: user prompt template.
 - `StepContextLimits`
-  - Limits for rendering dynamic context into the LLM prompt.
-  - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `tool_result_max_tokens`.
-
+    - Limits for rendering dynamic context into the LLM prompt.
+    - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `tool_result_max_tokens`.
 - `JsonableValue`
-  - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
-
+    - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
 - `ExecutionContext`
-  - Frozen dataclass representing runtime execution identity.
-  - `run_id`: the Id of the outermost run (trace root).
-  - `scope_id`: the Id of the current scope.
+    - Frozen dataclass representing runtime execution identity.
+    - `run_id`: the Id of the outermost run (trace root).
+    - `scope_id`: the Id of the current scope.
 
 ### 5.4. Runtime accessors
 
 - `nighthawk.get_current_step_context() -> StepContext`
-  - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
+    - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
 See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_context`).
 
@@ -194,7 +190,7 @@ Constraints:
 
 - `name` is a simple identifier (no dotted paths).
 - `<:name>` does not require prior declaration.
-  - Practical note: if subsequent Python code reads a variable that has not been assigned yet, Python will raise before any LLM behavior can help. Initialize variables in Python when needed.
+    - Practical note: if subsequent Python code reads a variable that has not been assigned yet, Python will raise before any LLM behavior can help. Initialize variables in Python when needed.
 
 Type note:
 
@@ -222,9 +218,9 @@ Nighthawk uses multiple state layers.
 
 - `step_locals` is a mapping used as the locals environment for LLM expression evaluation.
 - It is initialized at the start of each Natural block execution, in the following order:
-  1. If a parent step context exists on the step context stack, start from its `step_locals` values.
-  2. Overlay the caller frame's current `python_locals` (so current Python locals always win over inherited step-context state).
-  3. For each read binding (`<name>`), resolve the name using Python lexical rules (locals, enclosing cell scopes, name scopes, globals, builtins) and place the resolved value into `step_locals`.
+    1. If a parent step context exists on the step context stack, start from its `step_locals` values.
+    2. Overlay the caller frame's current `python_locals` (so current Python locals always win over inherited step-context state).
+    3. For each read binding (`<name>`), resolve the name using Python lexical rules (locals, enclosing cell scopes, name scopes, globals, builtins) and place the resolved value into `step_locals`.
 - During execution, the LLM can update `step_locals` via tools (Section 8.3).
 - At the end of execution, values for `<:name>` bindings are committed into Python locals.
 
@@ -259,9 +255,9 @@ Rendering format:
 
 - Non-callable values: `name: type_name = json_value`, where `json_value` is the compact JSON rendering of the value (bounded by `context_limits.value_max_tokens`).
 - Callable values: `name: (signature)`, where `(signature)` is the result of `inspect.signature`. Type annotations are included when available (e.g., `(base: int, bonus: int) -> int`).
-  - If the callable has a meaningful docstring, the first line is appended as `# intent: first_line`.
-  - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name` to help the LLM distinguish them.
-  - If the signature cannot be resolved (e.g., `__signature__` raises), the entry renders as `name: <callable; signature-unavailable>`.
+    - If the callable has a meaningful docstring, the first line is appended as `# intent: first_line`.
+    - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name` to help the LLM distinguish them.
+    - If the signature cannot be resolved (e.g., `__signature__` raises), the entry renders as `name: <callable; signature-unavailable>`.
 - `TypeAliasType` values (PEP 695): `name: type = underlying_type`.
 
 Truncation:
@@ -319,10 +315,10 @@ User-defined tools:
 Registration API:
 
 - `@nighthawk.tool`: Decorator that registers a callable as a Nighthawk tool.
-  - `name`: Optional name override. Defaults to the function `__name__`.
-  - `overwrite`: If True, replaces any existing tool with the same name.
-  - `description`: Optional description override. Defaults to the function docstring.
-  - `metadata`: Arbitrary metadata dict attached to the tool definition.
+    - `name`: Optional name override. Defaults to the function `__name__`.
+    - `overwrite`: If True, replaces any existing tool with the same name.
+    - `description`: Optional description override. Defaults to the function docstring.
+    - `metadata`: Arbitrary metadata dict attached to the tool definition.
 - Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
 - Tool registration targets the innermost active scope (call scope > tool scope > global).
 - Name conflicts raise `ToolRegistrationError` unless `overwrite=True`.
@@ -361,14 +357,14 @@ Expressions are evaluated against `step_globals` + `step_locals`.
 Inspect tool:
 
 - `nh_eval(expression: str) -> object`
-  - Evaluate a Python expression and return the result. Use to inspect values and call functions.
-  - If the evaluated expression is awaitable, it is awaited before returning.
+    - Evaluate a Python expression and return the result. Use to inspect values and call functions.
+    - If the evaluated expression is awaitable, it is awaited before returning.
 
 Mutation tool:
 
 - `nh_exec(expression: str) -> object`
-  - Execute a Python expression for its side effect on mutable objects (e.g., `list.append()`, `dict.update()`, `set.add()`).
-  - Returns the expression result.
+    - Execute a Python expression for its side effect on mutable objects (e.g., `list.append()`, `dict.update()`, `set.add()`).
+    - Returns the expression result.
 
 Implementation note: `nh_eval` and `nh_exec` share the same underlying implementation (Python `eval()`). The two-tool split exists as a semantic signal to the LLM (inspect intent vs mutate intent), not a runtime distinction.
 
@@ -390,16 +386,16 @@ Semantics of `nh_assign`:
 - Evaluate `expression` as a Python expression using `step_globals` and `step_locals`.
 - If the evaluated expression is awaitable, it is awaited before assignment.
 - If `target_path` is a bare `name`:
-  - Assign into `step_locals[name]`.
-  - Validation:
-    - If extracted type information is available for the corresponding `<:name>` binding, validate/coerce to that type.
-    - Otherwise, assign without validation.
+    - Assign into `step_locals[name]`.
+    - Validation:
+        - If extracted type information is available for the corresponding `<:name>` binding, validate/coerce to that type.
+        - Otherwise, assign without validation.
 - If `target_path` is dotted (`name.field...`):
-  - Resolve the root object from `step_locals[name]`.
-  - Traverse attributes for each intermediate segment.
-  - Assign using attribute assignment on the final segment.
-  - Validation:
-    - Validate only when runtime type metadata is available; otherwise assign without validation.
+    - Resolve the root object from `step_locals[name]`.
+    - Traverse attributes for each intermediate segment.
+    - Assign using attribute assignment on the final segment.
+    - Validation:
+        - Validate only when runtime type metadata is available; otherwise assign without validation.
 
 Commit and mutation notes:
 
@@ -410,10 +406,10 @@ Commit and mutation notes:
 Write tool return value:
 
 - The tool returns a diagnostic object describing:
-  - whether it succeeded
-  - a bounded summary of the updated value (on success)
-  - validation details (when relevant)
-  - error details (on failure)
+    - whether it succeeded
+    - a bounded summary of the updated value (on success)
+    - validation details (when relevant)
+    - error details (on failure)
 
 Tool result JSON format:
 
@@ -445,29 +441,26 @@ The outcome is a discriminated union keyed by the required field `kind`.
 Outcome kinds:
 
 - `pass`:
-  - Success with no control-flow change.
-  - Payload keys: `kind` only.
-
+    - Success with no control-flow change.
+    - Payload keys: `kind` only.
 - `return`:
-  - Return from the surrounding Python function immediately.
-  - Payload keys: `kind`, and required `return_reference_path`.
-  - `return_reference_path` must be a dot-separated identifier path into step locals.
-  - The host resolves `return_reference_path` within step locals only, using attribute access only.
-  - If the surrounding function is async and the resolved value is awaitable, the host awaits it before validation.
-  - The host then validates/coerces the resolved Python value to the function's return type annotation.
-  - If the surrounding function is sync and the resolved value is awaitable, execution fails.
-
+    - Return from the surrounding Python function immediately.
+    - Payload keys: `kind`, and required `return_reference_path`.
+    - `return_reference_path` must be a dot-separated identifier path into step locals.
+    - The host resolves `return_reference_path` within step locals only, using attribute access only.
+    - If the surrounding function is async and the resolved value is awaitable, the host awaits it before validation.
+    - The host then validates/coerces the resolved Python value to the function's return type annotation.
+    - If the surrounding function is sync and the resolved value is awaitable, execution fails.
 - `break` / `continue`:
-  - Loop control.
-  - Payload keys: `kind` only.
-  - These outcomes are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
-
+    - Loop control.
+    - Payload keys: `kind` only.
+    - These outcomes are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
 - `raise`:
-  - Failure.
-  - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.
-  - `raise_error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
-  - The host enforces this using the structured output JSON Schema: when `raise_error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
-  - When `raise_error_type` is provided, the host raises that exception type with the provided `raise_message`.
+    - Failure.
+    - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.
+    - `raise_error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
+    - The host enforces this using the structured output JSON Schema: when `raise_error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
+    - When `raise_error_type` is provided, the host raises that exception type with the provided `raise_message`.
 
 The implementation chooses strict parsing. Any non-JSON final response is an error.
 
@@ -512,8 +505,8 @@ Allowed outcome type names in `deny` are a subset of the baseline outcome types:
 Semantics:
 
 - Syntactic context defines a hard cap on allowed outcomes:
-  - Outside a loop: `pass`, `return`, `raise`.
-  - Inside a loop: `pass`, `return`, `break`, `continue`, `raise`.
+    - Outside a loop: `pass`, `return`, `raise`.
+    - Inside a loop: `pass`, `return`, `break`, `continue`, `raise`.
 - Frontmatter deny declarations may only exclude outcome types; they must not expand the syntactic cap.
 - If frontmatter denies an outcome type, and the model returns that outcome type, the host raises an `ExecutionError`.
 
@@ -548,23 +541,23 @@ Working directory selection for provider backends is configured via `ModelSettin
 API:
 
 - `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None)`
-  - Replaces the current context step executor with the provided step executor.
-  - Generates a new `ExecutionContext` for the duration of the `with`.
-  - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
-  - Always generates a fresh `scope_id`.
-  - Can be used even when no step executor is currently set.
+    - Replaces the current context step executor with the provided step executor.
+    - Generates a new `ExecutionContext` for the duration of the `with`.
+    - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
+    - Always generates a fresh `scope_id`.
+    - Can be used even when no step executor is currently set.
 - `nighthawk.scope(*, step_executor_configuration: StepExecutorConfiguration | None = None, step_executor_configuration_patch: StepExecutorConfigurationPatch | None = None, step_executor: StepExecutor | None = None, system_prompt_suffix_fragment: str | None = None, user_prompt_suffix_fragment: str | None = None) -> Iterator[StepExecutor]`
-  - Enter a nested scope within the current run.
-  - Requires an existing step executor.
-  - Generates a new `scope_id` (keeps the current `run_id`).
-  - Only specified fields are overridden for the duration of the `with`.
-  - `system_prompt_suffix_fragment`: optional string appended to the system prompt for the duration of the scope.
-  - `user_prompt_suffix_fragment`: optional string appended to the user prompt for the duration of the scope.
-  - Yields the resolved `StepExecutor` for the scope.
+    - Enter a nested scope within the current run.
+    - Requires an existing step executor.
+    - Generates a new `scope_id` (keeps the current `run_id`).
+    - Only specified fields are overridden for the duration of the `with`.
+    - `system_prompt_suffix_fragment`: optional string appended to the system prompt for the duration of the scope.
+    - `user_prompt_suffix_fragment`: optional string appended to the user prompt for the duration of the scope.
+    - Yields the resolved `StepExecutor` for the scope.
 - `nighthawk.get_step_executor() -> StepExecutor`
-  - Get the current step executor. Raises if unset.
+    - Get the current step executor. Raises if unset.
 - `nighthawk.get_execution_context() -> ExecutionContext`
-  - Get the current runtime execution identity. Raises if unset.
+    - Get the current runtime execution identity. Raises if unset.
 
 ## 11. Interpolation (opt-in, f-strings only)
 
@@ -577,8 +570,8 @@ Natural blocks often need to embed computed values (for example, paths or JSON e
 - Docstring Natural blocks are always literal. They are never interpolated.
 - Interpolated Natural blocks are inline f-string Natural blocks (standalone f-string expression statements).
 - Interpolation follows standard Python f-string semantics.
-  - Expression evaluation rules are those of Python.
-  - Brace escaping uses `{{` and `}}` in the f-string source to produce literal `{` and `}` in the rendered text.
+    - Expression evaluation rules are those of Python.
+    - Brace escaping uses `{{` and `}}` in the f-string source to produce literal `{` and `}` in the rendered text.
 
 Note:
 
@@ -608,17 +601,17 @@ Nighthawk defines a hierarchy of exceptions rooted at `NighthawkError`.
 Exception hierarchy:
 
 - `NighthawkError`: Base class for all Nighthawk exceptions.
-  - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
+    - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
 - `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
-  - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
+    - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
 - `ExecutionError(NighthawkError)`: Natural block execution failed.
-  - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
+    - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
 - `ToolEvaluationError(NighthawkError)`: Expression evaluation inside a tool call failed.
-  - Raised when: `eval()` raises during `nh_eval`, `nh_exec`, or `nh_assign` expression evaluation.
+    - Raised when: `eval()` raises during `nh_eval`, `nh_exec`, or `nh_assign` expression evaluation.
 - `ToolValidationError(NighthawkError)`: Type validation/coercion failed during `nh_assign`.
-  - Raised when: the assigned value does not match the expected binding type.
+    - Raised when: the assigned value does not match the expected binding type.
 - `ToolRegistrationError(NighthawkError)`: Tool registration failed.
-  - Raised when: a tool name is invalid, or a name conflict occurs without `overwrite=True`.
+    - Raised when: a tool name is invalid, or a name conflict occurs without `overwrite=True`.
 
 All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.
 

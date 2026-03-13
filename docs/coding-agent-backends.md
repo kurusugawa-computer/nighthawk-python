@@ -196,8 +196,8 @@ The symlink approach above lets a single skill definition serve both backends.
 
 Skill configuration differs between backends:
 
-- **Claude Code** (SDK and CLI): supports SKILL.md frontmatter fields such as `context`, `agent`, `allowed-tools`, and `disable-model-invocation`. See the [Claude Code skills documentation](https://code.claude.com/docs/skills) for available options.
-- **Codex**: uses a separate `agents/openai.yaml` file for invocation policy and tool dependencies. See the [Codex skills documentation](https://developers.openai.com/codex/guides/skills) for available options.
+- **Claude Code** (SDK and CLI): supports SKILL.md frontmatter fields such as `context`, `agent`, `allowed-tools`, and `disable-model-invocation`. See the [Claude Code skills documentation](https://code.claude.com/docs/en/skills) for available options.
+- **Codex**: uses a separate `agents/openai.yaml` file for invocation policy and tool dependencies. See the [Codex skills documentation](https://developers.openai.com/codex/skills/) for available options.
 
 Example `SKILL.md`:
 

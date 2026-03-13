@@ -83,8 +83,8 @@ Pros:
 
 Cons:
 - The hard part is state synchronization: how to share and reconcile execution state between
-  - the natural language plan/world, and
-  - the code execution world.
+    - the natural language plan/world, and
+    - the code execution world.
 
 Example:
 
