@@ -55,16 +55,11 @@ configuration = StepExecutorConfiguration(model="groq:llama-4-scout-17b-16e-inst
 
 ### Installation
 
-Install the provider dependencies that Pydantic AI requires. Nighthawk offers convenience extras for common providers:
+Install the provider dependencies that Pydantic AI requires:
 
 ```bash
-pip install nighthawk[openai]     # installs pydantic-ai-slim[openai]
-pip install nighthawk[vertexai]   # installs pydantic-ai-slim[google,vertexai]
-```
-
-For providers without a Nighthawk extra, install the Pydantic AI extra directly:
-
-```bash
+pip install pydantic-ai-slim[openai]
+pip install pydantic-ai-slim[google,vertexai]
 pip install pydantic-ai-slim[anthropic]
 pip install pydantic-ai-slim[bedrock]
 pip install pydantic-ai-slim[groq]
@@ -85,7 +80,7 @@ configuration = StepExecutorConfiguration(
 
 ## Coding agent backends
 
-The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate to a coding agent CLI instead of Pydantic AI. Install with `nighthawk[claude-code-sdk]`, `nighthawk[claude-code-cli]`, or `nighthawk[codex]`. See [Coding agent backends](coding-agent-backends.md) for configuration, skill behavior, and backend-specific settings.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends implement the Pydantic AI `Model` protocol internally but delegate inference to a coding agent CLI rather than a Pydantic AI provider. Install with `nighthawk[claude-code-sdk]`, `nighthawk[claude-code-cli]`, or `nighthawk[codex]`. See [Coding agent backends](coding-agent-backends.md) for configuration, skill behavior, and backend-specific settings.
 
 ## Custom backends
 

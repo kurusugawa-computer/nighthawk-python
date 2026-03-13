@@ -44,9 +44,8 @@ This file intentionally does not maintain a persistent divergence ledger.
 ## 3. Hard constraints
 
 - Python 3.13+.
-- Default model: `openai-responses:gpt-5-nano`.
-- Recommended model for quality: `openai-responses:gpt-5.4`.
-- Optional backends are installed via extras: `openai`, `vertexai`, `claude-code-sdk`, `claude-code-cli`, `codex`.
+- Default and recommended models: see [Providers](providers.md).
+- Coding agent backends are installed via extras: `claude-code-sdk`, `claude-code-cli`, `codex`. Pydantic AI provider dependencies are installed separately (see [Providers](providers.md)).
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
 ## 4. Terminology
@@ -79,7 +78,7 @@ This file intentionally does not maintain a persistent divergence ledger.
 ### 5.2. Configuration
 
 - `StepExecutorConfiguration`
-  - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano`.
+  - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5-nano` (see [Providers](providers.md)).
     - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
     - Special cases:
       - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
@@ -120,6 +119,8 @@ This file intentionally does not maintain a persistent divergence ledger.
 
 - `nighthawk.get_current_step_context() -> StepContext`
   - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
+
+See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_context`).
 
 ### 5.5. Backend-specific settings
 

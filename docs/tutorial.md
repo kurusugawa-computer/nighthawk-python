@@ -631,7 +631,7 @@ summary = await summarize_async("A long document about climate change...")
 
 Inside async natural functions:
 
-- Expressions evaluated by tools may use `await` (e.g., `nh_eval("await some_async_func()")`).
+- Expressions evaluated by tools may use `await` (e.g., `await some_async_func()` inside an expression).
 - Return values that are awaitable are automatically awaited before validation.
 - The carry pattern and all other patterns work identically in async context.
 
@@ -793,4 +793,5 @@ with nh.run(executor):
 - [API Reference](api.md)
 - [Providers](providers.md)
 - [Coding agent backends](coding-agent-backends.md)
+- [For coding agents](for-coding-agents.md)
 - [Roadmap](roadmap.md)

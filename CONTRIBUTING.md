@@ -37,14 +37,25 @@ uv run pyright
 # Run tests
 uv run pytest          # full suite
 uv run pytest -q       # quiet output
+```
 
-# Integration tests (requires API keys in .env)
+### Integration tests
+
+Integration tests require provider packages and API keys. Install the provider you need:
+
+```bash
+uv pip install pydantic-ai-slim[openai]
+```
+
+Then run with your `.env` loaded:
+
+```bash
 set -a; source .env; set +a; uv run pytest -q
 ```
 
 ### Environment variables
 
-- `OPENAI_API_KEY`: Required for OpenAI integration tests.
+- `OPENAI_API_KEY`: Required for OpenAI integration tests (also requires `pydantic-ai-slim[openai]`).
 - `CODEX_API_KEY`: Required for Codex integration tests.
 
 ## Docstring Guide

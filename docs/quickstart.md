@@ -6,13 +6,13 @@ This quickstart focuses on the shortest path to running your first Natural block
 
 Prerequisites: Python 3.13+
 
-Install with the OpenAI backend:
+Install Nighthawk and a provider:
 
 ```bash
-pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"
+pip install "nighthawk @ git+https://github.com/kurusugawa-computer/nighthawk-python" pydantic-ai-slim[openai]
 ```
 
-Other available extras: `vertexai`, `claude-code-sdk`, `claude-code-cli`, `codex`. See [Backends and model identifiers](#backends-and-model-identifiers) below.
+For other providers, see [Backends and model identifiers](#backends-and-model-identifiers) below.
 
 ## First Example
 
@@ -55,27 +55,31 @@ python quickstart.py
 
 Nighthawk uses the `provider:model` identifier format from [Pydantic AI](https://ai.pydantic.dev/models/overview/). For standard Pydantic AI providers, the identifier is passed directly to Pydantic AI.
 
-| Extra | Pydantic AI provider | Example identifier |
+| Pydantic AI provider | Install | Example identifier |
 |---|---|---|
-| `openai` | [OpenAI](https://ai.pydantic.dev/models/openai/) | `openai-responses:gpt-5-mini` |
-| `vertexai` | [Google / Vertex AI](https://ai.pydantic.dev/models/gemini/) | `google-vertex:gemini-3-pro-preview` |
+| [OpenAI](https://ai.pydantic.dev/models/openai/) | `pip install pydantic-ai-slim[openai]` | `openai-responses:gpt-5-mini` |
+| [Google / Vertex AI](https://ai.pydantic.dev/models/gemini/) | `pip install pydantic-ai-slim[google,vertexai]` | `google-vertex:gemini-3-pro-preview` |
+| [Anthropic](https://ai.pydantic.dev/models/anthropic/) | `pip install pydantic-ai-slim[anthropic]` | `anthropic:claude-sonnet-4-6` |
+| [AWS Bedrock](https://ai.pydantic.dev/models/bedrock/) | `pip install pydantic-ai-slim[bedrock]` | `bedrock:us.anthropic.claude-sonnet-4-6-v1:0` |
+| [Groq](https://ai.pydantic.dev/models/groq/) | `pip install pydantic-ai-slim[groq]` | `groq:llama-4-scout-17b-16e-instruct` |
 
 Nighthawk-specific backends (not backed by Pydantic AI):
 
-| Extra | Example identifier |
-|---|---|
-| `claude-code-sdk` | `claude-code-sdk:default` |
-| `claude-code-cli` | `claude-code-cli:default` |
-| `codex` | `codex:default` |
+| Extra | Install | Example identifier |
+|---|---|---|
+| `claude-code-sdk` | `pip install nighthawk[claude-code-sdk]` | `claude-code-sdk:default` |
+| `claude-code-cli` | `pip install nighthawk[claude-code-cli]` | `claude-code-cli:default` |
+| `codex` | `pip install nighthawk[codex]` | `codex:default` |
 
-Default model: `openai-responses:gpt-5-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
+See [Providers](providers.md) for the default and recommended models.
 
 ## Credentials
 
 Credential configuration for Pydantic AI providers follows [Pydantic AI conventions](https://ai.pydantic.dev/models/overview/). Common environment variables:
 
 - `OPENAI_API_KEY` — required for OpenAI models ([details](https://ai.pydantic.dev/models/openai/))
-- `GOOGLE_API_KEY` — required for Google / Vertex AI models ([details](https://ai.pydantic.dev/models/gemini/))
+- `GOOGLE_API_KEY` — required for Google AI (Gemini API) models ([details](https://ai.pydantic.dev/models/gemini/))
+- Google Vertex AI uses Application Default Credentials, not an API key ([details](https://ai.pydantic.dev/models/gemini/#vertex-ai))
 
 ## Safety model
 
@@ -99,7 +103,7 @@ Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx
 
 **`ModuleNotFoundError` for a provider**
 
-Install the corresponding extra: `pip install "nighthawk[openai]"`, `pip install "nighthawk[claude-code-sdk]"`, etc.
+Install the required provider package. For Pydantic AI providers: `pip install pydantic-ai-slim[openai]`. For coding agent backends: `pip install nighthawk[claude-code-sdk]`.
 
 ## Next Steps
 
@@ -109,3 +113,4 @@ Install the corresponding extra: `pip install "nighthawk[openai]"`, `pip install
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
 - **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).
+- **[Roadmap](roadmap.md)** — Future directions.

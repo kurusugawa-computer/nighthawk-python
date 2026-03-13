@@ -80,7 +80,7 @@ configuration = StepExecutorConfiguration(
 | `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` | `"default"` | Claude Code permission mode |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load (`SettingSource` is `"user"`, `"project"`, or `"local"`) |
 | `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
-| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow |
+| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow (SDK only; CLI does not support this field) |
 | `claude_max_turns` | `int` | `50` | Maximum conversation turns |
 | `working_directory` | `str` | `""` | Absolute path to the project directory |
 

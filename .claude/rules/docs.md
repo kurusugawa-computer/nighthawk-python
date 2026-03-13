@@ -7,7 +7,7 @@ paths:
 
 ## File roles and boundaries
 
-Each file has a distinct audience and scope. Content belongs in exactly one file; cross-reference rather than duplicate.
+Each file has a distinct audience and scope. Content belongs in exactly one file; cross-reference rather than duplicate. Exception: `for-coding-agents.md` is standalone and condenses (distills) content from other files into actionable rules. This is distillation, not duplication.
 
 | File | Audience | Role | Scope boundary |
 |---|---|---|---|
@@ -29,6 +29,8 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - **Coding agent backend settings, skills, MCP, or working directory?** -> `coding-agent-backends.md`
 - **Backend-agnostic concept that applies across all providers?** -> `tutorial.md` (or `design.md` for strict contracts)
 - **First-time setup or "just make it work"?** -> `quickstart.md`
+- **Credential or authentication setup?** -> `quickstart.md` (Pydantic AI providers), `coding-agent-backends.md` (coding agent backends)
+- **Error types or exception hierarchy?** -> `design.md` (specification), `tutorial.md` (practical usage with examples)
 - **Not yet implemented?** -> `roadmap.md`
 - **Public API signature or docstring?** -> `api.md` (edit the source docstring, not api.md)
 - **Knowledge a coding agent needs to develop Nighthawk code?** -> `for-coding-agents.md`
@@ -37,24 +39,40 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 
 ### General
 
-- Cross-reference with relative links (e.g., `[Section 5](tutorial.md#5-cross-block-composition)`) instead of duplicating content.
+- Cross-reference with relative links (e.g., `[Section 5](tutorial.md#5-cross-block-composition)`) instead of duplicating content. Exception: `for-coding-agents.md` uses absolute URLs based on `site_url` from `mkdocs.yml` (see [for-coding-agents.md specifics](#for-coding-agentsmd-specifics)).
 - When tutorial.md and design.md cover the same concept, tutorial.md shows the "what and how" with examples; design.md specifies the "exact rules and edge cases".
 - Keep code examples self-contained: a reader should understand the example without reading surrounding prose.
+- Built-in tool names (`nh_eval`, `nh_exec`, `nh_assign`) are implementation details. Only `design.md` may expose them. All other files describe behavior instead (e.g., "the LLM can set a new value" rather than "use `nh_assign`").
+
+### index.md specifics
+
+- The documentation links list must stay in sync with the `nav` entries in `mkdocs.yml`.
+
+### quickstart.md specifics
+
+- Optimize for copy-paste. A new user should be able to run the first example within minutes.
+- Keep troubleshooting entries to common first-run errors only.
 
 ### tutorial.md specifics
 
 - Assumes the reader has completed quickstart.md. Do not re-explain setup beyond a brief reminder.
 - Every section should teach one concept. Combine related ideas only when they share an example.
 - `<!-- prompt-example:name -->` markers are test anchors verified by `tests/docs/test_prompt_examples.py`. Never modify the content between a marker pair without updating the corresponding test.
-- Avoid exposing built-in tool names (`nh_eval`, `nh_exec`, `nh_assign`) in tutorial text. These are implementation details covered by design.md. Describe behavior instead (e.g., "the LLM can mutate the object in-place").
 - Keep tutorial content backend-agnostic. Do not document backend-specific file layouts, provider credentials, or backend initialization variants here.
 - If a concept needs backend-specific setup, add a short pointer to `providers.md` or `coding-agent-backends.md` instead of duplicating configuration details.
+
+### design.md specifics
+
+- This is the specification. Implementation should match this document; if they diverge, prefer changing the implementation (see Section 0.1 alignment policy).
+- Use precise, unambiguous language. Avoid hedging ("usually", "typically") for specified behavior.
+- Structure: numbered sections, decision notes, implementation notes. Keep the hierarchy stable; other docs link to specific section anchors.
 
 ### providers.md specifics
 
 - The capability matrix must clearly show which features require a coding agent backend.
 - Prefer concise, runnable setup snippets over conceptual narrative; link to `tutorial.md` for concept-first explanations.
 - For custom backends, show the recommended path (`AgentStepExecutor.from_agent`) first, then the direct protocol implementation as an alternative.
+- Credential details are not placed here. Pydantic AI provider credentials are delegated to the Pydantic AI documentation via external links.
 
 ### coding-agent-backends.md specifics
 
@@ -71,17 +89,14 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - Include runnable code templates the agent can adapt directly.
 - Keep the "common mistakes" table current; add entries when recurring issues are observed.
 - This file should be self-contained: a coding agent reading only this file should be able to write correct Nighthawk code without consulting other docs.
+- This file is consumed standalone (`@docs/for-coding-agents.md` in CLAUDE.md/AGENTS.md, GitHub raw URL, etc.). Do not assume sibling files exist at relative paths.
+- All external references to other docs use absolute URLs based on `site_url` from `mkdocs.yml` (currently `https://kurusugawa-computer.github.io/nighthawk-python/`). If `site_url` changes, update the URLs in this file.
 
-### design.md specifics
+### api.md specifics
 
-- This is the specification. Implementation should match this document; if they diverge, prefer changing the implementation (see Section 0.1 alignment policy).
-- Use precise, unambiguous language. Avoid hedging ("usually", "typically") for specified behavior.
-- Structure: numbered sections, decision notes, implementation notes. Keep the hierarchy stable; other docs link to specific section anchors.
-
-### quickstart.md specifics
-
-- Optimize for copy-paste. A new user should be able to run the first example within minutes.
-- Keep troubleshooting entries to common first-run errors only.
+- Content comes from source docstrings. Edit the source code, not api.md directly.
+- Hand-editing is limited to `:::` directive structure (adding/removing sections, adjusting member filters).
+- When the same module appears in multiple sections, use `members` filters in `:::` directives to partition members and avoid duplicate rendering.
 
 ### roadmap.md specifics
 

@@ -10,10 +10,10 @@ Nighthawk is an experimental Python library exploring a clear separation between
 
 Prerequisites: Python 3.13+
 
-Install with the OpenAI backend:
+Install Nighthawk and a provider:
 
 ```bash
-pip install "nighthawk[openai] @ git+https://github.com/kurusugawa-computer/nighthawk-python"
+pip install "nighthawk @ git+https://github.com/kurusugawa-computer/nighthawk-python" pydantic-ai-slim[openai]
 ```
 
 Save as `quickstart.py`:
