@@ -30,9 +30,8 @@ def test_carry_continuity_across_blocks():
         def step_2(carry: list[str]) -> int:
             result = 0
             """natural
-            Read <carry> for prior context.
-            The carry says the previous result was 10.
-            Set <:result> to 20 (previous result plus 10).
+            Read <carry> to find the previous result.
+            Add 10 to it and set <:result>.
             Append a one-line summary of what you did to <carry>.
             """
             return result
@@ -66,7 +65,7 @@ def test_carry_branching():
             result = 0
             """natural
             Set <:result> to 100.
-            Append "seed: set result to 100" to <carry>.
+            Append a one-line summary of what you did to <carry>.
             """
             return result
 
@@ -74,9 +73,9 @@ def test_carry_branching():
         def branch_add(carry: list[str]) -> int:
             result = 0
             """natural
-            Read <carry> for prior context. The seed step set result to 100.
-            Set <:result> to 105 (100 + 5).
-            Append "branch_add: added 5" to <carry>.
+            Read <carry> to find the previous result.
+            Add 5 to it and set <:result>.
+            Append a one-line summary of what you did to <carry>.
             """
             return result
 
@@ -84,9 +83,9 @@ def test_carry_branching():
         def branch_multiply(carry: list[str]) -> int:
             result = 0
             """natural
-            Read <carry> for prior context. The seed step set result to 100.
-            Set <:result> to 200 (100 * 2).
-            Append "branch_multiply: multiplied by 2" to <carry>.
+            Read <carry> to find the previous result.
+            Multiply it by 2 and set <:result>.
+            Append a one-line summary of what you did to <carry>.
             """
             return result
 
@@ -128,8 +127,7 @@ def test_carry_with_fstring_injection():
             result = 0
             f"""natural
             Prior context: {context_text}
-            Based on the context, the previous result was 42.
-            Set <:result> to 43 (previous result plus 1).
+            Add 1 to the previous result mentioned in the context and set <:result>.
             """
             return result
 
