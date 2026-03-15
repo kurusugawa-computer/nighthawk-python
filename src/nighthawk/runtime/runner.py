@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import inspect
-import uuid
 from dataclasses import dataclass
 from types import FrameType
 from typing import TypedDict
 
+from opentelemetry.trace import Span, Status, StatusCode
 from pydantic import TypeAdapter
 
-from ..errors import ExecutionError, NaturalParseError
+from ..errors import ExecutionError, NaturalParseError, NighthawkError
 from ..identifier_path import parse_identifier_path
 from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
 from .async_bridge import run_coroutine_synchronously
@@ -145,6 +145,37 @@ class StepEnvelope(TypedDict):
     return_value: object | None
 
 
+def _add_step_completed_event(*, step_span: Span, step_outcome_kind: str) -> None:
+    step_span.add_event(
+        "nighthawk.step.completed",
+        {
+            "nighthawk.step.outcome_kind": step_outcome_kind,
+        },
+    )
+
+
+def _add_step_raised_event(*, step_span: Span, step_outcome: RaiseStepOutcome) -> None:
+    event_attributes: dict[str, str] = {
+        "nighthawk.step.outcome_kind": step_outcome.kind,
+        "nighthawk.step.raise_message": step_outcome.raise_message,
+    }
+    if step_outcome.raise_error_type is not None:
+        event_attributes["nighthawk.step.raise_error_type"] = step_outcome.raise_error_type
+    step_span.add_event("nighthawk.step.raised", event_attributes)
+
+
+def _record_internal_step_failure(*, step_span: Span, exception: NighthawkError) -> None:
+    step_span.add_event(
+        "nighthawk.step.failed",
+        {
+            "nighthawk.step.error_kind": type(exception).__name__,
+            "nighthawk.step.error_message": str(exception),
+        },
+    )
+    step_span.record_exception(exception)
+    step_span.set_status(Status(status_code=StatusCode.ERROR, description=str(exception)))
+
+
 @dataclass(frozen=True)
 class _StepPreparation:
     """Result of preparing a Natural block for execution."""
@@ -153,6 +184,14 @@ class _StepPreparation:
     allowed_step_kinds: tuple[str, ...]
     step_context: StepContext
     input_binding_name_to_value: dict[str, object]
+
+
+def _build_step_id(*, caller_frame: FrameType) -> str:
+    module_name = caller_frame.f_globals.get("__name__")
+    if not isinstance(module_name, str) or not module_name:
+        module_name = "<unknown_module>"
+    return f"{module_name}:{caller_frame.f_lineno}"
+
 
 
 class Runner:
@@ -224,7 +263,7 @@ class Runner:
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets
 
         step_context = StepContext(
-            step_id=str(uuid.uuid4()),
+            step_id=_build_step_id(caller_frame=caller_frame),
             step_globals=step_globals,
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
@@ -241,20 +280,20 @@ class Runner:
             input_binding_name_to_value=input_binding_name_to_value,
         )
 
-    def _validate_raise_outcome(
+    def _build_raise_exception(
         self,
         step_context: StepContext,
         step_outcome: RaiseStepOutcome,
-    ) -> None:
+    ) -> BaseException:
         if step_outcome.raise_error_type is not None:
             resolved_raise_error_type = resolve_name_in_step_context(step_context, step_outcome.raise_error_type)
             if resolved_raise_error_type is _MISSING:
                 raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}: {step_outcome.raise_message}")
             if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
                 raise ExecutionError(f"Invalid raise_error_type: {step_outcome.raise_error_type!r}: {step_outcome.raise_message}")
-            raise resolved_raise_error_type(step_outcome.raise_message)
+            return resolved_raise_error_type(step_outcome.raise_message)
 
-        raise ExecutionError(f"Execution failed: {step_outcome.raise_message}")
+        return ExecutionError(f"Execution failed: {step_outcome.raise_message}")
 
     def _apply_bindings_and_validate_kind(
         self,
@@ -270,37 +309,51 @@ class Runner:
         step_context.step_locals.update(bindings)
         return step_outcome_kind
 
-    def _finalize_step(
+    async def _finalize_step(
         self,
         *,
         preparation: _StepPreparation,
         step_outcome: StepOutcome,
         bindings: dict[str, object],
         return_annotation: object,
+        step_span: Span,
+        allow_awaitable_return: bool,
     ) -> StepEnvelope:
-        """Sync finalization: validate kind, resolve return value, handle raise."""
-        step_outcome_kind = self._apply_bindings_and_validate_kind(
-            step_context=preparation.step_context,
-            step_outcome=step_outcome,
-            bindings=bindings,
-            allowed_step_kinds=preparation.allowed_step_kinds,
-        )
+        try:
+            step_outcome_kind = self._apply_bindings_and_validate_kind(
+                step_context=preparation.step_context,
+                step_outcome=step_outcome,
+                bindings=bindings,
+                allowed_step_kinds=preparation.allowed_step_kinds,
+            )
+        except NighthawkError as exception:
+            _record_internal_step_failure(step_span=step_span, exception=exception)
+            raise
 
         return_value: object | None = None
-        if step_outcome_kind == "return":
-            assert isinstance(step_outcome, ReturnStepOutcome)
-            resolved = self._resolve_reference_path(
-                preparation.step_context,
-                step_outcome.return_reference_path,
-            )
-            if inspect.isawaitable(resolved):
-                raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
-            return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+        try:
+            if step_outcome_kind == "raise":
+                assert isinstance(step_outcome, RaiseStepOutcome)
+                raise_exception = self._build_raise_exception(preparation.step_context, step_outcome)
+                _add_step_raised_event(step_span=step_span, step_outcome=step_outcome)
+                raise raise_exception
 
-        if step_outcome_kind == "raise":
-            assert isinstance(step_outcome, RaiseStepOutcome)
-            self._validate_raise_outcome(preparation.step_context, step_outcome)
+            if step_outcome_kind == "return":
+                assert isinstance(step_outcome, ReturnStepOutcome)
+                resolved = self._resolve_reference_path(
+                    preparation.step_context,
+                    step_outcome.return_reference_path,
+                )
+                if inspect.isawaitable(resolved):
+                    if not allow_awaitable_return:
+                        raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
+                    resolved = await resolved
+                return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+        except NighthawkError as exception:
+            _record_internal_step_failure(step_span=step_span, exception=exception)
+            raise
 
+        _add_step_completed_event(step_span=step_span, step_outcome_kind=step_outcome_kind)
         return StepEnvelope(
             step_outcome=step_outcome,
             input_bindings=dict(preparation.input_binding_name_to_value),
@@ -336,53 +389,37 @@ class Runner:
                 SCOPE_ID: execution_context.scope_id,
                 STEP_ID: preparation.step_context.step_id,
             },
-        ):
+        ) as step_span:
             step_executor = self.step_executor
 
-            if isinstance(step_executor, AsyncStepExecutor):
-                step_outcome, bindings = await step_executor.run_step_async(
-                    processed_natural_program=preparation.processed_program,
-                    step_context=preparation.step_context,
-                    binding_names=output_binding_names,
-                    allowed_step_kinds=preparation.allowed_step_kinds,
-                )
-            elif isinstance(step_executor, SyncStepExecutor):
-                step_outcome, bindings = step_executor.run_step(
-                    processed_natural_program=preparation.processed_program,
-                    step_context=preparation.step_context,
-                    binding_names=output_binding_names,
-                    allowed_step_kinds=preparation.allowed_step_kinds,
-                )
-            else:
-                raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
+            try:
+                if isinstance(step_executor, AsyncStepExecutor):
+                    step_outcome, bindings = await step_executor.run_step_async(
+                        processed_natural_program=preparation.processed_program,
+                        step_context=preparation.step_context,
+                        binding_names=output_binding_names,
+                        allowed_step_kinds=preparation.allowed_step_kinds,
+                    )
+                elif isinstance(step_executor, SyncStepExecutor):
+                    step_outcome, bindings = step_executor.run_step(
+                        processed_natural_program=preparation.processed_program,
+                        step_context=preparation.step_context,
+                        binding_names=output_binding_names,
+                        allowed_step_kinds=preparation.allowed_step_kinds,
+                    )
+                else:
+                    raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
+            except NighthawkError as exception:
+                _record_internal_step_failure(step_span=step_span, exception=exception)
+                raise
 
-            step_outcome_kind = self._apply_bindings_and_validate_kind(
-                step_context=preparation.step_context,
+            return await self._finalize_step(
+                preparation=preparation,
                 step_outcome=step_outcome,
                 bindings=bindings,
-                allowed_step_kinds=preparation.allowed_step_kinds,
-            )
-
-            return_value: object | None = None
-            if step_outcome_kind == "return":
-                assert isinstance(step_outcome, ReturnStepOutcome)
-                resolved = self._resolve_reference_path(
-                    preparation.step_context,
-                    step_outcome.return_reference_path,
-                )
-                if inspect.isawaitable(resolved):
-                    resolved = await resolved
-                return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
-
-            if step_outcome_kind == "raise":
-                assert isinstance(step_outcome, RaiseStepOutcome)
-                self._validate_raise_outcome(preparation.step_context, step_outcome)
-
-            return StepEnvelope(
-                step_outcome=step_outcome,
-                input_bindings=dict(preparation.input_binding_name_to_value),
-                bindings=bindings,
-                return_value=return_value,
+                return_annotation=return_annotation,
+                step_span=step_span,
+                allow_awaitable_return=True,
             )
 
     def run_step(
@@ -414,18 +451,27 @@ class Runner:
                     SCOPE_ID: execution_context.scope_id,
                     STEP_ID: preparation.step_context.step_id,
                 },
-            ):
-                step_outcome, bindings = self.step_executor.run_step(
-                    processed_natural_program=preparation.processed_program,
-                    step_context=preparation.step_context,
-                    binding_names=output_binding_names,
-                    allowed_step_kinds=preparation.allowed_step_kinds,
-                )
-                return self._finalize_step(
-                    preparation=preparation,
-                    step_outcome=step_outcome,
-                    bindings=bindings,
-                    return_annotation=return_annotation,
+            ) as step_span:
+                try:
+                    step_outcome, bindings = self.step_executor.run_step(
+                        processed_natural_program=preparation.processed_program,
+                        step_context=preparation.step_context,
+                        binding_names=output_binding_names,
+                        allowed_step_kinds=preparation.allowed_step_kinds,
+                    )
+                except NighthawkError as exception:
+                    _record_internal_step_failure(step_span=step_span, exception=exception)
+                    raise
+
+                return run_coroutine_synchronously(
+                    lambda: self._finalize_step(
+                        preparation=preparation,
+                        step_outcome=step_outcome,
+                        bindings=bindings,
+                        return_annotation=return_annotation,
+                        step_span=step_span,
+                        allow_awaitable_return=False,
+                    )
                 )
 
         return run_coroutine_synchronously(

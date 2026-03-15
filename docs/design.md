@@ -559,6 +559,44 @@ API:
 - `nighthawk.get_execution_context() -> ExecutionContext`
     - Get the current runtime execution identity. Raises if unset.
 
+### 10.1. Observability contract (OpenTelemetry span/event)
+
+Nighthawk uses OpenTelemetry spans as the sole runtime trace model.
+
+Runtime spans:
+
+- `nighthawk.run`
+- `nighthawk.scope`
+- `nighthawk.step`
+- `nighthawk.step_executor`
+
+Identity attributes:
+
+- `run.id: str`
+- `scope.id: str`
+- `step.id: str` (exact format: `python_module:line`, on `nighthawk.step`)
+
+Step events (emitted on `nighthawk.step`):
+
+- `nighthawk.step.completed`
+    - attributes:
+        - `nighthawk.step.outcome_kind`
+- `nighthawk.step.raised`
+    - attributes:
+        - `nighthawk.step.outcome_kind`
+        - `nighthawk.step.raise_message`
+        - `nighthawk.step.raise_error_type` (when provided)
+- `nighthawk.step.failed`
+    - attributes:
+        - `nighthawk.step.error_kind`
+        - `nighthawk.step.error_message`
+
+Semantics:
+
+- `raise` outcome is treated as domain-level behavior, represented by `nighthawk.step.raised`.
+- Nighthawk-side internal failures are represented by `nighthawk.step.failed`, and the span records exception + error status.
+- There is no in-memory step trace API.
+
 ## 11. Interpolation (opt-in, f-strings only)
 
 ### 11.1. Rationale

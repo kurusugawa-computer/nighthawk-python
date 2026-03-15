@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from opentelemetry.trace import get_tracer_provider
+from opentelemetry.trace import Span, get_tracer_provider
 
 from ..configuration import StepExecutorConfiguration, StepExecutorConfigurationPatch
 from ..errors import NighthawkError
@@ -40,9 +40,14 @@ _tracer = get_tracer_provider().get_tracer("nighthawk")
 
 
 @contextmanager
-def span(span_name: str, /, **attributes: Any) -> Iterator[None]:
-    with _tracer.start_as_current_span(span_name, attributes=attributes):
-        yield
+def span(span_name: str, /, **attributes: Any) -> Iterator[Span]:
+    with _tracer.start_as_current_span(
+        span_name,
+        attributes=attributes,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as current_span:
+        yield current_span
 
 
 def _generate_id() -> str:
