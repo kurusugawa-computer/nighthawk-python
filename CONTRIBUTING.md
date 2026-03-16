@@ -53,6 +53,23 @@ Then run with your `.env` loaded:
 set -a; source .env; set +a; uv run pytest -q
 ```
 
+### Trace inspection with otel-tui
+
+Nighthawk emits OpenTelemetry traces for step execution. You can inspect them
+locally using [otel-tui](https://github.com/ymtdzzz/otel-tui):
+
+```bash
+docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
+```
+
+Then run integration tests with the collector endpoint:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run pytest -q tests/integration/
+```
+
+Traces appear in the otel-tui terminal UI in real time.
+
 ### Environment variables
 
 - `OPENAI_API_KEY`: Required for OpenAI integration tests (also requires `pydantic-ai-slim[openai]`).
