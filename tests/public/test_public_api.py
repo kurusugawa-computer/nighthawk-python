@@ -298,11 +298,7 @@ def test_step_span_records_failure_event_for_execution_error(step_span_exporter:
             natural_value_function()
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
-    failed_event_attribute_by_name = {
-        event.name: dict(event.attributes or {})
-        for event in step_span.events
-        if event.name == "nighthawk.step.failed"
-    }
+    failed_event_attribute_by_name = {event.name: dict(event.attributes or {}) for event in step_span.events if event.name == "nighthawk.step.failed"}
     assert failed_event_attribute_by_name == {
         "nighthawk.step.failed": {
             "nighthawk.step.error_kind": "ExecutionError",
@@ -343,11 +339,7 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
             natural_failure_function()
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
-    failed_event_attribute_by_name = {
-        event.name: dict(event.attributes or {})
-        for event in step_span.events
-        if event.name == "nighthawk.step.failed"
-    }
+    failed_event_attribute_by_name = {event.name: dict(event.attributes or {}) for event in step_span.events if event.name == "nighthawk.step.failed"}
     assert failed_event_attribute_by_name == {
         "nighthawk.step.failed": {
             "nighthawk.step.error_kind": "CustomExecutionError",

@@ -193,7 +193,6 @@ def _build_step_id(*, caller_frame: FrameType) -> str:
     return f"{module_name}:{caller_frame.f_lineno}"
 
 
-
 class Runner:
     def __init__(self, step_executor: StepExecutor) -> None:
         self.step_executor = step_executor
