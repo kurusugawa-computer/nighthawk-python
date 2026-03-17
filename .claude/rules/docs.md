@@ -91,6 +91,8 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - This file should be self-contained: a coding agent reading only this file should be able to write correct Nighthawk code without consulting other docs.
 - This file is consumed standalone (`@docs/for-coding-agents.md` in CLAUDE.md/AGENTS.md, GitHub raw URL, etc.). Do not assume sibling files exist at relative paths.
 - All external references to other docs use absolute URLs based on `site_url` from `mkdocs.yml` (currently `https://kurusugawa-computer.github.io/nighthawk-python/`). If `site_url` changes, update the URLs in this file.
+- `@nh.tool` is deprecated. Do not add examples, recommendations, or references to `@nh.tool` in this file. Binding functions are the only recommended callable exposure mechanism.
+- Filter content for coding-agent relevance. Omit infrastructure-level concerns (scoped overrides parameter lists, exception hierarchy beyond `ExecutionError`, observability/tracing) that do not affect how an agent writes Natural blocks or binding functions. Mention existence and link to Tutorial or Design for details.
 
 ### api.md specifics
 

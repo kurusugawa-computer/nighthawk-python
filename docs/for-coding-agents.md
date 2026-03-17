@@ -64,10 +64,6 @@ Each Natural block should make exactly one independent judgment. If a block make
 
 Binding functions (local or module-level callables) are the preferred way to expose functions to the LLM. The LLM discovers them from the LOCALS/GLOBALS sections of the prompt, rendered as their signature with the first docstring line as `# intent:`.
 
-### Prefer binding functions over `@nh.tool`
-
-`@nh.tool` is reserved strictly for cases requiring `RunContext[StepContext]` access. Binding functions incur no per-definition token overhead beyond a signature line. Always use binding functions unless `RunContext` access is needed.
-
 ### Keep locals minimal
 
 Module-level names that are stable across invocations (constants, classes, utility functions) should stay in GLOBALS via `<name>` read bindings. Reserve function parameters for data that genuinely varies per call.
@@ -156,11 +152,7 @@ except nh.ExecutionError as e:
     print(f"Validation failed: {e}")
 ```
 
-Custom exception types referenced in step locals or globals are available as raise targets.
-
-### Exception hierarchy
-
-All exceptions inherit from `NighthawkError`: `ExecutionError`, `NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolRegistrationError`.
+Custom exception types referenced in step locals or globals are available as raise targets. Catch `nh.ExecutionError` for Natural block failures; all Nighthawk exceptions inherit from `nh.NighthawkError`.
 
 ## 6. Cross-block composition
 
@@ -221,30 +213,9 @@ with nh.run(step_executor):
     result = my_natural_function(data)
 ```
 
-### Scoped overrides
+Use `nh.scope()` to override model, prompts, or context limits within an existing run. For details, see [Tutorial](https://kurusugawa-computer.github.io/nighthawk-python/tutorial/).
 
-Use `nh.scope()` to override execution settings within an existing run. Each scope generates a new `scope_id` while keeping the current `run_id`.
-
-Parameters:
-
-- `step_executor_configuration`: replace the entire configuration.
-- `step_executor_configuration_patch`: partially override specific fields.
-- `step_executor`: replace the step executor entirely.
-- `system_prompt_suffix_fragment`: append text to the system prompt for the scope.
-- `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
-
-```python
-with nh.scope(
-    step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
-        model="openai-responses:gpt-5-mini",
-    ),
-):
-    expensive_analysis(data)
-```
-
-### Context limits
-
-LOCALS and GLOBALS sections are bounded by `StepContextLimits`. Configure via `StepExecutorConfiguration`:
+LOCALS and GLOBALS sections are bounded by `StepContextLimits`. When bindings are missing or truncated (`<snipped>`), adjust the limits:
 
 ```python
 configuration = nh.StepExecutorConfiguration(
@@ -304,7 +275,6 @@ def judge_review(review_data: str | nh.JsonableValue) -> ReviewVerdict:
 | Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place |
 | Put two independent judgments in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
 | Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python |
-| Use `@nh.tool` when a binding function suffices | Unnecessary per-definition token overhead | Use binding functions; reserve `@nh.tool` for `RunContext[StepContext]` access |
 | Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
 | Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding |
 

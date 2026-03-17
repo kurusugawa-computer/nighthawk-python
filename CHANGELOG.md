@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Trimmed `for-coding-agents.md` for coding-agent relevance: removed deprecated `@nh.tool` references, condensed exception hierarchy, scoped overrides, and added debugging context to `StepContextLimits`.
+
 ## [0.2.0] - 2026-03-16
 
 ### Added
