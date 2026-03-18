@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -36,7 +37,9 @@ STEP_ID = "step.id"
 TOOL_CALL_ID = "tool_call.id"
 
 
-_tracer = get_tracer_provider().get_tracer("nighthawk")
+_LIBRARY_VERSION = importlib.metadata.version("nighthawk-python")
+
+_tracer = get_tracer_provider().get_tracer("nighthawk", _LIBRARY_VERSION)
 
 
 @contextmanager
@@ -106,6 +109,26 @@ def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
 
 def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
     return _user_prompt_suffix_fragments_var.get()
+
+
+@contextmanager
+def system_prompt_suffix_fragment_scope(fragment: str) -> Iterator[None]:
+    current = _system_prompt_suffix_fragments_var.get()
+    token = _system_prompt_suffix_fragments_var.set((*current, fragment))
+    try:
+        yield
+    finally:
+        _system_prompt_suffix_fragments_var.reset(token)
+
+
+@contextmanager
+def user_prompt_suffix_fragment_scope(fragment: str) -> Iterator[None]:
+    current = _user_prompt_suffix_fragments_var.get()
+    token = _user_prompt_suffix_fragments_var.set((*current, fragment))
+    try:
+        yield
+    finally:
+        _user_prompt_suffix_fragments_var.reset(token)
 
 
 def _resolve_agent_step_executor(step_executor: StepExecutor) -> AgentStepExecutor:
@@ -179,7 +202,6 @@ def run(
                 "nighthawk.run",
                 **{
                     RUN_ID: execution_context.run_id,
-                    SCOPE_ID: execution_context.scope_id,
                 },
             ):
                 yield

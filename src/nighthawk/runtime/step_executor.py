@@ -13,13 +13,8 @@ from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
 from .prompt import build_user_prompt, extract_references_and_program
 from .scoping import (
-    RUN_ID,
-    SCOPE_ID,
-    STEP_ID,
-    get_execution_context,
     get_system_prompt_suffix_fragments,
-    scope,
-    span,
+    system_prompt_suffix_fragment_scope,
 )
 from .step_context import (
     _MISSING,
@@ -315,25 +310,16 @@ class AgentStepExecutor:
             allowed_step_kinds=allowed_step_kinds,
         )
 
-        with scope(system_prompt_suffix_fragment=step_system_prompt_fragment):
-            execution_context = get_execution_context()
-            with (
-                span(
-                    "nighthawk.step_executor",
-                    **{
-                        RUN_ID: execution_context.run_id,
-                        SCOPE_ID: execution_context.scope_id,
-                        STEP_ID: step_context.step_id,
-                    },
-                ),
-                step_context_scope(step_context),
-            ):
-                result = await self._run_agent(
-                    user_prompt=user_prompt,
-                    step_context=step_context,
-                    toolset=toolset,
-                    structured_output_type=structured_output_type,
-                )
+        with (
+            system_prompt_suffix_fragment_scope(step_system_prompt_fragment),
+            step_context_scope(step_context),
+        ):
+            result = await self._run_agent(
+                user_prompt=user_prompt,
+                step_context=step_context,
+                toolset=toolset,
+                structured_output_type=structured_output_type,
+            )
 
         step_outcome = self._parse_agent_result(result)
         bindings = self._extract_bindings(binding_names=binding_names, step_context=step_context)

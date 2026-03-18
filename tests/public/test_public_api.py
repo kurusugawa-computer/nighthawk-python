@@ -1,4 +1,5 @@
 import asyncio
+import importlib.metadata
 from collections.abc import Generator
 
 import pytest
@@ -26,7 +27,7 @@ def step_span_exporter() -> Generator[InMemorySpanExporter, None, None]:
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
     previous_tracer_provider = runtime_scoping._tracer
-    runtime_scoping._tracer = tracer_provider.get_tracer("nighthawk")
+    runtime_scoping._tracer = tracer_provider.get_tracer("nighthawk", importlib.metadata.version("nighthawk-python"))
     try:
         yield span_exporter
     finally:
@@ -428,3 +429,43 @@ def test_step_span_failure_event_structure_is_compact(step_span_exporter: InMemo
     assert "exception" in exception_event_name_set
     assert "nighthawk.step.failed" in exception_event_name_set
     assert len(step_span.events) == 2
+
+
+def test_run_span_has_only_run_id_attribute(step_span_exporter: InMemorySpanExporter) -> None:
+    with nh.run(StubExecutor(), run_id="attr-test"):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 42}}
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert natural_value_function() == 42
+
+    run_span_list = [s for s in step_span_exporter.get_finished_spans() if s.name == "nighthawk.run"]
+    assert len(run_span_list) == 1
+    run_span = run_span_list[0]
+    assert _require_attribute_key_set(run_span) == {"run.id"}
+    assert _require_attribute_value(run_span, "run.id") == "attr-test"
+
+
+def test_no_implicit_scope_or_step_executor_spans(step_span_exporter: InMemorySpanExporter) -> None:
+    with nh.run(StubExecutor()):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 7}}
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert natural_value_function() == 7
+
+    span_name_set = {s.name for s in step_span_exporter.get_finished_spans()}
+    assert "nighthawk.scope" not in span_name_set
+    assert "nighthawk.step_executor" not in span_name_set
+    assert "nighthawk.run" in span_name_set
+    assert "nighthawk.step" in span_name_set
