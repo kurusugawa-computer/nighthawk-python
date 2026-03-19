@@ -148,7 +148,7 @@ def run(
 
     Args:
         step_executor: The step executor to use for Natural block execution.
-        run_id: Optional identifier for the run. If not provided, a UUID is
+        run_id: Optional identifier for the run. If not provided, a ULID is
             generated automatically.
 
     Yields:

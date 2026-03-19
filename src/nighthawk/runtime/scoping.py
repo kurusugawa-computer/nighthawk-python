@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.metadata
-import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -13,6 +12,7 @@ from opentelemetry.trace import Span, get_tracer_provider
 from ..configuration import StepExecutorConfiguration, StepExecutorConfigurationPatch
 from ..errors import NighthawkError
 from ..tools.registry import tool_scope
+from ..ulid import generate_ulid
 
 if TYPE_CHECKING:
     from .step_executor import AgentStepExecutor, StepExecutor
@@ -51,10 +51,6 @@ def span(span_name: str, /, **attributes: Any) -> Iterator[Span]:
         set_status_on_exception=False,
     ) as current_span:
         yield current_span
-
-
-def _generate_id() -> str:
-    return uuid.uuid4().hex
 
 
 _step_executor_var: ContextVar[StepExecutor | None] = ContextVar(
@@ -172,7 +168,7 @@ def run(
 
     Args:
         step_executor: The step executor to use for Natural block execution.
-        run_id: Optional identifier for the run. If not provided, a UUID is
+        run_id: Optional identifier for the run. If not provided, a ULID is
             generated automatically.
 
     Yields:
@@ -188,8 +184,8 @@ def run(
         ```
     """
     execution_context = ExecutionContext(
-        run_id=run_id or _generate_id(),
-        scope_id=_generate_id(),
+        run_id=run_id or generate_ulid(),
+        scope_id=generate_ulid(),
     )
 
     with tool_scope():
@@ -282,7 +278,7 @@ def scope(
 
     next_execution_context = replace(
         current_execution_context,
-        scope_id=_generate_id(),
+        scope_id=generate_ulid(),
     )
 
     next_system_fragments = _system_prompt_suffix_fragments_var.get()

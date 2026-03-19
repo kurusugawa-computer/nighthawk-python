@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import uuid
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -9,9 +8,11 @@ from typing import Any
 from pydantic_ai import RunContext
 from pydantic_ai._instrumentation import InstrumentationNames
 
+from ..ulid import generate_ulid
+
 
 def generate_tool_call_id() -> str:
-    return str(uuid.uuid4())
+    return generate_ulid()
 
 
 def _resolve_instrumentation_names(*, run_context: RunContext[Any]) -> InstrumentationNames:

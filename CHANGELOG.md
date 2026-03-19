@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-19
+
+### Changed
+- Internal ID generation now uses `ulid.generate_ulid()` (ULID,
+  26-character Crockford Base32, timestamp-sortable) in a dedicated
+  module, replacing the former `generate_id` embedded in
+  `runtime.scoping`.
+
 ## [0.3.0] - 2026-03-18
 
 ### Added
@@ -41,7 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kurusugawa-computer/nighthawk-python/tree/v0.1.0
