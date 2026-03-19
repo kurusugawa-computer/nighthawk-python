@@ -4,7 +4,7 @@ The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural 
 
 Minimal configuration:
 
-```python
+```py
 from nighthawk.configuration import StepExecutorConfiguration
 
 # Claude Code (SDK)
@@ -62,7 +62,7 @@ pip install nighthawk-python[claude-code-sdk]
 
 ### Settings
 
-```python
+```py
 from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
 configuration = StepExecutorConfiguration(
@@ -79,7 +79,7 @@ configuration = StepExecutorConfiguration(
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` | `"default"` | Claude Code permission mode |
+| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` | `"default"` | Claude Code permission mode (always passed to the SDK) |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load (`SettingSource` is `"user"`, `"project"`, or `"local"`) |
 | `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
 | `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow (SDK only; CLI does not support this field) |
@@ -108,7 +108,7 @@ The `claude` CLI must be installed separately (it is a system tool, not a Python
 
 ### Settings
 
-```python
+```py
 from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
 configuration = StepExecutorConfiguration(
@@ -153,7 +153,7 @@ pip install nighthawk-python[codex]
 
 ### Settings
 
-```python
+```py
 from nighthawk.backends.codex import CodexModelSettings
 
 configuration = StepExecutorConfiguration(
@@ -213,7 +213,7 @@ Use the returned groups to set <:summary_markdown> as exactly 3 bullet points.
 
 Example Natural function that invokes the skill:
 
-```python
+```py
 import nighthawk as nh
 
 @nh.natural_function

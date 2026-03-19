@@ -13,7 +13,7 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 |---|---|---|---|
 | `index.md` | First-time visitors | Project overview, motivation, workflow styles | What Nighthawk is and why. No API details, no how-to. |
 | `quickstart.md` | New users | Shortest path to running a Natural block | Setup, first example, backends table, credentials, troubleshooting. No deep explanations. |
-| `tutorial.md` | Users learning the system | Build understanding from first principles | Bindings, tools, control flow, composition, configuration, guidelines. Assumes quickstart is done. |
+| `tutorial.md` | Users learning the system | Build understanding from first principles | Bindings, functions and discoverability, control flow, composition, configuration, guidelines. Assumes quickstart is done. |
 | `design.md` | Implementors and advanced users | Canonical specification (target behavior) | Full technical detail: syntax rules, state layers, prompt rendering, tool contracts, outcome schema, frontmatter. |
 | `providers.md` | Users choosing and configuring models | Provider selection, Pydantic AI setup, custom backends | Provider categories, capability matrix, model identifiers, Pydantic AI model settings, step executor protocols. No coding-agent-backend-specific content. |
 | `coding-agent-backends.md` | Users of Claude Code or Codex backends | Coding agent backend configuration and features | Backend-specific settings, skills, MCP tool exposure, working directory, project-scoped files. |
@@ -43,6 +43,8 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - When tutorial.md and design.md cover the same concept, tutorial.md shows the "what and how" with examples; design.md specifies the "exact rules and edge cases".
 - Keep code examples self-contained: a reader should understand the example without reading surrounding prose.
 - Built-in tool names (`nh_eval`, `nh_exec`, `nh_assign`) are implementation details. Only `design.md` may expose them. All other files describe behavior instead (e.g., "the LLM can set a new value" rather than "use `nh_assign`").
+- `@nh.tool` is discouraged. Binding functions are the preferred callable exposure mechanism. `design.md` documents `@nh.tool` as part of the specification. `tutorial.md` may mention it with a "prefer binding functions" note. All other files should not add examples, recommendations, or references to `@nh.tool`.
+- The PyPI package name is `nighthawk-python`. Always use `nighthawk-python` (not `nighthawk`) in `pip install` commands and extras references (e.g., `nighthawk-python[claude-code-sdk]`).
 
 ### index.md specifics
 
@@ -91,7 +93,7 @@ Each file has a distinct audience and scope. Content belongs in exactly one file
 - This file should be self-contained: a coding agent reading only this file should be able to write correct Nighthawk code without consulting other docs.
 - This file is consumed standalone (`@docs/for-coding-agents.md` in CLAUDE.md/AGENTS.md, GitHub raw URL, etc.). Do not assume sibling files exist at relative paths.
 - All external references to other docs use absolute URLs based on `site_url` from `mkdocs.yml` (currently `https://kurusugawa-computer.github.io/nighthawk-python/`). If `site_url` changes, update the URLs in this file.
-- `@nh.tool` is deprecated. Do not add examples, recommendations, or references to `@nh.tool` in this file. Binding functions are the only recommended callable exposure mechanism.
+- `@nh.tool` must not appear in this file (see General rule on `@nh.tool`). Binding functions are the only callable exposure mechanism presented here.
 - Filter content for coding-agent relevance. Omit infrastructure-level concerns (scoped overrides parameter lists, exception hierarchy beyond `ExecutionError`, observability/tracing) that do not affect how an agent writes Natural blocks or binding functions. Mention existence and link to Tutorial or Design for details.
 
 ### api.md specifics

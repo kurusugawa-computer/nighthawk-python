@@ -595,7 +595,7 @@ Parameters:
 - `system_prompt_suffix_fragment`: append text to the system prompt for the scope.
 - `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
 
-The context manager yields the resolved `StepExecutor` for the scope.
+Use `step_executor_configuration_patch` for single-field changes (e.g., switching models). Use `step_executor_configuration` when all fields need explicit values. The context manager yields the resolved `StepExecutor` for the scope.
 
 ### Context limits
 
@@ -612,6 +612,10 @@ configuration = nh.StepExecutorConfiguration(
 ```
 
 See [design.md Section 8.2](design.md#82-prompt-context) for the full specification.
+
+### JSON rendering style
+
+`StepExecutorConfiguration` also accepts `json_renderer_style`, which controls how values are rendered in prompt context and tool results (e.g., strict JSON vs annotated pseudo-JSON with omission markers). See [design.md Section 5.2](design.md#52-configuration) for available styles.
 
 ### Async natural functions
 
@@ -634,6 +638,12 @@ Inside async natural functions:
 - Expressions evaluated by tools may use `await` (e.g., `await some_async_func()` inside an expression).
 - Return values that are awaitable are automatically awaited before validation.
 - The carry pattern and all other patterns work identically in async context.
+
+### Observability (OpenTelemetry)
+
+Nighthawk emits [OpenTelemetry](https://opentelemetry.io/) spans for runs, scopes, and step executions. If your application has an OpenTelemetry tracer configured, Nighthawk traces appear automatically — no Nighthawk-specific setup is required.
+
+See [design.md Section 10.1](design.md#101-observability-contract-opentelemetry-spanevent) for the span and event specification.
 
 ## 7. Writing Guidelines
 
@@ -772,31 +782,19 @@ def analyze_feedback(topic: str) -> str:
 
 ## 8. Testing Natural Functions
 
-For unit tests that do not call a real LLM, use Pydantic AI's `TestModel`. It returns a fixed structured output, making tests deterministic without API calls:
+A Nighthawk application has two distinct layers that need testing: the **Python logic** around Natural blocks (control flow, error handling, composition) and the **Natural blocks themselves** (whether the prompt elicits the intended LLM judgment). Each layer requires a different approach.
+
+Mock tests cover the Python layer — they are fast, deterministic, and free from API calls, but they bypass the LLM entirely. A mock test passes even when the Natural block text is completely wrong. Integration tests cover the Natural block layer — they call a real LLM and verify actual judgments, but they are slower, non-deterministic, and require API credentials.
+
+**Use both:** mock tests to lock down the deterministic Python shell, integration tests to validate that each Natural block's prompt produces correct results.
+
+### Mock tests
+
+The `nighthawk.testing` module provides `ScriptedExecutor`, which returns scripted responses and records every Natural block invocation. Use it to test the Python logic that surrounds Natural blocks.
 
 ```py
 import nighthawk as nh
-from nighthawk.runtime.step_executor import AgentStepExecutor
-from nighthawk.configuration import StepExecutorConfiguration
-from pydantic_ai.models.test import TestModel
-
-configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
-executor = AgentStepExecutor(configuration=configuration, agent=TestModel())
-
-with nh.run(executor):
-    # Natural functions called here use TestModel instead of a real LLM
-    ...
-```
-
-### Concrete test example
-
-`TestModel` produces deterministic responses by generating default values for the expected output type. This means Natural function calls always succeed with predictable results, allowing you to test the surrounding Python logic:
-
-```py
-import nighthawk as nh
-from nighthawk.runtime.step_executor import AgentStepExecutor
-from nighthawk.configuration import StepExecutorConfiguration
-from pydantic_ai.models.test import TestModel
+from nighthawk.testing import ScriptedExecutor, pass_response
 
 
 @nh.natural_function
@@ -808,24 +806,136 @@ def classify(text: str) -> str:
     return label
 
 
-def test_classify_returns_string():
-    configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
-    executor = AgentStepExecutor(configuration=configuration, agent=TestModel())
-
+def test_classify_returns_scripted_label():
+    executor = ScriptedExecutor(responses=[
+        pass_response(label="positive"),
+    ])
     with nh.run(executor):
         result = classify("Great product!")
-        assert isinstance(result, str)
+
+    assert result == "positive"
 ```
 
-`TestModel` does not produce semantically meaningful results — it returns structurally valid defaults. Use it to verify that Natural functions integrate correctly with surrounding Python logic (types, control flow, error handling), not to test LLM reasoning quality.
+`ScriptedExecutor` does not call an LLM. You script what it returns with **outcome factories**:
 
-## References
+| Factory | Outcome | Use case |
+|---|---|---|
+| `pass_response(**bindings)` | pass | Normal completion with binding values |
+| `raise_response(message, *, error_type=None)` | raise | Test error handling paths |
+| `return_response(reference_path, **bindings)` | return | Early return from Natural function |
+| `break_response()` | break | Exit enclosing loop |
+| `continue_response()` | continue | Skip to next iteration |
 
-- [Quickstart](quickstart.md)
-- [Tutorial](tutorial.md)
-- [Providers](providers.md)
-- [Coding agent backends](coding-agent-backends.md)
-- [Design](design.md)
-- [API Reference](api.md)
-- [Roadmap](roadmap.md)
-- [For coding agents](for-coding-agents.md)
+#### Testing error handling
+
+Use `raise_response` to verify that your code handles LLM failures gracefully:
+
+```py
+from nighthawk.testing import raise_response
+
+def test_fallback_on_error():
+    executor = ScriptedExecutor(responses=[
+        raise_response("cannot interpret input", error_type="ValueError"),
+    ])
+    with nh.run(executor):
+        try:
+            result = classify("???")
+        except ValueError:
+            result = "unknown"
+
+    assert result == "unknown"
+```
+
+#### Testing multi-step composition
+
+When a pipeline contains multiple Natural blocks, script one response per block:
+
+```py
+def test_pipeline_classify_then_summarize():
+    executor = ScriptedExecutor(responses=[
+        pass_response(category="bug"),
+        pass_response(summary="Login crash on mobile"),
+    ])
+    with nh.run(executor):
+        result = triage_pipeline("App crashes when I log in on my phone")
+
+    assert result.category == "bug"
+    assert result.summary == "Login crash on mobile"
+```
+
+#### Verifying binding wiring
+
+Use recorded calls to check that the right data is visible to the LLM:
+
+```py
+def test_helper_is_discoverable():
+    executor = ScriptedExecutor(responses=[pass_response(result="")])
+    with nh.run(executor):
+        analyze(query="test")
+
+    call = executor.calls[0]
+    assert "helper" in call.step_globals   # binding function visible in GLOBALS
+    assert "query" in call.step_locals     # parameter visible in LOCALS
+    assert "result" in call.binding_names  # write binding registered
+```
+
+#### Callback executor
+
+When the mock response depends on the input, use `CallbackExecutor`:
+
+```py
+from nighthawk.testing import CallbackExecutor, StepCall, StepResponse
+
+def handler(call: StepCall) -> StepResponse:
+    text = call.step_locals.get("text", "")
+    if isinstance(text, str) and "urgent" in text:
+        return pass_response(priority="high")
+    return pass_response(priority="normal")
+
+def test_urgent_routing():
+    executor = CallbackExecutor(handler)
+    with nh.run(executor):
+        assert triage("urgent outage") == "high"
+        assert triage("minor typo") == "normal"
+```
+
+### Integration tests
+
+Integration tests call a real LLM and validate the judgment. This is where you verify that the Natural block text actually works.
+
+```py
+import nighthawk as nh
+
+
+def test_classify_with_real_llm():
+    step_executor = nh.AgentStepExecutor.from_configuration(
+        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
+    )
+    with nh.run(step_executor):
+        result = classify("Great product, highly recommend!")
+
+    assert result in ("positive", "negative", "neutral")
+```
+
+**Assertion strategy:** assert on type, value range, and semantic consistency rather than exact string matches. LLMs are non-deterministic; brittle equality checks produce flaky tests.
+
+Gate integration tests behind an environment variable so they do not run in every CI job:
+
+```py
+import os
+import pytest
+
+if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+    pytest.skip("Integration tests disabled", allow_module_level=True)
+```
+
+### When to use which
+
+| Question | Mock test | Integration test |
+|---|---|---|
+| Does my Python control flow work given specific LLM outputs? | Yes | Overkill |
+| Does error handling recover correctly? | Yes | Overkill |
+| Are the right bindings visible to the LLM? | Yes | Also works, but slower |
+| Does this Natural block actually produce useful results? | **No** | Yes |
+| Is my prompt wording effective? | **No** | Yes |
+

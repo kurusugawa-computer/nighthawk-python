@@ -78,8 +78,11 @@ See [Providers](providers.md) for the default and recommended models.
 Credential configuration for Pydantic AI providers follows [Pydantic AI conventions](https://ai.pydantic.dev/models/overview/). Common environment variables:
 
 - `OPENAI_API_KEY` — required for OpenAI models ([details](https://ai.pydantic.dev/models/openai/))
+- `ANTHROPIC_API_KEY` — required for Anthropic models ([details](https://ai.pydantic.dev/models/anthropic/))
 - `GOOGLE_API_KEY` — required for Google AI (Gemini API) models ([details](https://ai.pydantic.dev/models/gemini/))
 - Google Vertex AI uses Application Default Credentials, not an API key ([details](https://ai.pydantic.dev/models/gemini/#vertex-ai))
+- AWS Bedrock uses AWS credentials, not an API key ([details](https://ai.pydantic.dev/models/bedrock/))
+- `GROQ_API_KEY` — required for Groq models ([details](https://ai.pydantic.dev/models/groq/))
 
 ## Safety model
 
@@ -105,12 +108,3 @@ Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx
 
 Install the required provider package. For Pydantic AI providers: `pip install pydantic-ai-slim[openai]`. For coding agent backends: `pip install nighthawk-python[claude-code-sdk]`.
 
-## Next Steps
-
-- **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
-- **[Providers](providers.md)** — LLM providers and configuration.
-- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex backend configuration.
-- **[Design](design.md)** — Canonical specification.
-- **[API Reference](api.md)** — Auto-generated API documentation.
-- **[Roadmap](roadmap.md)** — Future directions.
-- **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).

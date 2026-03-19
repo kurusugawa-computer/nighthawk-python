@@ -127,19 +127,7 @@ calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
 
 ## Natural blocks
 
-A Natural block is a Python docstring or a standalone string literal whose underlying string value begins with `natural\n`.
-
-Bindings:
-
-- `<name>` is a read binding.
-- `<:name>` is a write binding.
-
-Write bindings control which values are committed back into Python locals at Natural block boundaries.
-
-Interpolation:
-
-- Natural blocks are literal by default. Interpolation is opt-in via f-string syntax.
-- See [Tutorial Section 2](tutorial.md#2-providing-data-to-a-block) for details.
+A Natural block is a Python docstring or a standalone string literal beginning with `natural\n`. Inside the block, `<name>` read bindings expose Python values to the LLM, and `<:name>` write bindings let the LLM commit values back into Python locals. Natural blocks are literal by default; interpolation is opt-in via f-string syntax. See the [Tutorial](tutorial.md#2-providing-data-to-a-block) for details.
 
 ## References
 

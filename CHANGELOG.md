@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `nighthawk.testing` module with test executors and convenience factories for deterministic Natural function testing without LLM API calls.
+
+### Changed
+- Rewrote testing documentation in `tutorial.md` (Section 8) and `for-coding-agents.md` (Section 8): replaced incorrect `TestModel` usage with `nighthawk.testing` utilities, added testing strategy guidance distinguishing mock tests (Python logic) from integration tests (Natural block judgment).
+
 ## [0.3.1] - 2026-03-19
 
 ### Changed

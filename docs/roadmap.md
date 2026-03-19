@@ -70,4 +70,4 @@ The f-string binding span validation uses a NUL byte (`\x00`) as a placeholder f
 ## Open questions
 
 - How to best represent tool results in the prompt for robust reasoning.
-- How to debug Natural blocks deterministically (unit testing is addressed via `TestModel`; debugging the LLM's reasoning path remains open).
+- How to debug Natural blocks deterministically (unit testing is addressed via `nighthawk.testing`; debugging the LLM's reasoning path remains open).

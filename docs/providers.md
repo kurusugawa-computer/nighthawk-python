@@ -2,7 +2,7 @@
 
 Nighthawk delegates Natural block execution to an LLM. The model is selected through the `model` field of `StepExecutorConfiguration` using the `provider:model` format:
 
-```python
+```py
 from nighthawk.configuration import StepExecutorConfiguration
 
 configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
@@ -36,7 +36,7 @@ Any provider that [Pydantic AI supports](https://ai.pydantic.dev/models/overview
 
 Examples:
 
-```python
+```py
 # OpenAI
 configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
 
@@ -71,7 +71,7 @@ See the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) fo
 
 Pydantic AI providers accept standard Pydantic AI model settings via the `model_settings` field:
 
-```python
+```py
 configuration = StepExecutorConfiguration(
     model="openai-responses:gpt-5-nano",
     model_settings={"temperature": 0.5},
@@ -80,7 +80,7 @@ configuration = StepExecutorConfiguration(
 
 ## Coding agent backends
 
-The `claude-code-sdk`, `claude-code-cli`, and `codex` backends implement the Pydantic AI `Model` protocol internally but delegate inference to a coding agent CLI rather than a Pydantic AI provider. Install with `nighthawk[claude-code-sdk]`, `nighthawk[claude-code-cli]`, or `nighthawk[codex]`. See [Coding agent backends](coding-agent-backends.md) for configuration, skill behavior, and backend-specific settings.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends implement the Pydantic AI `Model` protocol internally but delegate inference to a coding agent CLI rather than a Pydantic AI provider. Install with `nighthawk-python[claude-code-sdk]`, `nighthawk-python[claude-code-cli]`, or `nighthawk-python[codex]`. See [Coding agent backends](coding-agent-backends.md) for configuration, skill behavior, and backend-specific settings.
 
 ## Custom backends
 
@@ -88,7 +88,7 @@ Nighthawk's `SyncStepExecutor` and `AsyncStepExecutor` protocols define the step
 
 For most cases, wrap a Pydantic AI `Agent` using `AgentStepExecutor`:
 
-```python
+```py
 from pydantic_ai import Agent
 from nighthawk.runtime.step_executor import AgentStepExecutor
 
@@ -98,7 +98,7 @@ executor = AgentStepExecutor.from_agent(agent=agent)
 
 For full control, implement `AsyncStepExecutor` (or `SyncStepExecutor` for synchronous use) directly:
 
-```python
+```py
 from nighthawk.runtime.step_executor import AsyncStepExecutor
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import StepOutcome
