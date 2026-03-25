@@ -5,10 +5,10 @@ Nighthawk delegates Natural block execution to an LLM. The model is selected thr
 ```py
 from nighthawk.configuration import StepExecutorConfiguration
 
-configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
+configuration = StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
 ```
 
-The default model is `openai-responses:gpt-5-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
+The default model is `openai-responses:gpt-5.4-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
 
 ## Choosing a provider
 
@@ -38,7 +38,7 @@ Examples:
 
 ```py
 # OpenAI
-configuration = StepExecutorConfiguration(model="openai-responses:gpt-5-nano")
+configuration = StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
 
 # Anthropic (direct API)
 configuration = StepExecutorConfiguration(model="anthropic:claude-sonnet-4-6")
@@ -73,7 +73,7 @@ Pydantic AI providers accept standard Pydantic AI model settings via the `model_
 
 ```py
 configuration = StepExecutorConfiguration(
-    model="openai-responses:gpt-5-nano",
+    model="openai-responses:gpt-5.4-nano",
     model_settings={"temperature": 0.5},
 )
 ```
@@ -92,7 +92,7 @@ For most cases, wrap a Pydantic AI `Agent` using `AgentStepExecutor`:
 import nighthawk as nh
 from pydantic_ai import Agent
 
-agent = Agent(model="openai-responses:gpt-5-nano", ...)
+agent = Agent(model="openai-responses:gpt-5.4-nano", ...)
 executor = nh.AgentStepExecutor.from_agent(agent=agent)
 ```
 

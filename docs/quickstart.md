@@ -22,7 +22,7 @@ Save as `quickstart.py`:
 import nighthawk as nh
 
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini")
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")
 )
 
 with nh.run(step_executor):
@@ -38,7 +38,7 @@ with nh.run(step_executor):
     print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
 ```
 
-This example uses `gpt-5-mini` for higher quality. The library default is `gpt-5-nano` (see [Providers](providers.md)).
+This example uses `gpt-5.4-mini` for higher quality. The library default is `gpt-5.4-nano` (see [Providers](providers.md)).
 
 Run with your API key:
 
@@ -82,7 +82,7 @@ Natural functions must be called inside a `with nh.run(step_executor):` context.
 
 **`ValueError: Invalid model identifier`**
 
-The model identifier must be in `provider:model` format (e.g., `openai-responses:gpt-5-mini`). Check for typos or missing provider prefix.
+The model identifier must be in `provider:model` format (e.g., `openai-responses:gpt-5.4-mini`). Check for typos or missing provider prefix.
 
 **`OPENAI_API_KEY` not set**
 

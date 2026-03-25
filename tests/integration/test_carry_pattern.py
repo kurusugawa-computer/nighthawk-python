@@ -10,7 +10,7 @@ def test_carry_continuity_across_blocks():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini",
+            model="openai-responses:gpt-5.4-nano",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
@@ -53,7 +53,7 @@ def test_carry_branching():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini",
+            model="openai-responses:gpt-5.4-nano",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
@@ -115,7 +115,7 @@ def test_carry_with_fstring_injection():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini",
+            model="openai-responses:gpt-5.4-nano",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )

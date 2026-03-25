@@ -34,7 +34,7 @@ For other providers, see [Providers](https://kurusugawa-computer.github.io/night
 import nighthawk as nh
 
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini")
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")
 )
 
 with nh.run(step_executor):

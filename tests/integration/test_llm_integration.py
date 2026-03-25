@@ -18,7 +18,7 @@ async def test_async_function_call():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high")
         ),
     )
     with nh.run(step_executor):
@@ -43,7 +43,7 @@ def test_multiple_blocks_one_call_scope():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 
@@ -70,7 +70,7 @@ def test_system_prompt_suffix_fragments():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 
@@ -93,7 +93,7 @@ def test_user_prompt_suffix_fragments():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 
@@ -116,7 +116,7 @@ def test_tool_visibility_scopes():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 
@@ -144,7 +144,7 @@ def test_provided_tools_smoke():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 
@@ -170,7 +170,7 @@ def test_session_isolation(tmp_path):
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 
@@ -199,7 +199,7 @@ def test_provided_tools_do_not_leak_into_outer_scope(tmp_path):
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="minimal")
+            model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
         ),
     )
 

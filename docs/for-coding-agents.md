@@ -153,7 +153,7 @@ Natural functions must be called inside `with nh.run(step_executor):`.
 
 ```py
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini"),
 )
 with nh.run(step_executor):
     result = my_natural_function(data)

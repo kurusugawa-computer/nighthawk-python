@@ -115,7 +115,7 @@ class StepExecutorConfiguration(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model: str = "openai-responses:gpt-5-nano"
+    model: str = "openai-responses:gpt-5.4-nano"
     model_settings: dict[str, Any] | BaseModel | None = None
 
     @field_validator("model_settings", mode="before")

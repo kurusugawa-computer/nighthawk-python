@@ -333,7 +333,7 @@ import nighthawk as nh
 
 def test_classify_with_real_llm():
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
+        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini"),
     )
     with nh.run(step_executor):
         result = classify("Great product, highly recommend!")
@@ -409,7 +409,7 @@ When iterating on Natural block text, use a focused integration test with a real
 ```py
 def test_classify_iteration():
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
+        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini"),
     )
     with nh.run(step_executor):
         result = classify("ambiguous input that failed before")

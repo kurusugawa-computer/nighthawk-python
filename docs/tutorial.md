@@ -62,7 +62,7 @@ All examples assume the [Quickstart](quickstart.md) setup:
 import nighthawk as nh
 
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini"),
 )
 
 with nh.run(step_executor):
@@ -593,7 +593,7 @@ with nh.run(step_executor):
     # Override model for a specific section
     with nh.scope(
         step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
-            model="openai-responses:gpt-5-mini",
+            model="openai-responses:gpt-5.4-mini",
         ),
     ) as scoped_executor:
         expensive_analysis(data)
@@ -625,7 +625,7 @@ The LOCALS and GLOBALS sections are bounded by token and item limits configured 
 
 ```py
 configuration = nh.StepExecutorConfiguration(
-    model="openai-responses:gpt-5-mini",
+    model="openai-responses:gpt-5.4-mini",
     context_limits=nh.StepContextLimits(
         locals_max_tokens=4096,
         locals_max_items=50,
