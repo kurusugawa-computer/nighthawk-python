@@ -22,6 +22,8 @@ Nighthawk treats this document as the target behavior. If you find a mismatch be
 
 This file intentionally does not maintain a persistent divergence ledger.
 
+The condensed coding agent guide (`for-coding-agents.md`) is a derivative document. It distills actionable rules from this specification and the tutorial. If the guide contradicts this document, this document prevails.
+
 ## 1. Goals
 
 - Provide a compact reimplementation of nightjarpy-like Natural blocks in Python.
@@ -82,13 +84,13 @@ This file intentionally does not maintain a persistent divergence ledger.
         - Examples: `openai-responses:gpt-5-mini`, `openai-responses:gpt-5-nano`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-    - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls.
+    - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
     - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
     - `prompts`: prompt templates used for execution.
         - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
         - `step_user_prompt_template`: full user prompt template including section delimiters.
     - `context_limits`: limits for rendering dynamic context into the prompt.
-    - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
+    - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
     - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 - `StepExecutorConfigurationPatch`
@@ -117,12 +119,6 @@ This file intentionally does not maintain a persistent divergence ledger.
     - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
 See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_context`).
-
-### 5.5. Backend-specific settings
-
-Backend-specific settings are passed via `model_settings` in `StepExecutorConfiguration`. Each backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) that validates and applies its own fields.
-
-For field-level documentation and usage examples, see [Coding agent backends](coding-agent-backends.md).
 
 ## 6. Natural block detection
 
@@ -299,12 +295,12 @@ Truncation:
 
 Nighthawk exposes two paths for the LLM to call Python functions:
 
-1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_eval` or `nh_exec`.
+1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_eval`.
 2. **User-defined tools** (`@nighthawk.tool`): Registered callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
 
-Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Tutorial Section 7](tutorial.md#designing-binding-functions-for-llm-consumption) for practical design patterns.
+Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Practices Section 3](practices.md#3-designing-binding-functions) for practical design patterns.
 
 Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 
@@ -354,19 +350,11 @@ Decision (step_globals):
 
 Expressions are evaluated against `step_globals` + `step_locals`.
 
-Inspect tool:
+Eval tool:
 
 - `nh_eval(expression: str) -> object`
-    - Evaluate a Python expression and return the result. Use to inspect values and call functions.
+    - Evaluate a Python expression and return the result. Use to inspect values, call functions, and mutate objects in-place.
     - If the evaluated expression is awaitable, it is awaited before returning.
-
-Mutation tool:
-
-- `nh_exec(expression: str) -> object`
-    - Execute a Python expression for its side effect on mutable objects (e.g., `list.append()`, `dict.update()`, `set.add()`).
-    - Returns the expression result.
-
-Implementation note: `nh_eval` and `nh_exec` share the same underlying implementation (Python `eval()`). The two-tool split exists as a semantic signal to the LLM (inspect intent vs mutate intent), not a runtime distinction.
 
 Binding tool:
 
@@ -425,6 +413,11 @@ The `value` field is bounded by `context_limits.tool_result_max_tokens` and may 
 Atomicity requirement:
 
 - `nh_assign` is atomic: if traversal, evaluation, or validation fails, it performs no updates.
+
+#### 8.3.1. Supporting types (internal)
+
+- `ToolBoundaryError`: Exception carrying `kind` (ErrorKind), `message`, and optional `guidance`. Raised by tool implementations to signal structured failures.
+- `ToolResultRenderingPolicy`: Frozen dataclass controlling how tool results are rendered (tokenizer encoding name, max tokens, JSON renderer style).
 
 ### 8.4. Execution contract (final JSON)
 
@@ -624,11 +617,11 @@ Decision:
 
 Nighthawk does not define a built-in persistence or memory model.
 
-If you want a long-lived object, define it yourself and bind it as an ordinary Python value. Because expression evaluation and assignment operate on `step_locals`, bound values behave like any other local: they can be read via expressions and mutated in-place via `nh_exec`.
+If you want a long-lived object, define it yourself and bind it as an ordinary Python value. Because expression evaluation and assignment operate on `step_locals`, bound values behave like any other local: they can be read via expressions and mutated in-place via `nh_eval`.
 
 ### 12.1. Carry pattern
 
-The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_exec`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
+The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_eval`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
 
 For practical examples and design tips, see [Tutorial Section 5](tutorial.md#5-cross-block-composition).
 
@@ -645,7 +638,7 @@ Exception hierarchy:
 - `ExecutionError(NighthawkError)`: Natural block execution failed.
     - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
 - `ToolEvaluationError(NighthawkError)`: Expression evaluation inside a tool call failed.
-    - Raised when: `eval()` raises during `nh_eval`, `nh_exec`, or `nh_assign` expression evaluation.
+    - Raised when: `eval()` raises during `nh_eval` or `nh_assign` expression evaluation.
 - `ToolValidationError(NighthawkError)`: Type validation/coercion failed during `nh_assign`.
     - Raised when: the assigned value does not match the expected binding type.
 - `ToolRegistrationError(NighthawkError)`: Tool registration failed.
@@ -653,11 +646,3 @@ Exception hierarchy:
 
 All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.
 
-## 14. Tool result contract
-
-The tool result JSON envelope is specified in [Section 8.3](#83-tools-available-to-the-llm). This section documents additional supporting types used internally.
-
-Supporting types (internal):
-
-- `ToolBoundaryError`: Exception carrying `kind` (ErrorKind), `message`, and optional `guidance`. Raised by tool implementations to signal structured failures.
-- `ToolResultRenderingPolicy`: Frozen dataclass controlling how tool results are rendered (tokenizer encoding name, max tokens, JSON renderer style).

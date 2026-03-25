@@ -1,6 +1,6 @@
 # Coding agent backends
 
-The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural block execution to a coding agent CLI. All three implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [Providers](providers.md) for the full provider landscape and capability matrix. See [For coding agents](for-coding-agents.md) for a development guide targeting coding agents working on Nighthawk projects.
+The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural block execution to a coding agent CLI. All three implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [For coding agents](for-coding-agents.md) for a development guide targeting coding agents working on Nighthawk projects.
 
 Minimal configuration:
 
@@ -23,14 +23,12 @@ Backend-specific settings are configured via the `model_settings` field of `Step
 
 ## Shared capabilities
 
-All three backends provide features that are not available with Pydantic AI providers:
+All three backends provide capabilities not available with Pydantic AI providers. See the [capability matrix](providers.md#capability-matrix) for a summary.
 
-| Capability | How it works |
-|---|---|
-| Skill execution | The CLI loads and executes skills from its standard skill directories |
-| MCP tool exposure | Nighthawk tools are exposed to the CLI via an embedded MCP server |
-| Callable discoverability | Same rules as [Tutorial Section 3](tutorial.md#3-functions-and-discoverability) |
-| Project-scoped files | The CLI loads its own project files from `working_directory` |
+- **Skill execution:** The CLI loads and executes skills from its standard skill directories. See [Skills](#skills) below.
+- **MCP tool exposure:** Nighthawk tools are exposed to the CLI via an embedded MCP server started automatically.
+- **Callable discoverability:** Same rules as [Tutorial Section 3](tutorial.md#3-functions-and-discoverability).
+- **Project-scoped files:** The CLI loads its own project files (CLAUDE.md, AGENTS.md) from `working_directory`.
 
 ### Working directory
 
@@ -172,6 +170,12 @@ configuration = StepExecutorConfiguration(
 | `sandbox_mode` | `"read-only"` \| `"workspace-write"` \| `"danger-full-access"` \| `None` | `None` | Sandbox policy for CLI commands |
 | `working_directory` | `str` | `""` | Absolute path to the project directory |
 
+### Known issue: MCP tools + structured output
+
+The OpenAI Responses API intermittently fails with "stream disconnected" errors when a request contains both MCP-sourced function tools and `text.format.json_schema` (structured output via `--output-schema`). This affects all Codex CLI versions tested (0.110.0 through 0.116.0). When Nighthawk exposes tools via MCP and the step executor requests structured output, the combination may trigger server-side errors in the upstream API.
+
+**Current status:** awaiting an upstream fix in the Codex CLI or OpenAI Responses API. No workaround is applied on the Nighthawk side. Promptfoo evaluations for the `codex` provider may show intermittent errors for this reason.
+
 ## Skills
 
 All three backends can execute skills. A skill is a directory with a `SKILL.md` file that the CLI loads from its standard skill directories. You can share one skill definition across both backends using symlinks:
@@ -248,3 +252,25 @@ Callable discoverability in skills follows the same rules as regular Natural fun
 - `tests/integration/test_claude_code_sdk_integration.py::test_claude_skill_calc`
 - `tests/integration/test_claude_code_cli_integration.py::test_claude_code_cli_skill_calc`
 - `tests/integration/test_codex_integration.py::test_codex_skill_calc`
+
+## Troubleshooting
+
+**`FileNotFoundError: claude` or `codex` not found**
+
+The backend CLI must be installed separately. Claude Code CLI is a system tool (not a Python package); install it following the [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code). Codex CLI is also a system tool; install following the [Codex documentation](https://openai.com/index/introducing-codex/).
+
+**`ANTHROPIC_API_KEY` not set (Claude Code backends)**
+
+Set the environment variable before running: `export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxx`. Alternatively, authenticate via an active Claude Code session.
+
+**`CODEX_API_KEY` not set or Codex login required**
+
+Authenticate with `codex login`, or set `CODEX_API_KEY` for non-interactive use.
+
+**MCP server connection failure**
+
+Nighthawk starts an embedded MCP server on a random local port. Ensure no firewall rules block localhost connections. For `claude-code-cli` and `codex` backends, check that the CLI version supports MCP configuration.
+
+**Codex structured output errors ("stream disconnected")**
+
+The OpenAI Responses API intermittently fails when a request contains both MCP-sourced function tools and structured output (`--output-schema`). This affects Codex CLI versions 0.110.0 through 0.116.0. No workaround is available; awaiting an upstream fix. See [Known issue](#known-issue-mcp-tools-structured-output) above.

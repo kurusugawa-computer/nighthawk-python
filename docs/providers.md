@@ -22,13 +22,13 @@ There are three ways to connect Nighthawk to a model:
 
 ### Capability matrix
 
-| Capability | Pydantic AI provider | Coding agent backend | Custom backend |
-|---|---|---|---|
-| Natural block execution | Yes | Yes | Yes |
-| Skill execution | No | Yes | Depends on implementation |
-| MCP tool exposure | No | Yes (automatic) | Depends on implementation |
-| Project-scoped files (CLAUDE.md, AGENTS.md) | No | Yes | Depends on implementation |
-| Model settings | Pydantic AI standard | Backend-specific | User-defined |
+| Capability | Pydantic AI provider | Coding agent backend | Custom backend | Details |
+|---|---|---|---|---|
+| Natural block execution | Yes | Yes | Yes | |
+| Skill execution | No | Yes | Depends on implementation | [Skills](coding-agent-backends.md#skills) |
+| MCP tool exposure | No | Yes (automatic) | Depends on implementation | [Shared capabilities](coding-agent-backends.md#shared-capabilities) |
+| Project-scoped files (CLAUDE.md, AGENTS.md) | No | Yes | Depends on implementation | [Shared capabilities](coding-agent-backends.md#shared-capabilities) |
+| Model settings | Pydantic AI standard | Backend-specific | User-defined | [Backend settings](coding-agent-backends.md) |
 
 ## Pydantic AI providers
 
@@ -84,35 +84,29 @@ The `claude-code-sdk`, `claude-code-cli`, and `codex` backends implement the Pyd
 
 ## Custom backends
 
-Nighthawk's `SyncStepExecutor` and `AsyncStepExecutor` protocols define the step execution interface. Any object implementing one of these protocols can serve as a backend.
+Nighthawk's `SyncStepExecutor` and `AsyncStepExecutor` protocols define the step execution interface. Any object implementing one of these protocols can serve as a backend. See the [API Reference](api.md#base) for the full protocol definition.
 
 For most cases, wrap a Pydantic AI `Agent` using `AgentStepExecutor`:
 
 ```py
+import nighthawk as nh
 from pydantic_ai import Agent
-from nighthawk.runtime.step_executor import AgentStepExecutor
 
 agent = Agent(model="openai-responses:gpt-5-nano", ...)
-executor = AgentStepExecutor.from_agent(agent=agent)
+executor = nh.AgentStepExecutor.from_agent(agent=agent)
 ```
 
-For full control, implement `AsyncStepExecutor` (or `SyncStepExecutor` for synchronous use) directly:
+For full control, implement `AsyncStepExecutor` directly:
 
 ```py
-from nighthawk.runtime.step_executor import AsyncStepExecutor
+from nighthawk.backends.base import AsyncStepExecutor
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import StepOutcome
 
-class MyBackend:
-    async def run_step_async(
-        self,
-        *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
+class MyExecutor(AsyncStepExecutor):
+    async def execute_step(self, step_context: StepContext) -> None:
+        # Inspect step_context.natural_program, step_context.step_locals, etc.
+        # Mutate step_context to set outcomes and binding values.
         ...
 ```
 
-See the [Pydantic AI Model documentation](https://ai.pydantic.dev/models/overview/) for extending `Agent` with custom models, and the [Pydantic AI tools documentation](https://ai.pydantic.dev/tools/) for tool integration patterns.
+See [design.md Section 10](design.md#10-runtime-scoping) for the protocol specification.

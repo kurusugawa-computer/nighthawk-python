@@ -49,10 +49,10 @@ Non-goals:
 - Propagate execution context and step-executor context across tool execution boundaries when tools run in different threads or processes.
 - Define an explicit serialization/propagation mechanism for multi-process execution.
 
-### Skills-style packaging (future)
+### Natural-first packaging (future)
 
 - A directory structure similar to Claude Skills (SKILL.md, REFERENCE.md, scripts/).
-- Document a minimal "Skills" packaging convention for Nighthawk.
+- Document a minimal packaging convention for Natural-first workflows in Nighthawk.
 
 ### Async bridge ContextVar propagation (future)
 
@@ -61,11 +61,6 @@ The `run_coroutine_synchronously` bridge copies `contextvars` into a background 
 ### f-string binding validation robustness (future)
 
 The f-string binding span validation uses a NUL byte (`\x00`) as a placeholder for formatted-value boundaries. This is safe in practice but could theoretically be confused by f-string expressions that produce NUL bytes. A more robust approach would use AST position information instead of string scanning.
-
-### Documentation improvements (future)
-
-- Reduce quickstart setup boilerplate (consider a convenience wrapper for the common `AgentStepExecutor.from_configuration` + `nh.run` pattern).
-- Improve docstrings for API reference completeness (e.g. `get_step_executor`, `get_execution_context`).
 
 ## Open questions
 

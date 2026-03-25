@@ -7,127 +7,24 @@
 Nighthawk is an experimental Python library exploring a clear separation:
 
 - Use **hard control** (Python code) for strict procedure, verification, and deterministic flow.
-- Use **soft reasoning** (an LLM) for semantic interpretation inside small embedded "Natural blocks".
+- Use **soft reasoning** (an LLM or coding agent) for semantic interpretation inside small embedded "Natural blocks".
+
+Python controls all flow; the LLM or coding agent is constrained to small Natural blocks with explicit input/output boundaries. The same mechanism handles lightweight LLM judgments ("classify this sentiment") and autonomous agent executions ("refactor this module and write tests"). See **[Philosophy](philosophy.md)** for the full design rationale.
 
 This repository is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
 
 ## Documentation
 
-- **[Quickstart](quickstart.md)** — Setup, first example, backends, credentials.
-- **[Tutorial](tutorial.md)** — Learn Nighthawk from first principles.
+- **[Quickstart](quickstart.md)** — Setup and first example.
+- **[Tutorial](tutorial.md)** — Learn from first principles.
+- **[Practices](practices.md)** — Guidelines, patterns, and testing.
 - **[Providers](providers.md)** — LLM providers and configuration.
-- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex backend configuration, skills, and MCP tool exposure.
+- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex integration.
+- **[Philosophy](philosophy.md)** — Design rationale and positioning.
 - **[Design](design.md)** — Canonical specification.
 - **[API Reference](api.md)** — Auto-generated API documentation.
 - **[Roadmap](roadmap.md)** — Future directions.
-- **[For coding agents](for-coding-agents.md)** — Nighthawk development guide for coding agents (LLM reference).
-
-## What Nighthawk is trying to prove
-
-Nighthawk is a research vehicle. The main validation goals are:
-
-1. Hard control + soft reasoning works in practice
-    - Keep loops, conditionals, data plumbing, and "must run exactly N times" logic in Python.
-    - Delegate semantic interpretation to Natural blocks.
-
-2. Reduce "LLM is a black box" by mapping state into the interpreter
-    - Treat the Python interpreter as the primary external memory.
-    - Make intermediate state visible as Python locals / structured objects rather than hidden chat history.
-
-3. Constrain and validate updates at boundaries
-    - Use explicit write bindings (e.g., `<:result>`) so the LLM can only commit specific values.
-    - Optionally use a typed memory model (Pydantic) to force a domain mental model and validate updates.
-
-4. Explore alternative workflow styles (Nightjar vs Skills-style)
-    - Natural-language-first workflows are attractive, but require solving state synchronization between natural language and code.
-    - Nighthawk starts from the Nightjar side and explores how far we can push interpreter-visible state mapping.
-
-## Workflow styles
-
-This section summarizes the tradeoffs in terms of hard control vs flexibility.
-
-### 1. Nightjar style (hard control, embedded Natural blocks)
-
-You write strict flow in Python, and embed Natural blocks where semantics are needed.
-
-Pros:
-- Hard guarantees: exact loops, strict conditionals, deterministic boundaries.
-- Tools: debuggers, tests, linters, and normal software engineering practices apply.
-- The LLM is "physically constrained" to operate on interpreter-visible objects (locals, memory, tool context).
-
-Cons:
-- Knowledge often ends up encoded in code-adjacent artifacts, which can be less maintainable by non-engineers.
-
-Example:
-
-```py
-@nh.natural_function
-def calculate_average(numbers):
-    """natural
-    Map each element of <numbers> to the number it represents,
-    then compute the arithmetic mean as <:result>.
-    """
-    return result
-
-result = calculate_average([1, "2", "three", "cuatro", "五"])
-print(result)  # 3.0
-```
-
-### 2. Skills-style / reverse Nightjar (flexible workflow, code snippets as needed)
-
-You write a natural language workflow first, and embed code only where strict procedures are needed.
-
-Pros:
-- Excellent for strategy, iteration, and human collaboration.
-- Similar spirit to literate programming: readable narrative with precise code where necessary.
-
-Cons:
-- The hard part is state synchronization: how to share and reconcile execution state between
-    - the natural language plan/world, and
-    - the code execution world.
-
-Example:
-
-````md
-Compute the "semantic average" of the target list using the following function.
-However, the target list contains mixed numeric representations,
-so convert the elements appropriately before calling <calculate_average>
-and passing them as the argument.
-
-```py
-def calculate_average(numbers):
-    return sum(numbers) / len(numbers)
-```
-
-Target list: `[1, "2", "three", "cuatro", "五"]`
-
-Set <:result> to the computed average.
-````
-
-### 3. Hybrid nesting (Python -> Natural -> Python -> ...)
-
-Nighthawk's execution model is Python-first alternation: Python controls the steps, and Natural blocks are inserted where semantic interpretation is needed.
-
-Example:
-
-```py
-def python_average(numbers):
-    return sum(numbers) / len(numbers)
-
-@nh.natural_function
-def calculate_average(numbers):
-    """natural
-    Map each element of <numbers> to the number it represents,
-    then compute <:result> by calling <python_average> with the mapped list.
-    """
-    return result
-
-calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
-```
-
-## Natural blocks
-
-A Natural block is a Python docstring or a standalone string literal beginning with `natural\n`. Inside the block, `<name>` read bindings expose Python values to the LLM, and `<:name>` write bindings let the LLM commit values back into Python locals. Natural blocks are literal by default; interpolation is opt-in via f-string syntax. See the [Tutorial](tutorial.md#2-providing-data-to-a-block) for details.
+- **[For coding agents](for-coding-agents.md)** — LLM development reference.
 
 ## References
 

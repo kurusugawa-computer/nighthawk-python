@@ -50,9 +50,13 @@ Three sections:
 
 Each Natural block executes independently. There is no implicit message history between blocks. The LLM sees only the prompt assembled for that specific block. Cross-block context must be explicit (see [Section 5](#5-cross-block-composition)).
 
+### Step executor
+
+A **step executor** is the strategy object that executes Natural blocks. It encapsulates the model, configuration, and backend. `AgentStepExecutor` is the built-in implementation backed by Pydantic AI. All Natural functions must be called inside a `with nh.run(step_executor):` context.
+
 ### Running the examples
 
-All examples in this tutorial assume the following setup (see [Quickstart](quickstart.md) for details):
+All examples assume the [Quickstart](quickstart.md) setup:
 
 ```py
 import nighthawk as nh
@@ -65,7 +69,7 @@ with nh.run(step_executor):
     ...  # Call natural functions here
 ```
 
-Model identifiers use the `provider:model` format. See [Providers](providers.md) for available backends and configuration.
+See [Providers](providers.md) for model identifiers and backend options.
 
 ## 2. Providing Data to a Block
 
@@ -128,6 +132,30 @@ def detect_language(text: str):
 ```
 
 Type annotations on write bindings enable validation and coercion at commit time.
+
+### Pydantic model write bindings
+
+Write bindings can use Pydantic models for structured output with automatic validation:
+
+```py
+from pydantic import BaseModel
+
+class ReviewVerdict(BaseModel):
+    approved: bool
+    reason: str
+    risk_level: str
+
+@nh.natural_function
+def judge_review(review_data: str) -> ReviewVerdict:
+    verdict: ReviewVerdict
+    """natural
+    Analyze <review_data> and produce a structured <:verdict>.
+    Set approved, reason, and risk_level fields.
+    """
+    return verdict
+```
+
+When the LLM assigns a value to `verdict`, Nighthawk validates and coerces it to a `ReviewVerdict` instance. If the value does not conform to the model schema, a `ToolValidationError` is raised.
 
 **How write bindings appear in the prompt.** A pre-declared write binding with an initial value appears in LOCALS like any other local (e.g., `sentiment: str = "neutral"`). An annotation-only or undeclared write binding does not appear in LOCALS — the LLM discovers it from the `<:name>` reference in the program text.
 
@@ -455,15 +483,9 @@ except InputError as e:
 
 ### Error types
 
-All Nighthawk exceptions inherit from `NighthawkError`:
+All Nighthawk exceptions inherit from `NighthawkError`. The most common exception in application code is `ExecutionError`, raised when a Natural block produces an invalid outcome, a disallowed outcome type, or a validation failure.
 
-| Exception | Raised when |
-|---|---|
-| `ExecutionError` | Invalid outcome, disallowed outcome type, or validation failure |
-| `NaturalParseError` | Natural block parsing or frontmatter errors |
-| `ToolEvaluationError` | Expression evaluation fails inside a tool call |
-| `ToolValidationError` | Type validation/coercion fails during assignment |
-| `ToolRegistrationError` | Invalid tool name or name conflict during `@nh.tool` registration |
+For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolRegistrationError`), see [design.md Section 13](design.md#13-error-handling).
 
 ## 5. Cross-block Composition
 
@@ -617,9 +639,9 @@ See [design.md Section 8.2](design.md#82-prompt-context) for the full specificat
 
 `StepExecutorConfiguration` also accepts `json_renderer_style`, which controls how values are rendered in prompt context and tool results (e.g., strict JSON vs annotated pseudo-JSON with omission markers). See [design.md Section 5.2](design.md#52-configuration) for available styles.
 
-### Async natural functions
+## 7. Async Natural Functions
 
-Natural functions can be async:
+Natural functions can be async. The execution model is identical to sync natural functions, with two additions:
 
 ```py
 @nh.natural_function
@@ -639,303 +661,34 @@ Inside async natural functions:
 - Return values that are awaitable are automatically awaited before validation.
 - The carry pattern and all other patterns work identically in async context.
 
-### Observability (OpenTelemetry)
-
-Nighthawk emits [OpenTelemetry](https://opentelemetry.io/) spans for runs, scopes, and step executions. If your application has an OpenTelemetry tracer configured, Nighthawk traces appear automatically — no Nighthawk-specific setup is required.
-
-See [design.md Section 10.1](design.md#101-observability-contract-opentelemetry-spanevent) for the span and event specification.
-
-## 7. Writing Guidelines
-
-### Responsibility split
-
-**Use Natural when the task requires judgment** — decisions that depend on interpretation, world knowledge, or subjective evaluation:
-
-- Classification and routing (e.g., categorize a support ticket).
-- Text generation (e.g., summarize, draft, translate, reformulate).
-- Interpretation of ambiguous or unstructured input.
-- Selection among options based on context (e.g., choose the best policy).
-
-**Use Python for everything deterministic** — operations whose result is fully determined by the input:
-
-- Computation (arithmetic, string manipulation, data transformation).
-- Control flow (loops, conditionals, sequencing of Natural blocks).
-- I/O and side effects (file operations, API calls, database queries).
-- Validation, type enforcement, and error recovery.
-- State management and data flow between Natural blocks.
-
-**Decision rule:** if the correct output can be computed without an LLM, use Python. Natural blocks add latency, cost, and non-determinism — reserve them for tasks that genuinely require LLM capabilities.
-
-### Type boundary placement
-
-The responsibility split above determines *what* goes into a Natural block. A related question is *where* the typed input boundary sits.
-
-For deterministic functions (no Natural blocks), the boundary is at the function entry point — use typed inputs:
+Async binding functions work as expected:
 
 ```py
-from pydantic import BaseModel
-
-class ScoreInput(BaseModel):
-    base: int
-    bonus: int
-    multiplier: float = 1.0
-
-def compute_score(score_input: ScoreInput) -> int:
-    return int((score_input.base + score_input.bonus) * score_input.multiplier)
-```
-
-For judgment-heavy functions (containing Natural blocks), the boundary moves *inside* the function. Accept flexible inputs at the entry point and let the Natural block interpret them into typed intermediates:
-
-`JsonableValue` is a type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`). See [design.md Section 5.3](design.md#53-supporting-types) for the full definition.
-
-```py
-from pydantic import BaseModel
-from nighthawk import JsonableValue
-
-class ReviewVerdict(BaseModel):
-    approved: bool
-    reason: str
-    risk_level: str
-
-@nh.natural_function
-def judge_review(review_data: str | JsonableValue) -> ReviewVerdict:
-    verdict: ReviewVerdict
-    """natural
-    Analyze <review_data> and produce a structured <:verdict>.
-    """
-    return verdict
-```
-
-Here, `review_data` accepts flexible input because the Natural block handles interpretation. The type boundary is at `<:verdict>` — the write binding where the LLM commits a typed `ReviewVerdict`.
-
-When designing function contracts, document where the type boundary lies. Do not assume it is always at the function signature.
-
-### Rules
-
-1. Write one integrated instruction body per block; do not split into a "bindings list" then "instructions".
-2. One judgment per block. If a block makes two independent decisions, split it into two blocks connected by Python.
-3. Cross-block data flow must be explicit. Use Python locals, the carry pattern, or f-string injection.
-4. Write bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
-5. Mutable context objects use `<name>` (read binding), not `<:name>` (write binding).
-6. Keep function parameters and locals minimal — only bind invocation-specific data. Reference module-level names via `<name>` read bindings so they appear in GLOBALS with full type information ([Section 3](#keep-locals-minimal)).
-7. Prefer binding functions (local or module-level) for all callable needs. Reserve `@nh.tool` for cases that require `RunContext[StepContext]` access.
-8. Full coverage requirements are enforced by Python loops.
-9. Error behavior is explicit at the correct boundary.
-
-### Designing binding functions for LLM consumption
-
-Rules 6 and 7 say to keep locals minimal and prefer binding functions. This subsection explains *how* to design those binding functions.
-
-Each parameter in a binding function signature is a decision point the LLM must evaluate. Fewer parameters mean lower cognitive load and more reliable tool use.
-
-**Principle:** justify each parameter against LLM cognitive load. Simple writes (e.g., setting a value at creation) are acceptable. Complex reads (e.g., multi-predicate queries) are not — compose those in Python.
-
-Wrong — too many parameters force the LLM to construct a complex query:
-
-```py
-def find_items(
-    category: str,
-    min_score: float,
-    max_score: float,
-    tags: list[str],
-    created_after: str,
-    sort_by: str,
-) -> list[dict]:
-    """Find items matching all filter criteria."""
+async def fetch_data(query: str) -> list[str]:
+    """Fetch data matching the query from an external API."""
     ...
-```
 
-Correct — compose the complex query in Python, expose a simple binding function:
-
-```py
-def find_top_items(category: str) -> list[dict]:
-    """Return the highest-scored recent items in a category."""
-    return query_items(
-        category=category,
-        min_score=0.8,
-        tags=get_relevant_tags(category),
-        created_after=recent_cutoff(),
-        sort_by="score_desc",
-    )
-```
-
-The LLM sees a one-parameter function with a clear intent. The filtering logic lives in Python where it can be tested and debugged.
-
-This principle extends to project architecture: compose domain-specific helper functions in Python and expose them to Natural blocks as binding functions.
-
-```py
-# Python API — full flexibility, tested independently
-def get_feedback_summary(topic: str, max_items: int = 10) -> str:
-    items = fetch_feedback(topic=topic, limit=max_items)
-    return format_summary(items)
-
-# Natural block sees only what it needs
 @nh.natural_function
-def analyze_feedback(topic: str) -> str:
+async def analyze(query: str) -> str:
     result = ""
     """natural
-    Call <get_feedback_summary> for <topic> and set <:result>
-    to an actionable recommendation.
+    Use <fetch_data> to retrieve data for <query>, then set <:result> to a summary.
     """
     return result
 ```
 
-## 8. Testing Natural Functions
+The LLM calls `fetch_data` via `nh_eval`; Nighthawk detects the awaitable return value and awaits it automatically before returning the result to the LLM.
 
-A Nighthawk application has two distinct layers that need testing: the **Python logic** around Natural blocks (control flow, error handling, composition) and the **Natural blocks themselves** (whether the prompt elicits the intended LLM judgment). Each layer requires a different approach.
+### Async and sync interoperability
 
-Mock tests cover the Python layer — they are fast, deterministic, and free from API calls, but they bypass the LLM entirely. A mock test passes even when the Natural block text is completely wrong. Integration tests cover the Natural block layer — they call a real LLM and verify actual judgments, but they are slower, non-deterministic, and require API credentials.
+Async natural functions can call sync binding functions, and sync natural functions can reference async binding functions. Nighthawk detects awaitable return values and handles them automatically:
 
-**Use both:** mock tests to lock down the deterministic Python shell, integration tests to validate that each Natural block's prompt produces correct results.
+- In async natural functions: awaitable results from `nh_eval` and `nh_assign` expressions are awaited before returning to the LLM.
+- In sync natural functions: if the resolved return value is awaitable, execution fails (the caller must be async to await).
 
-### Mock tests
+This means you can mix sync and async binding functions freely in async natural functions without special handling.
 
-The `nighthawk.testing` module provides `ScriptedExecutor`, which returns scripted responses and records every Natural block invocation. Use it to test the Python logic that surrounds Natural blocks.
+## Next steps
 
-```py
-import nighthawk as nh
-from nighthawk.testing import ScriptedExecutor, pass_response
-
-
-@nh.natural_function
-def classify(text: str) -> str:
-    label: str = ""
-    """natural
-    Read <text> and set <:label> to one of: positive, negative, neutral.
-    """
-    return label
-
-
-def test_classify_returns_scripted_label():
-    executor = ScriptedExecutor(responses=[
-        pass_response(label="positive"),
-    ])
-    with nh.run(executor):
-        result = classify("Great product!")
-
-    assert result == "positive"
-```
-
-`ScriptedExecutor` does not call an LLM. You script what it returns with **outcome factories**:
-
-| Factory | Outcome | Use case |
-|---|---|---|
-| `pass_response(**bindings)` | pass | Normal completion with binding values |
-| `raise_response(message, *, error_type=None)` | raise | Test error handling paths |
-| `return_response(reference_path, **bindings)` | return | Early return from Natural function |
-| `break_response()` | break | Exit enclosing loop |
-| `continue_response()` | continue | Skip to next iteration |
-
-#### Testing error handling
-
-Use `raise_response` to verify that your code handles LLM failures gracefully:
-
-```py
-from nighthawk.testing import raise_response
-
-def test_fallback_on_error():
-    executor = ScriptedExecutor(responses=[
-        raise_response("cannot interpret input", error_type="ValueError"),
-    ])
-    with nh.run(executor):
-        try:
-            result = classify("???")
-        except ValueError:
-            result = "unknown"
-
-    assert result == "unknown"
-```
-
-#### Testing multi-step composition
-
-When a pipeline contains multiple Natural blocks, script one response per block:
-
-```py
-def test_pipeline_classify_then_summarize():
-    executor = ScriptedExecutor(responses=[
-        pass_response(category="bug"),
-        pass_response(summary="Login crash on mobile"),
-    ])
-    with nh.run(executor):
-        result = triage_pipeline("App crashes when I log in on my phone")
-
-    assert result.category == "bug"
-    assert result.summary == "Login crash on mobile"
-```
-
-#### Verifying binding wiring
-
-Use recorded calls to check that the right data is visible to the LLM:
-
-```py
-def test_helper_is_discoverable():
-    executor = ScriptedExecutor(responses=[pass_response(result="")])
-    with nh.run(executor):
-        analyze(query="test")
-
-    call = executor.calls[0]
-    assert "helper" in call.step_globals   # binding function visible in GLOBALS
-    assert "query" in call.step_locals     # parameter visible in LOCALS
-    assert "result" in call.binding_names  # write binding registered
-```
-
-#### Callback executor
-
-When the mock response depends on the input, use `CallbackExecutor`:
-
-```py
-from nighthawk.testing import CallbackExecutor, StepCall, StepResponse
-
-def handler(call: StepCall) -> StepResponse:
-    text = call.step_locals.get("text", "")
-    if isinstance(text, str) and "urgent" in text:
-        return pass_response(priority="high")
-    return pass_response(priority="normal")
-
-def test_urgent_routing():
-    executor = CallbackExecutor(handler)
-    with nh.run(executor):
-        assert triage("urgent outage") == "high"
-        assert triage("minor typo") == "normal"
-```
-
-### Integration tests
-
-Integration tests call a real LLM and validate the judgment. This is where you verify that the Natural block text actually works.
-
-```py
-import nighthawk as nh
-
-
-def test_classify_with_real_llm():
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5-mini"),
-    )
-    with nh.run(step_executor):
-        result = classify("Great product, highly recommend!")
-
-    assert result in ("positive", "negative", "neutral")
-```
-
-**Assertion strategy:** assert on type, value range, and semantic consistency rather than exact string matches. LLMs are non-deterministic; brittle equality checks produce flaky tests.
-
-Gate integration tests behind an environment variable so they do not run in every CI job:
-
-```py
-import os
-import pytest
-
-if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
-    pytest.skip("Integration tests disabled", allow_module_level=True)
-```
-
-### When to use which
-
-| Question | Mock test | Integration test |
-|---|---|---|
-| Does my Python control flow work given specific LLM outputs? | Yes | Overkill |
-| Does error handling recover correctly? | Yes | Overkill |
-| Are the right bindings visible to the LLM? | Yes | Also works, but slower |
-| Does this Natural block actually produce useful results? | **No** | Yes |
-| Is my prompt wording effective? | **No** | Yes |
+For observability, writing guidelines, binding function design, and testing, see [Practices](practices.md).
 
