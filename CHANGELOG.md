@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `evals/promptfoo/` evaluation harness for system prompt optimization using [promptfoo](https://www.promptfoo.dev/): custom Python provider, reusable assertions, and prompt variant A/B comparison support. See `CONTRIBUTING.md` for usage.
+- `docs/philosophy.md`: design philosophy and motivation behind Nighthawk.
+- `docs/practices.md`: practical patterns and binding function design guidance (extracted from tutorial).
+
+### Changed
+- Default `json_renderer_style` changed from `"strict"` to `"default"`, making truncation visible via `…` omission markers in prompt context and tool results.
+- Merged `nh_exec` into `nh_eval`: `nh_eval` now handles expression evaluation, function calls, and in-place mutation. `nh_exec` is removed.
+- Condensed system prompt: simplified tool selection guidance (single `nh_eval` tool), added execution order section, clarified tool result format.
+- Condensed step execution contract (outcome prompt suffix) for reduced token usage.
+- Improved `nh_assign` and `nh_eval` tool descriptions for LLM clarity.
+- Restructured documentation: rewrote `index.md`, `tutorial.md`, `for-coding-agents.md`; cross-referenced specification and practice guides.
+- Integration tests: replaced single `NIGHTHAWK_RUN_INTEGRATION_TESTS` gate with per-backend environment variables (`NIGHTHAWK_CODEX_INTEGRATION_TESTS`, `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS`, `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS`).
+
+### Removed
+- `nh_exec` tool (functionality absorbed by `nh_eval`).
+- Three redundant OpenAI integration tests from `test_llm_integration.py` (covered by promptfoo evaluation harness).
+- `pytest_sessionstart` credential-check hook (replaced by per-backend skip helpers).
+
 ## [0.4.0] - 2026-03-20
 
 ### Added

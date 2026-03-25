@@ -1,0 +1,66 @@
+# Category: Multi-Step Operations
+
+# P-TOOL-050: Append then count (sequential mutation then read)
+- description: "P-TOOL-050: Append then count"
+  vars:
+    natural_program: "Append 99 to <items>, then set <:count> to the length of <items>."
+    input_bindings: '{"items": [1, 2, 3]}'
+    output_binding_names: '["count"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          count: 4
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          items: [1, 2, 3, 99]
+
+# P-TOOL-051: Clear then populate
+- description: "P-TOOL-051: Clear then populate"
+  vars:
+    natural_program: "Clear <data>, then add key \"status\" with value \"new\" to <data>."
+    input_bindings: '{"data": {"old_key": "old_value"}}'
+    output_binding_names: '[]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          data:
+            status: "new"
+
+# P-TOOL-052: Sort then get last element
+- description: "P-TOOL-052: Sort then get last element"
+  vars:
+    natural_program: "Sort <items> in ascending order, then set <:last> to the last element of <items>."
+    input_bindings: '{"items": [5, 2, 8, 1, 9]}'
+    output_binding_names: '["last"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          last: 9
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          items: [1, 2, 5, 8, 9]

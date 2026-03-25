@@ -17,20 +17,17 @@ def requires_openai_integration():  # type: ignore[no-untyped-def]
 
 
 def requires_codex_integration() -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+    import shutil
+
+    if os.getenv("NIGHTHAWK_CODEX_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
-    # This integration test requires a real `codex` executable on PATH and valid provider credentials.
-    if os.getenv("CODEX_API_KEY") is None:
-        pytest.skip("Codex CLI integration test requires CODEX_API_KEY")
-
-    # Codex CLI is probabilistic and relies on local state; allow skipping in environments where it is flaky.
-    if os.getenv("NIGHTHAWK_SKIP_CODEX_INTEGRATION") == "1":
-        pytest.skip("Codex integration tests are skipped")
+    if shutil.which("codex") is None:
+        pytest.skip("Codex CLI integration test requires 'codex' on PATH")
 
 
 def requires_claude_code_sdk_integration() -> None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+    if os.getenv("NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
     if os.getenv("ANTHROPIC_AUTH_TOKEN") is None and os.getenv("ANTHROPIC_API_KEY") is None:
@@ -40,7 +37,7 @@ def requires_claude_code_sdk_integration() -> None:
 def requires_claude_code_cli_integration() -> None:
     import shutil
 
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+    if os.getenv("NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
     if shutil.which("claude") is None:

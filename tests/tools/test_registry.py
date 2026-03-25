@@ -136,7 +136,6 @@ def test_builtin_tools_are_always_visible():
     names = {t.name for t in get_visible_tools()}
 
     assert "nh_eval" in names
-    assert "nh_exec" in names
     assert "nh_assign" in names
 
 

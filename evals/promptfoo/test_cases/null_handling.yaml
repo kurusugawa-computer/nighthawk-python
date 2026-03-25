@@ -1,0 +1,35 @@
+# Category: Null/None Handling
+
+# P-BIND-011: Assign None
+- description: "P-BIND-011: Assign None"
+  vars:
+    natural_program: "Set <:result> to None."
+    input_bindings: '{}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: null
+
+# P-BIND-012: None conditional check
+- description: "P-BIND-012: None conditional check"
+  vars:
+    natural_program: "If <value> is None, set <:result> to \"missing\", otherwise set <:result> to \"present\"."
+    input_bindings: '{"value": null}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: "missing"

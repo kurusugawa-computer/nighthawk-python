@@ -194,38 +194,24 @@ def build_step_system_prompt_suffix_fragment(
     if not allowed_kinds:
         raise ValueError("allowed_kinds must not be empty")
 
-    allowed_kinds_text = ", ".join(f"`{outcome_kind}`" for outcome_kind in allowed_kinds)
+    allowed_kinds_text = " | ".join(allowed_kinds)
 
-    sections: list[str] = []
-    sections.append(
-        f"StepFinalResult — output exactly one JSON object with a `result` field. Inside `result`, `kind` must be one of: {allowed_kinds_text}.\n"
-    )
+    lines: list[str] = [
+        'Output {"result": {"kind": "<kind>", ...}}.',
+        f"kind: {allowed_kinds_text}. Default: pass.",
+    ]
 
     if "pass" in allowed_kinds:
-        sections.append('\nDefault: {"result": {"kind": "pass"}}\nChoose pass after completing the work. Most blocks end with pass.\n')
-
-    alternatives: list[str] = []
+        lines.append("Choose pass after completing the work. Most blocks end with pass.")
 
     if "return" in allowed_kinds:
-        alternatives.append(
-            '- return: immediately return from the Python function.\n  return_reference_path (required): name in step locals holding the value.\n  Example: after nh_assign("x", "42"), output {"result": {"kind": "return", "return_reference_path": "x"}}.\n'
-        )
-
-    if "break" in allowed_kinds:
-        alternatives.append("- break: break from the surrounding Python loop.\n")
-
-    if "continue" in allowed_kinds:
-        alternatives.append("- continue: continue to the next loop iteration.\n")
+        lines.append("return needs return_reference_path (name of the step local to return).")
 
     if "raise" in allowed_kinds:
-        raise_text = "- raise: raise a Python exception.\n  raise_message: required.\n"
+        raise_line = "raise needs raise_message."
         if raise_error_type_binding_names:
-            error_type_names_text = ", ".join(f"`{name}`" for name in raise_error_type_binding_names)
-            raise_text += f"  raise_error_type: optional, must be one of: {error_type_names_text}.\n"
-        alternatives.append(raise_text)
+            error_type_names_text = " | ".join(raise_error_type_binding_names)
+            raise_line += f" Optional raise_error_type: {error_type_names_text}."
+        lines.append(raise_line)
 
-    if alternatives:
-        sections.append("\nAlternatives (use only when the program text explicitly requires it):\n")
-        sections.extend(alternatives)
-
-    return "".join(sections)
+    return "\n".join(lines) + "\n"

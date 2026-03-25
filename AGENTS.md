@@ -51,13 +51,13 @@ Python 3.13+, `uv` for dependencies, `pytest` for tests. Prefer LSP-based toolin
 | `uv run python` | Investigate interactively |
 | `uv sync --all-extras --all-groups` | Install/sync dependencies |
 | `uv run ruff format .` | Format |
-| `uv run ruff check .` | Lint |
 | `uv run ruff check --fix .` | Auto-fix lint |
 | `uv run pyright` | Type check |
-| `uv run pytest` | Full test suite |
 | `uv run pytest -q` | Tests (quiet) |
-| `set -a; source .env; set +a; uv run pytest -q` | Integration tests |
+| `NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q` | Integration tests |
 
 `uv` hardlinking warnings do not indicate failure. Suppress: `export UV_LINK_MODE=copy`.
 
 Environment: `OPENAI_API_KEY` (OpenAI), `CODEX_API_KEY` (Codex).
+
+Promptfoo evaluation details (commands, configs, directory layout, flags): see `CONTRIBUTING.md` "Prompt evaluation with promptfoo".

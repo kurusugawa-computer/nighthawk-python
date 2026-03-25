@@ -3,6 +3,12 @@
 *.local.json
 .vscode/
 
+# promptfoo evaluation outputs
+evals/promptfoo/output/
+evals/promptfoo/*.json
+evals/promptfoo/*.html
+evals/promptfoo/*.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

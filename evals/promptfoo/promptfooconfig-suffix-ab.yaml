@@ -1,0 +1,72 @@
+# Nighthawk StepFinalResult Suffix Fragment A/B Testing
+#
+# Tests different suffix fragment text variants that guide LLM outcome selection.
+# All variants use the same base system prompt and tool preset to isolate the
+# effect of the suffix fragment.
+#
+# Run:
+#   cd evals/promptfoo
+#   set -a; source ../../.env; set +a
+#   PROMPTFOO_PYTHON="$(uv python find)" npx promptfoo@latest eval \
+#     -c promptfooconfig-suffix-ab.yaml --no-cache
+#
+# View results:
+#   npx promptfoo@latest view
+
+description: "Nighthawk suffix fragment A/B testing: gpt-5.4-mini only"
+
+prompts:
+  - "{{natural_program}}"
+
+providers:
+  # --- Control: current production suffix text ---
+  - id: file://provider.py
+    label: "control (current suffix)"
+    config:
+      model: "openai-responses:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_default.txt
+      tool_preset: "eval_examples"
+      suffix_variant: "control"
+
+  # --- Variant A: Terse (minimal prose, rely on JSON schema) ---
+  - id: file://provider.py
+    label: "suffix: terse"
+    config:
+      model: "openai-responses:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_default.txt
+      tool_preset: "eval_examples"
+      suffix_variant: "terse"
+
+  # --- Variant B: Examples (one JSON example per allowed kind) ---
+  - id: file://provider.py
+    label: "suffix: examples"
+    config:
+      model: "openai-responses:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_default.txt
+      tool_preset: "eval_examples"
+      suffix_variant: "examples"
+
+  # --- Variant C: Decisional (decision-tree framing) ---
+  - id: file://provider.py
+    label: "suffix: decisional"
+    config:
+      model: "openai-responses:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_default.txt
+      tool_preset: "eval_examples"
+      suffix_variant: "decisional"
+
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: python
+      value: file://assertions/outcome_kind.py
+
+tests:
+  - file://test_cases/binding_operations.yaml
+  - file://test_cases/outcome_kinds.yaml
+  - file://test_cases/tool_selection.yaml
+  - file://test_cases/edge_cases.yaml
+  - file://test_cases/loop_outcomes.yaml
+  - file://test_cases/multi_step.yaml
+  - file://test_cases/null_handling.yaml

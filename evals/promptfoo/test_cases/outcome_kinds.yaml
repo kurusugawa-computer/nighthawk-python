@@ -1,0 +1,151 @@
+# Category 2: Outcome Kind Correctness
+
+# P-OUTCOME-001: Conditional return
+- description: "P-OUTCOME-001: Conditional return (v>=10 -> return v)"
+  vars:
+    natural_program: "If <v> >= 10 then return <v>."
+    input_bindings: '{"v": 15}'
+    output_binding_names: '["v"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "return"
+
+# P-OUTCOME-002: Raise ValueError with message
+- description: "P-OUTCOME-002: Raise ValueError"
+  vars:
+    natural_program: 'Raise a <ValueError> with message "invalid input".'
+    input_bindings: '{}'
+    output_binding_names: '[]'
+    global_bindings: '{"ValueError": "__builtin__"}'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "raise"
+    - type: python
+      value: file://assertions/raise_message.py
+      config:
+        expected_raise_message_contains: "invalid input"
+        expected_error_type: "ValueError"
+
+# P-OUTCOME-003: Implicit pass (no explicit outcome instruction)
+- description: "P-OUTCOME-003: Implicit pass"
+  vars:
+    natural_program: "Set <:x> to <x> + 1."
+    input_bindings: '{"x": 5}'
+    output_binding_names: '["x"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          x: 6
+
+# P-OUTCOME-004: Deny constraint forces specific outcome
+- description: "P-OUTCOME-004: Deny pass+raise forces return"
+  vars:
+    natural_program: |
+      ---
+      deny: [pass, raise]
+      ---
+      Return <v>.
+    input_bindings: '{"v": 42}'
+    output_binding_names: '["v"]'
+    allowed_step_kinds: '["return"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "return"
+
+# P-OUTCOME-005: Return with multiple locals (reference path accuracy)
+- description: "P-OUTCOME-005: Return with multiple locals"
+  vars:
+    natural_program: "Return <result>."
+    input_bindings: '{"result": 42, "temp": 0, "flag": true}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "return"
+
+# P-OUTCOME-006: Raise with multiple error types available
+- description: "P-OUTCOME-006: Raise TypeError from multiple error types"
+  vars:
+    natural_program: 'Raise a <TypeError> with message "expected int".'
+    input_bindings: '{}'
+    output_binding_names: '[]'
+    global_bindings: '{"ValueError": "__builtin__", "TypeError": "__builtin__"}'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "raise"
+    - type: python
+      value: file://assertions/raise_message.py
+      config:
+        expected_raise_message_contains: "expected int"
+        expected_error_type: "TypeError"
+
+# P-OUTCOME-007: Assign then return (pass vs return discrimination)
+- description: "P-OUTCOME-007: Assign then return"
+  vars:
+    natural_program: "Set <:x> to 10. Return <x>."
+    input_bindings: '{}'
+    output_binding_names: '["x"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "return"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          x: 10
+
+# P-OUTCOME-008: Deny forces raise
+- description: "P-OUTCOME-008: Deny forces raise"
+  vars:
+    natural_program: |
+      ---
+      deny: [pass, return, break, continue]
+      ---
+      Signal an error with message "forced".
+    input_bindings: '{}'
+    output_binding_names: '[]'
+    allowed_step_kinds: '["raise"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "raise"
+    - type: python
+      value: file://assertions/raise_message.py
+      config:
+        expected_raise_message_contains: "forced"
+
+# P-OUTCOME-009: Conditional outcome — pass branch taken
+- description: "P-OUTCOME-009: Conditional pass when raise condition not met"
+  vars:
+    natural_program: "If <x> is negative, raise a <ValueError>. Otherwise set <:result> to <x>."
+    input_bindings: '{"x": 5}'
+    output_binding_names: '["result"]'
+    global_bindings: '{"ValueError": "__builtin__"}'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 5

@@ -41,14 +41,6 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     def nh_eval(run_context: RunContext[StepContext], expression: str) -> object:
         return _eval_expression_or_raise(run_context, expression)
 
-    # nh_exec intentionally shares the same implementation as nh_eval.
-    # Both use Python eval(); the two-tool split exists purely as a semantic
-    # signal to the LLM (inspect vs mutate intent), not a runtime distinction.
-    # If future requirements demand runtime differentiation (e.g., read-only
-    # enforcement for nh_eval), the split provides the structural hook for it.
-    def nh_exec(run_context: RunContext[StepContext], expression: str) -> object:
-        return _eval_expression_or_raise(run_context, expression)
-
     return [
         ProvidedToolDefinition(
             name="nh_assign",
@@ -56,7 +48,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                 nh_assign,
                 name="nh_assign",
                 metadata=metadata,
-                description="Rebind a name or set a nested field to a new value. target_path format: name(.field)*.",
+                description="Set a write binding to a new value. target_path: a name or dotted path (e.g., 'result', 'obj.field'). expression: evaluated as Python.",
             ),
         ),
         ProvidedToolDefinition(
@@ -65,16 +57,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                 nh_eval,
                 name="nh_eval",
                 metadata=metadata,
-                description="Evaluate a Python expression and return the result.",
-            ),
-        ),
-        ProvidedToolDefinition(
-            name="nh_exec",
-            tool=Tool(
-                nh_exec,
-                name="nh_exec",
-                metadata=metadata,
-                description="Execute a Python expression for its side effect (e.g., list.append(), dict.update()). Returns the expression result.",
+                description="Evaluate a Python expression and return the result. Examples: len(items), data.get('key', 0), items.sort(), add(3, 7).",
             ),
         ),
     ]

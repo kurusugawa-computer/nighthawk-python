@@ -1,0 +1,141 @@
+# Category 1: Binding Operations (highest priority)
+
+# P-BIND-001: Simple arithmetic binding
+- description: "P-BIND-001: Simple arithmetic (v=10, set v to v+5)"
+  vars:
+    natural_program: "Set <:v> to <v> + 5."
+    input_bindings: '{"v": 10}'
+    output_binding_names: '["v"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          v: 15
+
+# P-BIND-002: Multiple write bindings
+- description: "P-BIND-002: Multiple bindings (x=5, a=x*2, b=x*3)"
+  vars:
+    natural_program: "Set <:a> to <x> * 2 and <:b> to <x> * 3."
+    input_bindings: '{"x": 5}'
+    output_binding_names: '["a", "b"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          a: 10
+          b: 15
+
+# P-BIND-003: String operation (uppercase)
+- description: "P-BIND-003: String uppercase"
+  vars:
+    natural_program: "Set <:result> to the uppercase version of <text>."
+    input_bindings: '{"text": "hello world"}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: "HELLO WORLD"
+
+# P-BIND-004: List mutation via nh_exec (in-place append)
+- description: "P-BIND-004: List append via nh_exec"
+  vars:
+    natural_program: "Append 42 to <items>."
+    input_bindings: '{"items": [1, 2, 3]}'
+    output_binding_names: '[]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          items: [1, 2, 3, 42]
+
+# P-BIND-005: Dict value access
+- description: "P-BIND-005: Dict value access"
+  vars:
+    natural_program: "Set <:result> to the value of key 'name' in <data>."
+    input_bindings: '{"data": {"name": "Alice", "age": 30}}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: "Alice"
+
+# P-BIND-020: Boolean result (empty list check)
+- description: "P-BIND-020: Boolean result from empty list check"
+  vars:
+    natural_program: "Set <:is_empty> to True if <items> is empty, otherwise False."
+    input_bindings: '{"items": []}'
+    output_binding_names: '["is_empty"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          is_empty: true
+
+# P-BIND-021: Float division result
+- description: "P-BIND-021: Float division result"
+  vars:
+    natural_program: "Set <:result> to <a> divided by <b>."
+    input_bindings: '{"a": 7, "b": 2}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 3.5
+
+# P-BIND-030: Free-form context extraction and arithmetic
+- description: "P-BIND-030: Extract value from free-form context text and compute"
+  vars:
+    natural_program: |
+      Prior context: Step 0 produced result=42.
+      Add 1 to the previous result mentioned in the context and set <:result>.
+    input_bindings: '{}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 43

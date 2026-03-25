@@ -1,0 +1,287 @@
+# Category 3: Tool Selection
+
+# --- Basic tool selection ---
+
+# P-TOOL-001: nh_assign for write binding
+- description: "P-TOOL-001: nh_assign for write binding"
+  vars:
+    natural_program: "Set <:result> to 100."
+    input_bindings: '{}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 100
+
+# P-TOOL-002: nh_eval for value inspection
+- description: "P-TOOL-002: nh_eval for inspection then assign"
+  vars:
+    natural_program: "Set <:result> to the length of <items>."
+    input_bindings: '{"items": [10, 20, 30, 40]}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 4
+
+# P-TOOL-003: nh_exec for in-place mutation
+- description: "P-TOOL-003: nh_exec for list sort"
+  vars:
+    natural_program: "Sort <items> in ascending order."
+    input_bindings: '{"items": [3, 1, 4, 1, 5]}'
+    output_binding_names: '[]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          items: [1, 1, 3, 4, 5]
+
+# P-TOOL-004: Function call via nh_eval then nh_assign
+- description: "P-TOOL-004: Function call and assign"
+  vars:
+    natural_program: "Set <:result> to the result of calling <add>(3, 7)."
+    input_bindings: '{"add": "__callable:add"}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 10
+
+# --- nh_eval/nh_exec single use ---
+
+# P-TOOL-010: nh_eval for conditional logic
+- description: "P-TOOL-010: nh_eval for len check then conditional assign"
+  vars:
+    natural_program: 'If <items> has more than 3 elements, set <:result> to "large", else set <:result> to "small".'
+    input_bindings: '{"items": [1, 2, 3, 4]}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: "large"
+
+# P-TOOL-011: nh_eval for arithmetic expression
+- description: "P-TOOL-011: nh_eval for sum"
+  vars:
+    natural_program: "Set <:result> to the sum of all elements in <numbers>."
+    input_bindings: '{"numbers": [10, 20, 30]}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 60
+
+# P-TOOL-012: nh_exec for list filtering
+- description: "P-TOOL-012: nh_exec to remove negative numbers"
+  vars:
+    natural_program: "Remove all negative numbers from <data>."
+    input_bindings: '{"data": [1, -2, 3, -4, 5]}'
+    output_binding_names: '[]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          data: [1, 3, 5]
+
+# P-TOOL-013: nh_exec for dict mutation
+- description: "P-TOOL-013: nh_exec to add dict key"
+  vars:
+    natural_program: 'Add key "status" with value "active" to <record>.'
+    input_bindings: '{"record": {"name": "test"}}'
+    output_binding_names: '[]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          record:
+            name: "test"
+            status: "active"
+
+# --- Tool chains (multiple tools in sequence) ---
+
+# P-TOOL-020: eval -> assign chain
+- description: "P-TOOL-020: eval then assign (average)"
+  vars:
+    natural_program: "Set <:average> to the average of <scores>."
+    input_bindings: '{"scores": [80, 90, 100]}'
+    output_binding_names: '["average"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          average: 90.0
+
+# P-TOOL-021: eval -> conditional -> assign
+- description: "P-TOOL-021: eval, compare, then assign"
+  vars:
+    natural_program: "If the maximum of <values> exceeds <threshold>, set <:alert> to True, otherwise set <:alert> to False."
+    input_bindings: '{"values": [1, 5, 10], "threshold": 7}'
+    output_binding_names: '["alert"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          alert: true
+
+# P-TOOL-022: exec + assign mixed
+- description: "P-TOOL-022: exec (sort) then assign (first element)"
+  vars:
+    natural_program: "Sort <items> in place, then set <:first> to the first element."
+    input_bindings: '{"items": [3, 1, 2]}'
+    output_binding_names: '["first"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          first: 1
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          items: [1, 2, 3]
+
+# P-TOOL-023: Multiple assign (min and max)
+- description: "P-TOOL-023: Multiple assigns (min and max)"
+  vars:
+    natural_program: "Set <:minimum> to the minimum and <:maximum> to the maximum of <data>."
+    input_bindings: '{"data": [5, 2, 8, 1, 9]}'
+    output_binding_names: '["minimum", "maximum"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          minimum: 1
+          maximum: 9
+
+# --- Function calls via eval ---
+
+# P-TOOL-030: Local function call
+- description: "P-TOOL-030: Call local function via eval"
+  vars:
+    natural_program: "Set <:result> to the result of calling <multiply>(3, 4)."
+    input_bindings: '{"multiply": "__callable:multiply"}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 12
+
+# P-TOOL-031: Chained function call (string transform)
+- description: "P-TOOL-031: Function call with string transform"
+  vars:
+    natural_program: "Set <:result> to <transform>(<value>)."
+    input_bindings: '{"transform": "__callable:transform_upper", "value": "hello"}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: "HELLO"
+
+# --- Error handling/recovery ---
+
+# P-TOOL-040: Missing key with default
+- description: "P-TOOL-040: Dict access with default on missing key"
+  vars:
+    natural_program: 'Set <:result> to the value of key "missing_key" in <data>, defaulting to 0 if not found.'
+    input_bindings: '{"data": {"a": 1}}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 0
+
+# P-TOOL-041: Type-aware assignment
+- description: "P-TOOL-041: Numeric result for arithmetic"
+  vars:
+    natural_program: "Set <:count> to the number of items in <items> that are greater than 5."
+    input_bindings: '{"items": [1, 3, 7, 9, 2, 8]}'
+    output_binding_names: '["count"]'
+  assert:
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          count: 3
+
+# --- Multi-argument function calls ---
+
+# P-TOOL-060: Three-argument function call
+- description: "P-TOOL-060: Two-argument function call (format_name)"
+  vars:
+    natural_program: "Set <:result> to the result of calling <format_name>(\"Alice\", \"Smith\")."
+    input_bindings: '{"format_name": "__callable:format_name"}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: "Alice Smith"
+
+# P-TOOL-061: Clamp function call
+- description: "P-TOOL-061: Clamp function call"
+  vars:
+    natural_program: "Set <:result> to <clamp>(<value>, 0, 10)."
+    input_bindings: '{"clamp": "__callable:clamp", "value": 15}'
+    output_binding_names: '["result"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 10

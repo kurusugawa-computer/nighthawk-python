@@ -70,6 +70,48 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run pytest -q tests/integra
 
 Traces appear in the otel-tui terminal UI in real time.
 
+### Prompt evaluation with promptfoo
+
+System prompt, tool descriptions, and backend behavior are evaluated with [promptfoo](https://www.promptfoo.dev/). Requires Node.js (for `npx`). API keys must be loaded from `.env` first.
+
+```bash
+set -a; source .env; set +a
+PFOO="cd evals/promptfoo && PROMPTFOO_PYTHON=\"$(uv python find)\" npx promptfoo@latest"
+```
+
+| Command | Purpose |
+|---|---|
+| `eval $PFOO eval` | Full regression (all backends, all tests) |
+| `eval $PFOO eval -c promptfooconfig-prompt-ab.yaml` | Prompt A/B test (gpt-5.4-mini only) |
+| `eval $PFOO eval -c promptfooconfig-agents.yaml` | Coding agent backends (reduced test set) |
+| `eval $PFOO eval -c promptfooconfig.yaml --filter-pattern "P-BIND-001"` | Single test |
+| `eval $PFOO eval -c promptfooconfig.yaml --filter-providers "claude-code-cli"` | Single backend |
+| `eval $PFOO view` | Open results in browser |
+
+#### Config files (`evals/promptfoo/`)
+
+- `promptfooconfig.yaml` — Regression: winner prompt combo across openai-responses, claude-code-cli, and codex backends. All test cases.
+- `promptfooconfig-prompt-ab.yaml` — A/B testing: 4 prompt/tool variants on gpt-5.4-mini. All test cases.
+- `promptfooconfig-agents.yaml` — Coding agent only: claude-code-cli and codex with reduced test set.
+
+#### Directory layout
+
+- `provider.py` — Custom provider wrapping `AgentStepExecutor`. Handles tool preset installation, backend-specific model settings, and callable fixture resolution.
+- `prompts/` — System prompt variants (`eval_default.txt`, `eval_sequenced.txt`, `eval_mutation_aware.txt`, `eval_coding_agent.txt`, etc.).
+- `test_cases/` — YAML test suites: `binding_operations`, `tool_selection`, `outcome_kinds`, `edge_cases`, `loop_outcomes`, `multi_step`, `null_handling`, `tool_selection_core`.
+- `assertions/` — Custom Python assertions: `binding_value.py`, `outcome_kind.py`, `raise_message.py`.
+
+#### Adding tests
+
+Each test case YAML entry needs: `description` (with `P-SLUG-NNN` Id), `vars` (natural_program, input_bindings, output_binding_names), and `assert` list. Callable bindings use `"__callable:<key>"` resolved from `_CALLABLE_FIXTURE_REGISTRY` in `provider.py`.
+
+#### Useful flags
+
+- `--no-cache` — Skip cache (required after changing provider.py or prompts).
+- `--filter-pattern "<regex>"` — Run only matching test descriptions.
+- `--filter-providers "<regex>"` — Run only matching provider labels.
+- `-o <path>.json` — Write structured results to file for analysis.
+
 ### Environment variables
 
 - `OPENAI_API_KEY`: Required for OpenAI integration tests (also requires `pydantic-ai-slim[openai]`).

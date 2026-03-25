@@ -12,69 +12,6 @@ logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
 
-def test_natural_block_evaluate_order():
-    openai_responses_model_settings_class = requires_openai_integration()
-
-    run_configuration = nh.StepExecutorConfiguration(model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"))
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=run_configuration,
-    )
-
-    with nh.run(step_executor):
-
-        @nh.natural_function
-        def test_function() -> int:
-            v = 10
-            """natural
-            Set <:v> to <v> + 5.
-            """
-            return v
-
-        result = test_function()
-        assert result == 15
-
-
-def test_raise_exception():
-    openai_responses_model_settings_class = requires_openai_integration()
-
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5-mini", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")
-        ),
-    )
-    with nh.run(step_executor):
-
-        @nh.natural_function
-        def test_function():
-            """natural
-            raise a <ValueError> with message "This is a test error."
-            """
-
-        with pytest.raises(ValueError, match="This is a test error."):
-            test_function()
-
-
-def test_condition():
-    openai_responses_model_settings_class = requires_openai_integration()
-
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low")),
-    )
-    with nh.run(step_executor):
-
-        @nh.natural_function
-        def test_function(v: int) -> int:
-            v += 1
-            """natural
-            if <v> >= 10 then return 11
-            else <:v> = <v> + 5
-            """
-            v += 1
-            return v
-
-        assert test_function(9) == 11
-
-
 @pytest.mark.asyncio
 async def test_async_function_call():
     openai_responses_model_settings_class = requires_openai_integration()

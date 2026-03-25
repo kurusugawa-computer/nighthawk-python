@@ -1,0 +1,77 @@
+# Category: Loop Outcomes
+
+# P-OUTCOME-010: Break outcome
+- description: "P-OUTCOME-010: Break outcome in loop context"
+  vars:
+    natural_program: "Break out of the loop."
+    input_bindings: '{}'
+    output_binding_names: '[]'
+    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "break"
+
+# P-OUTCOME-011: Continue outcome
+- description: "P-OUTCOME-011: Continue outcome in loop context"
+  vars:
+    natural_program: "Skip to the next iteration."
+    input_bindings: '{}'
+    output_binding_names: '[]'
+    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "continue"
+
+# P-OUTCOME-012: Pass when loop outcomes available but unnecessary
+- description: "P-OUTCOME-012: Pass when loop outcomes available but unused"
+  vars:
+    natural_program: "Set <:result> to <x> + 1."
+    input_bindings: '{"x": 10}'
+    output_binding_names: '["result"]'
+    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "pass"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        expected_bindings:
+          result: 11
+
+# P-OUTCOME-013: Conditional break
+- description: "P-OUTCOME-013: Conditional break (x>10 -> break)"
+  vars:
+    natural_program: "If <x> is greater than 10, break out of the loop. Otherwise continue to the next iteration."
+    input_bindings: '{"x": 15}'
+    output_binding_names: '[]'
+    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "break"
+
+# P-OUTCOME-014: Work then continue
+- description: "P-OUTCOME-014: Append then continue"
+  vars:
+    natural_program: "Append <x> to <items>, then continue to the next iteration."
+    input_bindings: '{"x": 7, "items": [1, 2, 3]}'
+    output_binding_names: '[]'
+    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "continue"
+    - type: python
+      value: file://assertions/binding_value.py
+      config:
+        check_step_locals: true
+        expected_bindings:
+          items: [1, 2, 3, 7]

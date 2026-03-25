@@ -1,0 +1,44 @@
+# Nighthawk Natural Block Coding Agent Evaluation
+#
+# Run:
+#   cd evals/promptfoo
+#   PROMPTFOO_PYTHON="$(uv python find)" \
+#     npx promptfoo@latest eval -c promptfooconfig-agents.yaml
+#
+# View results:
+#   npx promptfoo@latest view
+
+description: "Nighthawk coding agent backends: reduced test set"
+
+prompts:
+  - "{{natural_program}}"
+
+providers:
+  # --- claude-code-cli ---
+  - id: file://provider.py
+    label: "claude-code-cli:haiku + coding_agent + examples"
+    config:
+      model: "claude-code-cli:haiku"
+      system_prompt_file: prompts/eval_coding_agent.txt
+      tool_preset: "eval_examples"
+
+  # --- codex ---
+  - id: file://provider.py
+    label: "codex:gpt-5.4-mini + coding_agent + examples"
+    config:
+      model: "codex:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_coding_agent.txt
+      tool_preset: "eval_examples"
+
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: python
+      value: file://assertions/outcome_kind.py
+
+tests:
+  - file://test_cases/binding_operations.yaml
+  - file://test_cases/outcome_kinds.yaml
+  - file://test_cases/tool_selection.yaml
+  - file://test_cases/loop_outcomes.yaml

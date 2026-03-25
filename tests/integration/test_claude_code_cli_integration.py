@@ -10,7 +10,7 @@ def test_claude_code_cli_natural_step_uses_tool(tmp_path: Path) -> None:
     from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="claude-code-cli:sonnet",
+        model="claude-code-cli:haiku",
         model_settings=ClaudeCodeCliModelSettings(
             working_directory=str(tmp_path.resolve()),
         ).model_dump(),
@@ -45,7 +45,7 @@ def test_claude_code_cli_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            model="claude-code-cli:sonnet",
+            model="claude-code-cli:haiku",
             model_settings=ClaudeCodeCliModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
