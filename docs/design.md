@@ -193,6 +193,13 @@ Type note:
 - Nighthawk extracts type information for `<:name>` bindings from the function source AST at compile time.
 - If no type annotation is found, the type is treated as `object`.
 
+Runtime type inference:
+
+- When a write binding has no explicit type annotation, the AST transformer assigns `object` as a placeholder type.
+- At runtime, before LLM execution, Nighthawk upgrades `object` placeholders to the type of the binding's initial value in `step_locals` (e.g., `result = ""` infers `str`).
+- Inference is skipped when the initial value is `None` or a generic `object()` instance.
+- This enables `nh_assign` type validation and retry for unannotated bindings that have typed initial values.
+
 Clarifying note (bindings vs tool targets):
 
 - Bindings (`<name>`, `<:name>`) are always simple identifiers.
@@ -300,7 +307,7 @@ Nighthawk exposes two paths for the LLM to call Python functions:
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
 
-Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Practices Section 3](practices.md#3-designing-binding-functions) for practical design patterns.
+Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Practices Section 2](practices.md#2-designing-binding-functions) for practical design patterns.
 
 Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 

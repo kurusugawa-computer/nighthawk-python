@@ -15,7 +15,7 @@ Content belongs in exactly one file; cross-reference rather than duplicate. Exce
 | `philosophy.md` | Users evaluating Nighthawk | Deep positioning and design rationale | Workflow styles, comparison with workflow engines, tool exposure tradeoffs (MCP/CLI/binding functions), runtime evaluation rationale. Technical arguments with benchmarks. |
 | `quickstart.md` | New users | Shortest path to running a Natural block | Setup, first example, credentials, troubleshooting. No deep explanations. |
 | `tutorial.md` | Users learning the system | Build understanding from first principles | Bindings, functions and discoverability, control flow, composition, configuration, async. Assumes quickstart is done. Guidelines and testing are in `practices.md`. |
-| `practices.md` | Users applying patterns | Practical patterns and guidelines | Observability, writing guidelines, binding function design, testing. Assumes tutorial is done. |
+| `practices.md` | Users applying patterns | Practical patterns and guidelines | Writing guidelines, binding function design, testing and debugging, observability. Assumes tutorial is done. |
 | `design.md` | Implementors and advanced users | Canonical specification (target behavior) | Full technical detail: syntax rules, state layers, prompt rendering, tool contracts, outcome schema, frontmatter. |
 | `providers.md` | Users choosing and configuring models | Provider selection, Pydantic AI setup, custom backends | Provider categories, capability matrix, model identifiers, Pydantic AI model settings, step executor protocols. No coding-agent-backend-specific content. |
 | `coding-agent-backends.md` | Users of Claude Code or Codex backends | Coding agent backend configuration and features | Backend-specific settings, skills, MCP tool exposure, working directory, project-scoped files. |
@@ -27,7 +27,7 @@ Content belongs in exactly one file; cross-reference rather than duplicate. Exce
 
 Most content maps to exactly one file via the scope boundaries above. These cases involve splits or non-intuitive placement:
 
-- **Credential setup** -> `quickstart.md` (Pydantic AI providers), `coding-agent-backends.md` (coding agent backends)
+- **Credential setup** -> `quickstart.md` (`OPENAI_API_KEY` only), `providers.md` (Pydantic AI providers), `coding-agent-backends.md` (coding agent backends)
 - **Error types** -> `design.md` (specification), `tutorial.md` (practical usage with examples)
 - **Testing patterns** -> `practices.md` (patterns with examples), `for-coding-agents.md` (condensed rules)
 - **Writing guidelines** -> `practices.md` (patterns with examples), `for-coding-agents.md` (condensed rules)
@@ -60,6 +60,7 @@ Most content maps to exactly one file via the scope boundaries above. These case
 
 **quickstart.md**
 - Optimize for copy-paste. Keep troubleshooting to common first-run errors only.
+- Includes both a Pydantic AI provider example and a coding agent backend (claude-code-cli) example.
 
 **tutorial.md**
 - One concept per section. Combine related ideas only when they share an example.

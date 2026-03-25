@@ -154,7 +154,7 @@ This is roughly 20 tokens -- comparable to the most compact CLI description, but
 
 A natural question: why not use an LLM once to translate a Natural block into equivalent Python code, then run the generated code on every invocation? This would eliminate per-call latency, cost, and non-determinism.
 
-The answer is that Natural blocks exist precisely for tasks that cannot be reduced to deterministic code. "Classify the sentiment of this review" or "interpret this ambiguous user input" require judgment that depends on the specific input, world knowledge, and context. If a task could be written as deterministic Python, it should be -- this is the core design principle (see [Practices Section 2](practices.md#2-writing-guidelines)).
+The answer is that Natural blocks exist precisely for tasks that cannot be reduced to deterministic code. "Classify the sentiment of this review" or "interpret this ambiguous user input" require judgment that depends on the specific input, world knowledge, and context. If a task could be written as deterministic Python, it should be -- this is the core design principle (see [Practices Section 1](practices.md#1-writing-guidelines)).
 
 One-time compilation has additional structural limitations:
 
@@ -164,4 +164,4 @@ One-time compilation has additional structural limitations:
 
 With [coding agent backends](coding-agent-backends.md), "evaluate every time" means launching an autonomous agent for each Natural block invocation. The agent can adapt its strategy to the specific input -- reading different files, running different commands, exploring different approaches -- in ways that no pre-compiled code could anticipate. The per-invocation cost is higher, but so is the adaptability.
 
-Nighthawk addresses the reliability concern through constraints rather than compilation: type validation on write bindings, deny frontmatter to restrict allowed outcomes, structured outcome kinds for control flow, and a [two-layer testing strategy](practices.md#4-testing-natural-functions) (mock tests for Python logic, integration tests for Natural block effectiveness).
+Nighthawk addresses the reliability concern through constraints rather than compilation: type validation on write bindings, deny frontmatter to restrict allowed outcomes, structured outcome kinds for control flow, and a [two-layer testing strategy](practices.md#3-testing-and-debugging) (mock tests for Python logic, integration tests for Natural block effectiveness).

@@ -22,8 +22,8 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 - **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex integration.
 - **[Philosophy](philosophy.md)** — Design rationale and positioning.
 - **[Design](design.md)** — Canonical specification.
-- **[API Reference](api.md)** — Auto-generated API documentation.
 - **[Roadmap](roadmap.md)** — Future directions.
+- **[API Reference](api.md)** — Auto-generated API documentation.
 - **[For coding agents](for-coding-agents.md)** — LLM development reference.
 
 ## References

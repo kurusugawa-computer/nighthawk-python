@@ -325,51 +325,7 @@ python_average: (numbers)
 
 Function parameters and local variables appear in LOCALS. Module-level names referenced via `<name>` that are _not_ in locals appear in GLOBALS. Nighthawk renders callable entries with their full signature and docstring intent — but only when type information is available.
 
-When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type.
-
-Wrong — `fetch_data` loses its signature in LOCALS:
-
-```py
-from myapp import fetch_data
-
-@nh.natural_function
-async def summarize(query: str, fetch_data: object) -> str:
-    result = ""
-    """natural
-    Use <fetch_data> to get data for <query> and set <:result>.
-    """
-    return result
-```
-
-```
-<<<NH:LOCALS>>>
-fetch_data: object = <non-serializable>
-query: str = "latest news"
-result: str = ""
-<<<NH:END_LOCALS>>>
-```
-
-Correct — `fetch_data` keeps its full signature in GLOBALS:
-
-```py
-from myapp import fetch_data
-
-@nh.natural_function
-async def summarize(query: str) -> str:
-    result = ""
-    """natural
-    Use <fetch_data> to get data for <query> and set <:result>.
-    """
-    return result
-```
-
-```
-<<<NH:GLOBALS>>>
-fetch_data: (query: str, max_results: int = 10) -> list[str]  # intent: Fetch data matching the query.
-<<<NH:END_GLOBALS>>>
-```
-
-This principle extends beyond callables. Any module-level name that is stable across invocations — constants, classes, utility functions — should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
+When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type. For design patterns and common pitfalls around locals, see [Practices Section 2](practices.md#2-designing-binding-functions).
 
 **Note:** Nighthawk also provides `@nh.tool`, which registers functions via the model's native tool-calling interface. This path is reserved for cases that require `RunContext[StepContext]` access. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [design.md Section 8.3](design.md#83-tools-available-to-the-llm) for the `@nh.tool` specification.
 
@@ -677,7 +633,7 @@ async def analyze(query: str) -> str:
     return result
 ```
 
-The LLM calls `fetch_data` via `nh_eval`; Nighthawk detects the awaitable return value and awaits it automatically before returning the result to the LLM.
+The LLM calls `fetch_data` through a tool call expression; Nighthawk detects the awaitable return value and awaits it automatically before returning the result to the LLM.
 
 ### Async and sync interoperability
 
@@ -690,5 +646,8 @@ This means you can mix sync and async binding functions freely in async natural 
 
 ## Next steps
 
-For observability, writing guidelines, binding function design, and testing, see [Practices](practices.md).
+- **Patterns and testing**: [Practices](practices.md) covers writing guidelines, binding function design, testing strategies, and debugging.
+- **Backend selection**: [Providers](providers.md) lists available models. [Coding agent backends](coding-agent-backends.md) covers Claude Code and Codex integration.
+- **Specification**: [Design](design.md) is the canonical specification for Natural block syntax, state layers, tool contracts, and outcome schema.
+- **Try next**: Build a multi-step pipeline using the [carry pattern](#the-carry-pattern) with two or more Natural functions chained by Python.
 

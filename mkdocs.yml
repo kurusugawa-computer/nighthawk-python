@@ -55,8 +55,8 @@ nav:
   - Coding agent backends: coding-agent-backends.md
   - Philosophy: philosophy.md
   - Design: design.md
-  - API Reference: api.md
   - Roadmap: roadmap.md
+  - API Reference: api.md
   - For coding agents (LLM reference): for-coding-agents.md
 
 markdown_extensions:

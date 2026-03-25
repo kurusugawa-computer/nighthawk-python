@@ -12,7 +12,7 @@ Install Nighthawk and a provider:
 pip install nighthawk-python pydantic-ai-slim[openai]
 ```
 
-For other providers, see [Backends and model identifiers](#backends-and-model-identifiers) below.
+For other providers, see [Providers](providers.md).
 
 ## First Example
 
@@ -53,26 +53,48 @@ python quickstart.py
 - `<name>` — read binding. The value is visible inside the Natural block. Mutable objects can be mutated in-place.
 - `<:name>` — write binding. The LLM can set a new value, which is committed back into Python locals.
 
+## Coding Agent Backend Example
+
+Nighthawk can also delegate Natural blocks to a coding agent CLI. Save as `quickstart_cli.py`:
+
+```py
+import nighthawk as nh
+
+step_executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(model="claude-code-cli:default")
+)
+
+with nh.run(step_executor):
+
+    @nh.natural_function
+    def calculate_total(items: str) -> int:
+        total = 0
+        """natural
+        Read <items> and set <:total> to the sum of all quantities mentioned.
+        """
+        return total
+
+    print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
+```
+
+Install the backend extra and the Claude Code CLI (a system tool, not a Python package):
+
+```bash
+pip install nighthawk-python[claude-code-cli]
+claude auth login
+python quickstart_cli.py
+# => 20
+```
+
+The Claude Code CLI must be installed separately. See [Coding agent backends](coding-agent-backends.md) for installation, configuration, and skills.
+
 ## Step Executor
 
-Natural functions require a step executor, created via `AgentStepExecutor.from_configuration()` and activated with `with nh.run(step_executor):`. See the [Tutorial](tutorial.md#step-executor) for details.
-
-## Backends and model identifiers
-
-Nighthawk uses the `provider:model` identifier format from [Pydantic AI](https://ai.pydantic.dev/models/overview/). Any [Pydantic AI provider](https://ai.pydantic.dev/models/overview/) works with Nighthawk. See [Providers](providers.md) for the full list, recommended models, and configuration.
-
-Nighthawk also provides [coding agent backends](coding-agent-backends.md) that delegate to autonomous CLI agents (Claude Code, Codex).
+Natural functions require a step executor, created via `AgentStepExecutor.from_configuration()` and activated with `with nh.run(step_executor):`. The `model` field uses the `provider:model` identifier format from [Pydantic AI](https://ai.pydantic.dev/models/overview/); see [Providers](providers.md) for the full list. See the [Tutorial](tutorial.md#step-executor) for details.
 
 ## Credentials
 
-Credential configuration for Pydantic AI providers follows [Pydantic AI conventions](https://ai.pydantic.dev/models/overview/). Common environment variables:
-
-- `OPENAI_API_KEY` — required for OpenAI models ([details](https://ai.pydantic.dev/models/openai/))
-- `ANTHROPIC_API_KEY` — required for Anthropic models ([details](https://ai.pydantic.dev/models/anthropic/))
-- `GOOGLE_API_KEY` — required for Google AI (Gemini API) models ([details](https://ai.pydantic.dev/models/gemini/))
-- Google Vertex AI uses Application Default Credentials, not an API key ([details](https://ai.pydantic.dev/models/gemini/#vertex-ai))
-- AWS Bedrock uses AWS credentials, not an API key ([details](https://ai.pydantic.dev/models/bedrock/))
-- `GROQ_API_KEY` — required for Groq models ([details](https://ai.pydantic.dev/models/groq/))
+Set `OPENAI_API_KEY` for OpenAI models (used in the first example above). For other providers, see [Providers](providers.md). For coding agent backends, see [Coding agent backends](coding-agent-backends.md).
 
 ## Troubleshooting
 
@@ -90,5 +112,4 @@ Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx
 
 **`ModuleNotFoundError` for a provider**
 
-Install the required provider package. For Pydantic AI providers: `pip install pydantic-ai-slim[openai]`. For coding agent backends: `pip install nighthawk-python[claude-code-sdk]`.
-
+Install the required provider package. For Pydantic AI providers: `pip install pydantic-ai-slim[openai]`. For coding agent backends: `pip install nighthawk-python[claude-code-cli]`.

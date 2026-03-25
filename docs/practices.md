@@ -1,53 +1,8 @@
 # Nighthawk Practices
 
-This guide covers observability, writing guidelines, binding function design, and testing. It assumes you have completed the [Tutorial](tutorial.md).
+This guide covers writing guidelines, binding function design, testing, debugging, and observability. It assumes you have completed the [Tutorial](tutorial.md).
 
-## 1. Observability
-
-Nighthawk emits [OpenTelemetry](https://opentelemetry.io/) spans for runs, scopes, and step executions. If your application has an OpenTelemetry tracer configured, Nighthawk traces appear automatically — no Nighthawk-specific setup is required.
-
-### Span hierarchy
-
-Each Nighthawk execution produces a tree of spans:
-
-| Span | Created by | Identity attribute |
-|---|---|---|
-| `nighthawk.run` | `nh.run()` context manager | `run.id` |
-| `nighthawk.scope` | `nh.scope()` context manager | `scope.id` |
-| `nighthawk.step` | Each Natural block execution | `step.id` (format: `python_module:line`) |
-| `nighthawk.step_executor` | The step executor's LLM call | — |
-
-### Step events
-
-Events are emitted on the `nighthawk.step` span:
-
-| Event | When | Key attributes |
-|---|---|---|
-| `nighthawk.step.completed` | Natural block succeeds | `outcome_kind` |
-| `nighthawk.step.raised` | `raise` outcome (domain-level) | `outcome_kind`, `raise_message`, `raise_error_type` |
-| `nighthawk.step.failed` | Internal Nighthawk failure | `error_kind`, `error_message` |
-
-The `raise` outcome is domain-level behavior (the LLM chose to signal an error). Internal failures (`failed`) indicate a Nighthawk-side problem (invalid JSON, validation failure, etc.).
-
-### Local trace inspection with otel-tui
-
-Start an [otel-tui](https://github.com/ymtdzzz/otel-tui) collector:
-
-```bash
-docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
-```
-
-Then run with the collector endpoint:
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python my_script.py
-```
-
-Traces appear in the terminal UI in real time.
-
-See [design.md Section 10.1](design.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
-
-## 2. Writing Guidelines
+## 1. Writing Guidelines
 
 ### Responsibility split
 
@@ -122,13 +77,65 @@ When designing function contracts, document where the type boundary lies. Do not
 4. Write bindings (`<:name>`) may be pre-declared or not. Type annotations help agent behavior and host-side validation/coercion.
 5. Mutable context objects use `<name>` (read binding), not `<:name>` (write binding).
 6. Keep function parameters and locals minimal — only bind invocation-specific data. Reference module-level names via `<name>` read bindings so they appear in GLOBALS with full type information ([Tutorial Section 3](tutorial.md#keep-locals-minimal)).
-7. Prefer binding functions (local or module-level) for all callable needs. Reserve `@nh.tool` for cases that require `RunContext[StepContext]` access.
+7. Prefer binding functions (local or module-level) for all callable needs. See [Tutorial Section 3](tutorial.md#3-functions-and-discoverability) for the preferred path and alternatives.
 8. Full coverage requirements are enforced by Python loops.
 9. Error behavior is explicit at the correct boundary.
 
-## 3. Designing Binding Functions
+## 2. Designing Binding Functions
 
 Rules 6 and 7 say to keep locals minimal and prefer binding functions. This section explains *how* to design those binding functions.
+
+### Keep locals minimal
+
+Function parameters and local variables appear in LOCALS. Module-level names referenced via `<name>` that are _not_ in locals appear in GLOBALS. Nighthawk renders callable entries with their full signature and docstring intent — but only when type information is available. See [Tutorial Section 3](tutorial.md#3-functions-and-discoverability) for how LOCALS and GLOBALS rendering works.
+
+When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type.
+
+Wrong — `fetch_data` loses its signature in LOCALS:
+
+```py
+from myapp import fetch_data
+
+@nh.natural_function
+async def summarize(query: str, fetch_data: object) -> str:
+    result = ""
+    """natural
+    Use <fetch_data> to get data for <query> and set <:result>.
+    """
+    return result
+```
+
+```
+<<<NH:LOCALS>>>
+fetch_data: object = <non-serializable>
+query: str = "latest news"
+result: str = ""
+<<<NH:END_LOCALS>>>
+```
+
+Correct — `fetch_data` keeps its full signature in GLOBALS:
+
+```py
+from myapp import fetch_data
+
+@nh.natural_function
+async def summarize(query: str) -> str:
+    result = ""
+    """natural
+    Use <fetch_data> to get data for <query> and set <:result>.
+    """
+    return result
+```
+
+```
+<<<NH:GLOBALS>>>
+fetch_data: (query: str, max_results: int = 10) -> list[str]  # intent: Fetch data matching the query.
+<<<NH:END_GLOBALS>>>
+```
+
+This principle extends beyond callables. Any module-level name that is stable across invocations — constants, classes, utility functions — should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
+
+### Minimize LLM cognitive load
 
 Each parameter in a binding function signature is a decision point the LLM must evaluate. Fewer parameters mean lower cognitive load and more reliable tool use.
 
@@ -184,7 +191,7 @@ def analyze_feedback(topic: str) -> str:
     return result
 ```
 
-## 4. Testing Natural Functions
+## 3. Testing and Debugging
 
 A Nighthawk application has two distinct layers that need testing: the **Python logic** around Natural blocks (control flow, error handling, composition) and the **Natural blocks themselves** (whether the prompt elicits the intended LLM judgment). Each layer requires a different approach.
 
@@ -363,20 +370,6 @@ if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
 | Does this Natural block actually produce useful results? | **No** | Yes |
 | Is my prompt wording effective? | **No** | Yes |
 
-## 5. Common Mistakes
-
-| Mistake | Why it breaks | Fix |
-|---|---|---|
-| Pass a callable as a parameter with generic type (`object`, `Any`) | Signature erased in LOCALS; LLM cannot discover arguments | Reference via `<name>` read binding so it appears in GLOBALS with full signature ([Tutorial Section 3](tutorial.md#keep-locals-minimal)) |
-| Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place ([Tutorial Section 5](tutorial.md#the-carry-pattern)) |
-| Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
-| Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python ([Section 2](#2-writing-guidelines)) |
-| Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
-| Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding ([Tutorial Section 3](tutorial.md#keep-locals-minimal)) |
-| Try to "compile" a Natural block into deterministic Python | Judgment tasks cannot be reduced to static code; input space is unbounded | Keep the Natural block; use Python only for deterministic operations ([Philosophy](philosophy.md#why-evaluate-every-time)) |
-
-## 6. Debugging Natural Blocks
-
 ### Inspecting the assembled prompt
 
 Enable `DEBUG` logging on the `nighthawk` logger to see the full prompt sent to the LLM:
@@ -400,7 +393,7 @@ When the LOCALS or GLOBALS section is too large, Nighthawk truncates it and appe
 
 ### Tracing tool calls with OpenTelemetry
 
-When a Natural block produces unexpected results, inspect the tool call sequence via OpenTelemetry spans. See [Section 1](#1-observability) for setup. The `nighthawk.step` span records each tool invocation, making it possible to trace the LLM's reasoning path.
+When a Natural block produces unexpected results, inspect the tool call sequence via OpenTelemetry spans. See [Section 4](#4-observability) for setup. The `nighthawk.step` span records each tool invocation, making it possible to trace the LLM's reasoning path.
 
 ### Integration test iteration
 
@@ -418,3 +411,60 @@ def test_classify_iteration():
 ```
 
 Run repeatedly with `pytest -x -k test_classify_iteration` to validate prompt changes against specific inputs that previously failed. Gate behind `NIGHTHAWK_RUN_INTEGRATION_TESTS=1` for CI.
+
+## 4. Observability
+
+Nighthawk emits [OpenTelemetry](https://opentelemetry.io/) spans for runs, scopes, and step executions. If your application has an OpenTelemetry tracer configured, Nighthawk traces appear automatically — no Nighthawk-specific setup is required.
+
+### Span hierarchy
+
+Each Nighthawk execution produces a tree of spans:
+
+| Span | Created by | Identity attribute |
+|---|---|---|
+| `nighthawk.run` | `nh.run()` context manager | `run.id` |
+| `nighthawk.scope` | `nh.scope()` context manager | `scope.id` |
+| `nighthawk.step` | Each Natural block execution | `step.id` (format: `python_module:line`) |
+| `nighthawk.step_executor` | The step executor's LLM call | — |
+
+### Step events
+
+Events are emitted on the `nighthawk.step` span:
+
+| Event | When | Key attributes |
+|---|---|---|
+| `nighthawk.step.completed` | Natural block succeeds | `outcome_kind` |
+| `nighthawk.step.raised` | `raise` outcome (domain-level) | `outcome_kind`, `raise_message`, `raise_error_type` |
+| `nighthawk.step.failed` | Internal Nighthawk failure | `error_kind`, `error_message` |
+
+The `raise` outcome is domain-level behavior (the LLM chose to signal an error). Internal failures (`failed`) indicate a Nighthawk-side problem (invalid JSON, validation failure, etc.).
+
+### Local trace inspection with otel-tui
+
+Start an [otel-tui](https://github.com/ymtdzzz/otel-tui) collector:
+
+```bash
+docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
+```
+
+Then run with the collector endpoint:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python my_script.py
+```
+
+Traces appear in the terminal UI in real time.
+
+See [design.md Section 10.1](design.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
+
+## 5. Common Mistakes
+
+| Mistake | Why it breaks | Fix |
+|---|---|---|
+| Pass a callable as a parameter with generic type (`object`, `Any`) | Signature erased in LOCALS; LLM cannot discover arguments | Reference via `<name>` read binding so it appears in GLOBALS with full signature ([Tutorial Section 3](tutorial.md#keep-locals-minimal)) |
+| Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place ([Tutorial Section 5](tutorial.md#the-carry-pattern)) |
+| Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
+| Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python ([Section 1](#1-writing-guidelines)) |
+| Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
+| Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding ([Tutorial Section 3](tutorial.md#keep-locals-minimal)) |
+| Try to "compile" a Natural block into deterministic Python | Judgment tasks cannot be reduced to static code; input space is unbounded | Keep the Natural block; use Python only for deterministic operations ([Philosophy](philosophy.md#why-evaluate-every-time)) |

@@ -159,7 +159,24 @@ with nh.run(step_executor):
     result = my_natural_function(data)
 ```
 
-Use `nh.scope()` to override model, prompts, or context limits within an existing run. For details, see [Tutorial](https://kurusugawa-computer.github.io/nighthawk-python/tutorial/).
+Use `nh.scope()` to override model, prompts, or context limits within an existing run:
+
+```py
+with nh.run(step_executor):
+    # Override model for a specific section
+    with nh.scope(
+        step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
+            model="openai-responses:gpt-5.4-mini",
+        ),
+    ):
+        expensive_analysis(data)
+
+    # Append a system prompt suffix
+    with nh.scope(system_prompt_suffix_fragment="Always respond in formal English."):
+        formal_summary(text)
+```
+
+For the full parameter list, see [Tutorial](https://kurusugawa-computer.github.io/nighthawk-python/tutorial/#scoped-overrides-with-nhscope).
 
 **Rule:** when bindings are missing or truncated (`<snipped>`), adjust `StepContextLimits` in the configuration. See [Design](https://kurusugawa-computer.github.io/nighthawk-python/design/) for field details.
 
@@ -222,11 +239,10 @@ if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
 |---|---|---|
 | Pass a callable as a parameter with generic type (`object`, `Any`) | Signature erased in LOCALS; LLM cannot discover arguments | Reference via `<name>` read binding so it appears in GLOBALS with full signature |
 | Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place |
-| Put two independent judgments in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
+| Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
 | Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python |
-| Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
-| Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding |
-| Try to "compile" a Natural block into deterministic Python | Judgment tasks cannot be reduced to static code; input space is unbounded | Keep the Natural block; use Python only for deterministic operations |
+
+For the full list, see [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/#5-common-mistakes).
 
 ## References
 
