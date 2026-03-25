@@ -52,6 +52,28 @@ def _compute_allowed_step_kinds(is_in_loop: bool, denied_step_kinds: tuple[str, 
     return tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
 
 
+def _infer_binding_types_from_initial_values(
+    binding_name_to_type: dict[str, object],
+    step_locals: dict[str, object],
+) -> None:
+    """Replace ``object`` fallback types with types inferred from initial values.
+
+    When a binding has no explicit type annotation, the AST transformer assigns
+    ``object`` as a placeholder.  This function upgrades those entries to the
+    runtime type of the initial value so that ``TypeAdapter`` validation in
+    ``nh_assign`` can catch type mismatches and prompt the LLM to retry.
+    """
+    for name, declared_type in binding_name_to_type.items():
+        if declared_type is not object:
+            continue
+        if name not in step_locals:
+            continue
+        initial_value = step_locals[name]
+        inferred_type = type(initial_value)
+        if inferred_type is not object and inferred_type is not type(None):
+            binding_name_to_type[name] = inferred_type
+
+
 def _build_step_globals(
     python_globals: dict[str, object],
 ) -> dict[str, object]:
@@ -257,6 +279,8 @@ class Runner:
         tool_result_rendering_policy = getattr(self.step_executor, "tool_result_rendering_policy", None)
         if tool_result_rendering_policy is not None and not isinstance(tool_result_rendering_policy, ToolResultRenderingPolicy):
             raise ExecutionError("Step executor tool_result_rendering_policy must be ToolResultRenderingPolicy when provided")
+
+        _infer_binding_types_from_initial_values(binding_name_to_type, step_locals)
 
         binding_commit_targets = set(output_binding_names)
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets

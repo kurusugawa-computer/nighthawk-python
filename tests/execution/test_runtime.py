@@ -637,3 +637,25 @@ def test_natural_function_rejects_step_executor_configuration_updates_for_non_ag
 
         with pytest.raises(NighthawkError, match="AgentStepExecutor"):
             f()
+
+
+def test_unannotated_binding_type_inferred_from_initial_value():
+    """binding_name_to_type should reflect the inferred type for unannotated write bindings."""
+    from nighthawk.testing import ScriptedExecutor, pass_response
+
+    executor = ScriptedExecutor(responses=[pass_response(result="hello")])
+    with nh.run(executor):
+
+        @nh.natural_function
+        def f() -> str:
+            result = ""
+            """natural
+            <:result>
+            This is a docstring Natural block.
+            """
+
+            return result
+
+        assert f() == "hello"
+
+    assert executor.calls[0].binding_name_to_type["result"] is str

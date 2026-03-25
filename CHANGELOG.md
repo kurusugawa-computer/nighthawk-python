@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/practices.md`: practical patterns and binding function design guidance (extracted from tutorial).
 
 ### Changed
+- `nh_assign` now infers binding types from initial values when no explicit annotation is provided, enabling type-mismatch retry for unannotated write bindings.
 - Default `json_renderer_style` changed from `"strict"` to `"default"`, making truncation visible via `…` omission markers in prompt context and tool results.
 - Merged `nh_exec` into `nh_eval`: `nh_eval` now handles expression evaluation, function calls, and in-place mutation. `nh_exec` is removed.
 - Condensed system prompt: simplified tool selection guidance (single `nh_eval` tool), added execution order section, clarified tool result format.

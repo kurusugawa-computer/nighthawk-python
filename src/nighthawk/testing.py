@@ -29,6 +29,9 @@ class StepCall:
             removal and interpolation).
         binding_names: Write binding names (``<:name>`` targets) requested by
             the Natural function.
+        binding_name_to_type: Mapping from binding name to its expected type.
+            Explicitly annotated bindings carry the declared type; unannotated
+            bindings are inferred from the initial value at runtime.
         allowed_step_kinds: Outcome kinds allowed for this step, determined by
             syntactic context and deny frontmatter.
         step_locals: Snapshot of step-local variables at the time of execution.
@@ -40,6 +43,7 @@ class StepCall:
 
     natural_program: str
     binding_names: list[str]
+    binding_name_to_type: dict[str, object]
     allowed_step_kinds: tuple[str, ...]
     step_locals: dict[str, object]
     step_globals: dict[str, object]
@@ -70,6 +74,7 @@ def _build_step_call(
     return StepCall(
         natural_program=processed_natural_program,
         binding_names=list(binding_names),
+        binding_name_to_type=dict(step_context.binding_name_to_type),
         allowed_step_kinds=allowed_step_kinds,
         step_locals=dict(step_context.step_locals),
         step_globals=filtered_globals,
