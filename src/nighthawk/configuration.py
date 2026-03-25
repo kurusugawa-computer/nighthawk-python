@@ -124,7 +124,7 @@ class StepExecutorConfiguration(BaseModel):
 
     prompts: StepPromptTemplates = StepPromptTemplates()
     context_limits: StepContextLimits = StepContextLimits()
-    json_renderer_style: JsonRendererStyle = "strict"
+    json_renderer_style: JsonRendererStyle = "default"
     tokenizer_encoding: str | None = None
     system_prompt_suffix_fragments: tuple[str, ...] = ()
     user_prompt_suffix_fragments: tuple[str, ...] = ()

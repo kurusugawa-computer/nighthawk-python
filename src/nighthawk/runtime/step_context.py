@@ -23,7 +23,7 @@ class ToolResultRenderingPolicy:
 DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
     tokenizer_encoding_name="o200k_base",
     tool_result_max_tokens=2_000,
-    json_renderer_style="strict",
+    json_renderer_style="default",
 )
 
 
