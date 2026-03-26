@@ -4,7 +4,7 @@
 .vscode/
 
 # promptfoo evaluation outputs
-evals/promptfoo/output/
+evals/promptfoo/outputs/
 evals/promptfoo/*.json
 evals/promptfoo/*.html
 evals/promptfoo/*.csv

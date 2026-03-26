@@ -9,7 +9,7 @@ Usage in promptfooconfig.yaml:
         config:
           model: "openai-responses:gpt-5.4-mini"
           tool_preset: "baseline"  # or "eval_functional", "py_functional", etc.
-          suffix_variant: "control"  # or "terse", "examples", "decisional"
+          suffix_variant: "control"  # or "terse", "examples"
 """
 
 from __future__ import annotations
@@ -128,44 +128,9 @@ def _build_suffix_examples(
     return "\n".join(sections) + "\n"
 
 
-def _build_suffix_decisional(
-    *,
-    allowed_kinds: tuple[StepKind, ...],
-    raise_error_type_binding_names: tuple[str, ...],
-) -> str:
-    """Variant C — Decisional: decision-tree framing for outcome selection."""
-    sections: list[str] = [
-        'StepFinalResult: output {"result": {...}}.\n',
-        "Decision (use alternatives only when the program explicitly requires it):",
-    ]
-
-    step_number = 1
-    if "return" in allowed_kinds:
-        sections.append(f'{step_number}. Program says RETURN a value? -> kind: "return", return_expression: Python expression.')
-        step_number += 1
-    if "raise" in allowed_kinds:
-        raise_line = f'{step_number}. Program says RAISE an error? -> kind: "raise", raise_message: description.'
-        if raise_error_type_binding_names:
-            error_type_names_text = ", ".join(raise_error_type_binding_names)
-            raise_line += f" Optional raise_error_type: {error_type_names_text}."
-        sections.append(raise_line)
-        step_number += 1
-    if "break" in allowed_kinds:
-        sections.append(f'{step_number}. Program says BREAK? -> kind: "break".')
-        step_number += 1
-    if "continue" in allowed_kinds:
-        sections.append(f'{step_number}. Program says CONTINUE? -> kind: "continue".')
-        step_number += 1
-    if "pass" in allowed_kinds:
-        sections.append(f'{step_number}. Otherwise -> kind: "pass" (default, most common).')
-
-    return "\n".join(sections) + "\n"
-
-
 _SUFFIX_VARIANT_BUILDERS: dict[str, Any] = {
     "terse": _build_suffix_terse,
     "examples": _build_suffix_examples,
-    "decisional": _build_suffix_decisional,
 }
 
 
@@ -363,7 +328,6 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
               "control"     - Current production suffix text (no change)
               "terse"       - Minimal prose, rely on JSON schema
               "examples"    - One concrete JSON example per allowed kind
-              "decisional"  - Decision-tree framing for outcome selection
     """
     test_variables = context.get("vars", {})
     provider_configuration = options.get("config", {})

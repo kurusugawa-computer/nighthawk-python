@@ -52,8 +52,8 @@
         expected_bindings:
           result: "HELLO WORLD"
 
-# P-BIND-004: List mutation via nh_exec (in-place append)
-- description: "P-BIND-004: List append via nh_exec"
+# P-BIND-004: List mutation via nh_eval (in-place append)
+- description: "P-BIND-004: List append via nh_eval"
   vars:
     natural_program: "Append 42 to <items>."
     input_bindings: '{"items": [1, 2, 3]}'
