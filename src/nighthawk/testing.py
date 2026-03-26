@@ -192,17 +192,17 @@ def raise_response(message: str, *, error_type: str | None = None) -> StepRespon
     )
 
 
-def return_response(reference_path: str, **bindings: object) -> StepResponse:
+def return_response(expression: str, **bindings: object) -> StepResponse:
     """Create a response with return outcome.
 
-    The ``reference_path`` must name a binding that the runner can resolve
-    from step locals (e.g. ``"result"`` or ``"result.field"``).
+    The ``expression`` is a Python expression evaluated against
+    step locals and globals (e.g. ``"result"`` or ``"len(items)"``).
     """
     return StepResponse(
         bindings=bindings,
         outcome=ReturnStepOutcome(
             kind="return",
-            return_reference_path=reference_path,
+            return_expression=expression,
         ),
     )
 

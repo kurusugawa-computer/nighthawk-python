@@ -445,12 +445,11 @@ Outcome kinds:
     - Payload keys: `kind` only.
 - `return`:
     - Return from the surrounding Python function immediately.
-    - Payload keys: `kind`, and required `return_reference_path`.
-    - `return_reference_path` must be a dot-separated identifier path into step locals.
-    - The host resolves `return_reference_path` within step locals only, using attribute access only.
-    - If the surrounding function is async and the resolved value is awaitable, the host awaits it before validation.
-    - The host then validates/coerces the resolved Python value to the function's return type annotation.
-    - If the surrounding function is sync and the resolved value is awaitable, execution fails.
+    - Payload keys: `kind`, and required `return_expression`.
+    - `return_expression` is a Python expression evaluated against `step_globals` and `step_locals` (consistent with `nh_eval` and `nh_assign` expression evaluation).
+    - If the surrounding function is async and the evaluated value is awaitable, the host awaits it before validation.
+    - The host then validates/coerces the evaluated Python value to the function's return type annotation.
+    - If the surrounding function is sync and the evaluated value is awaitable, execution fails.
 - `break` / `continue`:
     - Loop control.
     - Payload keys: `kind` only.

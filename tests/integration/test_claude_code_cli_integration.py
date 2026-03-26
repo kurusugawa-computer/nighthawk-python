@@ -45,7 +45,7 @@ def test_claude_code_cli_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            model="claude-code-cli:haiku",
+            model="claude-code-cli:sonnet",
             model_settings=ClaudeCodeCliModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],

@@ -42,9 +42,7 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
             actual_value = actual_step_locals.get(name)
 
         if actual_value != expected_value:
-            mismatches.append(
-                f"{name}: expected {expected_value!r}, got {actual_value!r}"
-            )
+            mismatches.append(f"{name}: expected {expected_value!r}, got {actual_value!r}")
 
     if mismatches:
         matched_count = len(expected_bindings) - len(mismatches)

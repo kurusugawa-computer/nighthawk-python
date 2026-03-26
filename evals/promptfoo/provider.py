@@ -80,7 +80,7 @@ def _build_suffix_terse(
         lines.append("Choose pass after completing the work. Most blocks end with pass.")
 
     if "return" in allowed_kinds:
-        lines.append("return needs return_reference_path (name of the step local to return).")
+        lines.append("return needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").")
 
     if "raise" in allowed_kinds:
         raise_line = "raise needs raise_message."
@@ -106,7 +106,7 @@ def _build_suffix_examples(
     if "pass" in allowed_kinds:
         sections.append('- {"result": {"kind": "pass"}}')
     if "return" in allowed_kinds:
-        sections.append('- {"result": {"kind": "return", "return_reference_path": "x"}}')
+        sections.append('- {"result": {"kind": "return", "return_expression": "x"}}')
     if "break" in allowed_kinds:
         sections.append('- {"result": {"kind": "break"}}')
     if "continue" in allowed_kinds:
@@ -141,9 +141,7 @@ def _build_suffix_decisional(
 
     step_number = 1
     if "return" in allowed_kinds:
-        sections.append(
-            f'{step_number}. Program says RETURN a value? -> kind: "return", return_reference_path: step local name.'
-        )
+        sections.append(f'{step_number}. Program says RETURN a value? -> kind: "return", return_expression: Python expression.')
         step_number += 1
     if "raise" in allowed_kinds:
         raise_line = f'{step_number}. Program says RAISE an error? -> kind: "raise", raise_message: description.'
@@ -418,7 +416,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
         model_settings_dict = {
             "allowed_tool_names": installed_tool_names,
             "permission_mode": "bypassPermissions",
-            "claude_max_turns": 10,
+            "claude_max_turns": 25,
         }
     elif model.startswith("codex:"):
         model_settings_dict = {
@@ -473,7 +471,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
 
         # Add kind-specific fields
         if step_outcome.kind == "return":
-            output_data["return_reference_path"] = step_outcome.return_reference_path  # type: ignore[union-attr]
+            output_data["return_expression"] = step_outcome.return_expression  # type: ignore[union-attr]
         elif step_outcome.kind == "raise":
             output_data["raise_message"] = step_outcome.raise_message  # type: ignore[union-attr]
             output_data["raise_error_type"] = step_outcome.raise_error_type  # type: ignore[union-attr]

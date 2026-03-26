@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### Added
 - `evals/promptfoo/` evaluation harness for system prompt optimization using [promptfoo](https://www.promptfoo.dev/): custom Python provider, reusable assertions, and prompt variant A/B comparison support. See `CONTRIBUTING.md` for usage.
 - `docs/philosophy.md`: design philosophy and motivation behind Nighthawk.
 - `docs/practices.md`: practical patterns and binding function design guidance (extracted from tutorial).
 
 ### Changed
+- Replaced `return_reference_path` with `return_expression` in step execution contract: return values are now specified as Python expressions evaluated against step locals/globals, consistent with `nh_eval`/`nh_assign` expression evaluation. This unblocks coding-agent backends (e.g. Claude Code CLI) that compute results via native tools without bridging values through `nh_assign`.
 - `nh_assign` now infers binding types from initial values when no explicit annotation is provided, enabling type-mismatch retry for unannotated write bindings.
 - Default `json_renderer_style` changed from `"strict"` to `"default"`, making truncation visible via `…` omission markers in prompt context and tool results.
 - Merged `nh_exec` into `nh_eval`: `nh_eval` now handles expression evaluation, function calls, and in-place mutation. `nh_exec` is removed.
@@ -77,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.2.0...v0.3.0

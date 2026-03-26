@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 from dataclasses import dataclass
 from types import FrameType
@@ -9,7 +10,6 @@ from opentelemetry.trace import Span, Status, StatusCode
 from pydantic import TypeAdapter
 
 from ..errors import ExecutionError, NaturalParseError, NighthawkError
-from ..identifier_path import parse_identifier_path
 from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
 from .async_bridge import run_coroutine_synchronously
 from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_execution_context, span
@@ -226,24 +226,6 @@ class Runner:
         except Exception as e:
             raise ExecutionError(f"Return value validation failed: {e}") from e
 
-    def _resolve_reference_path(self, step_context: StepContext, return_reference_path: str) -> object:
-        parsed_path = parse_identifier_path(return_reference_path)
-        if parsed_path is None:
-            raise ExecutionError(f"Invalid return_reference_path: {return_reference_path!r}")
-
-        root_name = parsed_path[0]
-        if root_name not in step_context.step_locals:
-            raise ExecutionError(f"Unknown root name in return_reference_path: {root_name}")
-        current = step_context.step_locals[root_name]
-
-        for part in parsed_path[1:]:
-            try:
-                current = getattr(current, part)
-            except Exception as e:
-                raise ExecutionError(f"Failed to resolve return_reference_path segment {part!r} in {return_reference_path!r}") from e
-
-        return current
-
     def _prepare_step_execution(
         self,
         natural_program: str,
@@ -363,10 +345,11 @@ class Runner:
 
             if step_outcome_kind == "return":
                 assert isinstance(step_outcome, ReturnStepOutcome)
-                resolved = self._resolve_reference_path(
-                    preparation.step_context,
-                    step_outcome.return_reference_path,
-                )
+                try:
+                    compiled = compile(step_outcome.return_expression, "<nighthawk-return>", "eval", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+                    resolved = eval(compiled, preparation.step_context.step_globals, preparation.step_context.step_locals)
+                except Exception as e:
+                    raise ExecutionError(f"Failed to evaluate return_expression {step_outcome.return_expression!r}: {e}") from e
                 if inspect.isawaitable(resolved):
                     if not allow_awaitable_return:
                         raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")

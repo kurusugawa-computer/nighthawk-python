@@ -9,9 +9,6 @@ type StepKind = Literal["pass", "return", "break", "continue", "raise"]
 STEP_KINDS: tuple[StepKind, ...] = get_args(StepKind.__value__)
 
 
-_REFERENCE_PATH_PATTERN = r"^(?!__)[A-Za-z_][A-Za-z0-9_]*(?:\.(?!__)[A-Za-z_][A-Za-z0-9_]*)*$"
-
-
 class PassStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -22,7 +19,7 @@ class ReturnStepOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["return"]
-    return_reference_path: str
+    return_expression: str
 
 
 class BreakStepOutcome(BaseModel):
@@ -87,9 +84,9 @@ def _build_return_variant_schema() -> dict[str, object]:
         "type": "object",
         "properties": {
             "kind": {"type": "string", "const": "return"},
-            "return_reference_path": {"type": "string", "pattern": _REFERENCE_PATH_PATTERN},
+            "return_expression": {"type": "string"},
         },
-        "required": ["kind", "return_reference_path"],
+        "required": ["kind", "return_expression"],
         "additionalProperties": False,
     }
 
@@ -205,7 +202,7 @@ def build_step_system_prompt_suffix_fragment(
         lines.append("Choose pass after completing the work. Most blocks end with pass.")
 
     if "return" in allowed_kinds:
-        lines.append("return needs return_reference_path (name of the step local to return).")
+        lines.append("return needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").")
 
     if "raise" in allowed_kinds:
         raise_line = "raise needs raise_message."

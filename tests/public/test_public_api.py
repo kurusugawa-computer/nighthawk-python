@@ -214,7 +214,7 @@ def test_step_span_records_completed_event_for_return_outcome(step_span_exporter
         def natural_value_function() -> int:
             """natural
             <:result>
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 11}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
@@ -291,7 +291,7 @@ def test_step_span_records_failure_event_for_execution_error(step_span_exporter:
               - return
             ---
             <:result>
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 5}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 5}}
             """
             return 0
 
@@ -410,7 +410,7 @@ def test_step_span_failure_event_structure_is_compact(step_span_exporter: InMemo
               - return
             ---
             <:result>
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 5}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 5}}
             """
             return 0
 

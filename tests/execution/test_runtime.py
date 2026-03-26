@@ -108,7 +108,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
             async def calculate() -> int:
                 return 17
 
-            return ReturnStepOutcome(kind="return", return_reference_path="result"), {"result": calculate()}
+            return ReturnStepOutcome(kind="return", return_expression="result"), {"result": calculate()}
 
     with nh.run(AssertingExecutor()):
 
@@ -145,7 +145,7 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
-            return ReturnStepOutcome(kind="return", return_reference_path="result"), {"result": AwaitableInt()}
+            return ReturnStepOutcome(kind="return", return_expression="result"), {"result": AwaitableInt()}
 
     with nh.run(AssertingExecutor()):
 
@@ -347,7 +347,7 @@ def test_natural_function_supports_async_classmethod_for_both_decorator_orders()
         assert asyncio.run(NaturalAsyncClassMethodCarrier.class_outer(10)) == 82
 
 
-def test_stub_return_effect_returns_value_from_return_reference_path():
+def test_stub_return_effect_returns_value_from_return_expression():
     nh.StepExecutorConfiguration()
     with nh.run(StubExecutor()):
 
@@ -355,7 +355,7 @@ def test_stub_return_effect_returns_value_from_return_reference_path():
         def f() -> int:
             """natural
             <:result>
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 11}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
             """
             result = 0
             return result
@@ -371,7 +371,7 @@ def test_stub_return_effect_invalid_return_value_raises():
         def f() -> int:
             """natural
             <:result>
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": "not an int"}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": "not an int"}}
             """
             result = 0
             return result
@@ -380,14 +380,14 @@ def test_stub_return_effect_invalid_return_value_raises():
             f()
 
 
-def test_stub_return_effect_invalid_return_reference_path_raises():
+def test_stub_return_effect_invalid_return_expression_raises():
     nh.StepExecutorConfiguration()
     with nh.run(StubExecutor()):
 
         @nh.natural_function
         def f() -> int:
             """natural
-            {"step_outcome": {"kind": "return", "return_reference_path": "missing"}, "bindings": {}}
+            {"step_outcome": {"kind": "return", "return_expression": "missing"}, "bindings": {}}
             """
             return 0
 
@@ -493,7 +493,7 @@ def test_frontmatter_deny_return_rejects_return_step():
             deny:
               - return
             ---
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 0}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 0}}
             """
             return 0
 
@@ -515,7 +515,7 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines():
               - return
             ---
             <:result>
-            {"step_outcome": {"kind": "return", "return_reference_path": "result"}, "bindings": {"result": 11}}
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
             """
             return result
 

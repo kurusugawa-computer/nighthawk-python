@@ -384,7 +384,7 @@ class TestConvenienceFactories:
     def test_return_response_creates_return_outcome(self) -> None:
         response = return_response("result", result=42)
         assert response.outcome.kind == "return"
-        assert response.outcome.return_reference_path == "result"  # type: ignore[union-attr]
+        assert response.outcome.return_expression == "result"  # type: ignore[union-attr]
         assert response.bindings == {"result": 42}
 
     def test_break_response_creates_break_outcome(self) -> None:

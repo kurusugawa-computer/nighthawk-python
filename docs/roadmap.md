@@ -62,6 +62,10 @@ The `run_coroutine_synchronously` bridge copies `contextvars` into a background 
 
 The f-string binding span validation uses a NUL byte (`\x00`) as a placeholder for formatted-value boundaries. This is safe in practice but could theoretically be confused by f-string expressions that produce NUL bytes. A more robust approach would use AST position information instead of string scanning.
 
+### Model-capability-aware prompting (future)
+
+Introduce tiered prompt strategies that adapt to model capability. Weaker models may need explicit examples and constraints in step contract prompts, while stronger models benefit from concise instructions that maximize freedom. Consider this when a single prompt cannot serve both tiers without measurable tradeoffs (e.g. detailed guidance consuming significant context budget, or constraining stronger models' output quality).
+
 ## Open questions
 
 - How to best represent tool results in the prompt for robust reasoning.
