@@ -80,7 +80,9 @@ def _build_suffix_terse(
         lines.append("Choose pass after completing the work. Most blocks end with pass.")
 
     if "return" in allowed_kinds:
-        lines.append("return needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").")
+        lines.append(
+            'return needs return_expression (a Python expression evaluated against step locals/globals, e.g. "result", "\'hello\'", "len(items)").'
+        )
 
     if "raise" in allowed_kinds:
         raise_line = "raise needs raise_message."
