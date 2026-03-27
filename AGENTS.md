@@ -13,7 +13,7 @@
 
 ### Allowed abbreviations (Glossary)
 
-`Id` (Identifier), `DSL` (Domain Specific Language), `LLM` (Large Language Model), `NH`/`nh` (Nighthawk), `max` (maximum), `min` (minimum), loop indices `i`/`j`/`k`.
+`Id` (Identifier), `DSL` (Domain Specific Language), `LLM` (Large Language Model), `NH`/`nh` (Nighthawk), `max` (maximum), `min` (minimum), loop indices `i`/`j`/`k`, type parameters `P` (ParamSpec), `R` (Return type), `T` (Type variable).
 
 ### Rules
 
@@ -54,7 +54,10 @@ Python 3.13+, `uv` for dependencies, `pytest` for tests. Prefer LSP-based toolin
 | `uv run ruff check --fix .` | Auto-fix lint |
 | `uv run pyright` | Type check |
 | `uv run pytest -q` | Tests (quiet) |
-| `NIGHTHAWK_RUN_INTEGRATION_TESTS=1 uv run pytest -q` | Integration tests |
+| `NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run pytest -q` | Integration tests (OpenAI) |
+| `NIGHTHAWK_CODEX_INTEGRATION_TESTS=1 uv run pytest -q` | Integration tests (Codex) |
+| `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS=1 uv run pytest -q` | Integration tests (Claude Code SDK) |
+| `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS=1 uv run pytest -q` | Integration tests (Claude Code CLI) |
 
 `uv` hardlinking warnings do not indicate failure. Suppress: `export UV_LINK_MODE=copy`.
 

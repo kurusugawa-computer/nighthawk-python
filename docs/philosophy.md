@@ -126,6 +126,22 @@ def classify(text: str) -> str:
 
 Workflow engines are a better fit when multi-agent coordination is the core of the task, or when accumulated conversation history is essential (e.g., chatbots). Nighthawk is a better fit when deterministic control flow contains discrete judgment points, when you want to integrate LLM reasoning into an existing Python codebase, or when you need strict input/output constraints on each judgment.
 
+## Resilience as composable functions
+
+Workflow engines build retry, checkpointing, and human-in-the-loop into the graph runtime -- resilience is inseparable from the orchestration layer. Nighthawk takes a different approach: resilience primitives (`nighthawk.resilience`) are ordinary Python function transformers that wrap any callable. Retry, fallback, voting, and timeout logic composes with standard Python syntax:
+
+```py
+from nighthawk.resilience import retrying, fallback, vote
+
+robust_classify = fallback(
+    retrying(attempts=2)(vote(count=3)(classify_gpt4)),
+    retrying(attempts=2)(classify_mini),
+    default="unknown",
+)
+```
+
+Each transformer takes a function and returns a function with the same signature. There is no graph DSL, no framework-managed state, and no implicit retry policy. The host controls exactly which calls are retried, how many times, and what happens on exhaustion -- using the same Python debugger, pytest, and code review workflows as the rest of the application. See [Practices Section 5](practices.md#5-resilience-patterns) for usage patterns.
+
 This extends beyond lightweight judgments. With [coding agent backends](coding-agent-backends.md), a Natural block can delegate to an autonomous agent (Claude Code, Codex) that reads files, executes commands, and invokes skills -- while Nighthawk's binding system constrains the inputs and outputs. The same execution model that handles "classify this sentiment" also handles "refactor this module and write tests". Python controls when and how each agent runs; bindings and type validation control what crosses the boundary.
 
 ## Tool exposure: MCP, CLI, and binding functions

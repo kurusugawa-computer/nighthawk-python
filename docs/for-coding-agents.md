@@ -124,6 +124,42 @@ except nh.ExecutionError as e:
     print(f"Validation failed: {e}")
 ```
 
+### Resilience wrappers
+
+`nighthawk.resilience` provides function transformers for error recovery. Each wraps a callable and returns a callable with the same signature. Do not add resilience logic inside Natural blocks -- wrap the Natural function call from Python.
+
+```py
+from nighthawk.resilience import retrying, fallback, vote
+
+# Retry on ExecutionError (default), 3 attempts
+resilient = retrying(attempts=3)(my_function)
+
+# Try primary, then backup, then default
+safe = fallback(primary, backup, default="unknown")
+
+# Call 3 times, return most common result
+voted = vote(count=3)(my_function)
+
+# Compose: inner to outer
+robust = fallback(
+    retrying(attempts=2)(vote(count=3)(primary)),
+    backup,
+    default="unknown",
+)
+```
+
+**Composition order** (innermost to outermost):
+
+| Order | Transformer | Why |
+|---|---|---|
+| 1 | `timeout` | Bound each individual call |
+| 2 | `vote` | Aggregate multiple bounded calls |
+| 3 | `retrying` | Retry the aggregated operation |
+| 4 | `circuit_breaker` | Protect against persistent failure |
+| 5 | `fallback` | Switch to alternative on exhaustion |
+
+For details, see [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/#5-resilience-patterns).
+
 ## 5. Cross-block composition
 
 ### The carry pattern
@@ -219,17 +255,24 @@ assert output == "Three key points: ..."
 |---|---|---|
 | `pass_response(**bindings)` | pass | Normal completion with binding values |
 | `raise_response(message, *, error_type=None)` | raise | Test error handling paths |
-| `return_response(reference_path, **bindings)` | return | Early return from Natural function |
+| `return_response(expression, **bindings)` | return | Early return from Natural function |
 | `break_response()` | break | Exit enclosing loop |
 | `continue_response()` | continue | Skip to next iteration |
 
 ### Integration tests
 
-**Rule:** gate behind `NIGHTHAWK_RUN_INTEGRATION_TESTS=1`. Assert on type, value range, and semantic consistency -- not exact string matches.
+**Rule:** gate behind the appropriate environment variable. Assert on type, value range, and semantic consistency -- not exact string matches.
+
+| Variable | Scope |
+|---|---|
+| `NIGHTHAWK_OPENAI_INTEGRATION_TESTS` | OpenAI (Pydantic AI provider) |
+| `NIGHTHAWK_CODEX_INTEGRATION_TESTS` | Codex backend |
+| `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS` | Claude Code SDK backend |
+| `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS` | Claude Code CLI backend |
 
 ```py
 import os, pytest
-if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+if os.getenv("NIGHTHAWK_OPENAI_INTEGRATION_TESTS") != "1":
     pytest.skip("Integration tests disabled", allow_module_level=True)
 ```
 
@@ -241,8 +284,10 @@ if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
 | Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place |
 | Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
 | Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python |
+| Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
+| Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding |
 
-For the full list, see [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/#5-common-mistakes).
+For the full list, see [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/#6-common-mistakes).
 
 ## References
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `nighthawk.resilience` module with composable function transformers for production resilience: `retrying` (tenacity-based), `fallback`, `vote`/`plurality`, `timeout`, `circuit_breaker`/`CircuitState`/`CircuitOpenError`.
+  - `tenacity>=9` as a core dependency.
+
+### Changed
+- Renamed `NIGHTHAWK_RUN_INTEGRATION_TESTS` to `NIGHTHAWK_OPENAI_INTEGRATION_TESTS` for consistency with other per-backend environment variables.
+
 ## [0.5.0]
 
 ### Added

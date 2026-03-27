@@ -224,7 +224,7 @@ def generate(config: Config, topic: str) -> str:
     return output
 ```
 
-**Note:** To use literal angle brackets in program text without creating a binding, escape with a backslash: `\<name>` renders as `<name>` in the prompt without binding resolution. See [design.md Section 8.2.3](design.md#823-globals-summary) for details.
+**Note:** To use literal angle brackets in program text without creating a binding, escape with a backslash: `\<name>` renders as `<name>` in the prompt without binding resolution. See [Design Section 8.2.3](design.md#823-globals-summary) for details.
 
 ### Choosing between bindings and injection
 
@@ -327,7 +327,7 @@ Function parameters and local variables appear in LOCALS. Module-level names ref
 
 When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type. For design patterns and common pitfalls around locals, see [Practices Section 2](practices.md#2-designing-binding-functions).
 
-**Note:** Nighthawk also provides `@nh.tool`, which registers functions via the model's native tool-calling interface. This path is reserved for cases that require `RunContext[StepContext]` access. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [design.md Section 8.3](design.md#83-tools-available-to-the-llm) for the `@nh.tool` specification.
+**Note:** Nighthawk also provides `@nh.tool`, which registers functions via the model's native tool-calling interface. This path is reserved for cases that require `RunContext[StepContext]` access. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [Design Section 8.3](design.md#83-tools-available-to-the-llm) for the `@nh.tool` specification.
 
 ## 4. Control Flow and Error Handling
 
@@ -392,7 +392,7 @@ def must_produce_result(text: str) -> str:
     return result
 ```
 
-See [design.md Section 8.4](design.md#84-execution-contract-final-json) for the full frontmatter specification.
+See [Design Section 8.4](design.md#84-execution-contract-final-json) for the full frontmatter specification.
 
 ### Error handling
 
@@ -441,7 +441,7 @@ except InputError as e:
 
 All Nighthawk exceptions inherit from `NighthawkError`. The most common exception in application code is `ExecutionError`, raised when a Natural block produces an invalid outcome, a disallowed outcome type, or a validation failure.
 
-For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolRegistrationError`), see [design.md Section 13](design.md#13-error-handling).
+For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolRegistrationError`), see [Design Section 13](design.md#13-error-handling).
 
 ## 5. Cross-block Composition
 
@@ -589,11 +589,11 @@ configuration = nh.StepExecutorConfiguration(
 )
 ```
 
-See [design.md Section 8.2](design.md#82-prompt-context) for the full specification.
+See [Design Section 8.2](design.md#82-prompt-context) for the full specification.
 
 ### JSON rendering style
 
-`StepExecutorConfiguration` also accepts `json_renderer_style`, which controls how values are rendered in prompt context and tool results (e.g., strict JSON vs annotated pseudo-JSON with omission markers). See [design.md Section 5.2](design.md#52-configuration) for available styles.
+`StepExecutorConfiguration` also accepts `json_renderer_style`, which controls how values are rendered in prompt context and tool results (e.g., strict JSON vs annotated pseudo-JSON with omission markers). See [Design Section 5.2](design.md#52-configuration) for available styles.
 
 ## 7. Async Natural Functions
 
@@ -635,6 +635,27 @@ async def analyze(query: str) -> str:
 
 The LLM calls `fetch_data` through a tool call expression; Nighthawk detects the awaitable return value and awaits it automatically before returning the result to the LLM.
 
+### Concurrent execution
+
+Async natural functions are ordinary coroutines, so you can run multiple Natural blocks concurrently with `asyncio.gather`:
+
+```py
+import asyncio
+
+@nh.natural_function
+async def classify(text: str) -> str:
+    label: str = ""
+    """natural
+    Read <text> and set <:label> to one of: positive, negative, neutral.
+    """
+    return label
+
+async def classify_batch(texts: list[str]) -> list[str]:
+    return list(await asyncio.gather(*(classify(t) for t in texts)))
+```
+
+Each concurrent Natural block executes independently — there is no shared message history or state between them. This makes `asyncio.gather` safe for Natural blocks that do not share mutable bindings.
+
 ### Async and sync interoperability
 
 Async natural functions can call sync binding functions, and sync natural functions can reference async binding functions. Nighthawk detects awaitable return values and handles them automatically:
@@ -643,6 +664,8 @@ Async natural functions can call sync binding functions, and sync natural functi
 - In sync natural functions: if the resolved return value is awaitable, execution fails (the caller must be async to await).
 
 This means you can mix sync and async binding functions freely in async natural functions without special handling.
+
+**Failure mode:** if a sync natural function references an async binding function and the LLM calls it, the expression produces an awaitable that cannot be awaited in a sync context. Nighthawk raises an `ExecutionError`. To fix, make the natural function `async`.
 
 ## Next steps
 

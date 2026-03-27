@@ -6,7 +6,7 @@ import pytest
 
 
 def requires_openai_integration():  # type: ignore[no-untyped-def]
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+    if os.getenv("NIGHTHAWK_OPENAI_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests are disabled")
 
     if os.getenv("OPENAI_API_KEY") is None:

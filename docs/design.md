@@ -652,3 +652,234 @@ Exception hierarchy:
 
 All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.
 
+## 14. Step executor
+
+### 14.1. Protocols
+
+Nighthawk defines two step executor protocols. Both are `@runtime_checkable`.
+
+- `SyncStepExecutor`
+    - `run_step(*, processed_natural_program: str, step_context: StepContext, binding_names: list[str], allowed_step_kinds: tuple[str, ...]) -> tuple[StepOutcome, dict[str, object]]`
+- `AsyncStepExecutor`
+    - `run_step_async(*, processed_natural_program: str, step_context: StepContext, binding_names: list[str], allowed_step_kinds: tuple[str, ...]) -> tuple[StepOutcome, dict[str, object]]`
+
+The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the union accepted by `nighthawk.run()`.
+
+Both methods return a tuple of the step outcome and a mapping from binding names to their final values.
+
+### 14.2. AgentStepExecutor
+
+`AgentStepExecutor` is the built-in implementation that delegates Natural block execution to a Pydantic AI agent. It implements both `SyncStepExecutor` and `AsyncStepExecutor`.
+
+Factory methods:
+
+- `AgentStepExecutor.from_configuration(*, configuration: StepExecutorConfiguration) -> AgentStepExecutor`
+    - Creates an executor with a managed agent built from the configuration.
+- `AgentStepExecutor.from_agent(*, agent: StepExecutionAgent, configuration: StepExecutorConfiguration | None = None) -> AgentStepExecutor`
+    - Creates an executor wrapping an existing agent. The agent is not managed (not rebuilt on configuration changes).
+    - Configuration defaults to `StepExecutorConfiguration()` when not provided.
+
+Instance attributes:
+
+- `configuration: StepExecutorConfiguration` — the resolved configuration.
+- `agent_is_managed: bool` — `True` when the agent was built internally from the configuration, `False` when provided externally via `from_agent`.
+- `token_encoding` — tiktoken encoding resolved from the configuration.
+- `tool_result_rendering_policy: ToolResultRenderingPolicy` — policy for rendering tool results, derived from configuration.
+
+## 15. Resilience primitives
+
+The `nighthawk.resilience` module provides composable function transformers for production resilience. Each transformer takes a callable and returns a new callable with the same signature. Transformers are not re-exported from the top-level `nighthawk` namespace; import from `nighthawk.resilience` directly.
+
+All transformers auto-detect sync/async based on the wrapped function and produce the appropriate wrapper.
+
+### 15.1. retrying
+
+```
+retrying(*, attempts: int = 3, on: ExceptionTypeOrTuple = ExecutionError, wait: Any | None = None, before_sleep: Callable[[RetryCallState], None] | None = None) -> _RetryingHandle
+```
+
+Wrap a function to retry on failure. Uses [tenacity](https://tenacity.readthedocs.io/) internally.
+
+Parameters:
+
+- `attempts`: maximum number of attempts including the initial call. Default: 3.
+- `on`: exception type or tuple of types that trigger retries. Default: `ExecutionError`.
+- `wait`: tenacity wait strategy. Default: `wait_exponential_jitter()`.
+- `before_sleep`: callback invoked before each retry sleep. Default: INFO-level logging on the `nighthawk` logger.
+
+Usage modes:
+
+- **Decorator form:** `resilient_fn = retrying(attempts=3)(my_function)`
+- **Sync iterator form:** `for attempt in retrying(attempts=3): with attempt: result = my_function()`
+- **Async iterator form:** `async for attempt in retrying(attempts=3): with attempt: result = await my_function()`
+
+If all attempts fail, the last exception is re-raised unmodified.
+
+Type alias: `type ExceptionTypeOrTuple = type[BaseException] | tuple[type[BaseException], ...]`
+
+### 15.2. fallback
+
+```
+fallback(*functions: Callable[..., Any], default: Any = _SENTINEL, on: type[BaseException] | tuple[type[BaseException], ...] = Exception) -> Callable[..., Any]
+```
+
+Try multiple functions in order. The first success wins.
+
+Parameters:
+
+- `*functions`: callables to try in order. Must have compatible signatures. Raises `ValueError` if empty.
+- `default`: value returned if all functions fail. If not provided, the last exception is re-raised.
+- `on`: exception types that trigger fallback. Default: `Exception`.
+
+Sync/async: determined by the first function. Mixed sync/async chains are supported; each function is individually checked.
+
+### 15.3. vote / plurality
+
+```
+vote(*, count: int = 3, decide: Callable[[list[Any]], Any] = plurality, min_success: int | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]
+```
+
+Call a function multiple times and aggregate results.
+
+Parameters:
+
+- `count`: number of invocations. Must be >= 1.
+- `decide`: aggregation function receiving a list of successful results. Default: `plurality`.
+- `min_success`: minimum successful calls required. Default: `ceil(count / 2)`. If not met, the last exception is raised (or `RuntimeError` if no exceptions occurred).
+
+Async functions run concurrently via `asyncio.gather`. Sync functions run sequentially. Partial failures are tolerated.
+
+```
+plurality(results: list[Any]) -> Any
+```
+
+Return the most common result (mode). Uses `collections.Counter` for hashable results, falls back to equality comparison for unhashable results. Raises `ValueError` on empty input.
+
+### 15.4. timeout
+
+```
+timeout(*, seconds: float) -> _TimeoutHandle
+```
+
+Enforce a time limit on function execution.
+
+Parameters:
+
+- `seconds`: maximum execution time.
+
+Usage modes:
+
+- **Decorator form:** `timed_fn = timeout(seconds=30)(my_function)`. Sync and async functions are supported.
+- **Async context manager:** `async with timeout(seconds=30): await slow_operation()`.
+- **Sync context manager:** not supported; raises `NotImplementedError`.
+
+Async: uses `asyncio.timeout` (true cancellation, raises `asyncio.TimeoutError`). Sync: runs in a background thread; the thread continues after timeout (only the caller is unblocked). Raises `TimeoutError`.
+
+### 15.5. circuit_breaker
+
+```
+circuit_breaker(*, fail_threshold: int = 5, reset_timeout: float = 60.0, on: type[BaseException] | tuple[type[BaseException], ...] = Exception) -> Callable[[Callable[..., Any]], _CircuitBreakerWrapper]
+```
+
+Prevent repeated calls to a failing service.
+
+Parameters:
+
+- `fail_threshold`: consecutive failures before opening the circuit. Default: 5.
+- `reset_timeout`: seconds before transitioning from OPEN to HALF_OPEN. Default: 60.0.
+- `on`: exception types counted as failures. Default: `Exception`.
+
+State machine (`CircuitState` enum):
+
+- `CLOSED` — normal operation.
+- `OPEN` — rejects calls immediately with `CircuitOpenError`.
+- `HALF_OPEN` — allows one probe call after `reset_timeout`.
+
+Transitions:
+
+- CLOSED → OPEN: after `fail_threshold` consecutive failures.
+- OPEN → HALF_OPEN: after `reset_timeout` seconds.
+- HALF_OPEN → CLOSED: successful probe.
+- HALF_OPEN → OPEN: failed probe.
+
+This is a **stateful** transformer. Each `circuit_breaker(...)` call creates independent state. The wrapper exposes:
+
+- `.state` property: current `CircuitState`.
+- `.reset()` method: manually reset to CLOSED.
+
+`CircuitOpenError` attributes: `reset_timeout: float`, `time_remaining: float`.
+
+### 15.6. Composition
+
+All transformers produce callables with the original signature, so they compose by nesting.
+
+Recommended composition order (innermost to outermost):
+
+1. `timeout` — bound each individual call.
+2. `vote` — aggregate multiple bounded calls.
+3. `retrying` — retry the aggregated operation.
+4. `circuit_breaker` — protect against persistent failure.
+5. `fallback` — switch to alternative on exhaustion.
+
+## 16. Testing utilities
+
+The `nighthawk.testing` module provides test executors and response factories for deterministic Natural function testing without LLM API calls.
+
+### 16.1. StepCall
+
+Frozen dataclass recording a single Natural block invocation.
+
+Fields:
+
+- `natural_program: str` — processed Natural block text (after frontmatter removal and interpolation).
+- `binding_names: list[str]` — write binding names (`<:name>` targets).
+- `binding_name_to_type: dict[str, object]` — mapping from binding name to its expected type. Annotated bindings carry the declared type; unannotated bindings carry the type inferred from the initial value.
+- `allowed_step_kinds: tuple[str, ...]` — outcome kinds allowed for this step.
+- `step_locals: dict[str, object]` — snapshot of step-local variables.
+- `step_globals: dict[str, object]` — snapshot of referenced module-level names (filtered to names resolved from globals, not locals).
+
+### 16.2. StepResponse
+
+Dataclass representing a scripted response for a single Natural block execution.
+
+Fields:
+
+- `bindings: dict[str, object]` — write binding values. Default: `{}`. Names not in the step's `binding_names` are silently ignored.
+- `outcome: StepOutcome` — the step outcome. Default: `PassStepOutcome(kind="pass")`.
+
+### 16.3. ScriptedExecutor
+
+Test executor that returns scripted responses in order and records all calls.
+
+Constructor:
+
+- `ScriptedExecutor(responses: list[StepResponse] | None = None, *, default_response: StepResponse | None = None)`
+
+Once `responses` are exhausted, `default_response` is returned for all subsequent calls. Default response defaults to `StepResponse()` (pass with no bindings).
+
+Implements `SyncStepExecutor`. Recorded calls are available in the `calls: list[StepCall]` attribute.
+
+### 16.4. CallbackExecutor
+
+Test executor that delegates to a user-provided callback.
+
+Constructor:
+
+- `CallbackExecutor(handler: Callable[[StepCall], StepResponse])`
+
+The `handler` receives a `StepCall` and returns a `StepResponse`. Recorded calls are available in the `calls: list[StepCall]` attribute.
+
+Implements `SyncStepExecutor`.
+
+### 16.5. Outcome factories
+
+| Factory | Signature | Outcome |
+|---|---|---|
+| `pass_response` | `(**bindings: object) -> StepResponse` | pass |
+| `raise_response` | `(message: str, *, error_type: str \| None = None) -> StepResponse` | raise |
+| `return_response` | `(expression: str, **bindings: object) -> StepResponse` | return |
+| `break_response` | `() -> StepResponse` | break |
+| `continue_response` | `() -> StepResponse` | continue |
+
+`return_response` takes a Python expression string evaluated against step locals and globals at execution time (consistent with `return_expression` in the outcome contract, Section 8.4).
+

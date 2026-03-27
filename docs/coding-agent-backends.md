@@ -5,16 +5,16 @@ The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural 
 Minimal configuration:
 
 ```py
-from nighthawk.configuration import StepExecutorConfiguration
+import nighthawk as nh
 
 # Claude Code (SDK)
-configuration = StepExecutorConfiguration(model="claude-code-sdk:default")
+configuration = nh.StepExecutorConfiguration(model="claude-code-sdk:default")
 
 # Claude Code (CLI)
-configuration = StepExecutorConfiguration(model="claude-code-cli:default")
+configuration = nh.StepExecutorConfiguration(model="claude-code-cli:default")
 
 # Codex
-configuration = StepExecutorConfiguration(model="codex:default")
+configuration = nh.StepExecutorConfiguration(model="codex:default")
 ```
 
 The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:o3-pro`). Available aliases depend on the backend CLI version.
@@ -41,49 +41,6 @@ All three backends accept `working_directory` in their model settings. This abso
 
 If a backend CLI process fails (e.g., crashes, times out, or returns an invalid response), Nighthawk surfaces the failure as an `ExecutionError`. See [Tutorial Section 4](tutorial.md#4-control-flow-and-error-handling) for error handling patterns.
 
-## Claude Code (SDK)
-
-The `claude-code-sdk` backend uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) to run Claude Code as a subprocess.
-
-### Installation
-
-```bash
-pip install nighthawk-python[claude-code-sdk]
-```
-
-### Environment
-
-- **Authentication:** Requires `ANTHROPIC_API_KEY` or an active Claude Code session.
-- **MCP tool exposure:** Nighthawk wraps tools as `SdkMcpTool` instances and exposes them via the Agent SDK's in-process MCP server (`create_sdk_mcp_server()`). Tool names are prefixed with `mcp__nighthawk__` in the Claude Code environment.
-- **Working directory:** Passed as the `cwd` option to the Agent SDK.
-- **Project-scoped files:** Resolved from `working_directory` following Claude Code's own rules (CLAUDE.md, .claude/CLAUDE.md, .claude/settings.json, .claude/skills/).
-
-### Settings
-
-```py
-from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
-
-configuration = StepExecutorConfiguration(
-    model="claude-code-sdk:sonnet",
-    model_settings=ClaudeCodeSdkModelSettings(
-        permission_mode="bypassPermissions",
-        setting_sources=["project"],
-        claude_allowed_tool_names=("Skill", "Bash"),
-        claude_max_turns=50,
-        working_directory="/abs/path/to/project",
-    ),
-)
-```
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` | `"default"` | Claude Code permission mode (always passed to the SDK) |
-| `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load (`SettingSource` is `"user"`, `"project"`, or `"local"`) |
-| `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
-| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow (SDK only; CLI does not support this field) |
-| `claude_max_turns` | `int` | `50` | Maximum conversation turns |
-| `working_directory` | `str` | `""` | Absolute path to the project directory |
-
 ## Claude Code (CLI)
 
 The `claude-code-cli` backend invokes `claude -p` directly as a subprocess, without the Claude Agent SDK. It communicates via JSON output and exposes Nighthawk tools via an HTTP MCP server on a random local port.
@@ -98,7 +55,7 @@ The `claude` CLI must be installed separately (it is a system tool, not a Python
 
 ### Environment
 
-- **Authentication:** Requires `ANTHROPIC_API_KEY` or an active Claude Code session.
+- **Authentication:** Requires `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an active Claude Code session.
 - **CLI invocation:** Nighthawk invokes `claude -p --output-format json --no-session-persistence` as a subprocess. Additional flags (`--model`, `--system-prompt-file`, `--permission-mode`, `--max-turns`, `--max-budget-usd`, `--mcp-config`, `--json-schema`, `--allowedTools`) are appended based on `ClaudeCodeCliModelSettings`.
 - **MCP tool exposure:** An HTTP MCP server is started in a background thread on a random local port. The Claude Code CLI connects via `--mcp-config`. Tool names are prefixed with `mcp__nighthawk__` in the Claude Code environment.
 - **Working directory:** Passed as the `cwd` parameter to `create_subprocess_exec`.
@@ -109,7 +66,7 @@ The `claude` CLI must be installed separately (it is a system tool, not a Python
 ```py
 from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
-configuration = StepExecutorConfiguration(
+configuration = nh.StepExecutorConfiguration(
     model="claude-code-cli:sonnet",
     model_settings=ClaudeCodeCliModelSettings(
         permission_mode="bypassPermissions",
@@ -129,6 +86,49 @@ configuration = StepExecutorConfiguration(
 | `max_budget_usd` | `float` \| `None` | `None` | Maximum dollar amount to spend on API calls |
 | `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode. `None` delegates to the CLI default. |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load |
+| `working_directory` | `str` | `""` | Absolute path to the project directory |
+
+## Claude Code (SDK)
+
+The `claude-code-sdk` backend uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) to run Claude Code as a subprocess.
+
+### Installation
+
+```bash
+pip install nighthawk-python[claude-code-sdk]
+```
+
+### Environment
+
+- **Authentication:** Requires `ANTHROPIC_API_KEY`.
+- **MCP tool exposure:** Nighthawk wraps tools as `SdkMcpTool` instances and exposes them via the Agent SDK's in-process MCP server (`create_sdk_mcp_server()`). Tool names are prefixed with `mcp__nighthawk__` in the Claude Code environment.
+- **Working directory:** Passed as the `cwd` option to the Agent SDK.
+- **Project-scoped files:** Resolved from `working_directory` following Claude Code's own rules (CLAUDE.md, .claude/CLAUDE.md, .claude/settings.json, .claude/skills/).
+
+### Settings
+
+```py
+from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+
+configuration = nh.StepExecutorConfiguration(
+    model="claude-code-sdk:sonnet",
+    model_settings=ClaudeCodeSdkModelSettings(
+        permission_mode="bypassPermissions",
+        setting_sources=["project"],
+        claude_allowed_tool_names=("Skill", "Bash"),
+        claude_max_turns=50,
+        working_directory="/abs/path/to/project",
+    ),
+)
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` | `"default"` | Claude Code permission mode (always passed to the SDK) |
+| `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load (`SettingSource` is `"user"`, `"project"`, or `"local"`) |
+| `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
+| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow (SDK only; CLI does not support this field) |
+| `claude_max_turns` | `int` | `50` | Maximum conversation turns |
 | `working_directory` | `str` | `""` | Absolute path to the project directory |
 
 ## Codex
@@ -154,7 +154,7 @@ pip install nighthawk-python[codex]
 ```py
 from nighthawk.backends.codex import CodexModelSettings
 
-configuration = StepExecutorConfiguration(
+configuration = nh.StepExecutorConfiguration(
     model="codex:default",
     model_settings=CodexModelSettings(
         working_directory="/abs/path/to/project",
@@ -261,7 +261,7 @@ The backend CLI must be installed separately. Claude Code CLI is a system tool (
 
 **`ANTHROPIC_API_KEY` not set (Claude Code backends)**
 
-Set the environment variable before running: `export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxx`. Alternatively, authenticate via an active Claude Code session.
+Set `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` before running: `export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxx`. Alternatively, authenticate via an active Claude Code session.
 
 **`CODEX_API_KEY` not set or Codex login required**
 

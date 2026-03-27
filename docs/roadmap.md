@@ -66,7 +66,48 @@ The f-string binding span validation uses a NUL byte (`\x00`) as a placeholder f
 
 Introduce tiered prompt strategies that adapt to model capability. Weaker models may need explicit examples and constraints in step contract prompts, while stronger models benefit from concise instructions that maximize freedom. Consider this when a single prompt cannot serve both tiers without measurable tradeoffs (e.g. detailed guidance consuming significant context budget, or constraining stronger models' output quality).
 
+### Resilience observability (future)
+
+Emit OpenTelemetry spans and events from resilience primitives so that retry attempts, fallback transitions, vote aggregation, and circuit breaker state changes are visible in the same trace as the Natural block execution they wrap.
+
+Motivation:
+
+- Production debugging requires knowing *why* a result was produced (first attempt? third retry? fallback to backup model?).
+- Retry and fallback behavior is currently visible only through `nighthawk` logger output, which is not correlated with trace context.
+
+Considerations:
+
+- Resilience primitives are function transformers independent of Natural blocks. Span emission should be optional or zero-cost when no tracer is configured.
+- Define which attributes to record (attempt count, elapsed time per attempt, decide function output distribution for vote, circuit state transitions).
+
+### Cost and token budget awareness (future)
+
+Surface per-step token usage as OpenTelemetry attributes and provide mechanisms for hosts to set token or cost budgets.
+
+Motivation:
+
+- Resilience primitives (retry, vote) multiply the number of LLM calls. Without cost visibility, production use risks unexpected spend.
+- Hosts need a way to cap total token usage across retries and vote rounds, not just per individual call.
+
+Non-goals:
+
+- Nighthawk does not own pricing models or billing integration.
+
+### Resilience defaults via scope (future)
+
+Allow hosts to set default resilience policies (retry attempts, timeout, fallback chain) at the `nighthawk.scope()` level, so that all Natural block executions within a scope inherit a baseline policy without per-call wrapping.
+
+Motivation:
+
+- Production deployments often want uniform retry/timeout policies across many Natural blocks. Per-function wrapping is verbose and error-prone.
+- Scope-level defaults compose naturally with per-call overrides: the host sets a baseline, individual calls can narrow or widen.
+
+Considerations:
+
+- This may require resilience awareness in the step executor or runner, crossing the current boundary where resilience operates purely outside Natural block execution.
+
 ## Open questions
 
 - How to best represent tool results in the prompt for robust reasoning.
 - How to debug Natural blocks deterministically (unit testing is addressed via `nighthawk.testing`; debugging the LLM's reasoning path remains open).
+- How to best integrate resilience observability (retry/fallback/vote spans) with the existing step-level trace hierarchy without excessive span noise.

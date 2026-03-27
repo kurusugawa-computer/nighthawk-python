@@ -3,9 +3,9 @@
 Nighthawk delegates Natural block execution to an LLM. The model is selected through the `model` field of `StepExecutorConfiguration` using the `provider:model` format:
 
 ```py
-from nighthawk.configuration import StepExecutorConfiguration
+import nighthawk as nh
 
-configuration = StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
+configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
 ```
 
 The default model is `openai-responses:gpt-5.4-nano`. Recommended model for quality: `openai-responses:gpt-5.4`.
@@ -38,19 +38,19 @@ Examples:
 
 ```py
 # OpenAI
-configuration = StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
+configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
 
 # Anthropic (direct API)
-configuration = StepExecutorConfiguration(model="anthropic:claude-sonnet-4-6")
+configuration = nh.StepExecutorConfiguration(model="anthropic:claude-sonnet-4-6")
 
 # AWS Bedrock
-configuration = StepExecutorConfiguration(model="bedrock:us.anthropic.claude-sonnet-4-6-v1:0")
+configuration = nh.StepExecutorConfiguration(model="bedrock:us.anthropic.claude-sonnet-4-6-v1:0")
 
 # Google Vertex AI
-configuration = StepExecutorConfiguration(model="google-vertex:gemini-3-pro-preview")
+configuration = nh.StepExecutorConfiguration(model="google-vertex:gemini-3-pro-preview")
 
 # Groq
-configuration = StepExecutorConfiguration(model="groq:llama-4-scout-17b-16e-instruct")
+configuration = nh.StepExecutorConfiguration(model="groq:llama-4-scout-17b-16e-instruct")
 ```
 
 ### Installation
@@ -72,7 +72,7 @@ See the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) fo
 Pydantic AI providers accept standard Pydantic AI model settings via the `model_settings` field:
 
 ```py
-configuration = StepExecutorConfiguration(
+configuration = nh.StepExecutorConfiguration(
     model="openai-responses:gpt-5.4-nano",
     model_settings={"temperature": 0.5},
 )
@@ -109,4 +109,18 @@ class MyExecutor(AsyncStepExecutor):
         ...
 ```
 
-See [design.md Section 10](design.md#10-runtime-scoping) for the protocol specification.
+See [Design Section 14](design.md#14-step-executor) for the protocol and `AgentStepExecutor` specification.
+
+## Troubleshooting
+
+**`ModuleNotFoundError` for a provider**
+
+Install the required provider package. For example: `pip install pydantic-ai-slim[openai]`. See the [installation section](#installation) above for all provider extras.
+
+**`ValueError: Invalid model identifier`**
+
+The model identifier must be in `provider:model` format (e.g., `openai-responses:gpt-5.4-mini`). Check for typos or a missing provider prefix. See the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for valid provider prefixes.
+
+**Provider authentication errors**
+
+Each Pydantic AI provider requires its own credentials (e.g., `OPENAI_API_KEY` for OpenAI). Nighthawk does not manage provider credentials — see the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for provider-specific credential setup.

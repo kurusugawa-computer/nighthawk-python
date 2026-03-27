@@ -192,8 +192,7 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         @nighthawk.natural_function
         def summarize(text: str) -> str:
             '''natural
-            Summarize <text> in one sentence.
-            -> <:result>
+            Summarize <text> in one sentence and assign it to <:result>.
             '''
             return result
         ```

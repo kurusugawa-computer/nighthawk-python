@@ -14,7 +14,7 @@ def _is_integration_test_item(item: pytest.Item) -> bool:
 
 
 def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> object | None:
-    if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+    if os.getenv("NIGHTHAWK_OPENAI_INTEGRATION_TESTS") != "1":
         return None
 
     if not _is_integration_test_item(item):

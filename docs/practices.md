@@ -45,7 +45,7 @@ def compute_score(score_input: ScoreInput) -> int:
 
 For judgment-heavy functions (containing Natural blocks), the boundary moves *inside* the function. Accept flexible inputs at the entry point and let the Natural block interpret them into typed intermediates:
 
-`JsonableValue` is a type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`). See [design.md Section 5.3](design.md#53-supporting-types) for the full definition.
+`JsonableValue` is a type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`). See [Design Section 5.3](design.md#53-supporting-types) for the full definition.
 
 ```py
 from pydantic import BaseModel
@@ -87,53 +87,9 @@ Rules 6 and 7 say to keep locals minimal and prefer binding functions. This sect
 
 ### Keep locals minimal
 
-Function parameters and local variables appear in LOCALS. Module-level names referenced via `<name>` that are _not_ in locals appear in GLOBALS. Nighthawk renders callable entries with their full signature and docstring intent — but only when type information is available. See [Tutorial Section 3](tutorial.md#3-functions-and-discoverability) for how LOCALS and GLOBALS rendering works.
+The rules for LOCALS vs GLOBALS rendering, and how passing a callable as a parameter with a generic type erases its signature, are covered in [Tutorial Section 3](tutorial.md#keep-locals-minimal). This section focuses on design implications.
 
-When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type.
-
-Wrong — `fetch_data` loses its signature in LOCALS:
-
-```py
-from myapp import fetch_data
-
-@nh.natural_function
-async def summarize(query: str, fetch_data: object) -> str:
-    result = ""
-    """natural
-    Use <fetch_data> to get data for <query> and set <:result>.
-    """
-    return result
-```
-
-```
-<<<NH:LOCALS>>>
-fetch_data: object = <non-serializable>
-query: str = "latest news"
-result: str = ""
-<<<NH:END_LOCALS>>>
-```
-
-Correct — `fetch_data` keeps its full signature in GLOBALS:
-
-```py
-from myapp import fetch_data
-
-@nh.natural_function
-async def summarize(query: str) -> str:
-    result = ""
-    """natural
-    Use <fetch_data> to get data for <query> and set <:result>.
-    """
-    return result
-```
-
-```
-<<<NH:GLOBALS>>>
-fetch_data: (query: str, max_results: int = 10) -> list[str]  # intent: Fetch data matching the query.
-<<<NH:END_GLOBALS>>>
-```
-
-This principle extends beyond callables. Any module-level name that is stable across invocations — constants, classes, utility functions — should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
+The principle extends beyond callables. Any module-level name that is stable across invocations — constants, classes, utility functions — should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
 
 ### Minimize LLM cognitive load
 
@@ -233,7 +189,7 @@ def test_classify_returns_scripted_label():
 |---|---|---|
 | `pass_response(**bindings)` | pass | Normal completion with binding values |
 | `raise_response(message, *, error_type=None)` | raise | Test error handling paths |
-| `return_response(reference_path, **bindings)` | return | Early return from Natural function |
+| `return_response(expression, **bindings)` | return | Early return from Natural function |
 | `break_response()` | break | Exit enclosing loop |
 | `continue_response()` | continue | Skip to next iteration |
 
@@ -350,15 +306,24 @@ def test_classify_with_real_llm():
 
 **Assertion strategy:** assert on type, value range, and semantic consistency rather than exact string matches. LLMs are non-deterministic; brittle equality checks produce flaky tests.
 
-Gate integration tests behind an environment variable so they do not run in every CI job:
+Gate integration tests behind environment variables so they do not run in every CI job:
+
+| Variable | Scope |
+|---|---|
+| `NIGHTHAWK_OPENAI_INTEGRATION_TESTS` | OpenAI (Pydantic AI provider) integration tests |
+| `NIGHTHAWK_CODEX_INTEGRATION_TESTS` | Codex backend integration tests |
+| `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS` | Claude Code SDK backend integration tests |
+| `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS` | Claude Code CLI backend integration tests |
 
 ```py
 import os
 import pytest
 
-if os.getenv("NIGHTHAWK_RUN_INTEGRATION_TESTS") != "1":
+if os.getenv("NIGHTHAWK_OPENAI_INTEGRATION_TESTS") != "1":
     pytest.skip("Integration tests disabled", allow_module_level=True)
 ```
+
+For coding agent backends, use the corresponding variable (e.g., `NIGHTHAWK_CODEX_INTEGRATION_TESTS=1`).
 
 ### When to use which
 
@@ -410,7 +375,7 @@ def test_classify_iteration():
     assert result in ("positive", "negative", "neutral")
 ```
 
-Run repeatedly with `pytest -x -k test_classify_iteration` to validate prompt changes against specific inputs that previously failed. Gate behind `NIGHTHAWK_RUN_INTEGRATION_TESTS=1` for CI.
+Run repeatedly with `pytest -x -k test_classify_iteration` to validate prompt changes against specific inputs that previously failed. Gate behind `NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1` for CI.
 
 ## 4. Observability
 
@@ -455,9 +420,151 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python my_script.py
 
 Traces appear in the terminal UI in real time.
 
-See [design.md Section 10.1](design.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
+See [Design Section 10.1](design.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
 
-## 5. Common Mistakes
+## 5. Resilience Patterns
+
+Natural blocks are non-deterministic by nature. Production deployments need strategies to handle transient failures, unstable outputs, and provider outages. The `nighthawk.resilience` module provides composable **function transformers** -- each takes a callable and returns a new callable with the same signature.
+
+```py
+from nighthawk.resilience import retrying, fallback, vote, timeout, circuit_breaker
+```
+
+Import directly from `nighthawk.resilience`. Resilience primitives are not re-exported from the top-level `nighthawk` namespace.
+
+### Retrying
+
+Wrap a function to retry on failure. Uses [tenacity](https://tenacity.readthedocs.io/) internally. Defaults to retrying on `ExecutionError` with exponential backoff and jitter.
+
+```py
+from nighthawk.resilience import retrying
+
+# Decorator form -- create a resilient version of the function
+resilient_classify = retrying(attempts=3)(classify)
+result = resilient_classify(text)
+
+# Iterator form -- retry a code block (tenacity pattern)
+for attempt in retrying(attempts=3):
+    with attempt:
+        result = classify(text)
+```
+
+Customize which exceptions trigger retries and the backoff strategy:
+
+```py
+from tenacity import wait_fixed
+
+resilient = retrying(
+    attempts=5,
+    on=(ExecutionError, TimeoutError),
+    wait=wait_fixed(2),
+)(classify)
+```
+
+### Fallback
+
+Try multiple functions in order. The first success wins.
+
+```py
+from nighthawk.resilience import fallback
+
+safe_classify = fallback(classify_gpt4, classify_mini, default="unknown")
+result = safe_classify(text)
+```
+
+The `on` parameter controls which exceptions trigger fallback (default: `Exception`). All functions must have compatible signatures.
+
+### Vote (majority voting)
+
+Call a function multiple times and aggregate results. Useful for classification and judgment tasks where LLM outputs are inconsistent.
+
+```py
+from nighthawk.resilience import vote
+
+voting_classify = vote(count=3)(classify)
+label = voting_classify(text)
+```
+
+Async functions run concurrently via `asyncio.gather`. Sync functions run sequentially. Partial failures are tolerated: only successful results go to the `decide` function (default: `plurality` -- most common result). If fewer than `min_success` calls succeed (default: `ceil(count/2)`), the last exception is raised.
+
+### Timeout
+
+Enforce a time limit on function execution.
+
+```py
+from nighthawk.resilience import timeout
+
+timed_classify = timeout(seconds=30)(classify)
+result = timed_classify(text)
+```
+
+For async functions, uses `asyncio.timeout` (true cancellation). For sync functions, runs in a background thread -- note that the underlying thread continues after timeout. Also available as an async context manager:
+
+```py
+async with timeout(seconds=30):
+    result = await slow_operation()
+```
+
+### Circuit breaker
+
+Prevent repeated calls to a failing service. After `fail_threshold` consecutive failures, the circuit opens and rejects calls immediately with `CircuitOpenError`. After `reset_timeout` seconds, one probe call is allowed.
+
+```py
+from nighthawk.resilience import circuit_breaker, CircuitState
+
+protected_api = circuit_breaker(fail_threshold=5, reset_timeout=60)(call_api)
+protected_api.state    # CircuitState.CLOSED
+protected_api.reset()  # manual reset
+```
+
+This is a **stateful** transformer (like `functools.lru_cache`). Each `circuit_breaker(...)` call creates independent state.
+
+### Composition
+
+All transformers produce callables with the original signature, so they compose by nesting. Read inside-out:
+
+```py
+robust_classify = fallback(
+    retrying(attempts=2)(                      # 3. Retry the voted call
+        vote(count=3)(classify_gpt4)           # 2. Vote 3x with GPT-4
+    ),                                         # 1. Try GPT-4 first
+    retrying(attempts=2)(classify_mini),       # 4. Fall back to mini
+    default="unknown",                         # 5. Last resort
+)
+
+result = robust_classify(text)
+```
+
+Recommended composition order (innermost to outermost):
+
+| Order | Transformer | Why |
+|---|---|---|
+| 1 | `timeout` | Bound each individual call |
+| 2 | `vote` | Aggregate multiple bounded calls |
+| 3 | `retrying` | Retry the aggregated operation |
+| 4 | `circuit_breaker` | Protect against persistent failure |
+| 5 | `fallback` | Switch to alternative on exhaustion |
+
+### Caching LLM results
+
+`nighthawk.resilience` does not provide a cache primitive. Natural functions are ordinary callables, so standard Python caching works directly:
+
+```py
+from functools import lru_cache
+
+@lru_cache(maxsize=256)
+@nh.natural_function
+def classify(text: str) -> str:
+    label: str = ""
+    """natural
+    Read <text> and set <:label> to one of: positive, negative, neutral.
+    """
+    return label
+```
+
+For TTL-based caching, use [cachetools](https://cachetools.readthedocs.io/). Place cache **outside** vote and retrying -- caching the voted/retried result avoids redundant LLM calls on repeated inputs.
+
+## 6. Common Mistakes
 
 | Mistake | Why it breaks | Fix |
 |---|---|---|
@@ -468,3 +575,4 @@ See [design.md Section 10.1](design.md#101-observability-contract-opentelemetry-
 | Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
 | Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding ([Tutorial Section 3](tutorial.md#keep-locals-minimal)) |
 | Try to "compile" a Natural block into deterministic Python | Judgment tasks cannot be reduced to static code; input space is unbounded | Keep the Natural block; use Python only for deterministic operations ([Philosophy](philosophy.md#why-evaluate-every-time)) |
+| Add resilience logic inside a Natural block | LLM cannot reliably retry itself or manage timeouts | Wrap the Natural function call from Python using `nighthawk.resilience` ([Section 5](#5-resilience-patterns)) |

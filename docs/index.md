@@ -15,16 +15,16 @@ This repository is a compact reimplementation of the core ideas of [Nightjar](ht
 
 ## Documentation
 
-- **[Quickstart](quickstart.md)** — Setup and first example.
-- **[Tutorial](tutorial.md)** — Learn from first principles.
-- **[Practices](practices.md)** — Guidelines, patterns, and testing.
-- **[Providers](providers.md)** — LLM providers and configuration.
-- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex integration.
-- **[Philosophy](philosophy.md)** — Design rationale and positioning.
-- **[Design](design.md)** — Canonical specification.
-- **[Roadmap](roadmap.md)** — Future directions.
-- **[API Reference](api.md)** — Auto-generated API documentation.
-- **[For coding agents](for-coding-agents.md)** — LLM development reference.
+- **[Quickstart](quickstart.md)** — Setup and first example. Start here.
+- **[Tutorial](tutorial.md)** — Learn bindings, functions, control flow, and composition from first principles.
+- **[Practices](practices.md)** — Writing guidelines, binding function design, testing, observability, and resilience patterns.
+- **[Providers](providers.md)** — Choose and configure an LLM provider (Pydantic AI, coding agent, or custom).
+- **[Coding agent backends](coding-agent-backends.md)** — Claude Code and Codex backend configuration, skills, and MCP tool exposure.
+- **[Philosophy](philosophy.md)** — Design rationale: workflow styles, comparison with workflow engines, tool exposure tradeoffs.
+- **[Design](design.md)** — Canonical specification (target behavior for implementation).
+- **[Roadmap](roadmap.md)** — Future directions and open questions.
+- **[API Reference](api.md)** — Auto-generated API documentation from source docstrings.
+- **[For coding agents](for-coding-agents.md)** — Condensed development reference for coding agents (LLMs) working on Nighthawk projects.
 
 ## References
 

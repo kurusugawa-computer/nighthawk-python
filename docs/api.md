@@ -18,6 +18,7 @@
         - StepPromptTemplates
         - StepContextLimits
         - JsonableValue
+        - to_jsonable_value
         - ExecutionContext
         - get_current_step_context
         - get_execution_context
@@ -87,6 +88,20 @@
         - Error
         - ErrorKind
         - ToolResultWrapperToolset
+
+## Resilience
+
+::: nighthawk.resilience
+    options:
+      members:
+        - retrying
+        - timeout
+        - fallback
+        - vote
+        - plurality
+        - circuit_breaker
+        - CircuitState
+        - CircuitOpenError
 
 ## Testing
 
