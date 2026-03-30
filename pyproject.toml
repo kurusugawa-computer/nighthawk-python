@@ -1,6 +1,6 @@
 [project]
 name = "nighthawk-python"
-version = "0.6.0"
+version = "0.6.1"
 description = "An experimental Python library that embeds Natural blocks inside Python functions and executes them using an LLM."
 readme = "README.md"
 requires-python = ">=3.13"
