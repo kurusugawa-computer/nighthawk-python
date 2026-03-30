@@ -159,6 +159,11 @@ def tool(
 ) -> ToolFunction | Callable[[ToolFunction], ToolFunction]:
     """Register a Python function as a Nighthawk tool visible to Natural blocks.
 
+    Prefer binding functions for most use cases, they incur no per-definition
+    token overhead beyond a signature line in the prompt context. Use ``@tool``
+    only when ``RunContext[StepContext]`` access is required. See the Guide
+    (Functions and Discoverability) for details.
+
     Args:
         func: The function to register. Can be omitted for use as a bare decorator.
         name: Tool name override. Defaults to the function name.

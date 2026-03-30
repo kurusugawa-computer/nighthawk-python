@@ -4,6 +4,7 @@ import textwrap
 from typing import Literal
 
 import nighthawk as nh
+from nighthawk.resilience import fallback
 from tests.execution.prompt_test_helpers import FakeAgent, build_step_context, build_user_prompt_text, globals_section, locals_section
 
 
@@ -124,7 +125,7 @@ def test_locals_section_renders_plain_python_function_signature() -> None:
 
     locals_text = locals_section(prompt)
     assert "local_function: (required, optional=10, *, keyword='x')" in locals_text
-    assert "# intent:" not in locals_text
+    assert "# " not in locals_text
     assert "<function>" not in locals_text
 
 
@@ -148,7 +149,7 @@ def test_locals_section_renders_lambda_builtin_and_bound_method_values() -> None
 
     locals_text = locals_section(prompt)
     assert "lambda_value: (number)" in locals_text
-    assert "builtin_length: (obj, /)  # intent:" in locals_text
+    assert "builtin_length: (obj, /)  # " in locals_text
     assert "bound_method: (item)" in locals_text
     assert "<function>" not in locals_text
     assert "builtin_function_or_method" not in locals_text
@@ -176,7 +177,7 @@ def test_locals_section_renders_callable_instance_and_partial_function() -> None
     assert "callable_instance: (item)" in locals_text
     assert "partially_applied_helper: (optional=10, *, keyword='x')" in locals_text
     assert "partial = " not in locals_text
-    assert "# intent:" not in locals_text
+    assert "# " not in locals_text
     assert "<function>" not in locals_text
     assert "(*args, **kwargs)" not in locals_text
 
@@ -197,7 +198,7 @@ def test_globals_section_renders_referenced_global_function_signature() -> None:
 
     globals_text = globals_section(prompt)
     assert "global_helper: (required, optional=10, *, keyword='x')" in globals_text
-    assert "# intent:" not in globals_text
+    assert "# " not in globals_text
     assert "<function>" not in globals_text
 
 
@@ -224,7 +225,7 @@ def test_locals_section_renders_typed_function_argument_and_return_annotations()
 
     locals_text = locals_section(prompt)
     assert "local_typed_function: (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in locals_text
-    assert "# intent:" not in locals_text
+    assert "# " not in locals_text
     assert "<function>" not in locals_text
 
 
@@ -244,7 +245,7 @@ def test_globals_section_renders_referenced_typed_function_argument_and_return_a
 
     globals_text = globals_section(prompt)
     assert "global_typed_helper: (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in globals_text
-    assert "# intent:" not in globals_text
+    assert "# " not in globals_text
     assert "<function>" not in globals_text
 
 
@@ -261,7 +262,7 @@ def test_signature_unavailable_callable_renders_non_invocable_marker() -> None:
 
     locals_text = locals_section(prompt)
     assert "opaque_callable: <callable; signature-unavailable>" in locals_text
-    assert "# intent:" not in locals_text
+    assert "# " not in locals_text
     assert "(*args, **kwargs)" not in locals_text
 
 
@@ -313,5 +314,55 @@ def test_locals_section_renders_pep695_type_alias_in_function_signature() -> Non
     assert "T: type = typing.Literal['A', 'B', 'C']" in locals_text
     assert "f: (t: T) -> None" in locals_text
     assert "g: (literal_value: Literal['A', 'B', 'C']) -> None" in locals_text
-    assert "# intent:" not in locals_text
+    assert "# " not in locals_text
+    assert "<function>" not in locals_text
+
+
+def test_locals_section_renders_fallback_composed_function_signature() -> None:
+    def primary(x: str) -> str:
+        return f"primary:{x}"
+
+    def backup(x: str) -> str:
+        return f"backup:{x}"
+
+    composed = fallback(primary, backup)
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"composed": composed},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "composed: (x: str) -> str" in locals_text
+    assert "# " not in locals_text
+    assert "<function>" not in locals_text
+
+
+def test_locals_section_renders_fallback_merged_return_type_signature() -> None:
+    def primary(x: str) -> str:
+        return f"primary:{x}"
+
+    def backup(x: str) -> int:
+        return len(f"backup:{x}")
+
+    composed = fallback(primary, backup)
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"composed": composed},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "composed: (x: str) -> str | int" in locals_text
+    assert "# " not in locals_text
     assert "<function>" not in locals_text

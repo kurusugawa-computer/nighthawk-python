@@ -129,13 +129,13 @@ def _render_callable_line(
     if callable_signature_text is None:
         rendered_text = f"{reference}: <callable; signature-unavailable>"
         if usage_intent_hint is not None:
-            rendered_text += f"  # intent: {usage_intent_hint}"
+            rendered_text += f"  # {usage_intent_hint}"
         return rendered_text
 
     rendered_text = f"{reference}: {callable_signature_text}"
     metadata_comment_list: list[str] = []
     if usage_intent_hint is not None:
-        metadata_comment_list.append(f"intent: {usage_intent_hint}")
+        metadata_comment_list.append(usage_intent_hint)
     if _is_async_callable_value(value):
         metadata_comment_list.append("async")
     if callable_signature_text in callable_signature_text_to_reference_list:
