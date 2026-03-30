@@ -37,7 +37,7 @@ Natural DSL sources and included markdown are trusted, repository-managed assets
 
 - `src/nighthawk/`: Library package.
 - `tests/`: Pytest suite.
-- `docs/`: `quickstart.md` (first steps), `tutorial.md` (first principles), `design.md` (specification), `roadmap.md` (future items).
+- `docs/`: User-facing documentation (MkDocs).
 - `.agents/`: `execplans/` (on request only), `PLANS.md` (format spec).
 - `.devcontainer/`: Devcontainer definition.
 - `pyproject.toml`, `uv.lock`: Metadata and locked dependencies.

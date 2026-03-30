@@ -1,25 +1,14 @@
-"""Smoke tests verifying that code patterns from docs/for-coding-agents.md are executable.
-
-These tests catch drift between the documentation and the actual API by running
-the key patterns described in the coding agent guide.
-"""
+"""Smoke tests for executable patterns in docs/for-coding-agents.md."""
 
 from __future__ import annotations
 
-import asyncio
+from collections.abc import Callable
+from pathlib import Path
 
 import nighthawk as nh
-from nighthawk.testing import (
-    CallbackExecutor,
-    ScriptedExecutor,
-    break_response,
-    continue_response,
-    pass_response,
-    raise_response,
-    return_response,
-)
+from nighthawk.testing import CallbackExecutor, ScriptedExecutor, pass_response
 
-# ── Module-level helpers (simulate module-level binding functions) ──
+GUIDE_PATH = Path(__file__).resolve().parents[2] / "docs" / "for-coding-agents.md"
 
 
 def helper(query: str) -> list[str]:
@@ -27,237 +16,122 @@ def helper(query: str) -> list[str]:
     return [f"item_{query}"]
 
 
-# ── Section 2: Writing Natural blocks ──
+class TestExecutorSelectionPatterns:
+    """The guide's per-block executor selection patterns execute correctly."""
 
-
-class TestNaturalFunctionTemplate:
-    """Section 2 sync and async Natural function templates compile and execute."""
-
-    def test_sync_template(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="processed output")])
+    def test_can_mix_fast_and_deep_executors_in_one_run(self) -> None:
+        fast_executor = ScriptedExecutor(responses=[pass_response(label="bug")])
+        deep_executor = ScriptedExecutor(responses=[pass_response(report="detailed analysis")])
 
         @nh.natural_function
-        def my_function(input_data: str) -> str:
-            result: str = ""
-            """natural
-            Read <input_data> and set <:result> to the processed output.
-            """
-            return result
-
-        with nh.run(executor):
-            assert my_function("raw data") == "processed output"
-
-    def test_async_template(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="summarized")])
-
-        @nh.natural_function
-        async def my_async_function(text: str) -> str:
-            result: str = ""
-            """natural
-            Summarize <text> and set <:result>.
-            """
-            return result
-
-        with nh.run(executor):
-            assert asyncio.run(my_async_function("long text")) == "summarized"
-
-
-# ── Section 3: Binding function pattern ──
-
-
-class TestBindingFunctionPattern:
-    """Section 3 binding function pattern: helper visible in GLOBALS."""
-
-    def test_binding_function_visible_in_globals(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="item summary")])
-
-        @nh.natural_function
-        def process(query: str) -> str:
-            result = ""
-            """natural
-            Call <helper> with <query> and set <:result> to a summary of the results.
-            """
-            return result
-
-        with nh.run(executor):
-            output = process("test")
-
-        assert output == "item summary"
-        call = executor.calls[0]
-        assert "helper" in call.step_globals
-        assert call.step_globals["helper"] is helper
-
-
-# ── Section 4: Deny frontmatter ──
-
-
-class TestDenyFrontmatter:
-    """Section 4 deny frontmatter restricts allowed outcomes."""
-
-    def test_deny_frontmatter_allows_pass(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="ok")])
-
-        @nh.natural_function
-        def summarize(text: str) -> str:
-            result: str = ""
+        def classify_ticket(text: str) -> str:
+            label: str = ""
             """natural
             ---
             deny: [raise, return]
             ---
-            Read <text> and set <:result> to a summary.
+            Read <text> and set <:label> to one of: bug, feature, question.
             """
-            return result
-
-        with nh.run(executor):
-            assert summarize("input") == "ok"
-
-    def test_deny_frontmatter_rejects_denied_outcome(self) -> None:
-        executor = ScriptedExecutor(responses=[raise_response("should not reach", error_type="ValueError")])
+            return label
 
         @nh.natural_function
-        def summarize(text: str) -> str:
-            result: str = ""
+        def write_analysis_report(ticket_text: str, product_context: str) -> str:
+            report: str = ""
             """natural
             ---
             deny: [raise, return]
             ---
-            Read <text> and set <:result>.
+            Read <ticket_text> and <product_context>.
+            Analyze the issue, identify likely causes, and set <:report> to a detailed analysis.
             """
-            return result
+            return report
 
-        import pytest
+        with nh.run(fast_executor):
+            label = classify_ticket("tests are failing")
+            with nh.scope(step_executor=deep_executor):
+                report = write_analysis_report("tests are failing", "product context")
 
-        with nh.run(executor), pytest.raises(nh.ExecutionError, match="not allowed"):
-            summarize("input")
+        assert label == "bug"
+        assert report == "detailed analysis"
+        assert len(fast_executor.calls) == 1
+        assert len(deep_executor.calls) == 1
 
 
-# ── Section 5: Carry pattern ──
+class TestStateBoundaryPatterns:
+    """The guide's state boundary rules match executable behavior."""
 
+    def test_read_binding_mutation_is_visible_through_shared_reference(self) -> None:
+        def handler(call):
+            carry = call.step_locals["carry"]
+            assert isinstance(carry, list)
+            carry.append("step_1 summary")
+            return pass_response(result=10)
 
-class TestCarryPatternTemplate:
-    """Section 5 carry pattern: mutable object passed as read binding."""
-
-    def test_carry_passed_to_consecutive_steps(self) -> None:
-        executor = ScriptedExecutor(
-            responses=[
-                pass_response(result=10),
-                pass_response(result=20),
-            ]
-        )
+        executor = CallbackExecutor(handler)
 
         @nh.natural_function
         def step_1(carry: list[str]) -> int:
-            result = 0
+            result: int = 0
             """natural
             Set <:result> to 10.
             Append a one-line summary of what you did to <carry>.
             """
             return result
 
-        @nh.natural_function
-        def step_2(carry: list[str]) -> int:
-            result = 0
-            """natural
-            Read <carry> and set <:result>.
-            """
-            return result
-
         carry: list[str] = []
         with nh.run(executor):
-            assert step_1(carry) == 10
-            assert step_2(carry) == 20
+            result = step_1(carry)
 
-        assert "carry" in executor.calls[0].step_locals
-        assert "carry" in executor.calls[1].step_locals
+        assert result == 10
+        assert carry == ["step_1 summary"]
 
-
-# ── Section 7: Testing patterns ──
-
-
-class TestTestingPatterns:
-    """Section 7 testing utility imports and patterns are valid."""
-
-    def test_all_response_factories_callable(self) -> None:
-        """All factories listed in the outcome factories table are importable and callable."""
-        assert callable(pass_response)
-        assert callable(raise_response)
-        assert callable(return_response)
-        assert callable(break_response)
-        assert callable(continue_response)
-
-    def test_both_executors_record_calls(self) -> None:
-        """Both ScriptedExecutor and CallbackExecutor expose .calls for post-inspection."""
-        scripted = ScriptedExecutor(responses=[pass_response()])
-        callback = CallbackExecutor(lambda _: pass_response())
+    def test_precisely_typed_callable_parameter_remains_visible_in_locals(self) -> None:
+        executor = ScriptedExecutor(responses=[pass_response(result="item summary")])
 
         @nh.natural_function
-        def f() -> None:
-            """natural
-            Do something.
-            """
-
-        with nh.run(scripted):
-            f()
-        with nh.run(callback):
-            f()
-
-        assert len(scripted.calls) == 1
-        assert len(callback.calls) == 1
-
-    def test_error_handling_pattern(self) -> None:
-        """Section 7 error handling test pattern works end-to-end."""
-        import pytest
-
-        executor = ScriptedExecutor(responses=[raise_response("invalid input", error_type="ValueError")])
-
-        @nh.natural_function
-        def classify(text: str) -> str:
-            category: str = ""
-            """natural
-            <ValueError>
-            Classify <text> and set <:category>.
-            """
-            return category
-
-        with nh.run(executor), pytest.raises(ValueError, match="invalid input"):
-            classify("???")
-
-    def test_default_response_pattern(self) -> None:
-        """Section 7 default_response pattern for multi-step functions."""
-        executor = ScriptedExecutor(default_response=pass_response(result="default"))
-
-        @nh.natural_function
-        def f() -> str:
+        def summarize(query: str, fetch_data: Callable[[str], list[str]]) -> str:
             result: str = ""
             """natural
-            Set <:result>.
+            Use <fetch_data> to get data for <query> and set <:result>.
             """
             return result
 
         with nh.run(executor):
-            assert f() == "default"
-            assert f() == "default"
+            output = summarize("test", helper)
 
-        assert len(executor.calls) == 2
+        assert output == "item summary"
+        call = executor.calls[0]
+        assert call.step_locals["fetch_data"] is helper
+        assert "fetch_data" not in call.step_globals
 
-    def test_binding_wiring_verification_pattern(self) -> None:
-        """Section 7 binding wiring verification pattern including all StepCall fields."""
-        executor = ScriptedExecutor(responses=[pass_response(result="")])
+
+class TestControlFlowPatterns:
+    """The guide's recommended deny pattern remains executable."""
+
+    def test_post_block_logic_pattern_allows_python_validation(self) -> None:
+        executor = ScriptedExecutor(responses=[pass_response(summary="concise summary")])
 
         @nh.natural_function
-        def process(query: str) -> str:
-            result = ""
+        def summarize(text: str) -> str:
+            summary: str = ""
             """natural
-            Call <helper> with <query> and set <:result> to a summary of the results.
+            ---
+            deny: [raise, return]
+            ---
+            Read <text> and set <:summary> to a concise summary.
             """
-            return result
+            if not summary.strip():
+                raise ValueError("Summary must not be empty")
+            return summary
 
         with nh.run(executor):
-            process(query="test")
+            result = summarize("long text")
 
-        call = executor.calls[0]
-        assert "helper" in call.step_globals
-        assert "query" in call.step_locals
-        assert "result" in call.binding_names
-        assert "query" in call.natural_program
-        assert "break" not in call.allowed_step_kinds
+        assert result == "concise summary"
+
+
+class TestGuideContent:
+    """The guide file should remain present as the target of the executable examples."""
+
+    def test_guide_exists(self) -> None:
+        assert GUIDE_PATH.exists(), f"Expected guide file at {GUIDE_PATH}"

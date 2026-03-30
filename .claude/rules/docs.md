@@ -5,102 +5,228 @@ paths:
 
 # Documentation rules
 
+## Canonical ownership
+
+Each topic must have exactly one canonical owner file. Other files may restate the topic only as a deliberate derivative summary, quickstart, or routing pointer.
+
+General rules:
+
+- Prefer cross-references over duplication.
+- If a topic appears in multiple files, one file must be the declared source of truth.
+- Derivative documents may compress or subset canonical content when that serves a distinct audience.
+- `for-coding-agents.md` is the main exception: it is a derivative operational guide for coding agents and may restate material from human-oriented docs.
+
+Public API documentation layering:
+
+- `api.md` owns the exhaustive inventory of the supported public API surface (existence, types, signatures, exceptions, docstrings). Low-level utilities and extension hooks belong here.
+- `specification.md` owns API semantics, contracts, boundaries, and runtime behavior. It is the canonical source for *what a symbol means and how it behaves*.
+- `quickstart.md`, `natural-blocks.md`, `patterns.md`, `runtime-configuration.md`, and `verification.md` are task-oriented. They cover *when to use* and *how to use* selected APIs -- not every public symbol. A public API having no coverage in these pages is expected when the symbol serves a narrow or advanced use case already documented by `api.md` and `specification.md`.
+
+`docs/AGENTS.md` is governance-only content. It is a symlink to `.claude/rules/docs.md` and must not appear as an accidental published governance page. It is excluded from the published site via `exclude_docs` in `mkdocs.yml`.
+
 ## File roles and boundaries
 
-Content belongs in exactly one file; cross-reference rather than duplicate. Exception: `for-coding-agents.md` condenses (distills) content from other files into actionable rules.
-
-| File | Audience | Role | Scope boundary |
+| File | Audience | Role | Scope |
 |---|---|---|---|
-| `index.md` | First-time visitors | Project overview, motivation, workflow styles | What Nighthawk is and why. Brief positioning summary with link to `philosophy.md`. No API details, no how-to. |
-| `philosophy.md` | Users evaluating Nighthawk | Deep positioning and design rationale | Workflow styles, comparison with workflow engines, tool exposure tradeoffs (MCP/CLI/binding functions), runtime evaluation rationale. Technical arguments with benchmarks. |
-| `quickstart.md` | New users | Shortest path to running a Natural block | Setup, first example, credentials, troubleshooting. No deep explanations. |
-| `tutorial.md` | Users learning the system | Build understanding from first principles | Bindings, functions and discoverability, control flow, composition, configuration, async. Assumes quickstart is done. Guidelines and testing are in `practices.md`. |
-| `practices.md` | Users applying patterns | Practical patterns and guidelines | Writing guidelines, binding function design, testing and debugging, observability. Assumes tutorial is done. |
-| `design.md` | Implementors and advanced users | Canonical specification (target behavior) | Full technical detail: syntax rules, state layers, prompt rendering, tool contracts, outcome schema, frontmatter. |
-| `providers.md` | Users choosing and configuring models | Provider selection, Pydantic AI setup, custom backends | Provider categories, capability matrix, model identifiers, Pydantic AI model settings, step executor protocols. No coding-agent-backend-specific content. |
-| `coding-agent-backends.md` | Users of Claude Code or Codex backends | Coding agent backend configuration and features | Backend-specific settings, skills, MCP tool exposure, working directory, project-scoped files. |
-| `for-coding-agents.md` | Coding agents (LLMs) working on Nighthawk projects | Condensed development knowledge base | Nighthawk mental model, Natural block writing, binding function design, control flow, composition, testing, common mistakes. Not a human tutorial; an LLM reference. |
-| `api.md` | Developers using the library | Auto-generated API reference (mkdocstrings) | Public API surface only. Content comes from source docstrings; do not hand-edit. |
-| `roadmap.md` | Contributors and planners | Future directions | Ideas and desired directions only. Must not restate what is already implemented. |
+| `index.md` | First-time visitors | Landing page | Value proposition, one runnable example, entry path routing. No API, no how-to. |
+| `quickstart.md` | New users | First success | Minimal setup, minimal example, minimal troubleshooting, explicit next-step link. |
+| `natural-blocks.md` | Learners | What Natural blocks are | Natural block anatomy, prompt structure, read/write bindings, Pydantic model bindings, f-string injection, functions and discoverability, binding function design (principles and basic examples), responsibility split, structured output design. |
+| `executors.md` | Learners / evaluators | Choose an execution backend | Capability / cost / latency matrix, decision tree, `StepExecutorConfiguration` basics, and routing to side references and `runtime-configuration.md`. |
+| `runtime-configuration.md` | Learners | Configure execution | `nh.run()`, `nh.scope()`, configuration patching, prompt suffix fragments, context limits, JSON rendering style, and runtime execution identity. |
+| `patterns.md` | Practitioners | Apply Natural blocks in workflows | Outcomes, deny frontmatter, error handling, custom exception types, async, carry pattern, cross-block composition, resilience patterns, and common mistakes. |
+| `verification.md` | Practitioners | Verify and debug | Mock tests, integration tests, prompt inspection, diagnosing snipped markers, OpenTelemetry span hierarchy, step events, local trace inspection. |
+| `pydantic-ai-providers.md` | Model configurers | Pydantic AI provider reference | Provider list, installation, model identifiers, credentials, model settings, provider-specific troubleshooting. No chooser. No custom backends. |
+| `coding-agent-backends.md` | Backend users | Backend reference | Backend-specific settings, shared capabilities, skills, MCP tool exposure, working directory, troubleshooting. |
+| `for-coding-agents.md` | Coding agents (LLMs) | Operational guide | Condensed, decision-oriented rules derived from human-oriented docs. Self-contained with absolute URLs. |
+| `specification.md` | Implementors | Canonical spec | Syntax, state layers, tools, outcomes, frontmatter, runtime semantics, observability contract, and custom backend capability/protocol semantics. Numbered section headings. |
+| `philosophy.md` | Evaluators | Design rationale | Execution model, harness evidence, design consequences (resilience, scoped execution contexts, tool exposure, multi-agent coordination, tradeoffs), runtime evaluation rationale, design landscape. |
+| `api.md` | Developers | API reference | Auto-generated from docstrings, including protocol and extension-hook symbols. |
+| `roadmap.md` | Contributors | Future directions | Ideas only. Remove when implemented. |
+| `docs/AGENTS.md` | Coding agents editing docs | Documentation governance | Canonical ownership, page roles, routing rules, and docs test invariants. Symlink to `.claude/rules/docs.md`. |
 
-## Content routing (non-obvious cases)
+## Content routing
 
-Most content maps to exactly one file via the scope boundaries above. These cases involve splits or non-intuitive placement:
+List only topics that commonly drift across multiple files or are easy to misplace.
 
-- **Credential setup** -> `quickstart.md` (`OPENAI_API_KEY` only), `providers.md` (Pydantic AI providers), `coding-agent-backends.md` (coding agent backends)
-- **Error types** -> `design.md` (specification), `tutorial.md` (practical usage with examples)
-- **Testing patterns** -> `practices.md` (patterns with examples), `for-coding-agents.md` (condensed rules)
-- **Writing guidelines** -> `practices.md` (patterns with examples), `for-coding-agents.md` (condensed rules)
-- **Observability** -> `practices.md` (practical setup), `design.md` (specification)
-- **Conceptual impact of coding agent backends** (how they expand what Natural blocks can do) -> `philosophy.md` (positioning arguments), `index.md` (brief summary), `practices.md` (guidelines). Configuration details stay in `coding-agent-backends.md`.
+- **Credentials** -> `quickstart.md` (minimal first run), `pydantic-ai-providers.md` (Pydantic AI providers), `coding-agent-backends.md` (backend prerequisites)
+- **Executor selection** -> `executors.md` (capability and cost tradeoffs), `coding-agent-backends.md` (backend behavior and constraints), `for-coding-agents.md` (block-level operational guidance), `quickstart.md` (minimal entry example only)
+- **Runtime setup and scoping** (`nh.run()`, `nh.scope()`, configuration patching) -> `runtime-configuration.md` (canonical), `patterns.md` (usage-only references), `for-coding-agents.md` (condensed)
+- **Context limits / JSON rendering / execution identity** -> `runtime-configuration.md` (canonical), `verification.md` (`<snipped>` diagnosis only), `specification.md` (formal semantics), `for-coding-agents.md` (condensed)
+- **Bindings** -> `natural-blocks.md` (canonical), `specification.md` (formal definition), `for-coding-agents.md` (condensed)
+- **Binding function design** -> `natural-blocks.md` (principles and basic examples), `patterns.md` (only when binding functions participate in multi-block patterns), `for-coding-agents.md` (condensed)
+- **Resilience** -> `patterns.md` (canonical patterns), `for-coding-agents.md` (condensed operational rules), `philosophy.md` (positioning only)
+- **Testing** -> `verification.md` (canonical patterns and examples), `for-coding-agents.md` (condensed operational rules), `specification.md` (testing is out of scope except for boundary statements)
+- **Observability** -> `verification.md` (usage and debugging workflow), `specification.md` (specification and runtime semantics), `for-coding-agents.md` (normally omit; mention only when needed to explain execution constraints)
+- **Deny frontmatter** -> `patterns.md` (standard patterns), `specification.md` (canonical specification), `for-coding-agents.md` (condensed operational rules)
+- **Coding agent control** -> `philosophy.md` (execution model and design consequences), `coding-agent-backends.md` (configuration and constraints)
+- **Coding agent backend impact** -> `philosophy.md` (execution model and design consequences), `index.md` (brief summary), `coding-agent-backends.md` (details)
+- **Async** -> `patterns.md` (patterns), `specification.md` (specification), `for-coding-agents.md` (condensed rules)
+- **Structured output / Pydantic models** -> `natural-blocks.md` (design guidelines), `specification.md` (type validation specification)
+- **Custom backends** -> `specification.md` (semantics), `api.md` (protocol symbols), `executors.md` (chooser-level mention only)
+- **Workflow engine comparison** -> `philosophy.md` (canonical, design landscape section), `index.md` (link), `executors.md` (link)
+- **Tool exposure tradeoffs** -> `philosophy.md` (canonical, design consequences section), `index.md` (link), `executors.md` (link)
+- **Docs governance** -> `docs/AGENTS.md` and `.claude/rules/docs.md`. No derivative restatement elsewhere.
 
-## Writing guidelines
+## Shared writing guidelines
 
 ### General
 
-- Cross-reference with relative links (e.g., `[Section 5](tutorial.md#5-cross-block-composition)`). Exception: `for-coding-agents.md` uses absolute URLs based on `site_url` from `mkdocs.yml`.
-- File boundary delineation: `index.md` owns "why" (motivation, positioning); `tutorial.md` owns "how" (usage with examples); `practices.md` owns "how to do it well" (guidelines, patterns, testing); `design.md` owns "exact rules and edge cases" (specification).
-- Maintain consistent terminology across files (e.g., "one task per block" everywhere, not "one judgment" in one file and "one task" in another).
-- Keep code examples self-contained: understandable without surrounding prose.
-- Built-in tool names (`nh_eval`, `nh_exec`, `nh_assign`) are implementation details. Only `design.md` may expose them; all other files describe behavior instead.
-- `@nh.tool` is discouraged. `design.md` documents it as specification. `tutorial.md` may mention it with a "prefer binding functions" note. All other files (including `for-coding-agents.md`) must not reference it.
-- The PyPI package name is `nighthawk-python`. Always use `nighthawk-python` in `pip install` commands and extras.
-- Terminology: "task" refers to the structural unit a Natural block performs (contract: inputs, outputs, outcome). "judgment" refers to the cognitive act the LLM performs (classification, interpretation, generation). Use "one task per block", not "one judgment per block".
+- Headings: sentence case. Capitalize first word, proper nouns (Nighthawk, Natural, Pydantic), acronyms (LLM, JSON, MCP).
+- Anchors: name-based (`#writing-guidelines`), not number-based (`#1-writing-guidelines`). Exception: `specification.md` is a specification document and may use numbered section headings as its stable citation hierarchy.
+- Cross-references: relative links. Exception: `for-coding-agents.md` uses absolute URLs from `site_url`.
+- Terminology: "task" = structural unit (contract), "judgment" = cognitive act. Use "one task per block".
+- Code examples: self-contained and understandable without surrounding prose.
+- Built-in tools (`nh_eval`, `nh_assign`): implementation details. Only `specification.md` may expose them.
+- `@nh.tool`: `specification.md` documents as spec, `natural-blocks.md` may mention it with a "prefer binding functions" note, all others must not reference it.
+- Package name: always `nighthawk-python` in `pip install` commands.
+- When renaming a document or changing its role, update all inbound references, routing rules here, relevant `tests/docs`, and navigation metadata if applicable.
+- When a governance file under `docs/` is not meant for publication, its MkDocs handling must be explicit.
+- `natural-blocks.md` and `patterns.md` together replace the former `guide.md`.
+- References to `design.md` should use `specification.md`.
+- References to `providers.md` should use `pydantic-ai-providers.md`.
 
-### Per-file rules
+### Prerequisite notes
 
-**index.md**
-- Documentation links list must stay in sync with `nav` entries in `mkdocs.yml`.
-- Keep positioning sections as brief summary paragraphs linking to `philosophy.md`. Do not add detailed comparisons, benchmarks, or technical arguments here.
+Pages in the Getting started, Patterns & verification, and Configuration nav groups must open with a short prerequisite note. This supports non-linear readers who jump directly to a topic. The note should be one sentence naming the assumed prior reading. Pages in Reference, Background, and Project groups (`specification.md`, `philosophy.md`, `roadmap.md`, `api.md`) are exempt -- they serve independent audiences that do not follow the learning path.
 
-**philosophy.md**
-- Owns all detailed positioning arguments: workflow styles, workflow engine comparison, tool exposure tradeoffs, runtime evaluation rationale.
-- External references (benchmarks, blog posts) are acceptable. Prefer stable URLs; include enough inline context that the argument survives link rot.
-- May reference `tutorial.md` and `coding-agent-backends.md` for cross-cutting concepts but must not duplicate how-to content.
+## Per-file rules
 
-**quickstart.md**
-- Optimize for copy-paste. Keep troubleshooting to common first-run errors only.
-- Includes both a Pydantic AI provider example and a coding agent backend (claude-code-cli) example.
+**`index.md`**
 
-**tutorial.md**
-- One concept per section. Combine related ideas only when they share an example.
-- `<!-- prompt-example:name -->` markers are test anchors verified by `tests/docs/test_prompt_examples.py`. Never modify content between markers without updating the test.
-- Backend-agnostic in configuration: no backend-specific file layouts, credentials, or initialization variants; point to `providers.md` or `coding-agent-backends.md` instead. Conceptual references to what coding agent backends enable are acceptable as brief pointers.
+- Links list must stay in sync with `nav` in `mkdocs.yml`.
+- One representative code example (Python + Natural block + binding function). The example must be self-contained and runnable (include executor setup and `nh.run()` context).
+- Brief positioning summaries linking to `philosophy.md`. No comparisons or benchmarks.
 
-**practices.md**
-- Assumes the reader has completed the tutorial. No repetition of fundamentals.
-- No `<!-- prompt-example:name -->` markers; all prompt examples remain in `tutorial.md`.
-- Focus on practical application patterns, setup instructions, and decision frameworks.
-- Cross-reference `tutorial.md` for concepts, `design.md` for specifications.
+**`quickstart.md`**
 
-**design.md**
-- The specification. If implementation diverges, prefer changing the implementation (Section 0.1).
-- Precise, unambiguous language. No hedging for specified behavior.
-- Keep section hierarchy stable; other docs link to anchors.
+- Optimize for copy-paste.
+- Include only the minimum needed for a first success.
+- Retain one explicit sentence stating the trust model / hard constraint for Natural blocks and imported markdown.
+- End with a next-page link to `natural-blocks.md`.
+- No backend alternatives beyond a one-line link to `executors.md`.
 
-**providers.md**
-- Capability matrix must clearly show which features require a coding agent backend.
-- Concise, runnable setup snippets over narrative; link to `tutorial.md` for concepts.
-- Custom backends: show `AgentStepExecutor.from_agent` snippet; link to `design.md` for protocol details.
-- No credential details; delegate to Pydantic AI documentation.
+**`natural-blocks.md`**
 
-**coding-agent-backends.md**
-- Document shared capabilities once in a shared section; per-backend sections focus on differences.
-- For CLI integrations, separate what Nighthawk configures from what is delegated to backend CLI rules.
-- Include a settings field table per backend (type, default, description).
-- Reference `providers.md` for the overall provider landscape and capability matrix; do not duplicate the matrix.
+- Prerequisite note: "This page assumes you have completed [Quickstart](quickstart.md)."
+- Owns Natural block anatomy, prompt structure, binding semantics, discoverability, binding function design (principles and basic examples), responsibility split, and structured output design guidelines.
+- Binding function design includes principles and basic examples that are complete within a single block. Advanced multi-block patterns (carry, branching, resilience) belong in `patterns.md`.
+- Owns migrated `prompt-example` test anchors (`basic-binding`, `fstring-injection`, `local-function-signature`, `global-function-reference`). Exception: `carry-pattern` belongs in `patterns.md`.
+- Backend-agnostic: examples use the Quickstart default executor.
+- Cross-reference `specification.md` for formal definitions.
+- Ends with a routing sentence: "Choosing an executor is in [Executors](executors.md). Runtime configuration (`nh.run()`, `nh.scope()`, limits) is in [Runtime configuration](runtime-configuration.md)."
 
-**for-coding-agents.md**
-- The reader is a coding agent (LLM). Write for immediate applicability, not progressive learning. Include runnable code templates.
-- Distill principles from tutorial.md, practices.md, design.md, and guidelines into actionable rules. Do not duplicate prose.
-- Information flows from human-oriented docs to this file, never the reverse. All facts, patterns, and rules in this file must have a source in tutorial.md, practices.md, or design.md. Do not introduce new information here.
-- Self-contained: readable without sibling files. All doc references use absolute URLs from `site_url` in `mkdocs.yml` (currently `https://kurusugawa-computer.github.io/nighthawk-python/`). Update URLs if `site_url` changes.
-- Keep the "common mistakes" table current.
-- Filter for coding-agent relevance: omit infrastructure concerns (scoped overrides, exception hierarchy beyond `ExecutionError`, observability) that don't affect writing Natural blocks or binding functions.
+**`executors.md`**
 
-**api.md**
-- Content from source docstrings; edit source code, not api.md. Hand-editing limited to `:::` directive structure.
-- Use `members` filters in `:::` directives to avoid duplicate rendering when the same module appears in multiple sections.
+- Prerequisite note: "This page assumes you have completed [Quickstart](quickstart.md) and [Natural blocks](natural-blocks.md)."
+- Owns executor selection: capability matrix, decision tree, and `StepExecutorConfiguration` basics.
+- Links to `philosophy.md` for positioning instead of duplicating it.
+- Capability matrix must include relative cost and latency columns.
+- Must include an explicit custom-backend routing subsection with a minimal `AgentStepExecutor.from_agent(agent=agent)` runnable example (3-5 lines). Direct `AsyncStepExecutor` implementation belongs in `specification.md`.
+- Ends with routing: side trips to `pydantic-ai-providers.md` and `coding-agent-backends.md`, then next-step link to `runtime-configuration.md`.
+- Runtime configuration topics (`nh.run()`, `nh.scope()`, configuration patching, prompt suffix, context limits, JSON rendering, execution identity) belong in `runtime-configuration.md`, not here.
 
-**roadmap.md**
-- Future-facing only. Remove items once implemented. No implementation details.
+**`runtime-configuration.md`**
+
+- Prerequisite note: "This page assumes you have completed [Executors](executors.md)."
+- Owns all runtime configuration: `nh.run()`, `nh.scope()`, configuration patching, prompt suffix fragments, context limits, JSON rendering style, and runtime execution identity.
+- These topics are independent of executor choice. The page applies equally to Pydantic AI providers and coding agent backends.
+- Cross-reference `specification.md` for formal semantics.
+- Ends with next-step link to `patterns.md`.
+
+**`patterns.md`**
+
+- Prerequisite note: "This page assumes you have completed [Natural blocks](natural-blocks.md) and [Runtime configuration](runtime-configuration.md)."
+- Owns outcomes, deny, async, carry, composition, resilience, and common mistakes.
+- Scope: multi-block coordination and operational patterns. Single-block-complete topics belong in `natural-blocks.md`.
+- Backend-agnostic: no backend-specific file layouts or credentials.
+- Cross-reference `specification.md` for formal definitions.
+
+**`verification.md`**
+
+- Prerequisite note: "Mock testing is readable after [Natural blocks](natural-blocks.md); later sections assume [Patterns](patterns.md)."
+- Owns mock tests, integration tests, prompt inspection, debugging workflow, and OpenTelemetry usage.
+- Normative observability contracts belong in `specification.md`.
+
+**`pydantic-ai-providers.md`**
+
+- Prerequisite note: "See [Executors](executors.md) for choosing between providers, backends, and custom executors."
+- Pure Pydantic AI provider reference: installation, model identifiers, model settings, troubleshooting.
+- No chooser table.
+- No custom backends.
+
+**`coding-agent-backends.md`**
+
+- Prerequisite note: "See [Executors](executors.md) for when to choose a coding agent backend over a provider-backed executor."
+- Reference-first page: minimal orientation only, then backend-specific settings, skills, MCP, working directory, and troubleshooting.
+- Must not become a second chooser page. Capability, latency, cost, and positioning comparisons belong in `executors.md` and `philosophy.md`.
+- Shared capabilities section for common features.
+- Reference `executors.md` for capability and cost comparisons.
+
+**`specification.md`**
+
+- All current specification rules apply, with the new name.
+- Numbered section headings remain stable.
+- Owns custom backend capability/protocol semantics, placed as a subsection under Section 14 (Step executor) to avoid top-level section number disruption.
+- Includes a non-runnable skeletal shape of the `AsyncStepExecutor` protocol surface under Section 14. No runnable implementation example is required (the runnable `from_agent` example lives in `executors.md`).
+
+**`philosophy.md`**
+
+- Owns the cumulative argument: execution model, harness evidence, design consequences (resilience, scoped execution contexts, tool exposure, multi-agent coordination, tradeoffs), runtime evaluation rationale, and design landscape.
+- External references acceptable. Prefer stable URLs with enough inline context to survive link rot.
+- No how-to code examples for patterns in `natural-blocks.md` or `patterns.md`. Exception: positioning examples may reuse function names from those pages.
+
+**`for-coding-agents.md`**
+
+- Reader is a coding agent. Write for immediate applicability with runnable templates and decision rules.
+- Information flows from human-oriented docs only; never introduce new product behavior here first.
+- May derive from `natural-blocks.md`, `patterns.md`, `runtime-configuration.md`, `verification.md`, `specification.md`, `pydantic-ai-providers.md`, and `coding-agent-backends.md`.
+- Self-contained with absolute URLs from `site_url` (`https://kurusugawa-computer.github.io/nighthawk-python/`).
+- Prefer decision rules over encyclopedic coverage.
+- Recommend provider-backed executors by default and coding agent backends only for blocks that need autonomous long-horizon work.
+- Keep trust-model constraints explicit.
+- Condensation policy: compress tables and lists to inline summaries or subsets with links to canonical docs. Verbatim duplication only for compact, self-contained content.
+- Common mistakes: subset of most impactful items with link to fuller guidance.
+- Include resilience and scoped overrides.
+- Omit observability except when needed to explain execution constraints.
+- Omit exception hierarchy beyond `ExecutionError` unless a narrower rule is essential for safe coding.
+- Published as a derivative operational reference under `Reference` in nav, not as a top-level learner-path peer.
+- Absolute URLs use topic-based canonical owner mapping:
+  - Bindings, block anatomy, responsibility split, binding function design -> `/natural-blocks/`
+  - Carry, deny, async, resilience, multi-block composition -> `/patterns/`
+  - Executor selection, `StepExecutorConfiguration` basics -> `/executors/`
+  - `nh.run()`, `nh.scope()`, configuration patching, context limits, JSON rendering, execution identity -> `/runtime-configuration/`
+  - Provider-specific setup -> `/pydantic-ai-providers/`
+  - Coding agent backend config -> `/coding-agent-backends/`
+  - Spec references -> `/specification/`
+
+**`api.md`**
+
+- Exhaustive inventory of the supported public API surface. Every supported public symbol should appear here.
+- Auto-generated from source docstrings. Hand-editing limited to `:::` directive structure.
+- Use `members` filters to avoid duplicate rendering.
+- A symbol appearing only in `api.md` (with no learner-facing page coverage) is acceptable. Task-oriented docs select symbols by pedagogical value, not completeness.
+
+**`roadmap.md`**
+
+- Future-facing only. Remove items once implemented.
+- Each item should reference the relevant `specification.md` section where that helps maintain traceability.
+
+**`docs/AGENTS.md`**
+
+- Is a symlink to `.claude/rules/docs.md`. No separate synchronization step needed.
+- Must not appear as an accidental published governance page. Exclude via `exclude_docs` in `mkdocs.yml`, listing `AGENTS.md` explicitly by filename.
+
+## Documentation test invariants
+
+- Treat executable or doctrinal claims in docs as testable when practical.
+- `prompt-example` anchors live in `natural-blocks.md` by default (`basic-binding`, `fstring-injection`, `local-function-signature`, `global-function-reference`). Exception: `carry-pattern` lives in `patterns.md` (cross-block composition). Test file: `tests/docs/test_prompt_examples.py`.
+- `for-coding-agents.md` operational examples and core doctrine are guarded by `tests/docs/test_coding_agent_examples.py`. Update the tests when changing executable guidance or non-negotiable rules.
+- When a docs change invalidates an existing test, first decide whether the docs or the test is the canonical truth for that claim, then update both sides to match.
+- Docs architecture regression tests (`tests/docs/test_docs_architecture.py`):
+  - Fail on stale references to deleted/renamed docs (`guide.md`, `design.md`, `providers.md`).
+  - Guard the canonical example relationship between `index.md` and `README.md` via fenced-code-block extraction + normalized exact match.
+  - Guard selected canonical-owner expectations where drift is likely.
+  - Automate `mkdocs.yml` nav entries vs `docs/` file existence as a pytest case.
+  - Guard that obsolete canonical pages do not remain published accidentally alongside their replacements.
+- `mkdocs build` must succeed without `--strict`. Warnings are acceptable.
+- All internal relative links must resolve.

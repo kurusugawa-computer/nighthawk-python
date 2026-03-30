@@ -26,44 +26,50 @@ Prerequisites: Python 3.13+
 pip install nighthawk-python pydantic-ai-slim[openai]
 ```
 
-For other providers, see [Providers](https://kurusugawa-computer.github.io/nighthawk-python/providers/).
+For other providers, see [Pydantic AI providers](https://kurusugawa-computer.github.io/nighthawk-python/pydantic-ai-providers/).
 
 ## Example
 
 ```py
 import nighthawk as nh
 
+def python_average(numbers):
+    return sum(numbers) / len(numbers)
+
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
 )
 
 with nh.run(step_executor):
 
     @nh.natural_function
-    def calculate_total(items: str) -> int:
-        total = 0
+    def calculate_average(numbers):
         """natural
-        Read <items> and set <:total> to the sum of all quantities mentioned.
+        Map each element of <numbers> to the number it represents,
+        then compute <:result> by calling <python_average> with the mapped list.
         """
-        return total
+        return result
 
-    print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
-    # => 20
+    calculate_average([1, "2", "three", "cuatro"])  # 2.5
 ```
 
 See the **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** for setup details, credentials, and troubleshooting.
 
 ## Documentation
 
-- **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** — Setup and first example.
-- **[Tutorial](https://kurusugawa-computer.github.io/nighthawk-python/tutorial/)** — Learn from first principles.
-- **[Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/)** — Guidelines, patterns, and testing.
-- **[Providers](https://kurusugawa-computer.github.io/nighthawk-python/providers/)** — LLM providers and configuration.
-- **[Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/)** — Claude Code and Codex integration.
-- **[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/)** — Design rationale and positioning.
-- **[Design](https://kurusugawa-computer.github.io/nighthawk-python/design/)** — Canonical specification.
-- **[API Reference](https://kurusugawa-computer.github.io/nighthawk-python/api/)** — Auto-generated API documentation.
-- **[Roadmap](https://kurusugawa-computer.github.io/nighthawk-python/roadmap/)** — Future directions.
+- **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** -- Setup and first example.
+- **[Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/)** -- Block anatomy, bindings, functions, and writing guidelines.
+- **[Executors](https://kurusugawa-computer.github.io/nighthawk-python/executors/)** -- Choose an execution backend.
+- **[Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/)** -- Scoping, patching, context limits, and execution identity.
+- **[Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/)** -- Outcomes, async, composition, resilience, and common mistakes.
+- **[Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/)** -- Mock tests, integration tests, and OpenTelemetry tracing.
+- **[Pydantic AI providers](https://kurusugawa-computer.github.io/nighthawk-python/pydantic-ai-providers/)** -- LLM provider configuration.
+- **[Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/)** -- Claude Code and Codex integration.
+- **[Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/)** -- Canonical specification.
+- **[API Reference](https://kurusugawa-computer.github.io/nighthawk-python/api/)** -- Auto-generated API documentation.
+- **[For coding agents](https://kurusugawa-computer.github.io/nighthawk-python/for-coding-agents/)** -- Development guide for coding agents (LLMs) building Python projects with Nighthawk.
+- **[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/)** -- Design rationale and positioning.
+- **[Roadmap](https://kurusugawa-computer.github.io/nighthawk-python/roadmap/)** -- Future directions.
 
 ## Development & Contributing
 

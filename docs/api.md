@@ -38,6 +38,22 @@
 
 ::: nighthawk.backends.base
 
+### Backend settings base
+
+::: nighthawk.backends.base
+    options:
+      members:
+        - BackendModelSettings
+
+### Claude Code shared settings
+
+::: nighthawk.backends.claude_code_settings
+    options:
+      members:
+        - ClaudeCodeModelSettings
+        - PermissionMode
+        - SettingSource
+
 ### Claude Code (SDK)
 
 ::: nighthawk.backends.claude_code_sdk
@@ -45,8 +61,6 @@
       members:
         - ClaudeCodeSdkModel
         - ClaudeCodeSdkModelSettings
-        - PermissionMode
-        - SettingSource
 
 ### Claude Code (CLI)
 
@@ -55,8 +69,6 @@
       members:
         - ClaudeCodeCliModel
         - ClaudeCodeCliModelSettings
-        - PermissionMode
-        - SettingSource
 
 ### Codex
 

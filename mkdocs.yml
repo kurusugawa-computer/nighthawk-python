@@ -25,9 +25,7 @@ theme:
     - navigation.sections
 
 exclude_docs: |
-  claude/
-  logfire/
-  nightjarpy/
+  AGENTS.md
 
 plugins:
   - search
@@ -48,16 +46,25 @@ plugins:
 
 nav:
   - Home: index.md
-  - Quickstart: quickstart.md
-  - Tutorial: tutorial.md
-  - Practices: practices.md
-  - Providers: providers.md
-  - Coding agent backends: coding-agent-backends.md
-  - Philosophy: philosophy.md
-  - Design: design.md
-  - Roadmap: roadmap.md
-  - API Reference: api.md
-  - For coding agents (LLM reference): for-coding-agents.md
+  - Getting started:
+      - Quickstart: quickstart.md
+      - Natural blocks: natural-blocks.md
+      - Executors: executors.md
+      - Runtime configuration: runtime-configuration.md
+  - Patterns & verification:
+      - Patterns: patterns.md
+      - Verification: verification.md
+  - Configuration:
+      - Pydantic AI providers: pydantic-ai-providers.md
+      - Coding agent backends: coding-agent-backends.md
+  - Reference:
+      - Specification: specification.md
+      - API Reference: api.md
+      - For coding agents: for-coding-agents.md
+  - Background:
+      - Philosophy: philosophy.md
+  - Project:
+      - Roadmap: roadmap.md
 
 markdown_extensions:
   - admonition

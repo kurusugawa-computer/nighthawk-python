@@ -1,299 +1,389 @@
-# Nighthawk development guide for coding agents
+# Nighthawk guide for coding agents
 
-> **For coding agents.** Give this document to your coding agent (e.g., via `@docs/for-coding-agents.md` in CLAUDE.md or AGENTS.md) to enable Nighthawk-aware development.
+> Give this document to a coding agent developing Python code that uses Nighthawk. It is not a contributor guide for nighthawk-python itself. This is a derivative guide. If it conflicts with `specification.md`, the specification document wins.
 
-You are expected to behave as a senior software engineer with deep Nighthawk experience. This document contains the knowledge you need to write, review, and debug Nighthawk code. Apply these principles without prompting.
+You are expected to write, review, and debug Python code that uses Nighthawk as a senior engineer. Apply the rules below without waiting to be prompted.
 
-## 1. Core mental model
+## 1. Non-negotiables
 
-Nighthawk separates **hard control** (Python) from **soft reasoning** (an LLM or coding agent). Python owns all deterministic logic; the LLM or coding agent handles semantic interpretation inside small embedded **Natural blocks**.
+- Python owns deterministic logic. Use Python for computation, control flow, I/O, validation, retries, state management, orchestration, and data shaping.
+- Natural blocks are for semantic judgment. Use them for classification, interpretation, generation, ranking, and decisions that depend on context or world knowledge.
+- One Natural block should do one task with one contract. If a block makes two independent decisions, split it.
+- There is no implicit cross-block history. Persist state in Python values and pass it back explicitly.
+- Natural blocks and imported markdown are trusted, repository-managed assets. Do not splice untrusted user input into Natural source text or markdown preprocessing. Pass untrusted data as bindings.
+- Prefer explicit, typed write bindings. Runtime inference exists for unannotated write bindings, but new code should not rely on it.
+- Keep outputs narrow and typed, especially when using coding agent backends. A block may do broad internal work, but the Python boundary should stay small.
+- When prompt context is truncated and you see `<snipped>`, first reduce context surface or split the block. Increase `StepContextLimits` only after simplification fails.
 
-Key invariants:
+## 2. First decision: should this be Natural at all?
 
-- The Python interpreter is the primary external memory. All intermediate state lives as Python locals or structured objects, not hidden chat history.
-- Each Natural block executes independently. There is no implicit message history between blocks. Cross-block context must be explicit.
-- Write bindings (`<:name>`) are the only way the LLM commits values back into Python locals.
+Use Natural only when the block genuinely needs model judgment.
 
-**Use Natural** when the task requires LLM judgment -- classification, generation, interpretation, or selection that depends on context or world knowledge.
+Use Python when the result is computable from explicit rules:
 
-**Use Python** for everything deterministic -- computation, control flow, I/O, validation, state management, and data plumbing between Natural blocks. If the correct output can be computed without an LLM, use Python.
+- parsing, filtering, arithmetic, sorting, schema validation
+- deterministic routing and retries
+- filesystem and network plumbing
+- transforming one known structure into another
 
-## 2. Writing Natural blocks
+Use Natural when the block needs semantic interpretation:
 
-### Anatomy
+- classify a report into categories
+- summarize or rewrite text for a target audience
+- extract structured meaning from messy language
+- choose among options using contextual judgment
 
-A Natural block is a docstring or standalone string literal beginning with `natural\n`. Nighthawk assembles a prompt with three sections: `<<<NH:PROGRAM>>>` (block text), `<<<NH:LOCALS>>>` (step locals as `name: type = value`), `<<<NH:GLOBALS>>>` (module-level names referenced via `<name>`).
+Default bias: if you can write the correct answer directly in Python, do not use Natural.
 
-### Bindings
+## 3. Second decision: which executor should this block use?
 
-- `<name>` -- read binding. Visible to the LLM; cannot be rebound. Mutable objects can be mutated in-place.
-- `<:name>` -- write binding. LLM sets a new value, committed into Python locals after the block.
+Nighthawk supports two different execution styles for Natural blocks. Choose per block, not per project.
 
-**Rule:** always annotate write bindings with types. This enables validation and coercion at commit time.
+| Use case | Preferred executor | Why |
+|---|---|---|
+| Bounded judgment, extraction, labeling, summarization, structured output | Pydantic AI provider-backed executor | Lower cost, lower latency, tighter surface area |
+| Repository inspection, multi-file reasoning, command use, adaptive long-horizon work | Coding agent backend | The block becomes an autonomous agent execution with tools and its own reasoning loop |
 
-### One block, one task
+Recommended default:
 
-Each Natural block performs exactly one task: one set of input bindings, one set of output bindings, one outcome. If a block makes two independent decisions, split it into two blocks connected by Python.
+- Start with a Pydantic AI provider-backed executor for most blocks.
+- Escalate only the blocks that truly need autonomous agent behavior to a coding agent backend.
+- Do not default an entire workflow to coding agent backends just because one block is deep.
 
-### Interpolation
+### Minimal setup
 
-- Docstring Natural blocks are always literal (no interpolation).
-- Inline f-string Natural blocks (`f"""natural\n..."""`) evaluate Python expressions before the LLM sees the prompt.
-- Use f-strings for static config and pre-formatted context; use `<name>` bindings for mutable state and objects the LLM inspects or modifies.
+Install Nighthawk and a provider (adjust the extra for your provider):
 
-### Async
+```sh
+pip install nighthawk-python "pydantic-ai-slim[openai]"
+```
 
-Async works identically; Nighthawk auto-awaits binding function returns. Expressions evaluated by tools may use `await`.
-
-## 3. Designing binding functions
-
-Binding functions (local or module-level callables) are the preferred way to expose functions to the LLM. The LLM discovers them from the LOCALS/GLOBALS prompt sections, rendered as their signature with the first docstring line as `# intent:`.
-
-### Keep locals minimal
-
-**Rule:** module-level names stable across invocations belong in GLOBALS via `<name>` read bindings. Reserve function parameters for per-call data.
+Every Natural function call must happen inside an `nh.run()` context. Without it, Nighthawk raises `NighthawkError: StepExecutor is not set`.
 
 ```py
-# Wrong -- fetch_data loses its signature in LOCALS:
-async def summarize(query: str, fetch_data: object) -> str: ...
+import nighthawk as nh
 
-# Correct -- fetch_data keeps its full signature in GLOBALS:
+
 @nh.natural_function
-async def summarize(query: str) -> str:
-    result = ""
+def summarize(text: str) -> str:
+    summary: str = ""
+    """natural
+    ---
+    deny: [raise, return]
+    ---
+    Read <text> and set <:summary> to a concise summary.
+    """
+    return summary
+
+
+executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(
+        model="openai-responses:gpt-5.4-mini",
+    ),
+)
+
+with nh.run(executor):
+    result = summarize("long document text")
+```
+
+See [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/) for provider alternatives and credentials.
+
+With coding agent backends, each Natural block is an autonomous agent execution. The agent may read files, run commands, and invoke skills inside the block. Python still owns the workflow, and only the declared outputs cross the boundary back to Python.
+
+Example: mix a cheap classifier with a deep analysis step in one workflow.
+
+```py
+import nighthawk as nh
+
+
+fast_executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(
+        model="openai-responses:gpt-5.4-mini",
+    ),
+)
+
+deep_executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(
+        model="codex:default",
+    ),
+)
+
+
+@nh.natural_function
+def classify_ticket(text: str) -> str:
+    label: str = ""
+    """natural
+    ---
+    deny: [raise, return]
+    ---
+    Read <text> and set <:label> to one of: bug, feature, question.
+    """
+    return label
+
+
+@nh.natural_function
+def write_analysis_report(ticket_text: str, product_context: str) -> str:
+    report: str = ""
+    """natural
+    ---
+    deny: [raise, return]
+    ---
+    Read <ticket_text> and <product_context>.
+    Analyze the issue, identify likely causes, and set <:report> to a detailed analysis.
+    """
+    return report
+
+
+with nh.run(fast_executor):
+    label = classify_ticket(ticket_text)
+    with nh.scope(step_executor=deep_executor):
+        report = write_analysis_report(ticket_text, product_summary)
+```
+
+## 4. The standard contract shape
+
+Prefer the post-block logic pattern. Let the block write a typed value, then validate or transform it in Python.
+
+```py
+@nh.natural_function
+def summarize(text: str) -> str:
+    summary: str = ""
+    """natural
+    ---
+    deny: [raise, return]
+    ---
+    Read <text> and set <:summary> to a concise summary.
+    """
+    if not summary.strip():
+        raise ValueError("Summary must not be empty")
+    return summary
+```
+
+Why this is the default:
+
+- Python gets the final say on validation.
+- The Natural block stays focused on judgment, not host control flow.
+- Tests can lock down post-block behavior deterministically.
+
+Use direct return only for leaf steps whose whole purpose is to return immediately:
+
+```py
+@nh.natural_function
+def choose_title(text: str) -> str:
+    """natural
+    ---
+    deny: [pass, raise]
+    ---
+    Read <text> and return a title.
+    """
+```
+
+Structured output with Pydantic models:
+
+```py
+from pydantic import BaseModel
+
+
+class TicketClassification(BaseModel):
+    label: str
+    confidence: float
+    reasoning: str
+
+
+@nh.natural_function
+def classify_ticket_structured(text: str) -> TicketClassification:
+    result: TicketClassification
+    """natural
+    ---
+    deny: [raise, return]
+    ---
+    Read <text> and set <:result> to the classification.
+    """
+    return result
+```
+
+See [Natural blocks: Designing structured output](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/#designing-structured-output) for guidelines on model design.
+
+## 5. State boundary and bindings
+
+Rules:
+
+- `<name>` is a read binding. The model can inspect the value but cannot rebind the name.
+- `<:name>` is a write binding. The model sets a new top-level value that commits back into Python locals after the block. Always add type annotations to write bindings.
+- Read bindings expose shared mutable objects. If the model mutates a bound list, dict, or object in place, the caller sees the mutation. Use this intentionally for the carry pattern, not casually.
+
+This is why the carry pattern uses a read binding:
+
+```py
+@nh.natural_function
+def step_1(carry: list[str]) -> int:
+    result: int = 0
+    """natural
+    Set <:result> to 10.
+    Append a one-line summary of what you did to <carry>.
+    """
+    return result
+```
+
+Additional rules:
+
+- Bindings are simple identifiers only. `<name>` and `<:name>` do not take dotted paths.
+- Dotted paths belong to internal tool expressions for attribute mutation, not to bindings.
+- There is no hidden memory between blocks. If later blocks need state, return it, pass it, or mutate a shared object explicitly.
+
+## 6. Block text, interpolation, and context
+
+Natural blocks come in two forms:
+
+- A function docstring beginning with `natural\n`
+- An inline string literal statement beginning with `natural\n`, including inline f-strings
+
+Docstring Natural blocks are literal. Inline f-string Natural blocks evaluate Python expressions before the model sees the prompt.
+
+Use f-strings only for static configuration or already-shaped context:
+
+```py
+PROJECT_POLICY = ["cite assumptions", "be concise", "avoid speculation"]
+
+
+@nh.natural_function
+def choose_policy(post: str) -> str:
+    selected_policy: str = ""
+    f"""natural
+    Read <post>.
+    Available policies: {PROJECT_POLICY}
+    Set <:selected_policy> to the single best policy.
+    """
+    return selected_policy
+```
+
+Do not inject untrusted raw text into Natural source. If input is user-controlled, pass it as a binding such as `<post>`.
+
+## 7. Exposing functions and capabilities to the model
+
+Rules:
+
+- The model sees callable signatures from both LOCALS and GLOBALS.
+- Put per-invocation data in function parameters. Put stable, reusable capabilities at module level.
+- Do not annotate callable parameters as `object` or `Any` -- this erases the signature the model needs:
+
+```py
+@nh.natural_function
+async def summarize(query: str, fetch_data: object) -> str:
+    result: str = ""
     """natural
     Use <fetch_data> to get data for <query> and set <:result>.
     """
     return result
 ```
 
-### Minimize LLM cognitive load
+`fetch_data: object` hides useful type information. The model sees an unhelpful surface.
 
-**Rule:** each parameter in a binding function is a decision point. Compose complex operations in Python and expose simple interfaces.
+Prefer one of these:
 
-```py
-# Wrong -- too many parameters
-def find_items(category: str, min_score: float, max_score: float,
-               tags: list[str], created_after: str, sort_by: str) -> list[dict]: ...
+- Expose a stable module-level helper through `<fetch_data>`
+- Wrap complex operations in a smaller helper with a simple signature
+- Keep callable parameters precisely typed if they truly must be local
 
-# Correct -- simple interface, complexity in Python
-def find_top_items(category: str) -> list[dict]:
-    """Return the highest-scored recent items in a category."""
-    return query_items(category=category, min_score=0.8,
-                       tags=get_relevant_tags(category),
-                       created_after=recent_cutoff(), sort_by="score_desc")
-```
+Good binding functions have small signatures and clear first-line docstrings. Every extra parameter is another decision point for the model.
 
-### Docstrings matter
+## 8. Control flow and failure handling
 
-Write short docstrings explaining intent and boundaries. The first line appears as `# intent:` in the prompt. Clear function names and accurate type annotations complete discoverability.
+Natural blocks have five outcome kinds: `pass`, `return`, `break`, `continue`, and `raise`.
 
-## 4. Control flow and error handling
+Use `deny` frontmatter to constrain outcomes the model should not choose.
 
-### Outcomes
+Default patterns:
 
-| Outcome | Effect | Available when |
-|---|---|---|
-| `pass` | Continue to next statement | Always |
-| `return` | Return from surrounding function | Always |
-| `break` | Break from enclosing loop | Inside a loop |
-| `continue` | Continue to next iteration | Inside a loop |
-| `raise` | Raise an exception | Always |
+- Post-block logic pattern: `deny: [raise, return]`
+- Direct-return pattern: `deny: [pass, raise]`
 
-### Deny frontmatter
+Error-handling rule:
 
-**Rule:** restrict outcomes with YAML frontmatter. **Template:**
+- Let the model signal failure with `raise`.
+- Catch failures in Python with `except nh.ExecutionError`, or expose explicit exception types if you want the block to raise them directly.
 
-```py
-"""natural
----
-deny: [raise, return]
----
-Read <text> and set <:result> to a summary.
-"""
-```
+Async rule:
 
-### Error handling
+- Async natural functions can use async binding functions.
+- If a sync natural function triggers an async binding function and gets an awaitable, Nighthawk raises `ExecutionError`.
+- Fix that by making the natural function `async`.
 
-**Rule:** the LLM signals errors via `raise`. Catch with `except nh.ExecutionError`. Custom exception types in step locals/globals are available as raise targets. All Nighthawk exceptions inherit from `nh.NighthawkError`.
+Resilience rule:
+
+- Keep retry, fallback, timeout, and circuit-breaker policy in Python, not inside Natural text.
+- Import from `nighthawk.resilience` (not re-exported from `nighthawk`):
 
 ```py
-try:
-    validate(data)
-except nh.ExecutionError as e:
-    print(f"Validation failed: {e}")
-```
+from nighthawk.resilience import retrying
 
-### Resilience wrappers
+resilient_classify = retrying(attempts=3)(classify_ticket)
 
-`nighthawk.resilience` provides function transformers for error recovery. Each wraps a callable and returns a callable with the same signature. Do not add resilience logic inside Natural blocks -- wrap the Natural function call from Python.
-
-```py
-from nighthawk.resilience import retrying, fallback, vote
-
-# Retry on ExecutionError (default), 3 attempts
-resilient = retrying(attempts=3)(my_function)
-
-# Try primary, then backup, then default
-safe = fallback(primary, backup, default="unknown")
-
-# Call 3 times, return most common result
-voted = vote(count=3)(my_function)
-
-# Compose: inner to outer
-robust = fallback(
-    retrying(attempts=2)(vote(count=3)(primary)),
-    backup,
-    default="unknown",
-)
-```
-
-**Composition order** (innermost to outermost):
-
-| Order | Transformer | Why |
-|---|---|---|
-| 1 | `timeout` | Bound each individual call |
-| 2 | `vote` | Aggregate multiple bounded calls |
-| 3 | `retrying` | Retry the aggregated operation |
-| 4 | `circuit_breaker` | Protect against persistent failure |
-| 5 | `fallback` | Switch to alternative on exhaustion |
-
-For details, see [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/#5-resilience-patterns).
-
-## 5. Cross-block composition
-
-### The carry pattern
-
-Pass a mutable object as a read binding (`<carry>`, not `<:carry>`) and instruct the LLM to mutate it in-place:
-
-```py
-@nh.natural_function
-def step_1(carry: list[str]) -> int:
-    result = 0
-    """natural
-    Set <:result> to 10.
-    Append a one-line summary of what you did to <carry>.
-    """
-    return result
-
-carry: list[str] = []
-r1 = step_1(carry)   # carry now has 1 entry
-r2 = step_2(carry)   # carry now has 2 entries
-```
-
-**Critical:** use `<carry>` (read binding), not `<:carry>` (write binding). Read bindings prevent rebinding, preserving the caller's reference. Branch by copying (`carry_a = carry.copy()`); when carry grows too large, inject context via f-string instead.
-
-## 6. Execution configuration
-
-Natural functions must be called inside `with nh.run(step_executor):`.
-
-```py
-step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini"),
-)
-with nh.run(step_executor):
-    result = my_natural_function(data)
-```
-
-Use `nh.scope()` to override model, prompts, or context limits within an existing run:
-
-```py
-with nh.run(step_executor):
-    # Override model for a specific section
-    with nh.scope(
-        step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
-            model="openai-responses:gpt-5.4-mini",
-        ),
-    ):
-        expensive_analysis(data)
-
-    # Append a system prompt suffix
-    with nh.scope(system_prompt_suffix_fragment="Always respond in formal English."):
-        formal_summary(text)
-```
-
-For the full parameter list, see [Tutorial](https://kurusugawa-computer.github.io/nighthawk-python/tutorial/#scoped-overrides-with-nhscope).
-
-**Rule:** when bindings are missing or truncated (`<snipped>`), adjust `StepContextLimits` in the configuration. See [Design](https://kurusugawa-computer.github.io/nighthawk-python/design/) for field details.
-
-## 7. Testing
-
-### Testing strategy
-
-| Layer | What it tests | What it cannot test |
-|---|---|---|
-| **Mock tests** (`nighthawk.testing`) | Python logic: control flow, error handling, composition, binding wiring | Natural block effectiveness, prompt quality, LLM behavior |
-| **Integration tests** (real LLM) | Whether the Natural block text produces correct judgments | Deterministic reproducibility (LLMs are non-deterministic) |
-
-**Guideline:** mock tests lock down the deterministic Python shell; integration tests validate prompt quality. Do not rely on mock tests as the primary quality gate -- they pass even when the Natural block text is wrong.
-
-### Mock tests
-
-`ScriptedExecutor` returns scripted responses and records every call in `executor.calls`.
-
-```py
-from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
-
-executor = ScriptedExecutor(responses=[
-    pass_response(result="Three key points: ..."),
-])
 with nh.run(executor):
-    output = summarize("long document")
-
-assert output == "Three key points: ..."
+    label = resilient_classify(ticket_text)
 ```
 
-**Rule:** for multi-step functions, use `default_response` to avoid enumerating every response: `ScriptedExecutor(default_response=pass_response(result=""))`.
+See [Patterns: Resilience](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) for `fallback`, `vote`, `timeout`, and `circuit_breaker`.
 
-**Rule:** use `CallbackExecutor(handler)` when response logic depends on input. It also records calls in `executor.calls`.
+## 9. Context budget discipline
 
-**Rule:** verify binding wiring via `executor.calls[0]`: check `call.step_globals`, `call.step_locals`, `call.binding_names`.
+Prompt context is finite. When you see `<snipped>`, fix in this order:
 
-#### Outcome factories
+1. Remove irrelevant locals and globals from the function scope.
+2. Split the block into smaller, focused blocks.
+3. Pre-compute or pre-format context in Python before the block.
+4. Replace complex helper signatures with simpler wrapper functions.
+5. Increase `StepContextLimits` only as a last resort.
 
-| Factory | Outcome | Use case |
+Do not raise limits as a first response to truncation. The root cause is usually too much state in scope.
+
+## 10. Testing strategy
+
+Test two layers separately.
+
+| Layer | What to verify | Main tool |
 |---|---|---|
-| `pass_response(**bindings)` | pass | Normal completion with binding values |
-| `raise_response(message, *, error_type=None)` | raise | Test error handling paths |
-| `return_response(expression, **bindings)` | return | Early return from Natural function |
-| `break_response()` | break | Exit enclosing loop |
-| `continue_response()` | continue | Skip to next iteration |
+| Deterministic Python shell around Natural blocks | control flow, validation, resilience, binding wiring, executor selection | `nighthawk.testing` |
+| Natural block effectiveness | semantic correctness of the prompt against a real model | integration tests |
 
-### Integration tests
+Mock-test rules:
 
-**Rule:** gate behind the appropriate environment variable. Assert on type, value range, and semantic consistency -- not exact string matches.
+- Use `ScriptedExecutor` for deterministic multi-step tests.
+- Use `CallbackExecutor` when the response depends on the input.
+- Inspect `executor.calls` to verify visible locals, globals, write bindings, and allowed outcomes.
 
-| Variable | Scope |
-|---|---|
-| `NIGHTHAWK_OPENAI_INTEGRATION_TESTS` | OpenAI (Pydantic AI provider) |
-| `NIGHTHAWK_CODEX_INTEGRATION_TESTS` | Codex backend |
-| `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS` | Claude Code SDK backend |
-| `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS` | Claude Code CLI backend |
+Integration-test rules:
 
-```py
-import os, pytest
-if os.getenv("NIGHTHAWK_OPENAI_INTEGRATION_TESTS") != "1":
-    pytest.skip("Integration tests disabled", allow_module_level=True)
-```
+- Gate them behind an explicit opt-in.
+- Assert on type, schema, range, or semantic class, not exact wording.
+- For mixed-executor workflows, test both the cheap block and the deep block in the configuration they actually use.
 
-## 8. Common mistakes to avoid
+## 11. Anti-patterns
 
-| Mistake | Why it breaks | Fix |
+| Anti-pattern | Why it is bad | Better pattern |
 |---|---|---|
-| Pass a callable as a parameter with generic type (`object`, `Any`) | Signature erased in LOCALS; LLM cannot discover arguments | Reference via `<name>` read binding so it appears in GLOBALS with full signature |
-| Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place |
-| Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
-| Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python |
-| Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
-| Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding |
+| Use Natural for deterministic computation | Higher cost, worse reliability, weaker tests | Write plain Python |
+| Put two unrelated tasks in one block | Ambiguous contract, hard to test | Split into separate `@nh.natural_function` functions |
+| Use coding agent backends for every block | Slow, expensive, oversized execution surface | Reserve them for deep autonomous steps |
+| Omit type annotations on write bindings | No validation or coercion at commit time | Always annotate: `result: str = ""`, not just `result = ""` |
+| Erase callable type with `object` | Model loses the signature it needs | Use precise types: `fetch: Callable[[str], Data]` |
+| Solve truncation by only raising limits | Prompt bloat hides design problems | Shrink context first (section 9) |
+| Depend on hidden cross-block memory | Blocks execute independently | Pass or return explicit state |
+| Inject untrusted text into Natural source | Breaks the trust model | Pass user data through bindings: `<user_input>` |
 
-For the full list, see [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/#6-common-mistakes).
+## 12. References
 
-## References
+Start here:
 
-- [Tutorial](https://kurusugawa-computer.github.io/nighthawk-python/tutorial/) -- learn Nighthawk from first principles (human-oriented).
-- [Practices](https://kurusugawa-computer.github.io/nighthawk-python/practices/) -- practical patterns and guidelines.
-- [Providers](https://kurusugawa-computer.github.io/nighthawk-python/providers/) -- LLM providers and configuration.
-- [Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/) -- backend configuration for Claude Code and Codex.
-- [Design](https://kurusugawa-computer.github.io/nighthawk-python/design/) -- canonical specification.
-- [API Reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- auto-generated API documentation.
+- [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) -- block anatomy, bindings, functions, binding function design, structured output
+- [Executors](https://kurusugawa-computer.github.io/nighthawk-python/executors/) -- executor selection and configuration basics
+- [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) -- scoping, patching, context limits, and execution identity
+- [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) -- outcomes, deny, async, carry, resilience, and common mistakes
+- [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- testing and debugging
+
+Canonical references:
+
+- [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) -- canonical specification
+- [Pydantic AI providers](https://kurusugawa-computer.github.io/nighthawk-python/pydantic-ai-providers/) -- model and provider configuration
+- [Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/) -- backend-specific configuration and behavior
+- [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- public API surface

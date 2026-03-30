@@ -1,8 +1,8 @@
-# Nighthawk design
+# Nighthawk specification
 
 This document is the specification for Nighthawk.
 
-## 0. Document scope
+## 0. Document scope and alignment policy
 
 This document specifies:
 
@@ -13,8 +13,6 @@ This document specifies:
 
 This document does not attempt to describe every compilation or implementation detail. The current implementation in `src/nighthawk/` is expected to match this specification.
 
-## 0.1 Alignment policy
-
 Nighthawk treats this document as the target behavior. If you find a mismatch between this document and the implementation:
 
 - Prefer changing the implementation to match this document.
@@ -22,7 +20,7 @@ Nighthawk treats this document as the target behavior. If you find a mismatch be
 
 This file intentionally does not maintain a persistent divergence ledger.
 
-The condensed coding agent guide (`for-coding-agents.md`) is a derivative document. It distills actionable rules from this specification and the tutorial. If the guide contradicts this document, this document prevails.
+The condensed coding agent guide (`for-coding-agents.md`) is a derivative document. It distills actionable rules from this specification and the learner-facing pages. If the guide contradicts this document, this document prevails.
 
 ## 1. Goals
 
@@ -40,14 +38,14 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 
 - Sandboxing or hard security isolation.
 - Persistence across processes.
-- A full "Skills" framework.
+- A full "Skills" framework (Nighthawk delegates to the backend CLI's native skill system; see [Coding agent backends](coding-agent-backends.md#skills)).
 - Executing Python code blocks embedded in markdown (a broader "Natural -> Python -> Natural" nesting beyond docstrings).
 
 ## 3. Hard constraints
 
 - Python 3.13+.
-- Default and recommended models: see [Providers](providers.md).
-- Coding agent backends are installed via extras: `claude-code-sdk`, `claude-code-cli`, `codex`. Pydantic AI provider dependencies are installed separately (see [Providers](providers.md)).
+- Default and recommended models: see [Pydantic AI providers](pydantic-ai-providers.md).
+- Coding agent backends are installed via extras: `claude-code-sdk`, `claude-code-cli`, `codex`. Pydantic AI provider dependencies are installed separately (see [Pydantic AI providers](pydantic-ai-providers.md)).
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
 ## 4. Terminology
@@ -80,7 +78,7 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 ### 5.2. Configuration
 
 - `StepExecutorConfiguration`
-    - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5.4-nano` (see [Providers](providers.md)).
+    - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5.4-nano` (see [Pydantic AI providers](pydantic-ai-providers.md)).
         - Examples: `openai-responses:gpt-5.4-mini`, `openai-responses:gpt-5.4-nano`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
@@ -258,7 +256,7 @@ Rendering format:
 
 - Non-callable values: `name: type_name = json_value`, where `json_value` is the compact JSON rendering of the value (bounded by `context_limits.value_max_tokens`).
 - Callable values: `name: (signature)`, where `(signature)` is the result of `inspect.signature`. Type annotations are included when available (e.g., `(base: int, bonus: int) -> int`).
-    - If the callable has a meaningful docstring, the first line is appended as `# intent: first_line`.
+    - If the callable has a meaningful docstring, the first line is appended as `# first_line`.
     - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name` to help the LLM distinguish them.
     - If the signature cannot be resolved (e.g., `__signature__` raises), the entry renders as `name: <callable; signature-unavailable>`.
 - `TypeAliasType` values (PEP 695): `name: type = underlying_type`.
@@ -307,7 +305,7 @@ Nighthawk exposes two paths for the LLM to call Python functions:
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
 
-Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Practices Section 2](practices.md#2-designing-binding-functions) for practical design patterns.
+Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Natural blocks](natural-blocks.md#designing-binding-functions) for practical design patterns.
 
 Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
 
@@ -329,11 +327,10 @@ Registration API:
 Example:
 
 ```py
-@nighthawk.tool(name="add_points")
-def add_points(run_context, *, base: int, bonus: int) -> int:
-    """Return a deterministic sum for score calculation."""
-    _ = run_context
-    return base + bonus
+@nighthawk.tool(name="get_step_id")
+def get_step_id(run_context: RunContext[StepContext]) -> str:
+    """Return the current step Id."""
+    return run_context.deps.step_id
 ```
 
 The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument.
@@ -513,6 +510,16 @@ Implementation note:
 
 - Frontmatter is stripped from the program text before it is placed into the model-facing prompt.
 
+### 8.5. Async execution model
+
+Natural functions may be declared `async`. The async execution model extends the sync model with the following behaviors:
+
+- Expression evaluation: if an `nh_eval` or `nh_assign` expression produces an awaitable, the host awaits it before returning the result to the model.
+- Return validation: if a `return` outcome's `return_expression` evaluates to an awaitable and the surrounding function is async, the host awaits it before return type validation. If the surrounding function is sync and the evaluated value is awaitable, execution fails with `ExecutionError`.
+- Binding function calls: async binding functions produce awaitables that are auto-awaited in async natural functions.
+- Sync/async interoperability: if a sync natural function encounters an awaitable from an async binding function, execution fails with `ExecutionError`. The caller must be async to handle awaitable results.
+- Concurrency: async natural functions are ordinary coroutines. Concurrent execution via `asyncio.gather` is safe for Natural blocks that do not share mutable bindings, since each block executes with an independent step context.
+
 ## 9. Return value
 
 In the simplest docstring pattern, the Python function body returns a variable that is updated by execution:
@@ -536,7 +543,7 @@ Runtime execution identity is modeled separately in `ExecutionContext`:
 
 Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the host application layer that embeds Nighthawk.
 
-Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When unset, backends omit the working-directory option and use the provider default (typically the parent process current working directory).
+Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When empty (default `""`), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:
 
 - `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None)`
@@ -629,7 +636,7 @@ If you want a long-lived object, define it yourself and bind it as an ordinary P
 
 The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_eval`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
 
-For practical examples and design tips, see [Tutorial Section 5](tutorial.md#5-cross-block-composition).
+For practical examples and design tips, see [Patterns](patterns.md#cross-block-composition).
 
 ## 13. Error handling
 
@@ -686,200 +693,39 @@ Instance attributes:
 - `token_encoding` — tiktoken encoding resolved from the configuration.
 - `tool_result_rendering_policy: ToolResultRenderingPolicy` — policy for rendering tool results, derived from configuration.
 
-## 15. Resilience primitives
+### 14.3. Custom backends
 
-The `nighthawk.resilience` module provides composable function transformers for production resilience. Each transformer takes a callable and returns a new callable with the same signature. Transformers are not re-exported from the top-level `nighthawk` namespace; import from `nighthawk.resilience` directly.
+Any object implementing `SyncStepExecutor` or `AsyncStepExecutor` can serve as a backend. The protocol surface for `AsyncStepExecutor`:
 
-All transformers auto-detect sync/async based on the wrapped function and produce the appropriate wrapper.
+```py
+from nighthawk.runtime.step_context import StepContext
+from nighthawk.runtime.step_executor import AsyncStepExecutor, StepOutcome
 
-### 15.1. retrying
-
-```
-retrying(*, attempts: int = 3, on: ExceptionTypeOrTuple = ExecutionError, wait: Any | None = None, before_sleep: Callable[[RetryCallState], None] | None = None) -> _RetryingHandle
-```
-
-Wrap a function to retry on failure. Uses [tenacity](https://tenacity.readthedocs.io/) internally.
-
-Parameters:
-
-- `attempts`: maximum number of attempts including the initial call. Default: 3.
-- `on`: exception type or tuple of types that trigger retries. Default: `ExecutionError`.
-- `wait`: tenacity wait strategy. Default: `wait_exponential_jitter()`.
-- `before_sleep`: callback invoked before each retry sleep. Default: INFO-level logging on the `nighthawk` logger.
-
-Usage modes:
-
-- **Decorator form:** `resilient_fn = retrying(attempts=3)(my_function)`
-- **Sync iterator form:** `for attempt in retrying(attempts=3): with attempt: result = my_function()`
-- **Async iterator form:** `async for attempt in retrying(attempts=3): with attempt: result = await my_function()`
-
-If all attempts fail, the last exception is re-raised unmodified.
-
-Type alias: `type ExceptionTypeOrTuple = type[BaseException] | tuple[type[BaseException], ...]`
-
-### 15.2. fallback
-
-```
-fallback(*functions: Callable[..., Any], default: Any = _SENTINEL, on: type[BaseException] | tuple[type[BaseException], ...] = Exception) -> Callable[..., Any]
+class MyExecutor(AsyncStepExecutor):
+    async def run_step_async(
+        self,
+        *,
+        processed_natural_program: str,
+        step_context: StepContext,
+        binding_names: list[str],
+        allowed_step_kinds: tuple[str, ...],
+    ) -> tuple[StepOutcome, dict[str, object]]:
+        # processed_natural_program: the Natural program text after
+        #   sentinel removal, dedent, f-string evaluation, and
+        #   frontmatter stripping.
+        # step_context: mutable per-step context containing step_locals,
+        #   step_globals, and step_id.
+        # binding_names: names declared as <:name> write bindings.
+        # allowed_step_kinds: outcome kinds permitted for this block
+        #   (e.g., ("pass", "return", "raise")).
+        #
+        # Return (outcome, binding_values) where binding_values maps
+        # each committed binding name to its final value.
+        ...
 ```
 
-Try multiple functions in order. The first success wins.
+`SyncStepExecutor` follows the same shape with `run_step` instead of `run_step_async`.
 
-Parameters:
+For most custom backends, wrapping a Pydantic AI `Agent` via `AgentStepExecutor.from_agent` (see [Executors](executors.md#custom-backends)) is simpler than implementing the protocol directly. Direct implementation is appropriate when the backend does not use a Pydantic AI agent at all.
 
-- `*functions`: callables to try in order. Must have compatible signatures. Raises `ValueError` if empty.
-- `default`: value returned if all functions fail. If not provided, the last exception is re-raised.
-- `on`: exception types that trigger fallback. Default: `Exception`.
-
-Sync/async: determined by the first function. Mixed sync/async chains are supported; each function is individually checked.
-
-### 15.3. vote / plurality
-
-```
-vote(*, count: int = 3, decide: Callable[[list[Any]], Any] = plurality, min_success: int | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]
-```
-
-Call a function multiple times and aggregate results.
-
-Parameters:
-
-- `count`: number of invocations. Must be >= 1.
-- `decide`: aggregation function receiving a list of successful results. Default: `plurality`.
-- `min_success`: minimum successful calls required. Default: `ceil(count / 2)`. If not met, the last exception is raised (or `RuntimeError` if no exceptions occurred).
-
-Async functions run concurrently via `asyncio.gather`. Sync functions run sequentially. Partial failures are tolerated.
-
-```
-plurality(results: list[Any]) -> Any
-```
-
-Return the most common result (mode). Uses `collections.Counter` for hashable results, falls back to equality comparison for unhashable results. Raises `ValueError` on empty input.
-
-### 15.4. timeout
-
-```
-timeout(*, seconds: float) -> _TimeoutHandle
-```
-
-Enforce a time limit on function execution.
-
-Parameters:
-
-- `seconds`: maximum execution time.
-
-Usage modes:
-
-- **Decorator form:** `timed_fn = timeout(seconds=30)(my_function)`. Sync and async functions are supported.
-- **Async context manager:** `async with timeout(seconds=30): await slow_operation()`.
-- **Sync context manager:** not supported; raises `NotImplementedError`.
-
-Async: uses `asyncio.timeout` (true cancellation, raises `asyncio.TimeoutError`). Sync: runs in a background thread; the thread continues after timeout (only the caller is unblocked). Raises `TimeoutError`.
-
-### 15.5. circuit_breaker
-
-```
-circuit_breaker(*, fail_threshold: int = 5, reset_timeout: float = 60.0, on: type[BaseException] | tuple[type[BaseException], ...] = Exception) -> Callable[[Callable[..., Any]], _CircuitBreakerWrapper]
-```
-
-Prevent repeated calls to a failing service.
-
-Parameters:
-
-- `fail_threshold`: consecutive failures before opening the circuit. Default: 5.
-- `reset_timeout`: seconds before transitioning from OPEN to HALF_OPEN. Default: 60.0.
-- `on`: exception types counted as failures. Default: `Exception`.
-
-State machine (`CircuitState` enum):
-
-- `CLOSED` — normal operation.
-- `OPEN` — rejects calls immediately with `CircuitOpenError`.
-- `HALF_OPEN` — allows one probe call after `reset_timeout`.
-
-Transitions:
-
-- CLOSED → OPEN: after `fail_threshold` consecutive failures.
-- OPEN → HALF_OPEN: after `reset_timeout` seconds.
-- HALF_OPEN → CLOSED: successful probe.
-- HALF_OPEN → OPEN: failed probe.
-
-This is a **stateful** transformer. Each `circuit_breaker(...)` call creates independent state. The wrapper exposes:
-
-- `.state` property: current `CircuitState`.
-- `.reset()` method: manually reset to CLOSED.
-
-`CircuitOpenError` attributes: `reset_timeout: float`, `time_remaining: float`.
-
-### 15.6. Composition
-
-All transformers produce callables with the original signature, so they compose by nesting.
-
-Recommended composition order (innermost to outermost):
-
-1. `timeout` — bound each individual call.
-2. `vote` — aggregate multiple bounded calls.
-3. `retrying` — retry the aggregated operation.
-4. `circuit_breaker` — protect against persistent failure.
-5. `fallback` — switch to alternative on exhaustion.
-
-## 16. Testing utilities
-
-The `nighthawk.testing` module provides test executors and response factories for deterministic Natural function testing without LLM API calls.
-
-### 16.1. StepCall
-
-Frozen dataclass recording a single Natural block invocation.
-
-Fields:
-
-- `natural_program: str` — processed Natural block text (after frontmatter removal and interpolation).
-- `binding_names: list[str]` — write binding names (`<:name>` targets).
-- `binding_name_to_type: dict[str, object]` — mapping from binding name to its expected type. Annotated bindings carry the declared type; unannotated bindings carry the type inferred from the initial value.
-- `allowed_step_kinds: tuple[str, ...]` — outcome kinds allowed for this step.
-- `step_locals: dict[str, object]` — snapshot of step-local variables.
-- `step_globals: dict[str, object]` — snapshot of referenced module-level names (filtered to names resolved from globals, not locals).
-
-### 16.2. StepResponse
-
-Dataclass representing a scripted response for a single Natural block execution.
-
-Fields:
-
-- `bindings: dict[str, object]` — write binding values. Default: `{}`. Names not in the step's `binding_names` are silently ignored.
-- `outcome: StepOutcome` — the step outcome. Default: `PassStepOutcome(kind="pass")`.
-
-### 16.3. ScriptedExecutor
-
-Test executor that returns scripted responses in order and records all calls.
-
-Constructor:
-
-- `ScriptedExecutor(responses: list[StepResponse] | None = None, *, default_response: StepResponse | None = None)`
-
-Once `responses` are exhausted, `default_response` is returned for all subsequent calls. Default response defaults to `StepResponse()` (pass with no bindings).
-
-Implements `SyncStepExecutor`. Recorded calls are available in the `calls: list[StepCall]` attribute.
-
-### 16.4. CallbackExecutor
-
-Test executor that delegates to a user-provided callback.
-
-Constructor:
-
-- `CallbackExecutor(handler: Callable[[StepCall], StepResponse])`
-
-The `handler` receives a `StepCall` and returns a `StepResponse`. Recorded calls are available in the `calls: list[StepCall]` attribute.
-
-Implements `SyncStepExecutor`.
-
-### 16.5. Outcome factories
-
-| Factory | Signature | Outcome |
-|---|---|---|
-| `pass_response` | `(**bindings: object) -> StepResponse` | pass |
-| `raise_response` | `(message: str, *, error_type: str \| None = None) -> StepResponse` | raise |
-| `return_response` | `(expression: str, **bindings: object) -> StepResponse` | return |
-| `break_response` | `() -> StepResponse` | break |
-| `continue_response` | `() -> StepResponse` | continue |
-
-`return_response` takes a Python expression string evaluated against step locals and globals at execution time (consistent with `return_expression` in the outcome contract, Section 8.4).
-
+See the [API Reference](api.md#base) for the full protocol definition.
