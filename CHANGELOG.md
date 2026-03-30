@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Implicit type alias discovery: callable signatures in step locals and referenced globals are now scanned for PEP 695 `TypeAliasType` references, automatically including their definitions in the prompt globals section so the LLM can resolve type names like `-> Labels`.
 
+### Changed
+- `nh_eval` and `nh_assign` provided tools are now async, directly awaiting coroutines in async contexts instead of bridging through a background thread.
+
 ## [0.6.0]
 
 ### Added

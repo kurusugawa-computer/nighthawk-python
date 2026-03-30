@@ -7,7 +7,7 @@ from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 from ..runtime.step_context import StepContext
-from .assignment import assign_tool, eval_expression
+from .assignment import assign_tool_async, eval_expression_async
 from .contracts import ToolBoundaryError
 
 
@@ -17,9 +17,9 @@ class ProvidedToolDefinition:
     tool: Tool[StepContext]
 
 
-def _eval_expression_or_raise(run_context: RunContext[StepContext], expression: str) -> object:
+async def _eval_expression_or_raise_async(run_context: RunContext[StepContext], expression: str) -> object:
     try:
-        return eval_expression(run_context.deps, expression)
+        return await eval_expression_async(run_context.deps, expression)
     except Exception as exception:
         raise ToolBoundaryError(kind="execution", message=str(exception), guidance="Fix the expression and retry.") from exception
 
@@ -27,19 +27,19 @@ def _eval_expression_or_raise(run_context: RunContext[StepContext], expression: 
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
     metadata = {"nighthawk.provided": True}
 
-    def nh_assign(
+    async def nh_assign(
         run_context: RunContext[StepContext],
         target_path: str,
         expression: str,
     ) -> dict[str, Any]:
-        return assign_tool(
+        return await assign_tool_async(
             run_context.deps,
             target_path,
             expression,
         )
 
-    def nh_eval(run_context: RunContext[StepContext], expression: str) -> object:
-        return _eval_expression_or_raise(run_context, expression)
+    async def nh_eval(run_context: RunContext[StepContext], expression: str) -> object:
+        return await _eval_expression_or_raise_async(run_context, expression)
 
     return [
         ProvidedToolDefinition(
