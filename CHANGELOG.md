@@ -10,9 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `nighthawk.resilience` module with composable function transformers for production resilience: `retrying` (tenacity-based), `fallback`, `vote`/`plurality`, `timeout`, `circuit_breaker`/`CircuitState`/`CircuitOpenError`.
   - `tenacity>=9` as a core dependency.
+- `BackendModelSettings` base class and `ClaudeCodeModelSettings` intermediate class extracting shared settings across coding agent backends.
 
 ### Changed
+- Refactored backend settings hierarchy: extracted shared fields (`allowed_tool_names`, `working_directory`) into `BackendModelSettings` and Claude Code fields (`max_turns`, `permission_mode`, `setting_sources`) into `ClaudeCodeModelSettings`; renamed `claude_executable`/`codex_executable` to `executable`, `claude_max_turns` to `max_turns`.
+- `nh_assign` now resolves type annotations via `get_type_hints` for plain classes and dataclasses, enabling type-mismatch retry beyond Pydantic models.
+- Simplified intent hint formatting: dropped `intent: ` prefix from callable metadata comments in prompt context.
 - Renamed `NIGHTHAWK_RUN_INTEGRATION_TESTS` to `NIGHTHAWK_OPENAI_INTEGRATION_TESTS` for consistency with other per-backend environment variables.
+- Restructured documentation into sectioned navigation: split monolithic tutorial into focused guides (`natural-blocks`, `executors`, `runtime-configuration`, `patterns`, `verification`, `pydantic-ai-providers`); renamed `design.md` to `specification.md`; removed `practices.md`, `providers.md`, `tutorial.md`.
 
 ## [0.5.0]
 

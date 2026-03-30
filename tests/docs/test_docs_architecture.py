@@ -28,10 +28,7 @@ def _extract_python_code_blocks(text: str) -> list[str]:
 
 def _heading_anchors(text: str) -> set[str]:
     """Compute heading anchors from markdown text using the MkDocs-aligned slug helper."""
-    return {
-        _toc_slugify(match.group(1).strip(), "-")
-        for match in re.finditer(r"^#{2,}\s+(.*)$", text, re.MULTILINE)
-    }
+    return {_toc_slugify(match.group(1).strip(), "-") for match in re.finditer(r"^#{2,}\s+(.*)$", text, re.MULTILINE)}
 
 
 def _collect_nav_files(nav: list) -> set[str]:
@@ -194,8 +191,7 @@ class TestPhilosophyStructure:
             for match in re.finditer(r"philosophy\.md#([-a-z0-9]+)", text):
                 anchor = match.group(1)
                 assert anchor in valid_anchors, (
-                    f"{doc_file.name} links to philosophy.md#{anchor} which does not exist. "
-                    f"Valid anchors: {sorted(valid_anchors)}"
+                    f"{doc_file.name} links to philosophy.md#{anchor} which does not exist. Valid anchors: {sorted(valid_anchors)}"
                 )
 
     def test_dependent_anchor_validity(self) -> None:
@@ -219,6 +215,4 @@ class TestPhilosophyStructure:
         valid_anchors = _heading_anchors(text)
         self_anchors = re.findall(r"\]\(#([A-Za-z0-9_-]+)\)", text)
         for anchor in self_anchors:
-            assert anchor in valid_anchors, (
-                f"philosophy.md self-reference #{anchor} does not resolve. Valid anchors: {sorted(valid_anchors)}"
-            )
+            assert anchor in valid_anchors, f"philosophy.md self-reference #{anchor} does not resolve. Valid anchors: {sorted(valid_anchors)}"
