@@ -4,12 +4,11 @@ import contextlib
 import json
 import os
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from opentelemetry import context as otel_context
-from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
-from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.profiles import ModelProfile
@@ -19,12 +18,9 @@ from pydantic_ai.usage import RequestUsage
 from ..json_renderer import to_jsonable_value
 from ..tools.registry import get_visible_tools
 from .base import BackendModelBase
+from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_boundary import call_tool_for_claude_code_sdk
 from .tool_bridge import ToolHandler
-
-type PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
-
-type SettingSource = Literal["user", "project", "local"]
 
 
 def _normalize_timestamp(value: object) -> datetime:
@@ -33,49 +29,14 @@ def _normalize_timestamp(value: object) -> datetime:
     return datetime.now(tz=datetime.now().astimezone().tzinfo)
 
 
-class ClaudeCodeSdkModelSettings(BaseModel):
+class ClaudeCodeSdkModelSettings(ClaudeCodeModelSettings):
     """Settings for the Claude Code SDK backend.
 
     Attributes:
-        permission_mode: Claude Code permission mode.
-        setting_sources: Configuration sources to load.
-        allowed_tool_names: Nighthawk tool names exposed to the model.
         claude_allowed_tool_names: Additional Claude Code native tool names to allow.
-        claude_max_turns: Maximum conversation turns.
-        working_directory: Absolute path to the working directory for Claude Code.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    permission_mode: PermissionMode = "default"
-    setting_sources: list[SettingSource] | None = None
-    allowed_tool_names: tuple[str, ...] | None = None
     claude_allowed_tool_names: tuple[str, ...] | None = None
-    claude_max_turns: int = 50
-    working_directory: str = ""
-
-    @field_validator("claude_max_turns")
-    @classmethod
-    def _validate_claude_max_turns(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("claude_max_turns must be greater than 0")
-        return value
-
-    @field_validator("working_directory")
-    @classmethod
-    def _validate_working_directory(cls, value: str) -> str:
-        if value and not os.path.isabs(value):
-            raise ValueError("working_directory must be an absolute path")
-        return value
-
-
-def _get_claude_code_sdk_model_settings(model_settings: ModelSettings | None) -> ClaudeCodeSdkModelSettings:
-    if model_settings is None:
-        return ClaudeCodeSdkModelSettings()
-    try:
-        return ClaudeCodeSdkModelSettings.model_validate(model_settings)
-    except Exception as exception:
-        raise UserError(str(exception)) from exception
 
 
 def _build_json_schema_output_format(model_request_parameters: ModelRequestParameters) -> dict[str, Any] | None:
@@ -185,7 +146,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
             model_request_parameters=model_request_parameters,
         )
 
-        claude_code_model_settings = _get_claude_code_sdk_model_settings(model_settings)
+        claude_code_model_settings = ClaudeCodeSdkModelSettings.from_model_settings(model_settings)
 
         tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
             model_request_parameters=model_request_parameters,
@@ -259,13 +220,16 @@ class ClaudeCodeSdkModel(BackendModelBase):
                 "append": system_prompt_text,
             },
             "mcp_servers": {"nighthawk": sdk_server},
-            "permission_mode": claude_code_model_settings.permission_mode,
             "model": self._model_name,
-            "setting_sources": claude_code_model_settings.setting_sources,
-            "max_turns": claude_code_model_settings.claude_max_turns,
             "output_format": _build_json_schema_output_format(model_request_parameters),
         }
 
+        if claude_code_model_settings.permission_mode is not None:
+            options_keyword_arguments["permission_mode"] = claude_code_model_settings.permission_mode
+        if claude_code_model_settings.setting_sources is not None:
+            options_keyword_arguments["setting_sources"] = claude_code_model_settings.setting_sources
+        if claude_code_model_settings.max_turns is not None:
+            options_keyword_arguments["max_turns"] = claude_code_model_settings.max_turns
         if working_directory:
             options_keyword_arguments["cwd"] = working_directory
 

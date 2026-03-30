@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, Self
 
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, SystemPromptPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.settings import ModelSettings
 
 from .tool_bridge import ToolHandler, prepare_allowed_tools
 
@@ -93,3 +96,34 @@ class BackendModelBase(Model):
             configured_allowed_tool_names=configured_allowed_tool_names,
             visible_tools=visible_tools,
         )
+
+
+class BackendModelSettings(BaseModel):
+    """Base settings shared by all Nighthawk backends.
+
+    Attributes:
+        allowed_tool_names: Nighthawk tool names exposed to the model.
+        working_directory: Absolute path to the working directory.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_tool_names: tuple[str, ...] | None = None
+    working_directory: str = ""
+
+    @field_validator("working_directory")
+    @classmethod
+    def _validate_working_directory(cls, value: str) -> str:
+        if value and not Path(value).is_absolute():
+            raise ValueError("working_directory must be an absolute path")
+        return value
+
+    @classmethod
+    def from_model_settings(cls, model_settings: ModelSettings | None) -> Self:
+        """Parse a pydantic_ai ModelSettings dict into a typed settings instance."""
+        if model_settings is None:
+            return cls()
+        try:
+            return cls.model_validate(model_settings)
+        except Exception as exception:
+            raise UserError(str(exception)) from exception

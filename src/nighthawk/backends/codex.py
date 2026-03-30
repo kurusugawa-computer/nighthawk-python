@@ -5,10 +5,9 @@ import contextlib
 import json
 import tempfile
 from dataclasses import replace
-from pathlib import Path
 from typing import IO, Any, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import field_validator
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -19,8 +18,11 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..tools.registry import get_visible_tools
-from .base import BackendModelBase
+from .base import BackendModelBase, BackendModelSettings
 from .mcp_server import mcp_server_if_needed
+
+type SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
+type ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 
 
 class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
@@ -37,51 +39,25 @@ class _CodexJsonSchemaTransformer(OpenAIJsonSchemaTransformer):
         return super().transform(schema)
 
 
-type SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
-type ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
-
-
-class CodexModelSettings(BaseModel):
+class CodexModelSettings(BackendModelSettings):
     """Settings for the Codex backend.
 
     Attributes:
-        allowed_tool_names: Nighthawk tool names exposed to the model.
-        codex_executable: Path or name of the Codex CLI executable.
+        executable: Path or name of the Codex CLI executable.
         model_reasoning_effort: Reasoning effort level for the model.
         sandbox_mode: Codex sandbox isolation mode.
-        working_directory: Absolute path to the working directory for Codex.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    allowed_tool_names: tuple[str, ...] | None = None
-    codex_executable: str = "codex"
+    executable: str = "codex"
     model_reasoning_effort: ModelReasoningEffort | None = None
     sandbox_mode: SandboxMode | None = None
-    working_directory: str = ""
 
-    @field_validator("codex_executable")
+    @field_validator("executable")
     @classmethod
-    def _validate_codex_executable(cls, value: str) -> str:
+    def _validate_executable(cls, value: str) -> str:
         if value.strip() == "":
-            raise ValueError("codex_executable must be a non-empty string")
+            raise ValueError("executable must be a non-empty string")
         return value
-
-    @field_validator("working_directory")
-    @classmethod
-    def _validate_working_directory(cls, value: str) -> str:
-        if value and not Path(value).is_absolute():
-            raise ValueError("working_directory must be an absolute path")
-        return value
-
-
-def _get_codex_model_settings(model_settings: ModelSettings | None) -> CodexModelSettings:
-    if model_settings is None:
-        return CodexModelSettings()
-    try:
-        return CodexModelSettings.model_validate(model_settings)
-    except Exception as exception:
-        raise UserError(str(exception)) from exception
 
 
 class _CodexTurnOutcome(TypedDict):
@@ -226,7 +202,7 @@ class CodexModel(BackendModelBase):
             prompt_parts = [p for p in [system_prompt_text, user_prompt_text] if p]
             prompt_text = "\n\n".join(prompt_parts)
 
-            codex_model_settings = _get_codex_model_settings(model_settings)
+            codex_model_settings = CodexModelSettings.from_model_settings(model_settings)
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
@@ -258,7 +234,7 @@ class CodexModel(BackendModelBase):
                     configuration_overrides["model_reasoning_effort"] = model_reasoning_effort
 
                 codex_arguments = [
-                    codex_model_settings.codex_executable,
+                    codex_model_settings.executable,
                     "exec",
                     "--experimental-json",
                     "--skip-git-repo-check",

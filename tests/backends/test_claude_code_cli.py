@@ -89,9 +89,9 @@ def test_parse_json_output_raises_on_non_object() -> None:
 
 def test_settings_defaults() -> None:
     settings = ClaudeCodeCliModelSettings()
-    assert settings.claude_executable == "claude"
+    assert settings.executable == "claude"
     assert settings.working_directory == ""
-    assert settings.claude_max_turns is None
+    assert settings.max_turns is None
     assert settings.max_budget_usd is None
     assert settings.permission_mode is None
     assert settings.setting_sources is None
@@ -100,7 +100,7 @@ def test_settings_defaults() -> None:
 
 def test_settings_rejects_empty_executable() -> None:
     with pytest.raises(ValidationError):
-        ClaudeCodeCliModelSettings(claude_executable="  ")
+        ClaudeCodeCliModelSettings(executable="  ")
 
 
 def test_settings_rejects_relative_working_directory() -> None:
@@ -115,14 +115,14 @@ def test_settings_accepts_absolute_working_directory() -> None:
 
 def test_settings_rejects_non_positive_max_turns() -> None:
     with pytest.raises(ValidationError):
-        ClaudeCodeCliModelSettings(claude_max_turns=0)
+        ClaudeCodeCliModelSettings(max_turns=0)
     with pytest.raises(ValidationError):
-        ClaudeCodeCliModelSettings(claude_max_turns=-1)
+        ClaudeCodeCliModelSettings(max_turns=-1)
 
 
 def test_settings_accepts_positive_max_turns() -> None:
-    settings = ClaudeCodeCliModelSettings(claude_max_turns=10)
-    assert settings.claude_max_turns == 10
+    settings = ClaudeCodeCliModelSettings(max_turns=10)
+    assert settings.max_turns == 10
 
 
 def test_settings_rejects_non_positive_max_budget() -> None:

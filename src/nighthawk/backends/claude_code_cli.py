@@ -5,10 +5,9 @@ import contextlib
 import json
 import os
 import tempfile
-from pathlib import Path
-from typing import IO, Literal, TypedDict
+from typing import IO, TypedDict
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import field_validator
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -19,48 +18,26 @@ from pydantic_ai.usage import RequestUsage
 
 from ..tools.registry import get_visible_tools
 from .base import BackendModelBase
+from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_server import mcp_server_if_needed
 
-type PermissionMode = Literal["default", "acceptEdits", "plan", "bypassPermissions"]
 
-type SettingSource = Literal["user", "project", "local"]
-
-
-class ClaudeCodeCliModelSettings(BaseModel):
+class ClaudeCodeCliModelSettings(ClaudeCodeModelSettings):
     """Settings for the Claude Code CLI backend.
 
     Attributes:
-        allowed_tool_names: Nighthawk tool names exposed to the model.
-        claude_executable: Path or name of the Claude Code CLI executable.
-        claude_max_turns: Maximum conversation turns.
+        executable: Path or name of the Claude Code CLI executable.
         max_budget_usd: Maximum dollar amount to spend on API calls.
-        permission_mode: Claude Code permission mode.
-        setting_sources: Configuration sources to load.
-        working_directory: Absolute path to the working directory for Claude Code CLI.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    allowed_tool_names: tuple[str, ...] | None = None
-    claude_executable: str = "claude"
-    claude_max_turns: int | None = None
+    executable: str = "claude"
     max_budget_usd: float | None = None
-    permission_mode: PermissionMode | None = None
-    setting_sources: list[SettingSource] | None = None
-    working_directory: str = ""
 
-    @field_validator("claude_executable")
+    @field_validator("executable")
     @classmethod
-    def _validate_claude_executable(cls, value: str) -> str:
+    def _validate_executable(cls, value: str) -> str:
         if value.strip() == "":
-            raise ValueError("claude_executable must be a non-empty string")
-        return value
-
-    @field_validator("claude_max_turns")
-    @classmethod
-    def _validate_claude_max_turns(cls, value: int | None) -> int | None:
-        if value is not None and value <= 0:
-            raise ValueError("claude_max_turns must be greater than 0")
+            raise ValueError("executable must be a non-empty string")
         return value
 
     @field_validator("max_budget_usd")
@@ -69,22 +46,6 @@ class ClaudeCodeCliModelSettings(BaseModel):
         if value is not None and value <= 0:
             raise ValueError("max_budget_usd must be greater than 0")
         return value
-
-    @field_validator("working_directory")
-    @classmethod
-    def _validate_working_directory(cls, value: str) -> str:
-        if value and not Path(value).is_absolute():
-            raise ValueError("working_directory must be an absolute path")
-        return value
-
-
-def _get_claude_code_cli_model_settings(model_settings: ModelSettings | None) -> ClaudeCodeCliModelSettings:
-    if model_settings is None:
-        return ClaudeCodeCliModelSettings()
-    try:
-        return ClaudeCodeCliModelSettings.model_validate(model_settings)
-    except Exception as exception:
-        raise UserError(str(exception)) from exception
 
 
 def _build_mcp_configuration_file(mcp_server_url: str) -> IO[str]:
@@ -205,7 +166,7 @@ class ClaudeCodeCliModel(BackendModelBase):
                 model_request_parameters=model_request_parameters,
             )
 
-            claude_code_cli_model_settings = _get_claude_code_cli_model_settings(model_settings)
+            claude_code_cli_model_settings = ClaudeCodeCliModelSettings.from_model_settings(model_settings)
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
@@ -236,7 +197,7 @@ class ClaudeCodeCliModel(BackendModelBase):
                 system_prompt_file.flush()
 
                 claude_arguments: list[str] = [
-                    claude_code_cli_model_settings.claude_executable,
+                    claude_code_cli_model_settings.executable,
                     "-p",
                     "--output-format",
                     "json",
@@ -258,9 +219,9 @@ class ClaudeCodeCliModel(BackendModelBase):
                 if setting_sources is not None:
                     claude_arguments.extend(["--setting-sources", ",".join(setting_sources)])
 
-                claude_max_turns = claude_code_cli_model_settings.claude_max_turns
-                if claude_max_turns is not None:
-                    claude_arguments.extend(["--max-turns", str(claude_max_turns)])
+                max_turns = claude_code_cli_model_settings.max_turns
+                if max_turns is not None:
+                    claude_arguments.extend(["--max-turns", str(max_turns)])
 
                 max_budget_usd = claude_code_cli_model_settings.max_budget_usd
                 if max_budget_usd is not None:

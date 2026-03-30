@@ -12,7 +12,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.function import FunctionToolset
 
 import nighthawk as nh
-from nighthawk.backends.codex import CodexModel, _get_codex_model_settings, _parse_codex_jsonl_lines
+from nighthawk.backends.codex import CodexModel, CodexModelSettings, _parse_codex_jsonl_lines
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.registry import get_visible_tools
 
@@ -72,51 +72,51 @@ def test_parse_codex_jsonl_lines_fails_closed_on_stream_error_event() -> None:
         _parse_codex_jsonl_lines(jsonl_lines)
 
 
-def test_get_codex_model_settings_default_sandbox_mode_is_none() -> None:
-    settings = _get_codex_model_settings(None)
+def test_codex_model_settings_default_sandbox_mode_is_none() -> None:
+    settings = CodexModelSettings.from_model_settings(None)
     assert settings.sandbox_mode is None
 
 
-def test_get_codex_model_settings_default_model_reasoning_effort_is_none() -> None:
-    settings = _get_codex_model_settings(None)
+def test_codex_model_settings_default_model_reasoning_effort_is_none() -> None:
+    settings = CodexModelSettings.from_model_settings(None)
     assert settings.model_reasoning_effort is None
 
 
-def test_get_codex_model_settings_accepts_none_sandbox_mode() -> None:
+def test_codex_model_settings_accepts_none_sandbox_mode() -> None:
     model_settings = cast(ModelSettings, {"sandbox_mode": None})
-    settings = _get_codex_model_settings(model_settings)
+    settings = CodexModelSettings.from_model_settings(model_settings)
     assert settings.sandbox_mode is None
 
 
-def test_get_codex_model_settings_accepts_none_model_reasoning_effort() -> None:
+def test_codex_model_settings_accepts_none_model_reasoning_effort() -> None:
     model_settings = cast(ModelSettings, {"model_reasoning_effort": None})
-    settings = _get_codex_model_settings(model_settings)
+    settings = CodexModelSettings.from_model_settings(model_settings)
     assert settings.model_reasoning_effort is None
 
 
-def test_get_codex_model_settings_accepts_model_reasoning_effort() -> None:
+def test_codex_model_settings_accepts_model_reasoning_effort() -> None:
     model_settings = cast(ModelSettings, {"model_reasoning_effort": "high"})
-    settings = _get_codex_model_settings(model_settings)
+    settings = CodexModelSettings.from_model_settings(model_settings)
     assert settings.model_reasoning_effort == "high"
 
 
-def test_get_codex_model_settings_uses_default_when_sandbox_mode_key_is_omitted() -> None:
-    model_settings = cast(ModelSettings, {"codex_executable": "codex"})
-    settings = _get_codex_model_settings(model_settings)
+def test_codex_model_settings_uses_default_when_sandbox_mode_key_is_omitted() -> None:
+    model_settings = cast(ModelSettings, {"executable": "codex"})
+    settings = CodexModelSettings.from_model_settings(model_settings)
     assert settings.sandbox_mode is None
     assert settings.model_reasoning_effort is None
 
 
-def test_get_codex_model_settings_rejects_invalid_sandbox_mode() -> None:
+def test_codex_model_settings_rejects_invalid_sandbox_mode() -> None:
     model_settings = cast(ModelSettings, {"sandbox_mode": "invalid-mode"})
     with pytest.raises(UserError, match="sandbox_mode"):
-        _get_codex_model_settings(model_settings)
+        CodexModelSettings.from_model_settings(model_settings)
 
 
-def test_get_codex_model_settings_rejects_invalid_model_reasoning_effort() -> None:
+def test_codex_model_settings_rejects_invalid_model_reasoning_effort() -> None:
     model_settings = cast(ModelSettings, {"model_reasoning_effort": "extreme"})
     with pytest.raises(UserError, match="model_reasoning_effort"):
-        _get_codex_model_settings(model_settings)
+        CodexModelSettings.from_model_settings(model_settings)
 
 
 def _write_executable_codex_stub(*, directory: Path) -> Path:
@@ -307,7 +307,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
         model_settings = cast(
             ModelSettings,
             {
-                "codex_executable": str(codex_executable),
+                "executable": str(codex_executable),
                 "allowed_tool_names": ("nh_eval",),
                 "working_directory": str(tmp_path.resolve()),
             },

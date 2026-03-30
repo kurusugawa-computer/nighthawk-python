@@ -382,7 +382,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
         model_settings_dict = {
             "allowed_tool_names": installed_tool_names,
             "permission_mode": "bypassPermissions",
-            "claude_max_turns": 25,
+            "max_turns": 25,
         }
     elif model.startswith("codex:"):
         model_settings_dict = {
