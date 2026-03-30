@@ -4,12 +4,12 @@
 <img src="assets/nighthawk_logo-128x128.png" alt="logo" width="128px">
 </div>
 
-Nighthawk is an experimental Python library exploring a clear separation:
+Nighthawk is a Python library where Python controls flow and LLMs or coding agents reason within constrained Natural blocks.
 
-- Use **hard control** (Python code) for strict procedure, verification, and deterministic flow.
-- Use **soft reasoning** (an LLM or coding agent) for semantic interpretation inside small embedded "Natural blocks".
+- **Hard control** (Python code): strict procedure, verification, and deterministic flow.
+- **Soft reasoning** (an LLM or coding agent): semantic interpretation inside small embedded "Natural blocks".
 
-Python controls all flow; the LLM or coding agent is constrained to small Natural blocks with explicit input/output boundaries. The same mechanism handles lightweight LLM judgments ("classify this sentiment") and autonomous agent executions ("refactor this module and write tests").
+The same mechanism handles lightweight LLM judgments ("classify this sentiment") and autonomous agent executions ("refactor this module and write tests").
 
 ```py
 import nighthawk as nh

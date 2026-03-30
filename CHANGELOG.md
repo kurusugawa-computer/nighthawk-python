@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Project status promoted from Alpha to Beta.
+- Updated one-line description.
+- Removed "experimental" language from README and documentation.
+- Updated PyPI keywords for improved discoverability.
+
 ## [0.6.1]
 
 ### Added

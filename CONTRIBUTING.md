@@ -27,15 +27,13 @@ uv run python
 # Format code
 uv run ruff format .
 
-# Lint (check / auto-fix)
-uv run ruff check .
+# Lint (auto-fix)
 uv run ruff check --fix .
 
 # Type check
 uv run pyright
 
 # Run tests
-uv run pytest          # full suite
 uv run pytest -q       # quiet output
 ```
 

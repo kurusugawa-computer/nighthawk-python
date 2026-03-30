@@ -1,7 +1,7 @@
 [project]
 name = "nighthawk-python"
 version = "0.6.1"
-description = "An experimental Python library that embeds Natural blocks inside Python functions and executes them using an LLM."
+description = "A Python library where Python controls flow and LLMs or coding agents reason within constrained Natural blocks."
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
@@ -9,9 +9,9 @@ license-files = ["LICENSE"]
 authors = [
   {name = "Kurusugawa Computer Inc.", email = "oss@kurusugawa.jp"},
 ]
-keywords = ["llm", "natural-language", "interoperability", "pydantic-ai", "embedded-dsl"]
+keywords = ["llm", "ai", "natural-language", "dsl", "pydantic-ai", "openai", "anthropic", "structured-output", "agent", "prompt-engineering"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
