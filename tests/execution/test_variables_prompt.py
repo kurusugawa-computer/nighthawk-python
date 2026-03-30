@@ -318,6 +318,219 @@ def test_locals_section_renders_pep695_type_alias_in_function_signature() -> Non
     assert "<function>" not in locals_text
 
 
+def test_globals_section_includes_type_alias_from_local_callable_return_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check": check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check the text.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+
+    locals_text = locals_section(prompt)
+    assert "check: (text: str) -> Labels" in locals_text
+
+
+def test_globals_section_includes_type_alias_from_local_callable_parameter_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def process(labels: Labels) -> str:
+        _ = labels
+        return ""
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"process": process},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Process.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+
+
+def test_globals_section_includes_type_alias_from_generic_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def batch_check(texts: list[str]) -> list[Labels]:
+        _ = texts
+        return []
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"batch_check": batch_check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Batch check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+
+
+def test_globals_section_includes_type_alias_from_nested_generic_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def deep_check(data: list[dict[str, Labels]]) -> None:
+        _ = data
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"deep_check": deep_check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Deep check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+
+
+def test_globals_section_includes_type_alias_from_global_callable_signature() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def classify(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels, "classify": classify},
+        python_locals={},
+        input_binding_names=["classify"],
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Classify the email by <classify> function.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+    assert "classify: (text: str) -> Labels" in globals_text
+
+
+def test_globals_section_excludes_builtin_types_from_callable_signature() -> None:
+    def plain(text: str, count: int) -> list[str]:
+        _ = text, count
+        return []
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"plain": plain},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Run plain.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert globals_text.strip() == ""
+
+
+def test_type_alias_in_locals_is_not_duplicated_in_globals_section() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check": check, "Labels": Labels},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels" not in globals_text
+
+    locals_text = locals_section(prompt)
+    assert "Labels: type = typing.Literal['good', 'bad']" in locals_text
+
+
+def test_globals_section_deduplicates_type_alias_from_multiple_callables() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check_a(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    def check_b(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check_a": check_a, "check_b": check_b},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check both.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert globals_text.count("Labels:") == 1
+
+
+def test_type_alias_in_globals_unreferenced_by_signature_is_not_discovered() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> str:
+        _ = text
+        return ""
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check": check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels" not in globals_text
+
+
+def test_type_alias_not_in_globals_is_not_discovered() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"check": check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels" not in globals_text
+
+
 def test_locals_section_renders_fallback_composed_function_signature() -> None:
     def primary(x: str) -> str:
         return f"primary:{x}"

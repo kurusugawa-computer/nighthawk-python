@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Implicit type alias discovery: callable signatures in step locals and referenced globals are now scanned for PEP 695 `TypeAliasType` references, automatically including their definitions in the prompt globals section so the LLM can resolve type names like `-> Labels`.
+
+## [0.6.0]
+
+### Added
 - `nighthawk.resilience` module with composable function transformers for production resilience: `retrying` (tenacity-based), `fallback`, `vote`/`plurality`, `timeout`, `circuit_breaker`/`CircuitState`/`CircuitOpenError`.
   - `tenacity>=9` as a core dependency.
 - `BackendModelSettings` base class and `ClaudeCodeModelSettings` intermediate class extracting shared settings across coding agent backends.
@@ -92,7 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.3.0...v0.3.1

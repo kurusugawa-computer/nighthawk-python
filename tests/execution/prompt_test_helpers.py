@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import nighthawk as nh
+from nighthawk.runtime.runner import _discover_implicit_type_alias_reference_names
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import build_user_prompt
 
@@ -27,13 +30,24 @@ class FakeAgent:
         return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
 
 
-def build_step_context(*, python_globals: dict[str, object], python_locals: dict[str, object]) -> StepContext:
+def build_step_context(
+    *,
+    python_globals: dict[str, object],
+    python_locals: dict[str, object],
+    input_binding_names: Iterable[str] = (),
+) -> StepContext:
+    implicit_type_reference_names = _discover_implicit_type_alias_reference_names(
+        step_locals=python_locals,
+        step_globals=python_globals,
+        input_binding_names=input_binding_names,
+    )
     return StepContext(
         step_id="test",
         step_globals=python_globals,
         step_locals=python_locals,
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
+        implicit_type_reference_names=implicit_type_reference_names,
     )
 
 

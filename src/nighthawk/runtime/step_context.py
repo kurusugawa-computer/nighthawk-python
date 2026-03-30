@@ -47,6 +47,7 @@ class StepContext:
 
     binding_commit_targets: set[str]
     read_binding_names: frozenset[str]
+    implicit_type_reference_names: frozenset[str]
 
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 

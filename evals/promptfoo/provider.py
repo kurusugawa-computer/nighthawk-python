@@ -413,6 +413,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
         step_locals=step_locals,
         binding_commit_targets=set(output_binding_names),
         read_binding_names=read_binding_names,
+        implicit_type_reference_names=frozenset(),
     )
 
     # -- Execute --

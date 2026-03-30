@@ -67,6 +67,7 @@ def _build_prompt(
         step_locals=python_locals,
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
+        implicit_type_reference_names=frozenset(),
     )
     return build_user_prompt(
         processed_natural_program=processed_natural_program,

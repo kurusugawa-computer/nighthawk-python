@@ -35,6 +35,7 @@ def _new_step_context() -> StepContext:
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
+        implicit_type_reference_names=frozenset(),
     )
 
 

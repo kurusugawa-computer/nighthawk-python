@@ -318,9 +318,10 @@ def build_user_prompt(
     )
 
     references, program_text = extract_references_and_program(processed_natural_program)
+    augmented_global_references = set(references) | set(step_context.implicit_type_reference_names)
     globals_text = _render_globals_section(
         step_context=step_context,
-        references=references,
+        references=augmented_global_references,
         token_encoding=token_encoding,
         context_limits=context_limits,
         json_renderer_style=configuration.json_renderer_style,

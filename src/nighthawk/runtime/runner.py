@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import ast
+import functools
 import inspect
+import typing
+from collections.abc import Iterable
 from dataclasses import dataclass
 from types import FrameType
-from typing import TypedDict
+from typing import TypeAliasType, TypedDict
 
 from opentelemetry.trace import Span, Status, StatusCode
 from pydantic import TypeAdapter
@@ -56,13 +59,6 @@ def _infer_binding_types_from_initial_values(
     binding_name_to_type: dict[str, object],
     step_locals: dict[str, object],
 ) -> None:
-    """Replace ``object`` fallback types with types inferred from initial values.
-
-    When a binding has no explicit type annotation, the AST transformer assigns
-    ``object`` as a placeholder.  This function upgrades those entries to the
-    runtime type of the initial value so that ``TypeAdapter`` validation in
-    ``nh_assign`` can catch type mismatches and prompt the LLM to retry.
-    """
     for name, declared_type in binding_name_to_type.items():
         if declared_type is not object:
             continue
@@ -72,6 +68,69 @@ def _infer_binding_types_from_initial_values(
         inferred_type = type(initial_value)
         if inferred_type is not object and inferred_type is not type(None):
             binding_name_to_type[name] = inferred_type
+
+
+def _discover_implicit_type_alias_reference_names(
+    *,
+    step_locals: dict[str, object],
+    step_globals: dict[str, object],
+    input_binding_names: Iterable[str],
+) -> frozenset[str]:
+    discovered_names: set[str] = set()
+    seen: set[int] = set()
+
+    def _collect(annotation: object) -> None:
+        if isinstance(annotation, TypeAliasType):
+            name = annotation.__name__
+            if name in step_globals and name not in step_locals:
+                discovered_names.add(name)
+            return
+
+        if isinstance(annotation, str):
+            resolved = step_globals.get(annotation)
+            if isinstance(resolved, TypeAliasType) and annotation not in step_locals:
+                discovered_names.add(annotation)
+            return
+
+        annotation_id = id(annotation)
+        if annotation_id in seen:
+            return
+        seen.add(annotation_id)
+
+        for arg in typing.get_args(annotation):
+            _collect(arg)
+
+    def _scan_callable(value: object) -> None:
+        target = value.func if isinstance(value, functools.partial) else value
+        try:
+            hints = typing.get_type_hints(target, localns=step_globals)
+        except Exception:
+            try:
+                signature = inspect.signature(value)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return
+            hints = {}
+            for parameter in signature.parameters.values():
+                if parameter.annotation is not inspect.Parameter.empty:
+                    hints[parameter.name] = parameter.annotation
+            if signature.return_annotation is not inspect.Signature.empty:
+                hints["return"] = signature.return_annotation
+
+        for annotation in hints.values():
+            _collect(annotation)
+
+    for value in step_locals.values():
+        if callable(value):
+            _scan_callable(value)
+
+    step_locals_keys = step_locals.keys()
+    for name in input_binding_names:
+        if name not in step_locals_keys and name in step_globals:
+            value = step_globals[name]
+            if callable(value):
+                _scan_callable(value)
+
+    return frozenset(discovered_names)
 
 
 def _build_step_globals(
@@ -266,6 +325,11 @@ class Runner:
 
         binding_commit_targets = set(output_binding_names)
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets
+        implicit_type_reference_names = _discover_implicit_type_alias_reference_names(
+            step_locals=step_locals,
+            step_globals=step_globals,
+            input_binding_names=input_binding_names,
+        )
 
         step_context = StepContext(
             step_id=_build_step_id(caller_frame=caller_frame),
@@ -273,6 +337,7 @@ class Runner:
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
             read_binding_names=read_binding_names,
+            implicit_type_reference_names=implicit_type_reference_names,
             binding_name_to_type=binding_name_to_type,
             tool_result_rendering_policy=tool_result_rendering_policy,
         )

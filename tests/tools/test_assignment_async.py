@@ -18,6 +18,7 @@ def _new_step_context() -> StepContext:
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
+        implicit_type_reference_names=frozenset(),
     )
 
 
@@ -63,6 +64,7 @@ def test_assign_rejects_rebind_of_read_binding() -> None:
         step_locals={"data": {"key": "old"}},
         binding_commit_targets=set(),
         read_binding_names=frozenset({"data"}),
+        implicit_type_reference_names=frozenset(),
     )
 
     with pytest.raises(ToolBoundaryError):
@@ -78,6 +80,7 @@ def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
         step_locals={"data": {"key": "old"}},
         binding_commit_targets={"data"},
         read_binding_names=frozenset(),
+        implicit_type_reference_names=frozenset(),
     )
 
     result = assign_tool(step_context, "data", "{'key': 'new'}")
@@ -94,6 +97,7 @@ def test_assign_allows_multiple_rebinds_of_new_local() -> None:
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
+        implicit_type_reference_names=frozenset(),
     )
 
     assign_tool(step_context, "temp", "1")
