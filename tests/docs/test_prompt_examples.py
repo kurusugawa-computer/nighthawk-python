@@ -1,11 +1,14 @@
-"""Verify that prompt examples in docs/tutorial.md match build_user_prompt output.
+"""Verify that prompt examples in docs match build_user_prompt output.
 
-Each example in tutorial.md is wrapped in HTML comment markers:
+Each example in the docs is wrapped in HTML comment markers:
     <!-- prompt-example:NAME -->
     ```text
     ...prompt text...
     ```
     <!-- /prompt-example:NAME -->
+
+Prompt-example anchors live in natural-blocks.md by default.
+Exception: carry-pattern lives in patterns.md (cross-block composition).
 
 This test file defines the inputs for each named example, calls
 build_user_prompt, and asserts the output matches the documented text.
@@ -21,20 +24,34 @@ from nighthawk.configuration import StepExecutorConfiguration
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import build_user_prompt
 
-_TUTORIAL_PATH = Path(__file__).resolve().parents[2] / "docs" / "tutorial.md"
+_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
+_NATURAL_BLOCKS_PATH = _DOCS_DIR / "natural-blocks.md"
+_PATTERNS_PATH = _DOCS_DIR / "patterns.md"
 _DEFAULT_CONFIGURATION = StepExecutorConfiguration()
+
+# Map example names to the file that owns them.
+_EXAMPLE_FILE_MAP: dict[str, Path] = {
+    "basic-binding": _NATURAL_BLOCKS_PATH,
+    "fstring-injection": _NATURAL_BLOCKS_PATH,
+    "local-function-signature": _NATURAL_BLOCKS_PATH,
+    "global-function-reference": _NATURAL_BLOCKS_PATH,
+    "carry-pattern": _PATTERNS_PATH,
+}
 
 
 def _extract_prompt_example(name: str) -> str:
-    """Extract the prompt text for a named example from tutorial.md."""
-    tutorial_text = _TUTORIAL_PATH.read_text(encoding="utf-8")
+    """Extract the prompt text for a named example from its canonical file."""
+    file_path = _EXAMPLE_FILE_MAP.get(name)
+    if file_path is None:
+        pytest.fail(f"prompt-example:{name} has no file mapping in _EXAMPLE_FILE_MAP")
+    file_text = file_path.read_text(encoding="utf-8")
     pattern = re.compile(
         rf"<!-- prompt-example:{re.escape(name)} -->\s*```py\n(.*?)```\s*<!-- /prompt-example:{re.escape(name)} -->",
         re.DOTALL,
     )
-    match = pattern.search(tutorial_text)
+    match = pattern.search(file_text)
     if match is None:
-        pytest.fail(f"prompt-example:{name} not found in {_TUTORIAL_PATH}")
+        pytest.fail(f"prompt-example:{name} not found in {file_path}")
     return match.group(1)
 
 

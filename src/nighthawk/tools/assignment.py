@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import types
-from typing import Any, NoReturn
+from typing import Any, NoReturn, get_type_hints
 
 from pydantic import BaseModel, TypeAdapter
 
@@ -75,6 +75,20 @@ def _get_pydantic_field_type(model: BaseModel, field_name: str) -> object | None
     return field.annotation
 
 
+def _get_annotation_type(instance: object, field_name: str) -> object | None:
+    """Return the resolved type annotation for *field_name* on *instance*, or None.
+
+    Works for dataclass instances and plain classes with ``__annotations__``.
+    Returns ``None`` when the field has no annotation or when forward-reference
+    resolution fails, signalling that type validation should be skipped.
+    """
+    try:
+        hints = get_type_hints(type(instance))
+    except Exception:
+        return None
+    return hints.get(field_name)
+
+
 def _assign_value_to_target_path(
     *,
     step_context: StepContext,
@@ -141,6 +155,8 @@ def _assign_value_to_target_path(
                 message=f"Unknown field on {type(current_object).__name__}: {final_attribute}",
                 guidance="Fix the target path so the referenced field exists, then retry.",
             )
+    else:
+        expected_type = _get_annotation_type(current_object, final_attribute)
 
     if expected_type is not None:
         try:
