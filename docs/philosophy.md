@@ -1,10 +1,10 @@
 # Philosophy
 
-Python controls orchestration; the LLM operates inside typed blocks with explicit state transfer.
+Python owns the control flow. The LLM works inside typed blocks, receiving inputs and returning outputs through explicit bindings.
 
 ## Execution model
 
-Nighthawk embeds Natural blocks inside ordinary Python functions. Each block is a typed boundary: read bindings (`<name>`) inject input state from Python variables, write bindings (`<:name>`) commit output state back with type validation, and binding functions give the LLM composable access to Python callables during block execution. Python controls the sequencing -- loops, conditionals, error handling, retries -- and the LLM operates inside each block with no implicit message history carried across blocks.
+Nighthawk embeds Natural blocks inside ordinary Python functions. Each block has a typed boundary. Read bindings (`<name>`) pass Python values in. Write bindings (`<:name>`) pass results back out, validated against their type annotations. Binding functions let the LLM call Python functions during execution. Python controls the sequencing -- loops, conditionals, error handling, retries -- and the LLM operates inside each block with no implicit message history carried across blocks.
 
 ```py
 def python_average(numbers):
@@ -23,7 +23,7 @@ calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
 
 Binding functions like `<python_average>` appear in the prompt as a compact signature line. The LLM's pre-trained Python knowledge lets it reason about types, return values, and composition from the signature alone, without JSON Schema or protocol overhead. See [Tool exposure efficiency](#tool-exposure-efficiency) for the quantitative comparison with MCP and CLI tool exposure.
 
-With provider-backed executors, each Natural block is a single LLM call where typed bindings do the heavy lifting. A sentiment classifier whose write binding is typed as `Literal["positive", "negative", "neutral"]` will reject any output that falls outside the declared set -- the type annotation is not a hint but a runtime-enforced contract via Pydantic validation. The same mechanism applies to numeric extraction (`int`, `float`), structured parsing (Pydantic models), and any task where the judgment space is bounded. Because the host program owns the loop, a misclassified result can be retried, logged, or routed to a fallback -- all in ordinary Python.
+With provider-backed executors, each Natural block is a single LLM call. A sentiment classifier whose write binding is typed as `Literal["positive", "negative", "neutral"]` rejects any output outside the declared set -- Pydantic validates the type annotation at runtime, not as a hint. The same mechanism applies to numeric extraction (`int`, `float`), structured parsing (Pydantic models), and any task where the judgment space is bounded. Because the host program owns the loop, a misclassified result can be retried, logged, or routed to a fallback -- all in ordinary Python.
 
 With [coding agent backends](coding-agent-backends.md), the same boundary contract applies, but each Natural block becomes an autonomous agent execution. The agent can read files, run commands, and invoke skills -- while typed bindings enforce what crosses the boundary back to Python. The same `scope()` and `run()` context managers that structure human-written workflows are equally legible to a coding agent constructing workflows programmatically. When a coding agent operates inside a Natural block, binding functions appear as Python signatures in the prompt:
 
@@ -32,13 +32,13 @@ fetch_items: (category: str, limit: int = 10) -> list[Item]
 merge_results: (primary: list[Item], secondary: list[Item]) -> list[Item]
 ```
 
-The underlying LLM's pre-trained Python knowledge lets it infer that `Item` has attributes, that the return value supports iteration and indexing, and that `merge_results` accepts the output of `fetch_items` directly -- all from the type annotations alone. An equivalent CLI tool description (`fetch-items --category X --limit 10`) conveys invocation syntax but not output structure; the model must infer or discover the output format separately.
+The underlying LLM's pre-trained Python knowledge lets it infer that `Item` has attributes, that the return value supports iteration and indexing, and that `merge_results` accepts the output of `fetch_items` directly -- all from the type annotations alone. A CLI tool description (`fetch-items --category X --limit 10`) is optimized for invocation syntax; output structure is left to the model's training data.
 
-Coding agent backends make this especially practical because the agent can immediately apply that inferred structure while reading workflow code, invoking tools, editing implementations, running `pytest`, and iterating within the same Python codebase. No framework-specific tooling, no graph serialization format, no separate configuration language.
+Coding agent backends make this especially practical because the agent can immediately apply that inferred structure while reading workflow code, invoking tools, editing implementations, running `pytest`, and iterating within the same Python codebase. The agent works directly in Python with standard tooling -- debugger, test runner, type checker -- rather than through a separate orchestration layer.
 
 ## The harness matters more than the model
 
-The strongest direct evidence comes from agentic coding tasks; extending the principle to provider-backed judgments is a design inference, not a measured claim.
+The strongest direct evidence comes from agentic coding tasks. The subsections below separate what has been measured from where Nighthawk extends the principle.
 
 ### Observed evidence
 
@@ -50,27 +50,29 @@ The direct evidence concerns LLM-driven code editing and file management tasks, 
 
 ### Design inference for Nighthawk
 
-Extending the principle to provider-backed lightweight judgments (sentiment classification, numeric interpretation) is a design inference, not an empirical claim: typed bindings structurally constrain hallucination, and resilience transformers absorb transient failures, but these benefits have not been independently measured in the same controlled fashion.
+We think the same principle applies to provider-backed judgments like sentiment classification and numeric interpretation, but we have not measured it directly. Typed bindings limit what the LLM can return, and resilience transformers handle transient failures -- both should help, but neither has been tested in the same controlled way as the coding-task evidence above.
 
-Regardless of scope, the practical question is how harness improvements are expressed. Configuration-file-based guardrail systems -- rule files, lifecycle hooks, permission modes, tool filtering -- are effective for restricting behavior but cannot express dynamic orchestration: conditional retry strategies, type-level input/output contracts, scope-dependent tool visibility, or prompts that adapt to runtime state. The constraint vocabulary is limited to what the configuration format allows.
+Regardless of scope, the practical question is how harness improvements are expressed. Configuration-file guardrails -- rule files, lifecycle hooks, permission modes, tool filtering -- are effective at restricting behavior. They are optimized for static constraints. Dynamic orchestration (conditional retries, typed input/output contracts, scope-dependent tool visibility, prompts that adapt at runtime) requires a programming language, which is where Nighthawk's Python-first approach fits.
 
-The primitives described in the [Execution model](#execution-model) and the following sections -- typed bindings, resilience transformers, scoped execution contexts -- are Nighthawk's implementation of the principle, through Python programming rather than configuration.
+The primitives described in the [Execution model](#execution-model) and the following sections -- typed bindings, resilience transformers, scoped execution contexts -- are how Nighthawk implements the principle in Python.
 
 ## Design consequences
 
-The execution model introduced typed bindings as the boundary mechanism between Python and LLM reasoning. The following subsections explore what design consequences follow from that choice -- from resilience and scoping to tool exposure, multi-agent coordination, and the tradeoffs the design accepts.
+The sections below explore what follows from the typed-binding execution model: resilience, scoping, tool exposure, multi-agent coordination, and the tradeoffs the design accepts.
 
 ### Resilience as composable functions
 
-Production LLM applications need strategies for handling transient failures, unstable outputs, and provider outages. Workflow engines build retry, checkpointing, and human-in-the-loop into the graph runtime -- resilience is inseparable from the orchestration layer. Nighthawk takes a different approach: resilience primitives (`nighthawk.resilience`) are ordinary Python function transformers that wrap any callable. Each transformer takes a function and returns a new function with the same signature. Retry, fallback, voting, timeout, and circuit breaker logic composes by nesting -- no graph DSL, no framework-managed state, and no implicit retry policy. The host controls exactly which calls are retried, how many times, and what happens on exhaustion -- using the same Python debugger, pytest, and code review workflows as the rest of the application. This applies equally to lightweight provider-backed judgments and autonomous agent executions. See [Patterns](patterns.md#resilience-patterns) for usage patterns and composition examples.
+Production LLM applications need strategies for transient failures, unstable outputs, and provider outages. Workflow engines build retry, checkpointing, and human-in-the-loop into the graph runtime. Nighthawk takes a different approach. Resilience primitives (`nighthawk.resilience`) are ordinary Python function transformers that wrap any callable. Each transformer takes a function and returns a new function with the same signature. Retry, fallback, voting, timeout, and circuit breaker logic composes by nesting -- no graph DSL, no framework-managed state, and no implicit retry policy. The host controls exactly which calls are retried, how many times, and what happens on exhaustion -- using the same Python debugger, pytest, and code review workflows as the rest of the application. This applies equally to lightweight provider-backed judgments and autonomous agent executions. See [Patterns](patterns.md#resilience-patterns) for usage patterns and composition examples.
 
 ### Scoped execution contexts
 
-`run()` establishes the execution boundary: it links a step executor to the current context as an explicit Python `with` statement rather than as a global configuration or implicit thread-local. `scope()` narrows configuration within an existing run -- model override, prompt suffix, or executor replacement -- each taking effect only within the nested `with` block. Nesting is natural Python lexical scoping: the host program's control flow, not a framework runtime, determines which configuration is active at any point. This connects directly to the philosophy that runtime behavior should live in Python structures rather than in prose-only instructions or static configuration. See [Runtime configuration](runtime-configuration.md) for details and examples.
+`run()` establishes the execution boundary: it links a step executor to the current context as an explicit Python `with` statement rather than as a global configuration or implicit thread-local. `scope()` narrows configuration within an existing run -- model override, prompt suffix, or executor replacement -- each taking effect only within the nested `with` block. Nesting is natural Python lexical scoping: the host program's control flow, not a framework runtime, determines which configuration is active at any point. Runtime behavior lives in Python structures rather than in prose-only instructions or static configuration. See [Runtime configuration](runtime-configuration.md) for details and examples.
 
 ### Tool exposure efficiency
 
-Because binding functions are Python signatures rather than JSON Schema objects or CLI descriptions, the per-tool context cost is on the order of a single signature line. MCP tool definitions carry per-request JSON Schema overhead that grows with the number of exposed tools. CLI tools reduce definition overhead but carry hidden costs -- Mario Zechner's [2025 benchmark](https://mariozechner.at/posts/2025-08-15-mcp-vs-cli/) found that CLI invocations in Claude Code trigger per-command security classification that consumed an order of magnitude more tokens than equivalent MCP calls. In both approaches, substantial context budget is spent on tool plumbing before the model sees the actual task.
+Binding functions carry higher information density per token than JSON Schema or CLI descriptions (see [Execution model](#execution-model) for how they appear in the prompt). This section compares the per-tool context cost across approaches.
+
+MCP tool definitions carry per-request JSON Schema overhead that grows with the number of exposed tools. CLI tools reduce definition overhead but carry hidden costs -- Mario Zechner's [2025 benchmark](https://mariozechner.at/posts/2025-08-15-mcp-vs-cli/) found that CLI invocations in Claude Code trigger per-command security classification that consumed an order of magnitude more tokens than equivalent MCP calls. In both approaches, substantial context budget is spent on tool plumbing before the model sees the actual task.
 
 **MCP** defines tools as JSON Schema objects served over a protocol layer. Each tool definition consumes tokens in every request.
 
@@ -82,7 +84,7 @@ Because binding functions are Python signatures rather than JSON Schema objects 
 find_top_items: (category: str) -> list[dict]  # Return the highest-scored recent items in a category.
 ```
 
-This is on the order of a single signature line -- comparable in token cost to the most compact CLI description, but carrying higher information density. The type annotations let the LLM reason structurally: a `list[dict]` return supports iteration and key access, an `Item` return type has discoverable attributes, and typed parameters make it clear what another binding function will accept. A CLI description of similar compactness conveys invocation syntax but leaves output structure to inference from training data. There is no protocol layer, no serialization boundary, and no per-tool JSON Schema overhead. The same type annotations serve as targets for optional static analysis (pyright) and as hooks for Nighthawk's runtime validation (via Pydantic). Testing, debugging, and composition use standard Python tooling.
+The type annotations let the LLM reason structurally: a `list[dict]` return supports iteration and key access, an `Item` return type has discoverable attributes, and typed parameters make it clear what another binding function will accept. There is no protocol layer, no serialization boundary, and no per-tool JSON Schema overhead. The same type annotations serve as targets for optional static analysis (pyright) and as hooks for Nighthawk's runtime validation (via Pydantic). Testing, debugging, and composition use standard Python tooling.
 
 | Approach | Per-tool context cost | Information density | Type safety | Composability | Testing | Interoperability |
 |---|---|---|---|---|---|---|
@@ -92,7 +94,7 @@ This is on the order of a single signature line -- comparable in token cost to t
 
 ### Multi-agent coordination without a framework
 
-Multi-agent systems face three structural challenges: how agents communicate state, how agents are isolated from each other, and how results from multiple agents are merged. Existing workflow engines address these through framework-specific mechanisms -- graph state for communication, managed runtimes for isolation, message aggregation for merging -- but each solution locks users into the framework's abstractions, and no single framework provides all three comprehensively.
+Multi-agent systems face three structural challenges: how agents communicate state, how agents are isolated from each other, and how results from multiple agents are merged. Existing workflow engines address these through framework-specific mechanisms -- graph state for communication, managed runtimes for isolation, message aggregation for merging -- but each ties communication, isolation, and merging to the framework's own abstractions.
 
 Nighthawk is not a multi-agent framework. It is a building block that composes with Python's existing ecosystem for each challenge.
 
@@ -100,7 +102,7 @@ Nighthawk is not a multi-agent framework. It is a building block that composes w
 
 **Isolation.** Nighthawk provides logical isolation at binding boundaries: read bindings prevent name rebinding, write bindings are type-validated, and each Natural block executes with an independent step context carrying no implicit message history. Read bindings do not prevent in-place mutation of mutable objects -- this is intentional and underlies the [carry pattern](patterns.md#the-carry-pattern). OS-level isolation -- sandboxing, filesystem scoping, permission control -- is delegated to the execution backend. Coding agent backends provide their own sandbox modes and working directory scoping, which Nighthawk configures but does not reimplement.
 
-**Result merging.** The resilience module provides composable patterns for common cases: `vote` for majority consensus across repeated invocations, `fallback` for sequential first-success chaining. Domain-specific merging -- reconciling edits from multiple agents, aggregating heterogeneous outputs, resolving conflicts -- belongs in user code, because merge semantics are inherently domain-dependent. Nighthawk's role is to ensure that each agent's output crosses the boundary as a typed, validated Python object that merge logic can operate on directly.
+**Result merging.** The resilience module provides composable patterns for common cases: `vote` for majority consensus across repeated invocations, `fallback` for sequential first-success chaining. Domain-specific merging -- reconciling edits from multiple agents, aggregating heterogeneous outputs, resolving conflicts -- belongs in user code, because merge semantics are inherently domain-dependent. Nighthawk ensures that each agent's output crosses the boundary as a typed, validated Python object that merge logic can operate on directly.
 
 ### Tradeoffs
 
@@ -108,7 +110,7 @@ The boundary-centric design has costs:
 
 - **Python lock-in.** Binding functions, type annotations, and resilience transformers are Python constructs. Nighthawk does not offer a language-neutral protocol; interoperability with non-Python systems requires explicit bridging (e.g., REST endpoints wrapping Natural functions).
 - **Per-invocation cost.** Every Natural block invocation calls the LLM. There is no compilation step that amortizes cost across inputs. For high-throughput, low-judgment tasks where a deterministic Python function would suffice, a Natural block is the wrong tool. See [Why evaluate every time](#why-evaluate-every-time) for the design rationale.
-- **Integration tests are essential.** Mock tests verify Python logic around Natural blocks, but verifying that the LLM produces correct judgments requires integration tests against a real provider. The [two-layer testing strategy](verification.md) is not optional -- it is a structural consequence of delegating judgment to an LLM.
+- **Integration tests are essential.** Mock tests verify Python logic around Natural blocks, but verifying that the LLM produces correct judgments requires integration tests against a real provider. The [two-layer testing strategy](verification.md) is not optional -- because the LLM produces the judgment, only a real LLM call can verify it.
 - **Manual orchestration burden.** Nighthawk leaves branching, retries, merge logic, and recovery policy in user code rather than a graph runtime. This is a direct cost of the "Python controls all flow" principle.
 - **Python API design discipline.** Binding functions are only as effective as their signatures, type annotations, and naming. Poor API design degrades the LLM's ability to reason about composition.
 
@@ -118,7 +120,7 @@ A natural question: why not use an LLM once to translate a Natural block into eq
 
 The answer is that Natural blocks exist precisely for tasks that cannot be reduced to deterministic code. "Classify the sentiment of this review" or "interpret this ambiguous user input" require judgment that depends on the specific input, world knowledge, and context. If a task could be written as deterministic Python, it should be -- this is the core design principle (see [Natural blocks](natural-blocks.md#responsibility-split)).
 
-One-time compilation has additional structural limitations:
+One-time compilation has additional limitations:
 
 - The generated code would freeze the LLM's world knowledge at compilation time.
 - The input space is unbounded: "three apples, a dozen eggs, and cinco naranjas" requires open-ended interpretation that no finite code generation can fully anticipate.
@@ -153,7 +155,7 @@ Target: `[1, "2", "three", "cuatro", "五"]`
 Store the computed average in `result`.
 ````
 
-The instruction references embedded code, but there is no explicit boundary for how `result` crosses back to the host program. The narrative assumes the value will be available to subsequent steps, but the mechanism for state transfer is implicit -- the reader must infer it from convention rather than from a declared contract.
+The instruction references embedded code, but there is no explicit boundary for how `result` crosses back to the host program. The narrative assumes the value will be available to subsequent steps, but getting `result` back to the host program is implicit -- it depends on convention, not a declared contract.
 
 ### Nighthawk
 
