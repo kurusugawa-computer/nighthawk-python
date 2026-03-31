@@ -90,7 +90,7 @@ See [Executors](executors.md#decision-tree) for when to choose a coding agent ba
 
 ## Context limits
 
-The LOCALS and GLOBALS sections are bounded by token and item limits configured via `StepContextLimits`. When a limit is reached, remaining entries are omitted and a `<snipped>` marker is appended.
+The LOCALS and GLOBALS sections are bounded by token and item limits configured via `StepContextLimits`. When a limit is reached, remaining entries are omitted and a `<snipped>` marker is appended. The underlying data remains in Python memory and is accessible through binding functions at runtime -- truncation affects prompt coherence, not data availability.
 
 ```py
 configuration = nh.StepExecutorConfiguration(

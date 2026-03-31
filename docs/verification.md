@@ -182,7 +182,7 @@ The log output includes the rendered PROGRAM, LOCALS, and GLOBALS sections, maki
 
 ## Diagnosing `<snipped>` markers
 
-When the LOCALS or GLOBALS section is too large, Nighthawk truncates it and appends a `<snipped>` marker. A diagnostic log message is emitted on the `nighthawk` logger. To fix:
+When the LOCALS or GLOBALS section is too large, Nighthawk truncates it and appends a `<snipped>` marker. The underlying data remains in Python memory and is still accessible through binding functions at runtime. A diagnostic log message is emitted on the `nighthawk` logger. To improve prompt coherence:
 
 - Increase `locals_max_tokens` or `globals_max_tokens` in `StepContextLimits`.
 - Reduce the number of locals by moving stable values to module-level (GLOBALS).
