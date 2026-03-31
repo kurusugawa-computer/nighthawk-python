@@ -48,7 +48,10 @@ class TestExecutorSelectionPatterns:
 
         with nh.run(fast_executor):
             label = classify_ticket("tests are failing")
-            with nh.scope(step_executor=deep_executor):
+            with nh.scope(
+                step_executor=deep_executor,
+                implicit_references={"search_repository": helper},
+            ):
                 report = write_analysis_report("tests are failing", "product context")
 
         assert label == "bug"

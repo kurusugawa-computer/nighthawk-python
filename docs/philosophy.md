@@ -36,6 +36,10 @@ The underlying LLM's pre-trained Python knowledge lets it infer that `Item` has 
 
 Coding agent backends make this especially practical because the agent can immediately apply that inferred structure while reading workflow code, invoking tools, editing implementations, running `pytest`, and iterating within the same Python codebase. The agent works directly in Python with standard tooling -- debugger, test runner, type checker -- rather than through a separate orchestration layer.
 
+When the prompt exceeds token limits, the runtime omits remaining entries from the rendered context and appends a `<snipped>` marker. The underlying data stays in Python memory -- binding functions can still query it at runtime. Truncation optimizes prompt coherence without causing data loss.
+
+Because each Natural block is a fresh prompt with no implicit history, the entire prompt surface -- block text (including f-string interpolation), bindings, and scope configuration -- is determined by the host program at each invocation. Changing any of these between invocations has no side effects on other blocks.
+
 ## The harness matters more than the model
 
 The strongest direct evidence comes from agentic coding tasks. The subsections below separate what has been measured from where Nighthawk extends the principle.

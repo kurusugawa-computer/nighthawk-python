@@ -15,7 +15,7 @@ from pydantic import TypeAdapter
 from ..errors import ExecutionError, NaturalParseError, NighthawkError
 from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
 from .async_bridge import run_coroutine_synchronously
-from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_execution_context, span
+from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_execution_context, get_implicit_reference_name_to_value, span
 from .step_context import (
     _MISSING,
     StepContext,
@@ -304,6 +304,8 @@ class Runner:
         allowed_step_kinds = _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
 
         step_globals = _build_step_globals(python_globals)
+        scoped_implicit_reference_name_to_value = get_implicit_reference_name_to_value()
+        step_globals.update(scoped_implicit_reference_name_to_value)
         step_locals = _build_step_locals(python_locals)
 
         resolved_bindings = _resolve_input_bindings(
@@ -325,10 +327,19 @@ class Runner:
 
         binding_commit_targets = set(output_binding_names)
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets
-        implicit_type_reference_names = _discover_implicit_type_alias_reference_names(
+        implicit_type_alias_reference_names = _discover_implicit_type_alias_reference_names(
             step_locals=step_locals,
             step_globals=step_globals,
             input_binding_names=input_binding_names,
+        )
+
+        implicit_reference_name_to_value: dict[str, object] = dict(scoped_implicit_reference_name_to_value)
+        implicit_reference_name_to_value.update(
+            {
+                implicit_reference_name: step_globals[implicit_reference_name]
+                for implicit_reference_name in implicit_type_alias_reference_names
+                if implicit_reference_name in step_globals
+            }
         )
 
         step_context = StepContext(
@@ -337,7 +348,7 @@ class Runner:
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
             read_binding_names=read_binding_names,
-            implicit_type_reference_names=implicit_type_reference_names,
+            implicit_reference_name_to_value=implicit_reference_name_to_value,
             binding_name_to_type=binding_name_to_type,
             tool_result_rendering_policy=tool_result_rendering_policy,
         )

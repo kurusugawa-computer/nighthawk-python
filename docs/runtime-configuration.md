@@ -28,6 +28,10 @@ with nh.run(step_executor):
     # Replace the step executor entirely for a section
     with nh.scope(step_executor=another_executor):
         specialized_step(data)
+
+    # Add implicit global references for this scope (merged across nested scopes)
+    with nh.scope(implicit_references={"search_repository": search_repository}):
+        typed_labeling_step(ticket_text)
 ```
 
 Parameters:
@@ -37,10 +41,31 @@ Parameters:
 - `step_executor`: replace the step executor entirely.
 - `system_prompt_suffix_fragment`: append text to the system prompt for the scope.
 - `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
+- `implicit_references`: add implicit global references for this scope as a name-to-value mapping. Nested scopes merge references additively (set union by key).
 
-Use `step_executor_configuration_patch` for single-field changes (e.g., switching models). Use `step_executor_configuration` when all fields need explicit values. The context manager yields the resolved `StepExecutor` for the scope.
+Use `step_executor_configuration` when you want a full configuration replacement for a scope.
+Use `step_executor_configuration_patch` for targeted changes (for example, switching only the model).
+Use `step_executor` to swap the executor implementation for that scope.
+Use `system_prompt_suffix_fragment` and `user_prompt_suffix_fragment` to append one-off scope-level prompt text.
+Use `implicit_references` when a step should always expose specific globals even without explicit `<name>` bindings.
 
-`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments that apply to all steps in the run. Scope-level fragments are appended after configuration-level fragments.
+The context manager yields the resolved `StepExecutor` for the scope.
+
+`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments for the whole run. Scope-level fragments are appended after configuration-level fragments.
+
+## Additive scoped implicit references
+
+`implicit_references` can inject global helper functions as step capabilities:
+
+```py
+def search_repository(query: str) -> list[str]: ...
+
+with nh.run(step_executor):
+    with nh.scope(implicit_references={"search_repository": search_repository}):
+        triage_issue(ticket_text)
+```
+
+Nested scopes merge names additively (set union by key).
 
 ## Mixing executors
 

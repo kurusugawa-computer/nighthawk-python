@@ -639,6 +639,35 @@ def test_natural_function_rejects_step_executor_configuration_updates_for_non_ag
             f()
 
 
+def test_scope_implicit_references_are_merged_into_step_context() -> None:
+    from nighthawk.testing import CallbackExecutor, pass_response
+
+    observed_implicit_reference_name_set: set[str] = set()
+
+    def search_repository(query: str) -> list[str]:
+        _ = query
+        return ["hit"]
+
+    def handler(call):  # type: ignore[no-untyped-def]
+        observed_implicit_reference_name_set.update(call.step_globals.keys())
+        return pass_response()
+
+    executor = CallbackExecutor(handler)
+
+    with nh.run(executor), nh.scope(implicit_references={"search_repository": search_repository}):
+
+        @nh.natural_function
+        def f() -> None:
+            """natural
+            Execute one step.
+            """
+
+        f()
+
+    assert "search_repository" in observed_implicit_reference_name_set
+    assert "SHADOWED_NUMBER" not in observed_implicit_reference_name_set
+
+
 def test_unannotated_binding_type_inferred_from_initial_value():
     """binding_name_to_type should reflect the inferred type for unannotated write bindings."""
     from nighthawk.testing import ScriptedExecutor, pass_response

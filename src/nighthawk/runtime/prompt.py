@@ -318,7 +318,7 @@ def build_user_prompt(
     )
 
     references, program_text = extract_references_and_program(processed_natural_program)
-    augmented_global_references = set(references) | set(step_context.implicit_type_reference_names)
+    augmented_global_references = set(references) | set(step_context.implicit_reference_name_to_value.keys())
     globals_text = _render_globals_section(
         step_context=step_context,
         references=augmented_global_references,

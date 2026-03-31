@@ -31,13 +31,8 @@ DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
 class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
-    ``step_globals`` and ``step_locals`` are mutable dicts. All mutations to
-    ``step_locals`` MUST go through :meth:`record_assignment` (for top-level
-    name bindings) or through the dotted-path assignment in
-    ``tools.assignment`` (which bumps ``step_locals_revision`` directly).
-    Direct dict writes bypass revision tracking and ``assigned_binding_names``
-    bookkeeping, which will cause incorrect commit behavior at Natural block
-    boundaries.
+    ``step_globals`` and ``step_locals`` are mutable dicts. All mutations to ``step_locals`` MUST go through :meth:`record_assignment` (for top-level name bindings) or through the dotted-path assignment in ``tools.assignment`` (which bumps ``step_locals_revision`` directly).
+    Direct dict writes bypass revision tracking and ``assigned_binding_names`` bookkeeping, which will cause incorrect commit behavior at Natural block boundaries.
     """
 
     step_id: str
@@ -47,7 +42,7 @@ class StepContext:
 
     binding_commit_targets: set[str]
     read_binding_names: frozenset[str]
-    implicit_type_reference_names: frozenset[str]
+    implicit_reference_name_to_value: dict[str, object]
 
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 
@@ -73,14 +68,14 @@ _step_context_stack_var: ContextVar[tuple[StepContext, ...]] = ContextVar(
 
 
 @dataclass(frozen=True)
-class PythonLookupState:
+class _PythonLookupState:
     python_name_scope_stack: tuple[dict[str, object], ...] = ()
     python_cell_scope_stack: tuple[dict[str, CellType], ...] = ()
 
 
-_python_lookup_state_var: ContextVar[PythonLookupState] = ContextVar(
+_python_lookup_state_var: ContextVar[_PythonLookupState] = ContextVar(
     "nighthawk_python_lookup_state",
-    default=PythonLookupState(),  # noqa: B039
+    default=_PythonLookupState(),  # noqa: B039
 )
 
 

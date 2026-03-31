@@ -127,6 +127,42 @@ def test_scope_requires_existing_step_executor():
         pass
 
 
+def test_scope_implicit_references_additive_across_nested_scopes() -> None:
+    parent_function = object()
+    child_function = object()
+
+    with nh.run(StubExecutor()):
+        assert runtime_scoping.get_implicit_reference_name_to_value() == {}
+
+        with nh.scope(implicit_references={"parent": parent_function}):
+            assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function}
+
+            with nh.scope(implicit_references={"child": child_function, "parent": parent_function}):
+                assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function, "child": child_function}
+
+            assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function}
+
+        assert runtime_scoping.get_implicit_reference_name_to_value() == {}
+
+
+def test_scope_implicit_references_rejects_conflicting_values() -> None:
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(implicit_references={"shared": object()}),
+        pytest.raises(
+            NighthawkError,
+            match="Conflict for implicit reference",
+        ),
+        nh.scope(implicit_references={"shared": object()}),
+    ):
+        pass
+
+
+def test_scope_implicit_references_accepts_mapping() -> None:
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"one": object(), "two": object()}):
+        assert set(runtime_scoping.get_implicit_reference_name_to_value().keys()) == {"one", "two"}
+
+
 def test_run_configuration_model_default_applies():
     configuration = nh.StepExecutorConfiguration()
     assert configuration.model == "openai-responses:gpt-5.4-nano"

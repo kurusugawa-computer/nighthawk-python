@@ -300,7 +300,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             step_locals={},
             binding_commit_targets=set(),
             read_binding_names=frozenset(),
-            implicit_type_reference_names=frozenset(),
+            implicit_reference_name_to_value={},
         )
 
         from typing import cast

@@ -69,7 +69,9 @@ def _build_step_call(
     binding_names: list[str],
     allowed_step_kinds: tuple[str, ...],
 ) -> StepCall:
-    referenced_global_names = (step_context.read_binding_names | step_context.implicit_type_reference_names) - step_context.step_locals.keys()
+    referenced_global_names = (
+        step_context.read_binding_names | set(step_context.implicit_reference_name_to_value.keys())
+    ) - step_context.step_locals.keys()
     filtered_globals = {name: step_context.step_globals[name] for name in referenced_global_names if name in step_context.step_globals}
     return StepCall(
         natural_program=processed_natural_program,

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated one-line description.
 - Removed "experimental" language from README and documentation.
 - Updated PyPI keywords for improved discoverability.
+- Generalized `StepContext` implicit references to value-based mappings (`implicit_reference_name_to_value`), and added additive scope injection via `nh.scope(implicit_references={...})` across nested scopes.
 
 ## [0.6.1]
 

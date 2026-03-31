@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib.metadata
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
@@ -74,6 +74,35 @@ _user_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
     default=(),
 )
 
+_implicit_reference_name_to_value_var: ContextVar[dict[str, object]] = ContextVar(
+    "nighthawk_implicit_reference_name_to_value",
+    default={},  # noqa: B039
+)
+
+type ImplicitReferenceNameToValue = Mapping[str, object]
+
+
+def _merge_implicit_reference_name_to_value_with_conflict_check(
+    current_implicit_reference_name_to_value: dict[str, object],
+    scope_implicit_reference_name_to_value: ImplicitReferenceNameToValue,
+) -> dict[str, object]:
+    merged_implicit_reference_name_to_value = dict(current_implicit_reference_name_to_value)
+    for implicit_reference_name, scope_implicit_reference_value in scope_implicit_reference_name_to_value.items():
+        if implicit_reference_name in merged_implicit_reference_name_to_value:
+            current_implicit_reference_value = merged_implicit_reference_name_to_value[implicit_reference_name]
+            if current_implicit_reference_value is not scope_implicit_reference_value:
+                current_implicit_reference_type_name = type(current_implicit_reference_value).__name__
+                scope_implicit_reference_type_name = type(scope_implicit_reference_value).__name__
+                raise NighthawkError(
+                    f"Conflict for implicit reference {implicit_reference_name!r}: "
+                    f"current scope has {current_implicit_reference_type_name}, "
+                    f"new scope has {scope_implicit_reference_type_name}"
+                )
+
+        merged_implicit_reference_name_to_value[implicit_reference_name] = scope_implicit_reference_value
+
+    return merged_implicit_reference_name_to_value
+
 
 def get_step_executor() -> StepExecutor:
     """Return the active step executor.
@@ -105,6 +134,10 @@ def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
 
 def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
     return _user_prompt_suffix_fragments_var.get()
+
+
+def get_implicit_reference_name_to_value() -> dict[str, object]:
+    return dict(_implicit_reference_name_to_value_var.get())
 
 
 @contextmanager
@@ -193,6 +226,7 @@ def run(
         execution_context_token = _execution_context_var.set(execution_context)
         system_fragments_token = _system_prompt_suffix_fragments_var.set(())
         user_fragments_token = _user_prompt_suffix_fragments_var.set(())
+        implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set({})
         try:
             with span(
                 "nighthawk.run",
@@ -202,6 +236,7 @@ def run(
             ):
                 yield
         finally:
+            _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
             _user_prompt_suffix_fragments_var.reset(user_fragments_token)
             _system_prompt_suffix_fragments_var.reset(system_fragments_token)
             _execution_context_var.reset(execution_context_token)
@@ -216,20 +251,19 @@ def scope(
     step_executor: StepExecutor | None = None,
     system_prompt_suffix_fragment: str | None = None,
     user_prompt_suffix_fragment: str | None = None,
+    implicit_references: ImplicitReferenceNameToValue | None = None,
 ) -> Iterator[StepExecutor]:
     """Open a nested scope that can override the step executor or its configuration.
 
-    Must be called inside an active run context. Creates a new scope_id while
-    inheriting the run_id from the parent context.
+    Must be called inside an active run context. Creates a new scope_id while inheriting the run_id from the parent context.
 
     Args:
-        step_executor_configuration: Full replacement configuration for the step
-            executor.
-        step_executor_configuration_patch: Partial override applied on top of the
-            current configuration.
+        step_executor_configuration: Full replacement configuration for the step executor.
+        step_executor_configuration_patch: Partial override applied on top of the current configuration.
         step_executor: Replacement step executor for this scope.
         system_prompt_suffix_fragment: Additional text appended to the system prompt.
         user_prompt_suffix_fragment: Additional text appended to the user prompt.
+        implicit_references: Additional implicit global references merged into this scope and inherited by nested scopes.
 
     Yields:
         The step executor active within this scope.
@@ -283,6 +317,7 @@ def scope(
 
     next_system_fragments = _system_prompt_suffix_fragments_var.get()
     next_user_fragments = _user_prompt_suffix_fragments_var.get()
+    next_implicit_reference_name_to_value = _implicit_reference_name_to_value_var.get()
 
     if system_prompt_suffix_fragment is not None:
         next_system_fragments = (*next_system_fragments, system_prompt_suffix_fragment)
@@ -290,11 +325,18 @@ def scope(
     if user_prompt_suffix_fragment is not None:
         next_user_fragments = (*next_user_fragments, user_prompt_suffix_fragment)
 
+    if implicit_references is not None:
+        next_implicit_reference_name_to_value = _merge_implicit_reference_name_to_value_with_conflict_check(
+            next_implicit_reference_name_to_value,
+            implicit_references,
+        )
+
     with tool_scope():
         step_executor_token = _step_executor_var.set(next_step_executor)
         execution_context_token = _execution_context_var.set(next_execution_context)
         system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_fragments)
         user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_fragments)
+        implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set(next_implicit_reference_name_to_value)
         try:
             with span(
                 "nighthawk.scope",
@@ -305,6 +347,7 @@ def scope(
             ):
                 yield next_step_executor
         finally:
+            _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
             _user_prompt_suffix_fragments_var.reset(user_fragments_token)
             _system_prompt_suffix_fragments_var.reset(system_fragments_token)
             _execution_context_var.reset(execution_context_token)

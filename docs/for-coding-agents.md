@@ -109,6 +109,9 @@ deep_executor = nh.AgentStepExecutor.from_configuration(
 )
 
 
+def search_repository(query: str) -> list[str]: ...
+
+
 @nh.natural_function
 def classify_ticket(text: str) -> str:
     label: str = ""
@@ -136,9 +139,15 @@ def write_analysis_report(ticket_text: str, product_context: str) -> str:
 
 with nh.run(fast_executor):
     label = classify_ticket(ticket_text)
-    with nh.scope(step_executor=deep_executor):
+    with nh.scope(
+        step_executor=deep_executor,
+        implicit_references={"search_repository": search_repository},
+    ):
         report = write_analysis_report(ticket_text, product_summary)
 ```
+
+`implicit_references` can inject global helper functions as block capabilities.
+Nested scopes still merge additively (set union by key).
 
 ## 4. The standard contract shape
 
@@ -327,7 +336,7 @@ See [Patterns: Resilience](https://kurusugawa-computer.github.io/nighthawk-pytho
 
 ## 9. Context budget discipline
 
-Prompt context is finite. When you see `<snipped>`, fix in this order:
+Prompt context is finite. When you see `<snipped>`, the marked data is truncated from the prompt but remains in Python memory -- the model can still reach it through binding functions. Fix context pressure in this order:
 
 1. Remove irrelevant locals and globals from the function scope.
 2. Split the block into smaller, focused blocks.
