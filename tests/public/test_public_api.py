@@ -505,3 +505,35 @@ def test_no_implicit_scope_or_step_executor_spans(step_span_exporter: InMemorySp
     assert "nighthawk.step_executor" not in span_name_set
     assert "nighthawk.run" in span_name_set
     assert "nighthawk.step" in span_name_set
+
+
+def test_usage_meter_is_importable() -> None:
+    assert hasattr(nh, "UsageMeter")
+
+
+def test_get_current_usage_meter_exists_on_module() -> None:
+    assert hasattr(nh, "get_current_usage_meter")
+
+
+def test_budget_exceeded_error_is_importable_from_resilience() -> None:
+    from nighthawk.resilience import BudgetExceededError
+
+    assert BudgetExceededError is not None
+
+
+def test_budget_is_importable_from_resilience() -> None:
+    from nighthawk.resilience import budget
+
+    assert budget is not None
+
+
+def test_budget_limit_kind_is_importable_from_resilience() -> None:
+    from nighthawk.resilience import BudgetLimitKind
+
+    assert BudgetLimitKind is not None
+
+
+def test_cost_function_is_importable_from_resilience() -> None:
+    from nighthawk.resilience import CostFunction
+
+    assert CostFunction is not None

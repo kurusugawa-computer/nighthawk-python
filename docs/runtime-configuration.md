@@ -120,6 +120,19 @@ context.scope_id  # current scope -- changes with each nh.scope()
 
 Use `run_id` to correlate distributed agent processes in logs and traces. Use `scope_id` to identify the current logical execution context. See [Specification Section 10](specification.md#10-runtime-scoping) for the full specification and [Verification: observability](verification.md#observability) for tracing integration.
 
+## Usage metering
+
+Each `nh.run()` creates a `UsageMeter` that accumulates LLM token usage across all Natural block executions in the run. The meter is thread-safe and updated automatically after each step.
+
+```py
+meter = nh.get_current_usage_meter()   # None outside nh.run()
+if meter is not None:
+    meter.total_tokens     # cumulative input + output tokens
+    meter.snapshot()       # independent RunUsage copy of current totals
+```
+
+`get_current_usage_meter()` returns `None` outside an active `nh.run()` context. Use the meter to inspect cumulative cost at decision points -- for example, to choose a cheaper model mid-pipeline when spend is high. For automatic budget enforcement, see [Patterns: Budget](patterns.md#budget).
+
 ## Next steps
 
 Continue to **[Patterns](patterns.md)** for outcomes, error handling, async, cross-block composition, resilience, and common mistakes.

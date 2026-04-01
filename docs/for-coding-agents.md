@@ -320,7 +320,7 @@ Async rule:
 
 Resilience rule:
 
-- Keep retry, fallback, timeout, and circuit-breaker policy in Python, not inside Natural text.
+- Keep retry, fallback, timeout, budget, and circuit-breaker policy in Python, not inside Natural text.
 - Import from `nighthawk.resilience` (not re-exported from `nighthawk`):
 
 ```py
@@ -332,7 +332,7 @@ with nh.run(executor):
     label = resilient_classify(ticket_text)
 ```
 
-See [Patterns: Resilience](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) for `fallback`, `vote`, `timeout`, and `circuit_breaker`.
+See [Patterns: Resilience](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) for `fallback`, `vote`, `timeout`, `budget`, and `circuit_breaker`.
 
 ## 9. Context budget discipline
 

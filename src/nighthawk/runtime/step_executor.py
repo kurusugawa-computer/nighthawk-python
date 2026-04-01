@@ -13,6 +13,7 @@ from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
 from .prompt import build_user_prompt, extract_references_and_program
 from .scoping import (
+    get_current_usage_meter,
     get_system_prompt_suffix_fragments,
     system_prompt_suffix_fragment_scope,
 )
@@ -320,6 +321,10 @@ class AgentStepExecutor:
                 toolset=toolset,
                 structured_output_type=structured_output_type,
             )
+
+        usage_meter = get_current_usage_meter()
+        if usage_meter is not None and hasattr(result, "usage"):
+            usage_meter.record(result.usage())
 
         step_outcome = self._parse_agent_result(result)
         bindings = self._extract_bindings(binding_names=binding_names, step_context=step_context)

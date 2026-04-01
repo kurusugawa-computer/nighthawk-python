@@ -323,7 +323,7 @@ def compute_with_context(context_text: str) -> int:
 Natural blocks are non-deterministic by nature. Production deployments need strategies to handle transient failures, unstable outputs, and provider outages. The `nighthawk.resilience` module provides composable **function transformers** -- each takes a callable and returns a new callable with the same signature.
 
 ```py
-from nighthawk.resilience import retrying, fallback, vote, timeout, circuit_breaker
+from nighthawk.resilience import retrying, fallback, vote, timeout, budget, circuit_breaker
 ```
 
 Import directly from `nighthawk.resilience`. Resilience primitives are not re-exported from the top-level `nighthawk` namespace.
@@ -405,6 +405,42 @@ async with timeout(seconds=30):
     result = await slow_operation()
 ```
 
+### Budget
+
+Enforce token or monetary cost limits on wrapped functions. Requires an active `nh.run()` context (the run-scoped `UsageMeter` tracks cumulative usage automatically).
+
+```py
+from nighthawk.resilience import budget
+
+safe_classify = budget(tokens=50_000, tokens_per_call=5_000)(classify)
+result = safe_classify(text)
+```
+
+`tokens` caps cumulative usage across all calls; `tokens_per_call` caps a single call. Both are checked before and after each invocation. When a limit is breached, `BudgetExceededError` is raised -- combine with `fallback` to degrade gracefully:
+
+```py
+from nighthawk.resilience import budget, fallback, BudgetExceededError
+
+composed = fallback(
+    budget(tokens=50_000)(classify_gpt4),
+    classify_mini,
+    on=(BudgetExceededError,),
+)
+```
+
+For monetary budgets, supply a `cost_function` that converts `RunUsage` to a float:
+
+```py
+from pydantic_ai.usage import RunUsage
+
+def dollar_cost(usage: RunUsage) -> float:
+    return usage.input_tokens * 3e-6 + usage.output_tokens * 15e-6
+
+budgeted = budget(cost=1.00, cost_function=dollar_cost)(classify)
+```
+
+Outside a `nh.run()` context, the transformer is a no-op.
+
 ### Circuit breaker
 
 Prevent repeated calls to a failing service. After `fail_threshold` consecutive failures, the circuit opens and rejects calls immediately with `CircuitOpenError`. After `reset_timeout` seconds, one probe call is allowed.
@@ -440,10 +476,11 @@ Recommended composition order (innermost to outermost):
 | Order | Transformer | Why |
 |---|---|---|
 | 1 | `timeout` | Bound each individual call |
-| 2 | `vote` | Aggregate multiple bounded calls |
-| 3 | `retrying` | Retry the aggregated operation |
-| 4 | `circuit_breaker` | Protect against persistent failure |
-| 5 | `fallback` | Switch to alternative on exhaustion |
+| 2 | `budget` | Cap token or monetary cost |
+| 3 | `vote` | Aggregate multiple bounded calls |
+| 4 | `retrying` | Retry the aggregated operation |
+| 5 | `circuit_breaker` | Protect against persistent failure |
+| 6 | `fallback` | Switch to alternative on exhaustion |
 
 ### Caching LLM results
 

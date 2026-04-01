@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+from pydantic_ai.usage import RunUsage
 from tenacity import wait_none
 
 import nighthawk as nh
 from nighthawk.resilience import (
+    BudgetExceededError,
     CircuitOpenError,
+    budget,
     circuit_breaker,
     fallback,
     retrying,
     timeout,
     vote,
 )
+from nighthawk.runtime.scoping import get_current_usage_meter
 from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
 
 # ---------------------------------------------------------------------------
@@ -208,3 +213,78 @@ class TestCompositionWithNaturalFunction:
 
         # primary fails twice (retrying exhausted), backup gets 3rd response
         assert result == "classified"
+
+
+# ---------------------------------------------------------------------------
+# Budget composition tests
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetWithRetry:
+    def test_budget_pre_check_stops_retry(self) -> None:
+        call_count = 0
+
+        def expensive(_text: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            meter = get_current_usage_meter()
+            if meter is not None:
+                meter.record(RunUsage(input_tokens=40, output_tokens=40))
+            raise ValueError("fail")
+
+        composed = retrying(attempts=5, on=(ValueError, BudgetExceededError), wait=wait_none())(budget(tokens=100)(expensive))
+
+        with nh.run(ScriptedExecutor()), pytest.raises(BudgetExceededError):
+            composed("x")
+
+        # First call uses 80 tokens (under 100), raises ValueError, retrying catches it.
+        # Second call: pre-check sees 80 >= 100? No, 80 < 100. Call runs, now 160 > 100, raises BudgetExceededError.
+        # retrying catches BudgetExceededError (it's in on=).
+        # Third call: pre-check sees 160 >= 100, raises BudgetExceededError.
+        # retrying catches again. Fourth call: same. Fifth call: same. Exhausted.
+        assert call_count == 2
+
+
+class TestBudgetWithFallback:
+    def test_fallback_triggered_on_budget_exceeded(self) -> None:
+        def primary(_text: str) -> str:
+            meter = get_current_usage_meter()
+            if meter is not None:
+                meter.record(RunUsage(input_tokens=100, output_tokens=100))
+            return "primary_result"
+
+        def backup(_text: str) -> str:
+            return "backup_result"
+
+        composed = fallback(
+            budget(tokens=50)(primary),
+            backup,
+            on=(BudgetExceededError,),
+        )
+
+        with nh.run(ScriptedExecutor()):
+            result = composed("x")
+            assert result == "backup_result"
+
+
+class TestBudgetWithNaturalFunction:
+    def test_budget_with_natural_function(self) -> None:
+        executor = ScriptedExecutor(
+            responses=[
+                pass_response(result="classified"),
+            ]
+        )
+
+        @nh.natural_function
+        def classify(text: str) -> str:
+            result: str = ""
+            """natural
+            Classify <text> and set <:result>.
+            """
+            return result
+
+        budgeted = budget(tokens=100_000)(classify)
+
+        with nh.run(executor):
+            result = budgeted("hello")
+            assert result == "classified"

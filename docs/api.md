@@ -21,8 +21,10 @@
         - to_jsonable_value
         - ExecutionContext
         - get_current_step_context
+        - get_current_usage_meter
         - get_execution_context
         - get_step_executor
+        - UsageMeter
 
 ## Errors
 
@@ -106,6 +108,10 @@
 ::: nighthawk.resilience
     options:
       members:
+        - budget
+        - BudgetExceededError
+        - BudgetLimitKind
+        - CostFunction
         - retrying
         - timeout
         - fallback

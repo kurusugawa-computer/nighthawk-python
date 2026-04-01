@@ -236,6 +236,14 @@ Events are emitted on the `nighthawk.step` span:
 
 The `raise` outcome is domain-level behavior (the LLM chose to signal an error). Internal failures (`failed`) indicate a Nighthawk-side problem (invalid JSON, validation failure, etc.).
 
+### Resilience events
+
+The `budget` transformer emits an event on the current span when a budget limit is breached:
+
+| Event | When | Key attributes |
+|---|---|---|
+| `nighthawk.budget.exceeded` | Token or cost budget exceeded | `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` |
+
 ### Local trace inspection with otel-tui
 
 Start an [otel-tui](https://github.com/ymtdzzz/otel-tui) collector:

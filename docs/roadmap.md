@@ -61,19 +61,6 @@ Considerations:
 - Resilience primitives are function transformers independent of Natural blocks. Span emission should be optional or zero-cost when no tracer is configured.
 - Define which attributes to record (attempt count, elapsed time per attempt, decide function output distribution for vote, circuit state transitions).
 
-### Cost and token budget awareness (future)
-
-Surface per-step token usage as OpenTelemetry attributes and provide mechanisms for hosts to set token or cost budgets.
-
-Motivation:
-
-- Resilience primitives (retry, vote) multiply the number of LLM calls. Without cost visibility, production use risks unexpected spend.
-- Hosts need a way to cap total token usage across retries and vote rounds, not just per individual call.
-
-Non-goals:
-
-- Nighthawk does not own pricing models or billing integration.
-
 ### Resilience defaults via scope (future)
 
 Allow hosts to set default resilience policies (retry attempts, timeout, fallback chain) at the `nighthawk.scope()` level, so that all Natural block executions within a scope inherit a baseline policy without per-call wrapping.
