@@ -9,7 +9,7 @@ from collections.abc import Callable, Coroutine
 from functools import wraps
 from typing import Any, overload
 
-_logger = logging.getLogger("nighthawk")
+_logger = logging.getLogger("nighthawk.resilience")
 
 
 class _Sentinel(enum.Enum):

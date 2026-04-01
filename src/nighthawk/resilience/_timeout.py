@@ -7,14 +7,31 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, cast
 
+from opentelemetry.trace import get_current_span
+
+
+def _emit_timeout_event(*, function_name: str, seconds: float, mode: str) -> None:
+    get_current_span().add_event(
+        "nighthawk.resilience.timeout.triggered",
+        {
+            "nighthawk.resilience.timeout.function": function_name,
+            "nighthawk.resilience.timeout.seconds": seconds,
+            "nighthawk.resilience.timeout.mode": mode,
+        },
+    )
+
 
 def _wrap_with_timeout[**P, R](function: Callable[P, R], *, seconds: float) -> Callable[P, R]:
     if inspect.iscoroutinefunction(function):
 
         @wraps(function)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            async with asyncio.timeout(seconds):
-                return await function(*args, **kwargs)
+            try:
+                async with asyncio.timeout(seconds):
+                    return await function(*args, **kwargs)
+            except TimeoutError:
+                _emit_timeout_event(function_name=function.__name__, seconds=seconds, mode="async")
+                raise
 
         return cast(Callable[P, R], async_wrapper)
 
@@ -25,6 +42,7 @@ def _wrap_with_timeout[**P, R](function: Callable[P, R], *, seconds: float) -> C
             try:
                 return future.result(timeout=seconds)
             except concurrent.futures.TimeoutError:
+                _emit_timeout_event(function_name=function.__name__, seconds=seconds, mode="sync")
                 raise TimeoutError(f"Function {function.__name__} timed out after {seconds} seconds") from None
 
     return cast(Callable[P, R], sync_wrapper)
@@ -75,7 +93,7 @@ class _TimeoutHandle:
             "For async code, use 'async with timeout(seconds=N):'."
         )
 
-    def __exit__(self, exception_type: Any, exception_value: Any, traceback: Any) -> None:
+    def __exit__(self, *_: Any) -> None:
         pass
 
 

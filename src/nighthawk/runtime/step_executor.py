@@ -324,7 +324,7 @@ class AgentStepExecutor:
 
         usage_meter = get_current_usage_meter()
         if usage_meter is not None and hasattr(result, "usage"):
-            usage_meter.record(result.usage())
+            usage_meter.record(result.usage(), kind="step")
 
         step_outcome = self._parse_agent_result(result)
         bindings = self._extract_bindings(binding_names=binding_names, step_context=step_context)

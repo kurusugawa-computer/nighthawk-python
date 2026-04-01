@@ -3,22 +3,25 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Callable
+from copy import copy
 from functools import wraps
 from typing import Any, Literal, cast
 
 from opentelemetry.trace import get_current_span
 from pydantic_ai.usage import RunUsage
 
+from ..errors import NighthawkError
 from ..runtime.scoping import get_current_usage_meter
 
-_logger = logging.getLogger("nighthawk")
+_logger = logging.getLogger("nighthawk.resilience")
 
 type BudgetLimitKind = Literal["tokens", "tokens_per_call", "cost", "cost_per_call"]
 
 type CostFunction = Callable[[RunUsage], float]
+type EstimateUsageFunction = Callable[..., RunUsage]
 
 
-class BudgetExceededError(Exception):
+class BudgetExceededError(NighthawkError):
     """Raised when LLM token usage exceeds a configured budget."""
 
     def __init__(
@@ -39,6 +42,31 @@ class BudgetExceededError(Exception):
         )
 
 
+def _get_usage_snapshot() -> RunUsage | None:
+    usage_meter = get_current_usage_meter()
+    if usage_meter is None:
+        return None
+    return usage_meter.snapshot()
+
+
+def _get_remaining_token_count(*, snapshot: RunUsage, tokens: int | None) -> int | None:
+    if tokens is None:
+        return None
+    return tokens - snapshot.total_tokens
+
+
+def _get_remaining_cost(*, snapshot: RunUsage, cost: float | None, cost_function: CostFunction | None) -> float | None:
+    if cost is None or cost_function is None:
+        return None
+    return cost - cost_function(snapshot)
+
+
+def _build_predicted_accumulated_usage(*, snapshot: RunUsage, call_usage: RunUsage) -> RunUsage:
+    predicted_accumulated_usage = copy(snapshot)
+    predicted_accumulated_usage.incr(call_usage)
+    return predicted_accumulated_usage
+
+
 def _raise_budget_exceeded(
     *,
     accumulated_usage: RunUsage,
@@ -47,9 +75,17 @@ def _raise_budget_exceeded(
     limit_value: int | float,
 ) -> None:
     current_span = get_current_span()
+    budget_exceeded_attribute_name_to_value: dict[str, str | int | float | bool] = {
+        **accumulated_usage.opentelemetry_attributes(),
+        "nighthawk.resilience.budget.limit_kind": limit_kind,
+        "nighthawk.resilience.budget.limit_value": float(limit_value),
+        "nighthawk.resilience.budget.call_input_tokens": call_usage.input_tokens,
+        "nighthawk.resilience.budget.call_output_tokens": call_usage.output_tokens,
+        "nighthawk.resilience.budget.call_total_tokens": call_usage.total_tokens,
+    }
     current_span.add_event(
-        "nighthawk.budget.exceeded",
-        accumulated_usage.opentelemetry_attributes(),
+        "nighthawk.resilience.budget.exceeded",
+        budget_exceeded_attribute_name_to_value,
     )
     error = BudgetExceededError(
         accumulated_usage=accumulated_usage,
@@ -134,6 +170,62 @@ def _pre_check(
         )
 
 
+def _pre_check_with_estimate(
+    *,
+    snapshot: RunUsage,
+    estimated_call_usage: RunUsage,
+    tokens: int | None,
+    tokens_per_call: int | None,
+    cost: float | None,
+    cost_per_call: float | None,
+    cost_function: CostFunction | None,
+) -> None:
+    predicted_accumulated_usage = _build_predicted_accumulated_usage(
+        snapshot=snapshot,
+        call_usage=estimated_call_usage,
+    )
+
+    if tokens_per_call is not None and estimated_call_usage.total_tokens > tokens_per_call:
+        _raise_budget_exceeded(
+            accumulated_usage=predicted_accumulated_usage,
+            call_usage=estimated_call_usage,
+            limit_kind="tokens_per_call",
+            limit_value=tokens_per_call,
+        )
+
+    remaining_token_count = _get_remaining_token_count(snapshot=snapshot, tokens=tokens)
+    if remaining_token_count is not None and estimated_call_usage.total_tokens > remaining_token_count:
+        assert tokens is not None
+        _raise_budget_exceeded(
+            accumulated_usage=predicted_accumulated_usage,
+            call_usage=estimated_call_usage,
+            limit_kind="tokens",
+            limit_value=tokens,
+        )
+
+    if cost_function is None:
+        return
+
+    estimated_call_cost = cost_function(estimated_call_usage)
+    if cost_per_call is not None and estimated_call_cost > cost_per_call:
+        _raise_budget_exceeded(
+            accumulated_usage=predicted_accumulated_usage,
+            call_usage=estimated_call_usage,
+            limit_kind="cost_per_call",
+            limit_value=cost_per_call,
+        )
+
+    remaining_cost = _get_remaining_cost(snapshot=snapshot, cost=cost, cost_function=cost_function)
+    if remaining_cost is not None and estimated_call_cost > remaining_cost:
+        assert cost is not None
+        _raise_budget_exceeded(
+            accumulated_usage=predicted_accumulated_usage,
+            call_usage=estimated_call_usage,
+            limit_kind="cost",
+            limit_value=cost,
+        )
+
+
 def _wrap_with_budget[**P, R](
     function: Callable[P, R],
     *,
@@ -142,25 +234,40 @@ def _wrap_with_budget[**P, R](
     cost: float | None,
     cost_per_call: float | None,
     cost_function: CostFunction | None,
+    estimate_usage: EstimateUsageFunction | None,
 ) -> Callable[P, R]:
     if inspect.iscoroutinefunction(function):
 
         @wraps(function)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            meter = get_current_usage_meter()
-            if meter is None:
+            snapshot = _get_usage_snapshot()
+            if snapshot is None:
                 return await function(*args, **kwargs)
 
             _pre_check(
-                snapshot=meter.snapshot(),
+                snapshot=snapshot,
                 tokens=tokens,
                 cost=cost,
                 cost_function=cost_function,
             )
 
-            before = meter.snapshot()
+            if estimate_usage is not None:
+                estimated_call_usage = estimate_usage(args, kwargs)
+                _pre_check_with_estimate(
+                    snapshot=snapshot,
+                    estimated_call_usage=estimated_call_usage,
+                    tokens=tokens,
+                    tokens_per_call=tokens_per_call,
+                    cost=cost,
+                    cost_per_call=cost_per_call,
+                    cost_function=cost_function,
+                )
+
+            before = snapshot
             result = await function(*args, **kwargs)
-            after = meter.snapshot()
+            after = _get_usage_snapshot()
+            if after is None:
+                return result
             call_usage = _compute_call_usage(before, after)
             _check_budget(
                 after=after,
@@ -177,20 +284,34 @@ def _wrap_with_budget[**P, R](
 
     @wraps(function)
     def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-        meter = get_current_usage_meter()
-        if meter is None:
+        snapshot = _get_usage_snapshot()
+        if snapshot is None:
             return function(*args, **kwargs)
 
         _pre_check(
-            snapshot=meter.snapshot(),
+            snapshot=snapshot,
             tokens=tokens,
             cost=cost,
             cost_function=cost_function,
         )
 
-        before = meter.snapshot()
+        if estimate_usage is not None:
+            estimated_call_usage = estimate_usage(args, kwargs)
+            _pre_check_with_estimate(
+                snapshot=snapshot,
+                estimated_call_usage=estimated_call_usage,
+                tokens=tokens,
+                tokens_per_call=tokens_per_call,
+                cost=cost,
+                cost_per_call=cost_per_call,
+                cost_function=cost_function,
+            )
+
+        before = snapshot
         result = function(*args, **kwargs)
-        after = meter.snapshot()
+        after = _get_usage_snapshot()
+        if after is None:
+            return result
         call_usage = _compute_call_usage(before, after)
         _check_budget(
             after=after,
@@ -222,12 +343,14 @@ class _BudgetHandle:
         cost: float | None,
         cost_per_call: float | None,
         cost_function: CostFunction | None,
+        estimate_usage: EstimateUsageFunction | None,
     ) -> None:
         self._tokens = tokens
         self._tokens_per_call = tokens_per_call
         self._cost = cost
         self._cost_per_call = cost_per_call
         self._cost_function = cost_function
+        self._estimate_usage = estimate_usage
 
     def __call__[**P, R](self, function: Callable[P, R]) -> Callable[P, R]:
         """Wrap *function* with budget enforcement."""
@@ -238,6 +361,7 @@ class _BudgetHandle:
             cost=self._cost,
             cost_per_call=self._cost_per_call,
             cost_function=self._cost_function,
+            estimate_usage=self._estimate_usage,
         )
 
 
@@ -248,6 +372,7 @@ def budget(
     cost: float | None = None,
     cost_per_call: float | None = None,
     cost_function: CostFunction | None = None,
+    estimate_usage: EstimateUsageFunction | None = None,
 ) -> _BudgetHandle:
     """Create a budget enforcement transformer.
 
@@ -263,6 +388,7 @@ def budget(
         cost: Maximum cumulative monetary cost. Requires *cost_function*.
         cost_per_call: Maximum monetary cost for a single call. Requires *cost_function*.
         cost_function: Callable that converts :class:`RunUsage` to a monetary cost (float). Required when *cost* or *cost_per_call* is set.
+        estimate_usage: Optional callable that estimates the next call usage from positional/keyword arguments. When provided, over-limit calls fail fast before execution.
 
     Returns:
         A handle that wraps a function with budget enforcement.
@@ -289,4 +415,5 @@ def budget(
         cost=cost,
         cost_per_call=cost_per_call,
         cost_function=cost_function,
+        estimate_usage=estimate_usage,
     )

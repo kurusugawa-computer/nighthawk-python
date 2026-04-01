@@ -9,7 +9,9 @@ from enum import Enum
 from functools import update_wrapper
 from typing import Any, cast
 
-_logger = logging.getLogger("nighthawk")
+from opentelemetry.trace import get_current_span
+
+_logger = logging.getLogger("nighthawk.resilience")
 
 
 class CircuitState(Enum):
@@ -89,6 +91,14 @@ class _CircuitBreakerState:
                 _logger.warning(
                     "Circuit breaker opened after %d failures",
                     self._failure_count,
+                )
+                get_current_span().add_event(
+                    "nighthawk.resilience.circuit.opened",
+                    {
+                        "nighthawk.resilience.circuit.fail_threshold": self._fail_threshold,
+                        "nighthawk.resilience.circuit.failure_count": self._failure_count,
+                        "nighthawk.resilience.circuit.exception_type": type(exception).__name__,
+                    },
                 )
 
     def reset(self) -> None:

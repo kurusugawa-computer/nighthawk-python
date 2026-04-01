@@ -349,7 +349,12 @@ for attempt in retrying(attempts=3):
         result = classify(text)
 ```
 
-Customize which exceptions trigger retries and the backoff strategy:
+`retrying` separates retry control into four roles:
+
+- `on`: type-level retry eligibility.
+- `retry_if`: content-level retry eligibility after `on` matches.
+- `wait`: retry interval strategy.
+- `on_retry`: side-effect hook when a retry is decided.
 
 ```py
 from tenacity import wait_fixed
@@ -357,9 +362,13 @@ from tenacity import wait_fixed
 resilient = retrying(
     attempts=5,
     on=(ExecutionError, TimeoutError),
+    retry_if=lambda exception: "transient" in str(exception).lower(),
     wait=wait_fixed(2),
+    on_retry=lambda retry_state: logger.info("retrying", extra={"attempt": retry_state.attempt_number}),
 )(classify)
 ```
+
+Use only what you need. For most cases, `retrying(attempts=3)(fn)` is enough.
 
 ### Fallback
 

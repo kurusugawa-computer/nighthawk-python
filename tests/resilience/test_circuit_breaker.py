@@ -1,11 +1,72 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import time
+from collections.abc import Generator
 
 import pytest
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+import nighthawk as nh
 from nighthawk.resilience import CircuitOpenError, CircuitState, circuit_breaker
+from nighthawk.runtime import scoping as runtime_scoping
+from tests.execution.stub_executor import StubExecutor
+
+
+@pytest.fixture
+def run_span_exporter() -> Generator[InMemorySpanExporter, None, None]:
+    span_exporter = InMemorySpanExporter()
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+
+    previous_tracer_provider = runtime_scoping._tracer
+    runtime_scoping._tracer = tracer_provider.get_tracer("nighthawk", importlib.metadata.version("nighthawk-python"))
+    try:
+        yield span_exporter
+    finally:
+        runtime_scoping._tracer = previous_tracer_provider
+
+
+def _get_finished_run_spans(run_span_exporter: InMemorySpanExporter) -> list[ReadableSpan]:
+    return [span_data for span_data in run_span_exporter.get_finished_spans() if span_data.name == "nighthawk.run"]
+
+
+def _circuit_opened_event_list(run_span: ReadableSpan) -> list[object]:
+    return [event for event in run_span.events if event.name == "nighthawk.resilience.circuit.opened"]
+
+
+def _require_event_attribute(event: object, key: str) -> object:
+    attributes = getattr(event, "attributes", None)
+    assert attributes is not None
+    assert key in attributes
+    return attributes[key]
+
+
+# ---------------------------------------------------------------------------
+# Sync
+# ---------------------------------------------------------------------------
+
+
+class TestCircuitBreakerTracing:
+    def test_emits_circuit_opened_event(self, run_span_exporter: InMemorySpanExporter) -> None:
+        @circuit_breaker(fail_threshold=2, on=ValueError)
+        def failing() -> str:
+            raise ValueError("boom")
+
+        with nh.run(StubExecutor()):
+            for _ in range(2):
+                with pytest.raises(ValueError):
+                    failing()
+
+        run_span = _get_finished_run_spans(run_span_exporter)[0]
+        event_list = _circuit_opened_event_list(run_span)
+        assert len(event_list) == 1
+        assert _require_event_attribute(event_list[0], "nighthawk.resilience.circuit.failure_count") == 2
+        assert _require_event_attribute(event_list[0], "nighthawk.resilience.circuit.exception_type") == "ValueError"
+
 
 # ---------------------------------------------------------------------------
 # Sync

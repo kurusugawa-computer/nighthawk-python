@@ -9,7 +9,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, cast
 
-_logger = logging.getLogger("nighthawk")
+_logger = logging.getLogger("nighthawk.resilience")
 
 
 def plurality(results: list[Any]) -> Any:

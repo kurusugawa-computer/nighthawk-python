@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `nighthawk.UsageMeter`: run-scoped, thread-safe LLM token usage accumulator. Created automatically by `nh.run()` and readable via `nh.get_current_usage_meter()`.
-- `nighthawk.resilience.budget` transformer: composable token and cost budget enforcement with pre-call and post-call checks. Parameters: `tokens`, `tokens_per_call`, `cost`, `cost_per_call`, `cost_function`.
+- `nighthawk.resilience.budget` transformer: composable token and cost budget enforcement with pre-call and post-call checks. Parameters: `tokens`, `tokens_per_call`, `cost`, `cost_per_call`, `cost_function`, `estimate_usage`.
   - `BudgetExceededError`, `BudgetLimitKind`, `CostFunction` supporting types.
-  - OpenTelemetry span event `nighthawk.budget.exceeded` and `nighthawk` logger warning on budget violation.
+  - OpenTelemetry span event `nighthawk.resilience.budget.exceeded` and `nighthawk.resilience` logger warning on budget violation.
+- Resilience OpenTelemetry events for retry/timeout/circuit paths: `nighthawk.resilience.retry.attempt`, `nighthawk.resilience.retry.exhausted`, `nighthawk.resilience.timeout.triggered`, `nighthawk.resilience.circuit.opened`.
 
 ### Changed
 - Project status promoted from Alpha to Beta.
