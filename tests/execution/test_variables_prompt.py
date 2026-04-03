@@ -27,6 +27,44 @@ class _SignatureUnavailableCallable:
         return items
 
 
+class _PublicObjectSurface:
+    field_value = 12
+    _internal = "skip"
+
+    def append(self, action: str) -> None:
+        _ = action
+
+    def remove(self, action_id: str) -> None:
+        _ = action_id
+
+    @property
+    def computed(self) -> str:
+        raise AssertionError("property must not be evaluated")
+
+
+class _WithSlots:
+    __slots__ = ("slot_name", "_private_slot")
+
+    def __init__(self) -> None:
+        self.slot_name = "slot"
+        self._private_slot = "secret"
+
+
+class _MethodCollisionA:
+    def open(self, action_id: str) -> None:
+        _ = action_id
+
+
+class _MethodCollisionB:
+    def open(self, action_id: str) -> None:
+        _ = action_id
+
+
+class _AsyncSurface:
+    async def wait(self, operation: str) -> str:
+        return operation
+
+
 G = 1
 
 
@@ -266,6 +304,73 @@ def test_signature_unavailable_callable_renders_non_invocable_marker() -> None:
     assert "(*args, **kwargs)" not in locals_text
 
 
+def test_object_surface_renders_public_methods_and_fields_without_properties() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"collector": _PublicObjectSurface()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect collector.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "collector: object = _PublicObjectSurface" in locals_text
+    assert "collector.append: (action: str) -> None" in locals_text
+    assert "collector.remove: (action_id: str) -> None" in locals_text
+    assert "collector.field_value: int = 12" in locals_text
+    assert "collector._internal" not in locals_text
+    assert "collector.computed" not in locals_text
+
+
+def test_object_surface_renders_public_slots() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"collector": _WithSlots()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect collector.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert 'collector.slot_name: str = "slot"' in locals_text
+    assert "collector._private_slot" not in locals_text
+
+
+def test_object_method_signature_collision_renders_disambiguation_hint() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"a": _MethodCollisionA(), "b": _MethodCollisionB()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect objects.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "a.open: (action_id: str) -> None  # disambiguation: use a.open" in locals_text
+    assert "b.open: (action_id: str) -> None  # disambiguation: use b.open" in locals_text
+
+
+def test_object_async_method_renders_async_marker() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"worker": _AsyncSurface()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect worker.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "worker.wait: (operation: str) -> str  # async" in locals_text
+
+
 def test_callable_signature_collision_renders_disambiguation_hint_for_each_callable() -> None:
     def open_customer(customer_id):  # type: ignore[no-untyped-def]
         return customer_id
@@ -289,6 +394,51 @@ def test_callable_signature_collision_renders_disambiguation_hint_for_each_calla
     locals_text = locals_section(prompt)
     assert "open_customer: (customer_id)  # disambiguation: use open_customer" in locals_text
     assert "open_order: (customer_id)  # disambiguation: use open_order" in locals_text
+
+
+def test_object_surface_limits_methods_and_fields() -> None:
+    class Surface:
+        f1 = 1
+        f2 = 2
+        f3 = 3
+
+        def a(self) -> None:
+            return None
+
+        def b(self) -> None:
+            return None
+
+        def c(self) -> None:
+            return None
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"surface": Surface()},
+    )
+
+    configuration = nh.StepExecutorConfiguration(
+        context_limits=nh.StepContextLimits(
+            locals_max_tokens=8_000,
+            locals_max_items=80,
+            globals_max_tokens=4_000,
+            globals_max_items=40,
+            value_max_tokens=200,
+            object_max_methods=2,
+            object_max_fields=2,
+            object_field_value_max_tokens=120,
+            tool_result_max_tokens=1_200,
+        )
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect surface.",
+        step_context=step_context,
+        configuration=configuration,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "surface.<methods>: <snipped 1 public methods>" in locals_text
+    assert "surface.<fields>: <snipped 1 public fields>" in locals_text
 
 
 def test_locals_section_renders_pep695_type_alias_in_function_signature() -> None:

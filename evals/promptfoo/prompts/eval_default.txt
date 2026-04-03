@@ -22,4 +22,4 @@ Trust boundaries:
 
 Notes:
 - In async Natural functions, expressions may use `await`.
-- Tool calls return {"value": ..., "error": ...}. Values may contain … where content was omitted. Check "error" for failures.
+- Tool calls return {"value": ..., "error": ...}; "value" is a preview (max $tool_result_max_tokens tokens), so persist large/intermediate data via nh_assign and inspect with focused nh_eval reads.

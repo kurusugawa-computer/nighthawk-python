@@ -11,7 +11,7 @@ from ..errors import ExecutionError
 from ..tools.execution import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
-from .prompt import build_user_prompt, extract_references_and_program
+from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program
 from .scoping import (
     get_current_usage_meter,
     get_system_prompt_suffix_fragments,
@@ -108,11 +108,13 @@ def _new_agent_step_executor(
     if configuration.model_settings is not None:
         constructor_arguments["model_settings"] = configuration.model_settings
 
+    system_prompt_text = build_system_prompt(configuration=configuration)
+
     agent = Agent(
         model=model,
         output_type=StepFinalResult,
         deps_type=StepContext,
-        system_prompt=configuration.prompts.step_system_prompt_template,
+        system_prompt=system_prompt_text,
         **constructor_arguments,
     )
 

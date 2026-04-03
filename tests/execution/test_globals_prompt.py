@@ -4,7 +4,7 @@ import builtins
 import logging
 
 import nighthawk as nh
-from nighthawk.runtime.step_executor import build_user_prompt
+from nighthawk.runtime.prompt import build_user_prompt
 from tests.execution.prompt_test_helpers import build_step_context, build_user_prompt_text, globals_section, locals_section
 
 
@@ -169,6 +169,57 @@ def test_locals_ordering_is_lexicographic_by_name(tmp_path) -> None:
     assert locals_text.splitlines()[1].startswith("b:")
 
 
+def test_user_prompt_template_can_inject_tool_result_max_tokens() -> None:
+    class NoopAgent:
+        def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("Agent should not be invoked by build_user_prompt")
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"x": 10},
+    )
+    configuration = nh.StepExecutorConfiguration(
+        prompts=nh.StepPromptTemplates(
+            step_user_prompt_template=(
+                "<<<NH:PROGRAM>>>\n"
+                "$program\n"
+                "<<<NH:END_PROGRAM>>>\n\n"
+                "limit=$tool_result_max_tokens\n\n"
+                "<<<NH:LOCALS>>>\n"
+                "$locals\n"
+                "<<<NH:END_LOCALS>>>\n\n"
+                "<<<NH:GLOBALS>>>\n"
+                "$globals\n"
+                "<<<NH:END_GLOBALS>>>\n"
+            )
+        ),
+        context_limits=nh.StepContextLimits(
+            locals_max_tokens=8_000,
+            locals_max_items=80,
+            globals_max_tokens=4_000,
+            globals_max_items=40,
+            value_max_tokens=200,
+            object_max_methods=16,
+            object_max_fields=16,
+            object_field_value_max_tokens=120,
+            tool_result_max_tokens=4_321,
+        ),
+    )
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=NoopAgent(), configuration=configuration)):
+        prompt = build_user_prompt(
+            processed_natural_program="Say hi.",
+            step_context=step_context,
+            configuration=configuration,
+        )
+
+    assert "limit=4321" in prompt
+    assert "$tool_result_max_tokens" not in prompt
+    assert "<<<NH:PROGRAM>>>" in prompt
+    assert "<<<NH:LOCALS>>>" in prompt
+    assert "<<<NH:GLOBALS>>>" in prompt
+
+
 def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
     class NoopAgent:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -201,6 +252,9 @@ def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
             globals_max_tokens=4_000,
             globals_max_items=40,
             value_max_tokens=120,
+            object_max_methods=16,
+            object_max_fields=16,
+            object_field_value_max_tokens=120,
             tool_result_max_tokens=1_200,
         )
     )

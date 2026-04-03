@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 import nighthawk as nh
+from nighthawk.runtime.prompt import build_user_prompt
 from nighthawk.runtime.runner import _discover_implicit_type_alias_reference_names
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_executor import build_user_prompt
 
 _DEFAULT_EXECUTOR_CONFIGURATION = nh.StepExecutorConfiguration()
 
@@ -55,11 +55,16 @@ def build_step_context(
     )
 
 
-def build_user_prompt_text(*, processed_natural_program: str, step_context: StepContext) -> str:
+def build_user_prompt_text(
+    *,
+    processed_natural_program: str,
+    step_context: StepContext,
+    configuration: nh.StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
+) -> str:
     return build_user_prompt(
         processed_natural_program=processed_natural_program,
         step_context=step_context,
-        configuration=_DEFAULT_EXECUTOR_CONFIGURATION,
+        configuration=configuration,
     )
 
 

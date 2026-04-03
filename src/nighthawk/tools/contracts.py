@@ -38,7 +38,7 @@ def render_tool_result_json_text(
 ) -> str:
     """Render a tool result envelope as compact JSON text.
 
-    Both ``value`` and ``error`` are individually rendered under their own
+    Both ``value`` and ``error`` are individually previewed under their own
     token budgets via ``render_json_text``, then assembled into a
     ``{"value": ..., "error": ...}`` envelope using f-string interpolation.
     The sub-values are already valid JSON fragments produced by

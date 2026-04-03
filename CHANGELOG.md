@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Unit tests covering prompt token-budget injection: system prompt resolves `$tool_result_max_tokens`, and custom user prompt templates can resolve the same placeholder.
+
+### Changed
+- Default step system prompt now states that tool result `value` is a preview and includes the injected max-token limit.
+- User prompt template rendering now uses `Template.safe_substitute`, aligned with system prompt injection behavior and compatible with optional `$tool_result_max_tokens` placeholders.
+
 ## [0.7.0]
 
 ### Added
