@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0]
+
 ### Added
 - Unit tests covering prompt token-budget injection: system prompt resolves `$tool_result_max_tokens`, and custom user prompt templates can resolve the same placeholder.
 
@@ -125,8 +127,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.7.0...HEAD
-[0.6.1]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.6.1...v0.7.0
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.4.0...v0.5.0
