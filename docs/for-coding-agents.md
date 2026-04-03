@@ -273,6 +273,8 @@ Do not inject untrusted raw text into Natural source. If input is user-controlle
 Rules:
 
 - The model sees callable signatures from both LOCALS and GLOBALS.
+- For object read bindings, the model also sees a capability view: object header, public methods (with signatures), and public fields (with typed previews).
+- Object capability views expose public members only. Private/dunder members are omitted, and properties are not evaluated.
 - Put per-invocation data in function parameters. Put stable, reusable capabilities at module level.
 - Do not annotate callable parameters as `object` or `Any` -- this erases the signature the model needs:
 

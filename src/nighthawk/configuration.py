@@ -32,7 +32,7 @@ Trust boundaries:
 
 Notes:
 - In async Natural functions, expressions may use `await`.
-- Tool calls return {"value": ..., "error": ...}. Values may contain \u2026 where content was omitted. Check "error" for failures.
+- Tool calls return {"value": ..., "error": ...}; "value" is a preview (max $tool_result_max_tokens tokens), so persist large/intermediate data via nh_assign and inspect with focused nh_eval reads.
 """
 
 
@@ -81,8 +81,11 @@ class StepContextLimits(BaseModel):
         locals_max_items: Maximum items rendered in the locals section.
         globals_max_tokens: Maximum tokens for the globals section.
         globals_max_items: Maximum items rendered in the globals section.
-        value_max_tokens: Maximum tokens for a single value rendering.
-        tool_result_max_tokens: Maximum tokens for a tool result rendering.
+        value_max_tokens: Maximum tokens for a single value preview.
+        object_max_methods: Maximum public methods rendered for one object capability view.
+        object_max_fields: Maximum public fields rendered for one object capability view.
+        object_field_value_max_tokens: Maximum tokens for one object field value preview.
+        tool_result_max_tokens: Maximum tokens for a tool result preview.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -94,6 +97,9 @@ class StepContextLimits(BaseModel):
     globals_max_items: int = Field(default=40, ge=1)
 
     value_max_tokens: int = Field(default=200, ge=1)
+    object_max_methods: int = Field(default=16, ge=0)
+    object_max_fields: int = Field(default=16, ge=0)
+    object_field_value_max_tokens: int = Field(default=120, ge=1)
     tool_result_max_tokens: int = Field(default=1_200, ge=1)
 
 

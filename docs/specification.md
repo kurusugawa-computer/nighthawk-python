@@ -103,7 +103,7 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
     - `step_user_prompt_template`: user prompt template.
 - `StepContextLimits`
     - Limits for rendering dynamic context into the LLM prompt.
-    - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `tool_result_max_tokens`.
+    - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
 - `JsonableValue`
     - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
 - `ExecutionContext`
@@ -254,12 +254,49 @@ Ordering:
 
 Rendering format:
 
-- Non-callable values: `name: type_name = json_value`, where `json_value` is the compact JSON rendering of the value (bounded by `context_limits.value_max_tokens`).
+- `TypeAliasType` values (PEP 695): `name: type = underlying_type`.
 - Callable values: `name: (signature)`, where `(signature)` is the result of `inspect.signature`. Type annotations are included when available (e.g., `(base: int, bonus: int) -> int`).
     - If the callable has a meaningful docstring, the first line is appended as `# first_line`.
-    - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name` to help the LLM distinguish them.
+    - If the callable is async, `async` is appended in metadata comments.
+    - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name`.
     - If the signature cannot be resolved (e.g., `__signature__` raises), the entry renders as `name: <callable; signature-unavailable>`.
-- `TypeAliasType` values (PEP 695): `name: type = underlying_type`.
+- Object capability values (non-callable, non-scalar, non-container values):
+    - Header line: `name: object = TypeName`.
+    - Public method lines: `name.method: (signature)` using callable rules above.
+    - Public field lines: `name.field: type_name = json_value`.
+    - Public means names that do not start with `_`; private and dunder names are excluded.
+    - Properties are not evaluated.
+    - Field discovery uses safe sources: instance `__dict__`, dataclass fields, Pydantic model fields, and readable public `__slots__` entries.
+    - Class attributes that are public and non-callable are included as fields.
+    - Method expansion is bounded by `context_limits.object_max_methods`; field expansion is bounded by `context_limits.object_max_fields`; each field value preview is bounded by `context_limits.object_field_value_max_tokens`.
+    - If object member limits are exceeded, explicit omission lines are added: `name.<methods>: <snipped N public methods>` and/or `name.<fields>: <snipped N public fields>`.
+- Other non-callable values: `name: type_name = json_value`, where `json_value` is bounded by `context_limits.value_max_tokens`.
+
+Callable disambiguation considers both top-level callable entries and object method entries in the same section.
+
+Ordering:
+
+- Top-level entries are rendered in lexicographic order by top-level name.
+- Object methods and fields are rendered in lexicographic order by member name.
+- Methods are rendered before fields for each object entry.
+- If a section-level budget prevents rendering all top-level entries, `<snipped>` is appended at the end of the section.
+
+Safety:
+
+- Prompt rendering does not call user methods.
+- Prompt rendering does not evaluate properties or descriptors requiring attribute execution.
+- Slot and field access failures are ignored for rendering purposes.
+
+Token budgeting:
+
+- Section budgets remain governed by `locals_max_tokens` / `globals_max_tokens` and item budgets by `locals_max_items` / `globals_max_items`.
+- Object method and field expansion is additionally governed by object-specific limits listed above.
+- Line-level token counting includes newline separators during budget checks.
+
+Observability:
+
+- Section-level token truncation emits `prompt_context_truncated` logs with section, reason, and configured max token details.
+- Object member omission due to object-specific member limits does not emit a separate log event.
 
 Truncation:
 
@@ -421,7 +458,7 @@ Atomicity requirement:
 #### 8.3.1. Supporting types (internal)
 
 - `ToolBoundaryError`: Exception carrying `kind` (ErrorKind), `message`, and optional `guidance`. Raised by tool implementations to signal structured failures.
-- `ToolResultRenderingPolicy`: Frozen dataclass controlling how tool results are rendered (tokenizer encoding name, max tokens, JSON renderer style).
+- `ToolResultRenderingPolicy`: Frozen dataclass controlling how tool result previews are rendered (tokenizer encoding name, max tokens, JSON renderer style).
 
 ### 8.4. Execution contract (final JSON)
 
@@ -691,7 +728,7 @@ Instance attributes:
 - `configuration: StepExecutorConfiguration` — the resolved configuration.
 - `agent_is_managed: bool` — `True` when the agent was built internally from the configuration, `False` when provided externally via `from_agent`.
 - `token_encoding` — tiktoken encoding resolved from the configuration.
-- `tool_result_rendering_policy: ToolResultRenderingPolicy` — policy for rendering tool results, derived from configuration.
+- `tool_result_rendering_policy: ToolResultRenderingPolicy` — policy for rendering tool result previews, derived from configuration.
 
 ### 14.3. Custom backends
 
