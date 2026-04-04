@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Redesigned `nh.scope()` around `mode` semantics (`"inherit"` default, `"replace"` for explicit replacement).
+- Scope prompt suffix arguments now use list-based forms: `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`.
+
+### Removed
+- Removed `step_executor_configuration_patch` from `nh.scope()`.
+- Removed `StepExecutorConfigurationPatch` from the public API.
+
+### Fixed
+- Clarified and aligned docs/tests for scope merge vs replace behavior.
+
 ## [0.8.0]
 
 ### Added
