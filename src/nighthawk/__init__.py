@@ -3,7 +3,6 @@ from __future__ import annotations
 from .configuration import (
     StepContextLimits,
     StepExecutorConfiguration,
-    StepExecutorConfigurationPatch,
     StepPromptTemplates,
 )
 from .errors import (
@@ -32,7 +31,6 @@ __all__ = [
     "StepContextLimits",
     "StepExecutor",
     "StepExecutorConfiguration",
-    "StepExecutorConfigurationPatch",
     "StepPromptTemplates",
     "ToolEvaluationError",
     "ToolRegistrationError",

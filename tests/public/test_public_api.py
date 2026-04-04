@@ -145,7 +145,7 @@ def test_scope_implicit_references_additive_across_nested_scopes() -> None:
         assert runtime_scoping.get_implicit_reference_name_to_value() == {}
 
 
-def test_scope_implicit_references_rejects_conflicting_values() -> None:
+def test_scope_implicit_references_rejects_conflicting_values_in_inherit_mode() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(implicit_references={"shared": object()}),
@@ -161,6 +161,101 @@ def test_scope_implicit_references_rejects_conflicting_values() -> None:
 def test_scope_implicit_references_accepts_mapping() -> None:
     with nh.run(StubExecutor()), nh.scope(implicit_references={"one": object(), "two": object()}):
         assert set(runtime_scoping.get_implicit_reference_name_to_value().keys()) == {"one", "two"}
+
+
+def test_scope_replace_mode_none_keeps_inherited_implicit_references() -> None:
+    parent_function = object()
+
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
+        with nh.scope(mode="replace", implicit_references=None):
+            assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function}
+
+
+def test_scope_replace_mode_explicit_empty_mapping_clears_implicit_references() -> None:
+    parent_function = object()
+
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
+        with nh.scope(mode="replace", implicit_references={}):
+            assert runtime_scoping.get_implicit_reference_name_to_value() == {}
+
+
+def test_scope_replace_mode_replaces_implicit_references_mapping() -> None:
+    parent_function = object()
+    replacement_function = object()
+
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
+        with nh.scope(mode="replace", implicit_references={"replacement": replacement_function}):
+            assert runtime_scoping.get_implicit_reference_name_to_value() == {"replacement": replacement_function}
+
+
+def test_scope_replace_mode_none_keeps_inherited_prompt_suffix_fragments() -> None:
+    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]):
+        with nh.scope(mode="replace", system_prompt_suffix_fragments=None):
+            assert runtime_scoping.get_system_prompt_suffix_fragments() == ("parent",)
+
+
+def test_scope_replace_mode_explicit_empty_prompt_suffix_fragments_clears() -> None:
+    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]):
+        with nh.scope(mode="replace", system_prompt_suffix_fragments=[]):
+            assert runtime_scoping.get_system_prompt_suffix_fragments() == ()
+
+
+def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
+    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]):
+        with nh.scope(mode="replace", system_prompt_suffix_fragments=["child_1", "child_2"]):
+            assert runtime_scoping.get_system_prompt_suffix_fragments() == ("child_1", "child_2")
+
+
+def test_scope_mode_defaults_to_inherit() -> None:
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": object()}):
+        with nh.scope(implicit_references={"child": object()}):
+            assert set(runtime_scoping.get_implicit_reference_name_to_value().keys()) == {"parent", "child"}
+
+
+def test_scope_replace_mode_replaces_step_executor_configuration() -> None:
+    class FakeAgent:
+        def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            _ = args
+            _ = kwargs
+            raise AssertionError
+
+    first_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
+    second_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=first_configuration)):
+        with nh.scope(mode="replace", step_executor_configuration=second_configuration):
+            scoped_step_executor = nh.get_step_executor()
+            assert isinstance(scoped_step_executor, AgentStepExecutor)
+            assert scoped_step_executor.configuration == second_configuration
+
+
+def test_scope_replace_mode_none_keeps_inherited_step_executor() -> None:
+    with nh.run(StubExecutor()):
+        parent_step_executor = nh.get_step_executor()
+        with nh.scope(mode="replace", step_executor=None):
+            child_step_executor = nh.get_step_executor()
+        assert child_step_executor is parent_step_executor
+
+
+def test_scope_inherit_mode_appends_prompt_suffix_fragments() -> None:
+    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]):
+        with nh.scope(mode="inherit", system_prompt_suffix_fragments=["child"]):
+            assert runtime_scoping.get_system_prompt_suffix_fragments() == ("parent", "child")
+
+
+def test_scope_inherit_mode_rejects_invalid_implicit_reference_conflicts() -> None:
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"shared": object()}):
+        with pytest.raises(NighthawkError, match="Conflict for implicit reference"):
+            with nh.scope(mode="inherit", implicit_references={"shared": object()}):
+                pass
+
+
+def test_scope_mode_validation_is_enforced_by_typing_contract() -> None:
+    with nh.run(StubExecutor()):
+        with nh.scope(mode="inherit"):
+            pass
+        with nh.scope(mode="replace"):
+            pass
 
 
 def test_run_configuration_model_default_applies():

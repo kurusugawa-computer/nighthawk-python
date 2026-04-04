@@ -616,7 +616,7 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
             """
             first_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            with nh.scope(step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(model="openai-responses:gpt-5.4-mini")):
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")):
                 """natural
                 <:observed_model_identifier>
                 Record the current model identifier.
@@ -653,7 +653,7 @@ def test_natural_function_rejects_step_executor_configuration_updates_for_non_ag
 
         @nh.natural_function
         def f() -> None:
-            with nh.scope(step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(model="openai-responses:gpt-5.4-mini")):
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")):
                 pass
 
         with pytest.raises(NighthawkError, match="AgentStepExecutor"):

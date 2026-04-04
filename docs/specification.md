@@ -91,9 +91,6 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
     - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
     - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
-- `StepExecutorConfigurationPatch`
-    - Partial override object for scoped configuration updates.
-    - Supports patching model, model settings, templates, limits, renderer style, tokenizer encoding, and prompt suffix fragment tuples.
 
 ### 5.3. Supporting types
 
@@ -589,13 +586,18 @@ API:
     - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
-- `nighthawk.scope(*, step_executor_configuration: StepExecutorConfiguration | None = None, step_executor_configuration_patch: StepExecutorConfigurationPatch | None = None, step_executor: StepExecutor | None = None, system_prompt_suffix_fragment: str | None = None, user_prompt_suffix_fragment: str | None = None) -> Iterator[StepExecutor]`
+- `nighthawk.scope(*, mode: Literal["inherit", "replace"] = "inherit", step_executor_configuration: StepExecutorConfiguration | None = None, step_executor: StepExecutor | None = None, system_prompt_suffix_fragments: Sequence[str] | None = None, user_prompt_suffix_fragments: Sequence[str] | None = None, implicit_references: Mapping[str, object] | None = None) -> Iterator[StepExecutor]`
     - Enter a nested scope within the current run.
     - Requires an existing step executor.
     - Generates a new `scope_id` (keeps the current `run_id`).
-    - Only specified fields are overridden for the duration of the `with`.
-    - `system_prompt_suffix_fragment`: optional string appended to the system prompt for the duration of the scope.
-    - `user_prompt_suffix_fragment`: optional string appended to the user prompt for the duration of the scope.
+    - `mode="inherit"` (default):
+        - Appends prompt suffix fragment lists.
+        - Merges `implicit_references` additively with conflict checks.
+    - `mode="replace"`:
+        - Replaces provided list/mapping values.
+        - `None` means no change.
+        - Explicit `[]` / `{}` clears inherited list/mapping values.
+        - Explicit list/mapping values (for example `[e1, e2]` or `{k1: v1, k2: v2}`) fully replace inherited values.
     - Yields the resolved `StepExecutor` for the scope.
 - `nighthawk.get_step_executor() -> StepExecutor`
     - Get the current step executor. Raises if unset.

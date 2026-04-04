@@ -146,8 +146,12 @@ with nh.run(fast_executor):
         report = write_analysis_report(ticket_text, product_summary)
 ```
 
-`implicit_references` can inject global helper functions as block capabilities.
-Nested scopes still merge additively (set union by key).
+- `implicit_references` inject helper functions as block capabilities.
+- `nh.scope()` must run inside `nh.run()`; it keeps `run_id` and creates a new `scope_id`.
+- `mode` affects only `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, and `implicit_references`.
+- `inherit`: suffix lists append; `implicit_references` merge with conflict check (same key + different object => `NighthawkError`).
+- `replace`: explicit list/mapping fully replace; `[]`/`{}` clear; `None` keeps inherited value.
+- `step_executor` / `step_executor_configuration` are resolved independently of `mode`.
 
 ## 4. The standard contract shape
 

@@ -2,7 +2,7 @@
 
 > This page assumes you have completed [Executors](executors.md).
 
-This page covers how to configure execution at runtime: scoping, configuration patching, prompt suffix fragments, context limits, JSON rendering, and execution identity. These settings are independent of executor choice and apply equally to Pydantic AI providers and coding agent backends.
+This page covers how to configure execution at runtime: scoping modes, prompt suffix fragments, context limits, JSON rendering, and execution identity. These settings are independent of executor choice and apply equally to Pydantic AI providers and coding agent backends.
 
 ## Scoped overrides with `nh.scope()`
 
@@ -11,17 +11,20 @@ Use `nh.scope()` to override execution settings within an existing run. Each sco
 ```py
 with nh.run(step_executor):
 
-    # Override model for a specific section
+    # Inherit mode (default): merge/append into current scope state
     with nh.scope(
-        step_executor_configuration_patch=nh.StepExecutorConfigurationPatch(
+        step_executor_configuration=nh.StepExecutorConfiguration(
             model="openai-responses:gpt-5.4-mini",
         ),
     ) as scoped_executor:
         expensive_analysis(data)
 
-    # Append a system prompt suffix for a section
+    # Replace mode: replace only explicitly provided values
+    # None means "no change". [] / {} means "clear".
     with nh.scope(
-        system_prompt_suffix_fragment="Always respond in formal English.",
+        mode="replace",
+        system_prompt_suffix_fragments=["Always respond in formal English."],
+        implicit_references={},
     ):
         formal_summary(text)
 
@@ -29,31 +32,35 @@ with nh.run(step_executor):
     with nh.scope(step_executor=another_executor):
         specialized_step(data)
 
-    # Add implicit global references for this scope (merged across nested scopes)
+    # Add implicit global references for this scope
     with nh.scope(implicit_references={"search_repository": search_repository}):
         typed_labeling_step(ticket_text)
 ```
 
 Parameters:
 
+- `mode`: scope composition mode. Default: `"inherit"`.
 - `step_executor_configuration`: replace the entire configuration.
-- `step_executor_configuration_patch`: partially override specific fields.
 - `step_executor`: replace the step executor entirely.
-- `system_prompt_suffix_fragment`: append text to the system prompt for the scope.
-- `user_prompt_suffix_fragment`: append text to the user prompt for the scope.
-- `implicit_references`: add implicit global references for this scope as a name-to-value mapping. Nested scopes merge references additively (set union by key).
+- `system_prompt_suffix_fragments`: scope-level system suffix fragments.
+- `user_prompt_suffix_fragments`: scope-level user suffix fragments.
+- `implicit_references`: scope-level implicit global references.
 
-Use `step_executor_configuration` when you want a full configuration replacement for a scope.
-Use `step_executor_configuration_patch` for targeted changes (for example, switching only the model).
-Use `step_executor` to swap the executor implementation for that scope.
-Use `system_prompt_suffix_fragment` and `user_prompt_suffix_fragment` to append one-off scope-level prompt text.
-Use `implicit_references` when a step should always expose specific globals even without explicit `<name>` bindings.
+Mode semantics:
+
+- `mode="inherit"` (default):
+  - `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` are appended.
+  - `implicit_references` are merged additively with conflict checks.
+- `mode="replace"`:
+  - `None` means no change.
+  - Explicit `[]` or `{}` clears inherited list/dict values.
+  - Explicit list/dict values (for example `[e1, e2]` or `{k1: v1, k2: v2}`) fully replace inherited values.
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
-`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments for the whole run. Scope-level fragments are appended after configuration-level fragments.
+`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments for the whole run. In `mode="inherit"`, scope-level fragments are appended after configuration-level fragments.
 
-## Additive scoped implicit references
+## Scoped implicit references
 
 `implicit_references` can inject global helper functions as step capabilities:
 
@@ -65,8 +72,72 @@ with nh.run(step_executor):
         triage_issue(ticket_text)
 ```
 
-Nested scopes merge names additively (set union by key).
+In `mode="inherit"` (default), nested scopes merge additively with conflict checks.
+In `mode="replace"`, explicit mappings fully replace inherited mappings.
 
+```py
+with nh.run(step_executor), nh.scope(implicit_references={"parent": search_repository}):
+    with nh.scope(mode="replace", implicit_references={}):
+        triage_issue(ticket_text)
+```
+
+The inner scope above clears inherited implicit references.
+
+```py
+with nh.scope(mode="replace", implicit_references={"child": search_repository}):
+    triage_issue(ticket_text)
+```
+
+This fully replaces inherited references with the provided mapping.
+
+```py
+with nh.scope(mode="replace", implicit_references=None):
+    triage_issue(ticket_text)
+```
+
+This keeps inherited references unchanged.
+
+## Prompt suffix fragments in scopes
+
+Use list values when setting scope-level suffix fragments:
+
+```py
+with nh.run(step_executor):
+    with nh.scope(system_prompt_suffix_fragments=["Use concise answers."]):
+        summarize_ticket(ticket_text)
+```
+
+`user_prompt_suffix_fragments` follows the same rules.
+
+```py
+with nh.scope(user_prompt_suffix_fragments=["Focus on actionable output."]):
+    summarize_ticket(ticket_text)
+```
+
+In `mode="inherit"`, provided lists are appended.
+In `mode="replace"`, provided lists fully replace inherited lists.
+
+```py
+with nh.run(step_executor), nh.scope(system_prompt_suffix_fragments=["parent"]):
+    with nh.scope(mode="replace", system_prompt_suffix_fragments=["child_1", "child_2"]):
+        summarize_ticket(ticket_text)
+```
+
+Pass `[]` to clear inherited fragments.
+
+```py
+with nh.scope(mode="replace", system_prompt_suffix_fragments=[]):
+    summarize_ticket(ticket_text)
+```
+
+Pass `None` to keep inherited fragments unchanged.
+
+```py
+with nh.scope(mode="replace", system_prompt_suffix_fragments=None):
+    summarize_ticket(ticket_text)
+```
+
+The same `replace` semantics apply to `user_prompt_suffix_fragments`.
 ## Mixing executors
 
 Use `nh.scope(step_executor=...)` to switch executors within a single run. This is the standard pattern for mixing a cheap classifier with a deep autonomous step:

@@ -74,7 +74,7 @@ def test_system_prompt_suffix_fragments():
         ),
     )
 
-    with nh.run(step_executor), nh.scope(system_prompt_suffix_fragment="Hello suffix"):
+    with nh.run(step_executor), nh.scope(system_prompt_suffix_fragments=["Hello suffix"]):
 
         @nh.natural_function
         def f() -> int:
@@ -97,7 +97,7 @@ def test_user_prompt_suffix_fragments():
         ),
     )
 
-    with nh.run(step_executor), nh.scope(user_prompt_suffix_fragment="Hello suffix"):
+    with nh.run(step_executor), nh.scope(user_prompt_suffix_fragments=["Hello suffix"]):
 
         @nh.natural_function
         def f() -> int:

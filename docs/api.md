@@ -14,7 +14,6 @@
         - scope
         - AgentStepExecutor
         - StepExecutorConfiguration
-        - StepExecutorConfigurationPatch
         - StepPromptTemplates
         - StepContextLimits
         - JsonableValue
