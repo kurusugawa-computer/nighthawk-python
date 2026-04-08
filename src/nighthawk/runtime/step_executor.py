@@ -283,7 +283,7 @@ class AgentStepExecutor:
         """Extract committed bindings from the step context."""
         bindings: dict[str, object] = {}
         for name in binding_names:
-            if name in step_context.assigned_binding_names:
+            if name in step_context.assigned_binding_names or name in step_context.dirty_output_binding_names:
                 bindings[name] = step_context.step_locals[name]
         return bindings
 

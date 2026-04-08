@@ -2,18 +2,57 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated, Literal
 
 import pytest
+from pydantic import BaseModel, Field, model_validator
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime.prompt import build_system_prompt
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepKind
+from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepFinalResult, StepKind
 from tests.execution.stub_executor import StubExecutor
 
 GLOBAL_NUMBER = 7
 SHADOWED_NUMBER = 1
+
+
+class RuntimeChildModel(BaseModel):
+    value: int
+
+
+class RuntimeResultModel(BaseModel):
+    child: RuntimeChildModel | None = None
+    value: int = 0
+
+
+class RuntimeApproveProposal(BaseModel):
+    kind: Literal["approve"]
+    score: int
+
+
+class RuntimeRejectProposal(BaseModel):
+    kind: Literal["reject"]
+    reason: str
+
+
+RuntimeProposal = Annotated[RuntimeApproveProposal | RuntimeRejectProposal, Field(discriminator="kind")]
+
+
+class RuntimeProposalEnvelope(BaseModel):
+    proposals: list[RuntimeProposal]
+
+
+class RuntimePlanUpdateDecision(BaseModel):
+    should_update: bool
+    next_plan: str | None = None
+
+    @model_validator(mode="after")
+    def validate_next_plan(self) -> "RuntimePlanUpdateDecision":
+        if self.should_update and self.next_plan is None:
+            raise ValueError("next_plan is required when should_update is true")
+        return self
 
 
 def global_import_file(file_path: Path | str) -> str:
@@ -111,6 +150,54 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert asyncio.run(f(10)) == 11
+
+
+def test_pass_step_finalize_coerces_committed_model_binding() -> None:
+    with nh.run(StubExecutor()):
+
+        @nh.natural_function
+        def f() -> str:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": {"child": {"value": "7"}}}}
+            """
+            result: RuntimeResultModel
+            assert result.child is not None  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
+            return f"{type(result).__name__}:{type(result.child).__name__}:{result.child.value}"  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
+
+        assert f() == "RuntimeResultModel:RuntimeChildModel:7"
+
+
+def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
+    with nh.run(StubExecutor()):
+
+        @nh.natural_function
+        def f() -> str:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": {"proposals": [{"kind": "approve", "score": "5"}]}}}
+            """
+            result: RuntimeProposalEnvelope
+            first_proposal = result.proposals[0]  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
+            return f"{type(first_proposal).__name__}:{first_proposal.score}"
+
+        assert f() == "RuntimeApproveProposal:5"
+
+
+def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
+    with nh.run(StubExecutor()):
+
+        @nh.natural_function
+        def f() -> int:
+            """natural
+            <:decision>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"decision": {"should_update": true, "next_plan": null}}}
+            """
+            decision: RuntimePlanUpdateDecision
+            return 1 if decision.should_update else 0  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
+
+        with pytest.raises(ExecutionError, match="Output binding 'decision' failed validation"):
+            f()
 
 
 def test_async_step_execution_sets_execution_ref_step_id() -> None:
@@ -646,6 +733,36 @@ def test_step_system_prompt_injects_tool_result_max_tokens() -> None:
     resolved_system_prompt_text = build_system_prompt(configuration=configuration)
     assert "max 4321 tokens" in resolved_system_prompt_text
     assert "$tool_result_max_tokens" not in resolved_system_prompt_text
+
+
+def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
+    class FakeRunResult:
+        def __init__(self, output: object) -> None:
+            self.output = output
+
+    class FakeAgent:
+        def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            from nighthawk.tools.assignment import assign_tool
+
+            assert deps is not None
+            _ = user_prompt
+            _ = kwargs
+
+            assign_tool(deps, "result.value", "9")
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
+
+        @nh.natural_function
+        def f() -> int:
+            result: RuntimeResultModel = RuntimeResultModel(value=0)
+            """natural
+            <:result>
+            Update the result value.
+            """
+            return result.value
+
+        assert f() == 9
 
 
 def test_natural_function_can_override_step_executor_configuration_model_within_scope() -> None:

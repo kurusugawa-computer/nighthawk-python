@@ -129,7 +129,7 @@ def detect_language(text: str):
     return language
 ```
 
-Type annotations on write bindings enable validation and coercion at commit time.
+Type annotations on write bindings enable validation and coercion at step finalization for values that are actually committed.
 
 ### Pydantic model write bindings
 

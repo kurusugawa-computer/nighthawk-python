@@ -267,3 +267,40 @@ def test_assign_dotted_path_no_annotations_allowed() -> None:
 
     assign_tool(step_context, "instance.x", "99")
     assert instance.x == 99
+
+
+def test_assign_dotted_path_marks_write_binding_root_dirty() -> None:
+    class Model(BaseModel):
+        value: int = 0
+
+    step_context = StepContext(
+        step_id="test_write_root_dirty",
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"model": Model()},
+        binding_commit_targets={"model"},
+        read_binding_names=frozenset(),
+        implicit_reference_name_to_value={},
+    )
+
+    assign_tool(step_context, "model.value", "2")
+
+    assert "model" in step_context.dirty_output_binding_names
+    assert "model" not in step_context.assigned_binding_names
+
+
+def test_assign_dotted_path_read_binding_root_is_not_marked_dirty() -> None:
+    class Model(BaseModel):
+        value: int = 0
+
+    step_context = StepContext(
+        step_id="test_read_root_not_dirty",
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"model": Model()},
+        binding_commit_targets=set(),
+        read_binding_names=frozenset({"model"}),
+        implicit_reference_name_to_value={},
+    )
+
+    assign_tool(step_context, "model.value", "2")
+
+    assert step_context.dirty_output_binding_names == set()

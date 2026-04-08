@@ -32,7 +32,7 @@ class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
     ``step_globals`` and ``step_locals`` are mutable dicts. All mutations to ``step_locals`` MUST go through :meth:`record_assignment` (for top-level name bindings) or through the dotted-path assignment in ``tools.assignment`` (which bumps ``step_locals_revision`` directly).
-    Direct dict writes bypass revision tracking and ``assigned_binding_names`` bookkeeping, which will cause incorrect commit behavior at Natural block boundaries.
+    Direct dict writes bypass revision tracking, ``assigned_binding_names``, and ``dirty_output_binding_names`` bookkeeping, which will cause incorrect commit behavior at Natural block boundaries.
     """
 
     step_id: str
@@ -49,6 +49,7 @@ class StepContext:
     processed_natural_program: str = ""
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)
+    dirty_output_binding_names: set[str] = field(default_factory=set)
     step_locals_revision: int = 0
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
 
@@ -59,6 +60,11 @@ class StepContext:
         """
         self.step_locals[name] = value
         self.assigned_binding_names.add(name)
+        self.step_locals_revision += 1
+
+    def record_output_binding_mutation(self, name: str) -> None:
+        """Record an in-place mutation affecting a committed output binding root."""
+        self.dirty_output_binding_names.add(name)
         self.step_locals_revision += 1
 
 

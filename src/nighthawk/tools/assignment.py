@@ -176,10 +176,13 @@ def _assign_value_to_target_path(
             guidance="Fix the target path so the referenced attributes are assignable, then retry.",
         )
 
-    # Dotted mutation bypasses record_assignment because commit selection is
-    # controlled only by <:name> bindings (top-level names).  See design.md
-    # Section 8.3 "Commit and mutation notes" for the distinction.
-    step_context.step_locals_revision += 1
+    # Dotted mutation bypasses record_assignment. Top-level rebinding still
+    # drives ordinary assignment tracking, while write-binding roots touched by
+    # dotted nh_assign are tracked separately for commit selection.
+    if root_name in step_context.binding_commit_targets:
+        step_context.record_output_binding_mutation(root_name)
+    else:
+        step_context.step_locals_revision += 1
 
     return {
         "target_path": target_path,

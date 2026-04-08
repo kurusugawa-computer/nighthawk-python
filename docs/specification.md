@@ -393,6 +393,7 @@ Eval tool:
 
 - `nh_eval(expression: str) -> object`
     - Evaluate a Python expression and return the result. Use to inspect values, call functions, and mutate objects in-place.
+    - In-place mutations performed via `nh_eval` are not runtime-validated.
     - If the evaluated expression is awaitable, it is awaited before returning.
 
 Binding tool:
@@ -422,13 +423,16 @@ Semantics of `nh_assign`:
     - Traverse attributes for each intermediate segment.
     - Assign using attribute assignment on the final segment.
     - Validation:
-        - Validate only when runtime type metadata is available; otherwise assign without validation.
+        - Validate only the final assigned field when runtime type metadata is available; otherwise assign without validation.
 
 Commit and mutation notes:
 
 - Commit selection is controlled only by `<:name>` bindings.
 - `<:name>` selects which top-level names are committed from `step_locals` into Python locals at Natural block boundaries.
-- Dotted mutation is independent of `<:name>`.
+- Dotted `nh_assign` on a write binding root marks that root as dirty for commit selection.
+- Dotted `nh_assign` on a read binding root does not participate in commit selection.
+- Final validation is applied only to committed write bindings at step finalization.
+- Dotted mutation on read bindings and in-place mutation via `nh_eval` are outside the final validation guarantee.
 
 Write tool return value:
 

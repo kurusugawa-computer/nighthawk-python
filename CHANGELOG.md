@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool-boundary regression test ensuring recoverable `ToolBoundaryError` is wrapped into JSON payload.
 
 ### Changed
+- Finalized committed binding validation at step boundaries, added write-root dirty tracking for dotted `nh_assign`, and aligned prompt/docs with the new validation contract.
 - Redesigned `nh.scope()` around `mode` semantics (`"inherit"` default, `"replace"` for explicit replacement).
 - Scope prompt suffix arguments now use list-based forms: `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`.
 - Introduced `ExecutionRef` (`run_id`, `scope_id`, optional `step_id`) and renamed runtime accessor to `get_execution_ref`.

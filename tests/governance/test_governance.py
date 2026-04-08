@@ -10,6 +10,7 @@ from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
+from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
@@ -17,6 +18,10 @@ from nighthawk.runtime import scoping as runtime_scoping
 from nighthawk.runtime.scoping import get_oversight
 from nighthawk.runtime.step_contract import ReturnStepOutcome
 from tests.execution.stub_executor import StubExecutor
+
+
+class GovernanceResultModel(BaseModel):
+    value: int
 
 
 @pytest.fixture
@@ -167,6 +172,25 @@ def test_invalid_step_rewrite_flows_through_finalize_validation() -> None:
 
         with pytest.raises(ExecutionError, match="Return value validation failed"):
             natural_value_function()
+
+
+def test_step_commit_rewrite_is_coerced_by_finalize_validation() -> None:
+    def rewrite_step(review: nh.oversight.StepCommitProposal) -> nh.oversight.Rewrite:
+        assert review.proposed_binding_name_to_value["result"] == {"value": 1}
+        return nh.oversight.Rewrite(rewritten_binding_name_to_value={"result": {"value": "29"}})
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": {"value": 1}}}
+            """
+            result: GovernanceResultModel
+            return result.value  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
+
+        assert natural_value_function() == 29
 
 
 def test_empty_rewrite_is_rejected() -> None:

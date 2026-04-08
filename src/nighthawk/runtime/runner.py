@@ -402,12 +402,42 @@ class Runner:
         step_outcome: StepOutcome,
         bindings: dict[str, object],
         allowed_step_kinds: tuple[StepKind, ...],
-    ) -> str:
+    ) -> tuple[str, dict[str, object]]:
         step_outcome_kind = step_outcome.kind
         if step_outcome_kind not in allowed_step_kinds:
             raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
-        step_context.step_locals.update(bindings)
-        return step_outcome_kind
+        if step_outcome_kind == "raise":
+            return step_outcome_kind, dict(bindings)
+        validated_bindings = self._validate_and_coerce_output_bindings(
+            step_context=step_context,
+            bindings=bindings,
+        )
+        step_context.step_locals.update(validated_bindings)
+        return step_outcome_kind, validated_bindings
+
+    def _validate_and_coerce_output_bindings(
+        self,
+        *,
+        step_context: StepContext,
+        bindings: dict[str, object],
+    ) -> dict[str, object]:
+        validated_binding_name_to_value = dict(bindings)
+        for binding_name in step_context.binding_commit_targets:
+            if binding_name not in validated_binding_name_to_value:
+                continue
+
+            expected_type = step_context.binding_name_to_type.get(binding_name)
+            if expected_type is None:
+                continue
+
+            try:
+                validated_binding_name_to_value[binding_name] = TypeAdapter(expected_type).validate_python(
+                    validated_binding_name_to_value[binding_name]
+                )
+            except Exception as exception:
+                raise ExecutionError(f"Output binding '{binding_name}' failed validation: {exception}") from exception
+
+        return validated_binding_name_to_value
 
     def _apply_step_oversight_if_needed(
         self,
@@ -477,7 +507,7 @@ class Runner:
         allow_awaitable_return: bool,
     ) -> StepEnvelope:
         try:
-            step_outcome_kind = self._apply_bindings_and_validate_kind(
+            step_outcome_kind, validated_bindings = self._apply_bindings_and_validate_kind(
                 step_context=preparation.step_context,
                 step_outcome=step_outcome,
                 bindings=bindings,
@@ -515,7 +545,7 @@ class Runner:
         return StepEnvelope(
             step_outcome=step_outcome,
             input_bindings=dict(preparation.input_binding_name_to_value),
-            bindings=bindings,
+            bindings=validated_bindings,
             return_value=return_value,
         )
 
