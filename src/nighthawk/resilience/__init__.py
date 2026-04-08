@@ -8,9 +8,8 @@ Import directly from this module::
 
     from nighthawk.resilience import retrying, fallback, vote, timeout, budget, circuit_breaker
 
-These primitives are **not** re-exported from the top-level ``nighthawk``
-namespace.  See [Patterns: Resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns)
-for usage patterns and composition examples.
+The ``nighthawk.resilience`` module is available as ``nh.resilience`` after ``import nighthawk as nh``. Individual resilience primitives are **not** re-exported from the top-level ``nighthawk`` namespace.
+See [Patterns: Resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) for usage patterns and composition examples.
 """
 
 from __future__ import annotations

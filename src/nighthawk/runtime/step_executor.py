@@ -61,7 +61,7 @@ class SyncStepExecutor(Protocol):
         processed_natural_program: str,
         step_context: StepContext,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]: ...
 
 
@@ -75,7 +75,7 @@ class AsyncStepExecutor(Protocol):
         processed_natural_program: str,
         step_context: StepContext,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]: ...
 
 
@@ -218,7 +218,7 @@ class AgentStepExecutor:
         *,
         processed_natural_program: str,
         step_context: StepContext,
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[object, str]:
         """Build the structured output type and system prompt fragment for a step."""
         unknown_kinds = set(allowed_step_kinds).difference(STEP_KINDS)
@@ -293,7 +293,7 @@ class AgentStepExecutor:
         processed_natural_program: str,
         step_context: StepContext,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
         if step_context.tool_result_rendering_policy is None:
             step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
@@ -338,7 +338,7 @@ class AgentStepExecutor:
         processed_natural_program: str,
         step_context: StepContext,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
         return cast(
             tuple[StepOutcome, dict[str, object]],

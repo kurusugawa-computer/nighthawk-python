@@ -6,7 +6,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome
+from nighthawk.runtime.step_contract import PassStepOutcome, StepKind
 
 NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 
@@ -22,7 +22,7 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
             processed_natural_program: str,
             step_context: StepContext,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[PassStepOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = step_context
@@ -59,7 +59,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
             processed_natural_program: str,
             step_context: StepContext,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[PassStepOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = step_context

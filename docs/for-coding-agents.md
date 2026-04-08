@@ -327,7 +327,7 @@ Async rule:
 Resilience rule:
 
 - Keep retry, fallback, timeout, budget, and circuit-breaker policy in Python, not inside Natural text.
-- Import from `nighthawk.resilience` (not re-exported from `nighthawk`):
+- Import primitives from `nighthawk.resilience`. After `import nighthawk as nh`, the module namespace is also available as `nh.resilience`:
 
 ```py
 from nighthawk.resilience import retrying

@@ -6,6 +6,7 @@ import textwrap
 import pytest
 
 import nighthawk as nh
+from nighthawk.runtime.step_contract import StepKind
 from tests.execution.prompt_test_helpers import FakeAgent
 
 
@@ -117,7 +118,7 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
             processed_natural_program: str,
             step_context: object,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ):
             _ = (
                 processed_natural_program,

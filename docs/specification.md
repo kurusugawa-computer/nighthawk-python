@@ -103,17 +103,18 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
     - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
 - `JsonableValue`
     - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
-- `ExecutionContext`
+- `ExecutionRef`
     - Frozen dataclass representing runtime execution identity.
     - `run_id`: the Id of the outermost run (trace root).
     - `scope_id`: the Id of the current scope.
+    - `step_id`: the Id of the current step when available, otherwise `None`.
 
 ### 5.4. Runtime accessors
 
 - `nighthawk.get_current_step_context() -> StepContext`
     - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
-See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_context`).
+See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_ref`).
 
 ## 6. Natural block detection
 
@@ -446,6 +447,11 @@ All tool results are wrapped in a JSON envelope with the following structure:
 
 Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`.
 
+Boundary rule for tool-call failures:
+
+- If the model can recover by changing tool arguments, choosing another tool, or continuing without the tool, the failure MUST be returned in the JSON envelope (`{"value": null, "error": ...}`).
+- Host invariant violations (for example, broken runtime contract or invalid host-side oversight hook contract) MAY propagate as Python exceptions to the host instead of being envelope-wrapped.
+
 The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
 
 Atomicity requirement:
@@ -570,10 +576,11 @@ The required runtime object for step execution is:
 
 - `step_executor` (required): a strategy object responsible for executing steps (Natural blocks).
 
-Runtime execution identity is modeled separately in `ExecutionContext`:
+Runtime execution identity is modeled separately in `ExecutionRef`:
 
 - `run_id`: the Id of the outermost run (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
 - `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
+- `step_id`: the Id of the current step when available. Outside active step execution it is `None`.
 
 Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the host application layer that embeds Nighthawk.
 
@@ -582,14 +589,15 @@ API:
 
 - `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None)`
     - Replaces the current context step executor with the provided step executor.
-    - Generates a new `ExecutionContext` for the duration of the `with`.
+    - Generates a new `ExecutionRef` for the duration of the `with`.
     - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
-- `nighthawk.scope(*, mode: Literal["inherit", "replace"] = "inherit", step_executor_configuration: StepExecutorConfiguration | None = None, step_executor: StepExecutor | None = None, system_prompt_suffix_fragments: Sequence[str] | None = None, user_prompt_suffix_fragments: Sequence[str] | None = None, implicit_references: Mapping[str, object] | None = None) -> Iterator[StepExecutor]`
+- `nighthawk.scope(*, mode: Literal["inherit", "replace"] = "inherit", step_executor_configuration: StepExecutorConfiguration | None = None, step_executor: StepExecutor | None = None, oversight: Oversight | None = None, system_prompt_suffix_fragments: Sequence[str] | None = None, user_prompt_suffix_fragments: Sequence[str] | None = None, implicit_references: Mapping[str, object] | None = None) -> Iterator[StepExecutor]`
     - Enter a nested scope within the current run.
     - Requires an existing step executor.
     - Generates a new `scope_id` (keeps the current `run_id`).
+    - `oversight` omitted means inherit the current hooks; explicit `None` clears them for the nested scope.
     - `mode="inherit"` (default):
         - Appends prompt suffix fragment lists.
         - Merges `implicit_references` additively with conflict checks.
@@ -601,7 +609,7 @@ API:
     - Yields the resolved `StepExecutor` for the scope.
 - `nighthawk.get_step_executor() -> StepExecutor`
     - Get the current step executor. Raises if unset.
-- `nighthawk.get_execution_context() -> ExecutionContext`
+- `nighthawk.get_execution_ref() -> ExecutionRef`
     - Get the current runtime execution identity. Raises if unset.
 
 ### 10.1. Observability contract (OpenTelemetry span/event)

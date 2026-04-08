@@ -46,6 +46,7 @@ class StepContext:
 
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 
+    processed_natural_program: str = ""
     binding_name_to_type: dict[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)
     step_locals_revision: int = 0

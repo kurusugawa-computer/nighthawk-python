@@ -35,6 +35,15 @@ with nh.run(step_executor):
     # Add implicit global references for this scope
     with nh.scope(implicit_references={"search_repository": search_repository}):
         typed_labeling_step(ticket_text)
+
+    # Add synchronous oversight for this scope
+    with nh.scope(
+        oversight=nh.oversight.Oversight(
+            inspect_tool_call=inspect_tool_call,
+            inspect_step_commit=inspect_step_commit,
+        )
+    ):
+        inspected_step(ticket_text)
 ```
 
 Parameters:
@@ -42,6 +51,7 @@ Parameters:
 - `mode`: scope composition mode. Default: `"inherit"`.
 - `step_executor_configuration`: replace the entire configuration.
 - `step_executor`: replace the step executor entirely.
+- `oversight`: scope-level synchronous tool-call inspection and step-commit inspection hooks.
 - `system_prompt_suffix_fragments`: scope-level system suffix fragments.
 - `user_prompt_suffix_fragments`: scope-level user suffix fragments.
 - `implicit_references`: scope-level implicit global references.
@@ -55,6 +65,8 @@ Mode semantics:
   - `None` means no change.
   - Explicit `[]` or `{}` clears inherited list/dict values.
   - Explicit list/dict values (for example `[e1, e2]` or `{k1: v1, k2: v2}`) fully replace inherited values.
+
+For `oversight`, omitted means inherit the current hooks, while explicit `None` clears them for the nested scope.
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
@@ -138,6 +150,36 @@ with nh.scope(mode="replace", system_prompt_suffix_fragments=None):
 ```
 
 The same `replace` semantics apply to `user_prompt_suffix_fragments`.
+
+## Synchronous oversight in scopes
+
+Use `nh.scope(oversight=...)` when the host needs synchronous inspection around tool calls or a final rewrite/reject checkpoint before Nighthawk commits a step result.
+
+```py
+def inspect_tool_call(tool_call: nh.oversight.ToolCall) -> nh.oversight.ToolCallDecision:
+    if tool_call.tool_name == "delete_file":
+        return nh.oversight.Reject("Deletion must be approved by a human.")
+    return nh.oversight.Accept()
+
+
+def inspect_step_commit(proposal: nh.oversight.StepCommitProposal) -> nh.oversight.StepCommitDecision:
+    if "result" in proposal.proposed_binding_name_to_value:
+        return nh.oversight.Rewrite(rewritten_binding_name_to_value={"result": "reviewed"})
+    return nh.oversight.Accept()
+
+
+with nh.run(step_executor):
+    with nh.scope(
+        oversight=nh.oversight.Oversight(
+            inspect_tool_call=inspect_tool_call,
+            inspect_step_commit=inspect_step_commit,
+        )
+    ):
+        inspected_step(ticket_text)
+```
+
+Tool rejections are returned to the model as a normal tool result envelope with `error.kind == "oversight"`. Step rejections raise `nh.oversight.OversightRejectedError` to the host. Rewrite values still flow through the normal step finalization path. For the normative boundary rule on which tool-call failures are envelope-wrapped versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tool-boundary-contract-built-in-tooling).
+
 ## Mixing executors
 
 Use `nh.scope(step_executor=...)` to switch executors within a single run. This is the standard pattern for mixing a cheap classifier with a deep autonomous step:
@@ -181,12 +223,13 @@ See [Specification Section 8.2](specification.md#82-prompt-context) for the full
 
 ## Runtime execution identity
 
-Each `nh.run()` generates an `ExecutionContext` with a unique `run_id` (trace root) and `scope_id`. Nested `nh.scope()` calls generate new `scope_id` values while keeping the same `run_id`.
+Each `nh.run()` generates an `ExecutionRef` with a unique `run_id` (trace root) and `scope_id`. Nested `nh.scope()` calls generate new `scope_id` values while keeping the same `run_id`.
 
 ```py
-context = nh.get_execution_context()
-context.run_id    # trace root -- stable across nested scopes
-context.scope_id  # current scope -- changes with each nh.scope()
+execution_ref = nh.get_execution_ref()
+execution_ref.run_id    # trace root -- stable across nested scopes
+execution_ref.scope_id  # current scope -- changes with each nh.scope()
+execution_ref.step_id   # None outside active step execution
 ```
 
 Use `run_id` to correlate distributed agent processes in logs and traces. Use `scope_id` to identify the current logical execution context. See [Specification Section 10](specification.md#10-runtime-scoping) for the full specification and [Verification: observability](verification.md#observability) for tracing integration.

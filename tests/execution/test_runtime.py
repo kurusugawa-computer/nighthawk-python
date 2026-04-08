@@ -9,7 +9,7 @@ import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime.prompt import build_system_prompt
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome
+from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepKind
 from tests.execution.stub_executor import StubExecutor
 
 GLOBAL_NUMBER = 7
@@ -19,6 +19,45 @@ SHADOWED_NUMBER = 1
 def global_import_file(file_path: Path | str) -> str:
     _ = file_path
     return '{"step_outcome": {"kind": "pass"}, "bindings": {"result": 20}}'
+
+
+def test_sync_step_execution_sets_execution_ref_step_id() -> None:
+    observed_step_ids: list[str | None] = []
+
+    @dataclass
+    class StepIdAssertingExecutor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[StepKind, ...],
+        ) -> tuple[PassStepOutcome, dict[str, object]]:
+            _ = processed_natural_program
+            _ = binding_names
+            _ = allowed_step_kinds
+            observed_step_ids.append(nh.get_execution_ref().step_id)
+            assert nh.get_execution_ref().step_id == step_context.step_id
+            return PassStepOutcome(kind="pass"), {"result": 11}
+
+    with nh.run(StepIdAssertingExecutor()):
+
+        @nh.natural_function
+        def f(x: int):
+            """natural
+            <x>
+            <:result>
+            This is a docstring Natural block.
+            """
+            _ = x
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert nh.get_execution_ref().step_id is None
+        assert f(10) == 11
+        assert nh.get_execution_ref().step_id is None
+
+    assert observed_step_ids and observed_step_ids[0] is not None
 
 
 def test_natural_function_updates_output_binding_via_docstring_step():
@@ -32,7 +71,7 @@ def test_natural_function_updates_output_binding_via_docstring_step():
             processed_natural_program: str,
             step_context: StepContext,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[PassStepOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = binding_names
@@ -74,6 +113,43 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
         assert asyncio.run(f(10)) == 11
 
 
+def test_async_step_execution_sets_execution_ref_step_id() -> None:
+    observed_step_ids: list[str | None] = []
+
+    @dataclass
+    class AsyncStepIdAssertingExecutor:
+        async def run_step_async(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[StepKind, ...],
+        ) -> tuple[PassStepOutcome, dict[str, object]]:
+            _ = processed_natural_program
+            _ = binding_names
+            _ = allowed_step_kinds
+            observed_step_ids.append(nh.get_execution_ref().step_id)
+            assert nh.get_execution_ref().step_id == step_context.step_id
+            return PassStepOutcome(kind="pass"), {"result": 13}
+
+    with nh.run(AsyncStepIdAssertingExecutor()):
+
+        @nh.natural_function
+        async def f() -> int:
+            """natural
+            <:result>
+            execute one step.
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert nh.get_execution_ref().step_id is None
+        assert asyncio.run(f()) == 13
+        assert nh.get_execution_ref().step_id is None
+
+    assert observed_step_ids and observed_step_ids[0] is not None
+
+
 def test_async_natural_function_awaits_awaitable_return_value_from_step_executor():
     nh.StepExecutorConfiguration()
 
@@ -85,7 +161,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
             processed_natural_program: str,
             step_context: StepContext,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[ReturnStepOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = step_context
@@ -99,7 +175,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
             processed_natural_program: str,
             step_context: StepContext,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[ReturnStepOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = binding_names
@@ -140,7 +216,7 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
             processed_natural_program: str,
             step_context: StepContext,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[ReturnStepOutcome, dict[str, object]]:
             _ = processed_natural_program
             _ = step_context
@@ -460,7 +536,7 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
             processed_natural_program: str,
             step_context: object,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ) -> tuple[PassStepOutcome, dict[str, object]]:
             _ = step_context
             _ = binding_names

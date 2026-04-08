@@ -18,12 +18,14 @@
         - StepContextLimits
         - JsonableValue
         - to_jsonable_value
-        - ExecutionContext
+        - ExecutionRef
         - get_current_step_context
         - get_current_usage_meter
-        - get_execution_context
+        - get_execution_ref
         - get_step_executor
+        - resilience
         - UsageMeter
+        - oversight
 
 ## Errors
 
@@ -123,4 +125,3 @@
 ## Testing
 
 ::: nighthawk.testing
-

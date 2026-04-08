@@ -18,7 +18,7 @@ from .scoping import (
     RUN_ID,
     SCOPE_ID,
     STEP_ID,
-    get_execution_context,
+    get_execution_ref,
     get_user_prompt_suffix_fragments,
 )
 from .step_context import _MISSING, StepContext, resolve_name_in_step_context
@@ -469,9 +469,9 @@ def _render_reference_and_value_list_section(
                 "nighthawk.prompt_context.max_tokens": section_max_tokens,
             }
             try:
-                execution_context = get_execution_context()
-                log_attributes[RUN_ID] = execution_context.run_id
-                log_attributes[SCOPE_ID] = execution_context.scope_id
+                execution_ref = get_execution_ref()
+                log_attributes[RUN_ID] = execution_ref.run_id
+                log_attributes[SCOPE_ID] = execution_ref.scope_id
             except Exception:
                 pass
             logging.getLogger("nighthawk").info("prompt_context_truncated %s", log_attributes)

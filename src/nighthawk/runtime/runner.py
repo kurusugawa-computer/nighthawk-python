@@ -14,8 +14,25 @@ from pydantic import TypeAdapter
 
 from ..errors import ExecutionError, NaturalParseError, NighthawkError
 from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
+from ..oversight import (
+    Accept,
+    OversightRejectedError,
+    Reject,
+    Rewrite,
+    StepCommitProposal,
+    record_oversight_decision,
+)
 from .async_bridge import run_coroutine_synchronously
-from .scoping import RUN_ID, SCOPE_ID, STEP_ID, get_execution_context, get_implicit_reference_name_to_value, span
+from .scoping import (
+    RUN_ID,
+    SCOPE_ID,
+    STEP_ID,
+    get_execution_ref,
+    get_implicit_reference_name_to_value,
+    get_oversight,
+    span,
+    step_execution_ref_scope,
+)
 from .step_context import (
     _MISSING,
     StepContext,
@@ -28,6 +45,7 @@ from .step_context import (
 from .step_contract import (
     RaiseStepOutcome,
     ReturnStepOutcome,
+    StepKind,
     StepOutcome,
 )
 from .step_executor import AsyncStepExecutor, StepExecutor, SyncStepExecutor
@@ -48,8 +66,8 @@ def _split_frontmatter(
     return program_without_frontmatter, denied_step_kinds
 
 
-def _compute_allowed_step_kinds(is_in_loop: bool, denied_step_kinds: tuple[str, ...]) -> tuple[str, ...]:
-    base_allowed_kinds: list[str] = ["pass", "return", "raise"]
+def _compute_allowed_step_kinds(is_in_loop: bool, denied_step_kinds: tuple[str, ...]) -> tuple[StepKind, ...]:
+    base_allowed_kinds: list[StepKind] = ["pass", "return", "raise"]
     if is_in_loop:
         base_allowed_kinds.extend(["break", "continue"])
     return tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
@@ -262,7 +280,7 @@ class _StepPreparation:
     """Result of preparing a Natural block for execution."""
 
     processed_program: str
-    allowed_step_kinds: tuple[str, ...]
+    allowed_step_kinds: tuple[StepKind, ...]
     step_context: StepContext
     input_binding_name_to_value: dict[str, object]
 
@@ -349,6 +367,7 @@ class Runner:
             binding_commit_targets=binding_commit_targets,
             read_binding_names=read_binding_names,
             implicit_reference_name_to_value=implicit_reference_name_to_value,
+            processed_natural_program=processed_without_frontmatter,
             binding_name_to_type=binding_name_to_type,
             tool_result_rendering_policy=tool_result_rendering_policy,
         )
@@ -382,13 +401,70 @@ class Runner:
         step_context: StepContext,
         step_outcome: StepOutcome,
         bindings: dict[str, object],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> str:
         step_outcome_kind = step_outcome.kind
         if step_outcome_kind not in allowed_step_kinds:
             raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
         step_context.step_locals.update(bindings)
         return step_outcome_kind
+
+    def _apply_step_oversight_if_needed(
+        self,
+        *,
+        preparation: _StepPreparation,
+        step_outcome: StepOutcome,
+        bindings: dict[str, object],
+    ) -> tuple[StepOutcome, dict[str, object]]:
+        oversight = get_oversight()
+        if oversight is None or oversight.inspect_step_commit is None:
+            return step_outcome, bindings
+
+        execution_ref = get_execution_ref()
+        step_commit_proposal = StepCommitProposal(
+            execution_ref=execution_ref,
+            processed_natural_program=preparation.processed_program,
+            input_binding_name_to_value=preparation.input_binding_name_to_value,
+            proposed_step_outcome=step_outcome,
+            proposed_binding_name_to_value=bindings,
+            allowed_step_kinds=preparation.allowed_step_kinds,
+            output_binding_name_set=frozenset(preparation.step_context.binding_commit_targets),
+            binding_name_to_type=preparation.step_context.binding_name_to_type,
+        )
+        decision = oversight.inspect_step_commit(step_commit_proposal)
+
+        if isinstance(decision, Reject):
+            record_oversight_decision(
+                subject="step_commit",
+                verdict="reject",
+                execution_ref=execution_ref,
+                reason=decision.reason,
+            )
+            raise OversightRejectedError(decision.reason)
+
+        if isinstance(decision, Accept):
+            record_oversight_decision(
+                subject="step_commit",
+                verdict="accept",
+                execution_ref=execution_ref,
+                reason=decision.reason,
+            )
+            return step_outcome, bindings
+
+        if not isinstance(decision, Rewrite):
+            raise NighthawkError("Oversight inspect_step_commit must return Accept, Reject, or Rewrite")
+
+        record_oversight_decision(
+            subject="step_commit",
+            verdict="rewrite",
+            execution_ref=execution_ref,
+            reason=decision.reason,
+        )
+        next_step_outcome = decision.rewritten_step_outcome if decision.rewritten_step_outcome is not None else step_outcome
+        next_binding_name_to_value = (
+            dict(decision.rewritten_binding_name_to_value) if decision.rewritten_binding_name_to_value is not None else dict(bindings)
+        )
+        return next_step_outcome, next_binding_name_to_value
 
     async def _finalize_step(
         self,
@@ -462,47 +538,59 @@ class Runner:
             is_in_loop,
             caller_frame=caller_frame,
         )
-        execution_context = get_execution_context()
+        with step_execution_ref_scope(step_id=preparation.step_context.step_id):
+            execution_ref = get_execution_ref()
+            with span(
+                "nighthawk.step",
+                **{
+                    RUN_ID: execution_ref.run_id,
+                    SCOPE_ID: execution_ref.scope_id,
+                    STEP_ID: preparation.step_context.step_id,
+                },
+            ) as step_span:
+                step_executor = self.step_executor
 
-        with span(
-            "nighthawk.step",
-            **{
-                RUN_ID: execution_context.run_id,
-                SCOPE_ID: execution_context.scope_id,
-                STEP_ID: preparation.step_context.step_id,
-            },
-        ) as step_span:
-            step_executor = self.step_executor
+                try:
+                    if isinstance(step_executor, AsyncStepExecutor):
+                        step_outcome, bindings = await step_executor.run_step_async(
+                            processed_natural_program=preparation.processed_program,
+                            step_context=preparation.step_context,
+                            binding_names=output_binding_names,
+                            allowed_step_kinds=preparation.allowed_step_kinds,
+                        )
+                    elif isinstance(step_executor, SyncStepExecutor):
+                        step_outcome, bindings = step_executor.run_step(
+                            processed_natural_program=preparation.processed_program,
+                            step_context=preparation.step_context,
+                            binding_names=output_binding_names,
+                            allowed_step_kinds=preparation.allowed_step_kinds,
+                        )
+                    else:
+                        raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
+                except NighthawkError as exception:
+                    _record_internal_step_failure(step_span=step_span, exception=exception)
+                    raise
 
-            try:
-                if isinstance(step_executor, AsyncStepExecutor):
-                    step_outcome, bindings = await step_executor.run_step_async(
-                        processed_natural_program=preparation.processed_program,
-                        step_context=preparation.step_context,
-                        binding_names=output_binding_names,
-                        allowed_step_kinds=preparation.allowed_step_kinds,
+                try:
+                    step_outcome, bindings = self._apply_step_oversight_if_needed(
+                        preparation=preparation,
+                        step_outcome=step_outcome,
+                        bindings=bindings,
                     )
-                elif isinstance(step_executor, SyncStepExecutor):
-                    step_outcome, bindings = step_executor.run_step(
-                        processed_natural_program=preparation.processed_program,
-                        step_context=preparation.step_context,
-                        binding_names=output_binding_names,
-                        allowed_step_kinds=preparation.allowed_step_kinds,
-                    )
-                else:
-                    raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
-            except NighthawkError as exception:
-                _record_internal_step_failure(step_span=step_span, exception=exception)
-                raise
+                except OversightRejectedError:
+                    raise
+                except NighthawkError as exception:
+                    _record_internal_step_failure(step_span=step_span, exception=exception)
+                    raise
 
-            return await self._finalize_step(
-                preparation=preparation,
-                step_outcome=step_outcome,
-                bindings=bindings,
-                return_annotation=return_annotation,
-                step_span=step_span,
-                allow_awaitable_return=True,
-            )
+                return await self._finalize_step(
+                    preparation=preparation,
+                    step_outcome=step_outcome,
+                    bindings=bindings,
+                    return_annotation=return_annotation,
+                    step_span=step_span,
+                    allow_awaitable_return=True,
+                )
 
     def run_step(
         self,
@@ -525,36 +613,49 @@ class Runner:
         )
 
         if isinstance(self.step_executor, SyncStepExecutor):
-            execution_context = get_execution_context()
-            with span(
-                "nighthawk.step",
-                **{
-                    RUN_ID: execution_context.run_id,
-                    SCOPE_ID: execution_context.scope_id,
-                    STEP_ID: preparation.step_context.step_id,
-                },
-            ) as step_span:
-                try:
-                    step_outcome, bindings = self.step_executor.run_step(
-                        processed_natural_program=preparation.processed_program,
-                        step_context=preparation.step_context,
-                        binding_names=output_binding_names,
-                        allowed_step_kinds=preparation.allowed_step_kinds,
-                    )
-                except NighthawkError as exception:
-                    _record_internal_step_failure(step_span=step_span, exception=exception)
-                    raise
+            with step_execution_ref_scope(step_id=preparation.step_context.step_id):
+                execution_ref = get_execution_ref()
+                with span(
+                    "nighthawk.step",
+                    **{
+                        RUN_ID: execution_ref.run_id,
+                        SCOPE_ID: execution_ref.scope_id,
+                        STEP_ID: preparation.step_context.step_id,
+                    },
+                ) as step_span:
+                    try:
+                        step_outcome, bindings = self.step_executor.run_step(
+                            processed_natural_program=preparation.processed_program,
+                            step_context=preparation.step_context,
+                            binding_names=output_binding_names,
+                            allowed_step_kinds=preparation.allowed_step_kinds,
+                        )
+                    except NighthawkError as exception:
+                        _record_internal_step_failure(step_span=step_span, exception=exception)
+                        raise
 
-                return run_coroutine_synchronously(
-                    lambda: self._finalize_step(
-                        preparation=preparation,
-                        step_outcome=step_outcome,
-                        bindings=bindings,
-                        return_annotation=return_annotation,
-                        step_span=step_span,
-                        allow_awaitable_return=False,
+                    try:
+                        step_outcome, bindings = self._apply_step_oversight_if_needed(
+                            preparation=preparation,
+                            step_outcome=step_outcome,
+                            bindings=bindings,
+                        )
+                    except OversightRejectedError:
+                        raise
+                    except NighthawkError as exception:
+                        _record_internal_step_failure(step_span=step_span, exception=exception)
+                        raise
+
+                    return run_coroutine_synchronously(
+                        lambda: self._finalize_step(
+                            preparation=preparation,
+                            step_outcome=step_outcome,
+                            bindings=bindings,
+                            return_annotation=return_annotation,
+                            step_span=step_span,
+                            allow_awaitable_return=False,
+                        )
                     )
-                )
 
         return run_coroutine_synchronously(
             lambda: self._run_step_async_impl(

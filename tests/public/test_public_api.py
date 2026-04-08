@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import nighthawk as nh
 from nighthawk.errors import NighthawkError
 from nighthawk.runtime import scoping as runtime_scoping
+from nighthawk.runtime.step_contract import StepKind
 from nighthawk.runtime.step_executor import AgentStepExecutor
 from tests.execution.stub_executor import StubExecutor
 
@@ -113,13 +114,13 @@ def test_scope_keeps_run_id_and_generates_new_scope_id() -> None:
         StubExecutor(),
         run_id="run-test",
     ):
-        parent_execution_context = nh.get_execution_context()
+        parent_execution_ref = nh.get_execution_ref()
         with nh.scope():
-            nested_execution_context = nh.get_execution_context()
+            nested_execution_ref = nh.get_execution_ref()
 
-        assert parent_execution_context.run_id == "run-test"
-        assert nested_execution_context.run_id == "run-test"
-        assert parent_execution_context.scope_id != nested_execution_context.scope_id
+        assert parent_execution_ref.run_id == "run-test"
+        assert nested_execution_ref.run_id == "run-test"
+        assert parent_execution_ref.scope_id != nested_execution_ref.scope_id
 
 
 def test_scope_requires_existing_step_executor():
@@ -463,7 +464,7 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
             processed_natural_program: str,
             step_context,
             binding_names: list[str],
-            allowed_step_kinds: tuple[str, ...],
+            allowed_step_kinds: tuple[StepKind, ...],
         ):
             _ = (processed_natural_program, step_context, binding_names, allowed_step_kinds)
             raise CustomExecutionError("ignored")
@@ -500,7 +501,7 @@ def test_step_trace_symbols_are_removed_from_public_api() -> None:
 
 def test_step_span_attributes_include_run_scope_and_step_identity(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor(), run_id="trace-run"):
-        expected_scope_id = nh.get_execution_context().scope_id
+        expected_scope_id = nh.get_execution_ref().scope_id
 
         @nh.natural_function
         def natural_value_function() -> int:

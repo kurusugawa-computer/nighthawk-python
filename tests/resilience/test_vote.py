@@ -124,6 +124,14 @@ class TestVoteSync:
         with pytest.raises(ValueError, match="must be at least 1"):
             vote(count=0)
 
+    def test_min_success_must_be_positive(self) -> None:
+        with pytest.raises(ValueError, match="min_success must be at least 1"):
+            vote(count=3, min_success=0)
+
+    def test_min_success_must_not_exceed_count(self) -> None:
+        with pytest.raises(ValueError, match="less than or equal to count"):
+            vote(count=3, min_success=4)
+
     def test_preserves_metadata(self) -> None:
         def my_function(x: str) -> str:
             """My doc."""

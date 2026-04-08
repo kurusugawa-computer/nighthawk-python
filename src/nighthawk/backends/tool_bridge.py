@@ -20,13 +20,10 @@ from pydantic_ai.messages import RetryPromptPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..errors import NighthawkError
 from ..runtime.step_context import DEFAULT_TOOL_RESULT_RENDERING_POLICY, StepContext, ToolResultRenderingPolicy
 from ..runtime.tool_calls import generate_tool_call_id, run_tool_instrumented
-from ..tools.contracts import (
-    ToolBoundaryError,
-    ToolResult,
-    render_tool_result_json_text,
-)
+from ..tools.contracts import ToolBoundaryError, render_tool_result_json_text
 from ..tools.execution import ToolResultWrapperToolset
 
 type ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
@@ -44,7 +41,7 @@ def get_current_run_context_required() -> RunContext[StepContext]:
 
     run_context = get_current_run_context()
     if run_context is None:
-        raise RuntimeError("Nighthawk tool boundaries require an active RunContext")
+        raise NighthawkError("Nighthawk tool boundaries require an active RunContext")
     return cast(RunContext[StepContext], run_context)
 
 
@@ -71,6 +68,7 @@ async def execute_tool_call(
     *,
     tool_name: str,
     tool: Any,
+    toolset: ToolResultWrapperToolset,
     arguments: dict[str, Any],
     run_context: RunContext[StepContext],
     tool_call_id: str,
@@ -102,7 +100,7 @@ async def execute_tool_call(
             ).model_response()
 
         try:
-            tool_result = await tool.toolset.call_tool(tool_name, validated_arguments, run_context, tool)
+            tool_result = await toolset.call_tool(tool_name, validated_arguments, run_context, tool)
         except (ModelRetry, CallDeferred, ApprovalRequired):
             raise
         except ToolBoundaryError as exception:
@@ -121,6 +119,9 @@ async def execute_tool_call(
                 encoding=encoding,
                 style=rendering_policy.json_renderer_style,
             )
+        except NighthawkError:
+            # Preserve host-invariant failures as Python exceptions; these are not LLM-recoverable tool-call errors and must propagate to the host.
+            raise
         except Exception as exception:
             return render_tool_result_json_text(
                 value=None,
@@ -134,10 +135,10 @@ async def execute_tool_call(
                 style=rendering_policy.json_renderer_style,
             )
 
-    if isinstance(tool_result, ToolResult):
+    if isinstance(tool_result, dict) and set(tool_result.keys()) == {"value", "error"}:
         return render_tool_result_json_text(
-            value=tool_result.value,
-            error=None,
+            value=tool_result["value"],
+            error=tool_result["error"],
             max_tokens=rendering_policy.tool_result_max_tokens,
             encoding=encoding,
             style=rendering_policy.json_renderer_style,
@@ -193,6 +194,7 @@ async def build_tool_name_to_handler(
                 return await execute_tool_call(
                     tool_name=tool_name,
                     tool=tool,
+                    toolset=toolset,
                     arguments=arguments,
                     run_context=tool_run_context,
                     tool_call_id=tool_call_id,

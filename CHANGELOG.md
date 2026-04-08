@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Scope-level oversight hooks in `nh.scope(oversight=...)` for synchronous tool-call inspection and step-commit inspection.
+- Oversight trace events and backend/wrapper coverage for accept/reject decision paths.
+- Validation for `vote(min_success=...)` bounds (`>= 1` and `<= count`) with matching tests.
+- Tool-boundary regression test ensuring recoverable `ToolBoundaryError` is wrapped into JSON payload.
+
 ### Changed
 - Redesigned `nh.scope()` around `mode` semantics (`"inherit"` default, `"replace"` for explicit replacement).
 - Scope prompt suffix arguments now use list-based forms: `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`.
+- Introduced `ExecutionRef` (`run_id`, `scope_id`, optional `step_id`) and renamed runtime accessor to `get_execution_ref`.
+- Added top-level module access for `oversight` and `resilience`, with docs and public API tests aligned.
+- Consolidated tool-call oversight inspection to a single wrapper-side entry point and removed duplicate inspection guard state.
+- Unified tool result handling to TypedDict-based envelope types (`ToolResult`, `ToolError`) instead of Pydantic models.
+- Clarified tool-boundary policy: recoverable tool-call failures are JSON-envelope responses, host invariant violations propagate as Python exceptions.
+- Updated specification and runtime configuration docs to codify envelope-vs-raise boundary semantics for tool-call failures.
+- Updated API and patterns docs for `ExecutionRef`, `get_execution_ref`, and oversight/resilience namespace exposure.
+
+### Fixed
+- Backend handler now preserves wrapped tool error payloads (`{"value": ..., "error": ...}`) without dropping error details.
+- Tool-call context propagation now preserves step identity in execution ref during step execution.
 
 ### Removed
 - Removed `step_executor_configuration_patch` from `nh.scope()`.

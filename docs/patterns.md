@@ -326,7 +326,8 @@ Natural blocks are non-deterministic by nature. Production deployments need stra
 from nighthawk.resilience import retrying, fallback, vote, timeout, budget, circuit_breaker
 ```
 
-Import directly from `nighthawk.resilience`. Resilience primitives are not re-exported from the top-level `nighthawk` namespace.
+Import directly from `nighthawk.resilience`.
+After `import nighthawk as nh`, the module namespace is also available as `nh.resilience`.
 
 ### Retrying
 

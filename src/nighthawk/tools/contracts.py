@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, TypedDict
 
 import tiktoken
-from pydantic import BaseModel
 
 from ..json_renderer import JsonRendererStyle, render_json_text
 
-type ErrorKind = Literal["invalid_input", "resolution", "execution", "transient", "internal"]
+type ErrorKind = Literal["invalid_input", "resolution", "execution", "transient", "internal", "oversight"]
 
 
 class ToolBoundaryError(Exception):
@@ -17,15 +16,15 @@ class ToolBoundaryError(Exception):
         self.guidance: str | None = guidance
 
 
-class _Error(BaseModel, extra="forbid"):
+class ToolError(TypedDict):
     kind: ErrorKind
     message: str
-    guidance: str | None = None
+    guidance: str | None
 
 
-class ToolResult[ValueType](BaseModel, extra="forbid"):
-    value: ValueType | None
-    error: _Error | None
+class ToolResult(TypedDict):
+    value: object | None
+    error: ToolError | None
 
 
 def render_tool_result_json_text(

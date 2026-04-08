@@ -16,6 +16,7 @@ from .runtime.step_contract import (
     PassStepOutcome,
     RaiseStepOutcome,
     ReturnStepOutcome,
+    StepKind,
     StepOutcome,
 )
 
@@ -25,26 +26,20 @@ class StepCall:
     """Recorded information about a single Natural block execution.
 
     Attributes:
-        natural_program: The processed Natural block text (after frontmatter
-            removal and interpolation).
-        binding_names: Write binding names (``<:name>`` targets) requested by
-            the Natural function.
+        natural_program: The processed Natural block text (after frontmatter removal and interpolation).
+        binding_names: Write binding names (``<:name>`` targets) requested by the Natural function.
         binding_name_to_type: Mapping from binding name to its expected type.
-            Explicitly annotated bindings carry the declared type; unannotated
-            bindings are inferred from the initial value at runtime.
-        allowed_step_kinds: Outcome kinds allowed for this step, determined by
-            syntactic context and deny frontmatter.
+            Explicitly annotated bindings carry the declared type; unannotated bindings are inferred from the initial value at runtime.
+        allowed_step_kinds: Outcome kinds allowed for this step, determined by syntactic context and deny frontmatter.
         step_locals: Snapshot of step-local variables at the time of execution.
             Contains function parameters and local variables.
-        step_globals: Snapshot of referenced module-level names. Filtered to
-            only names that appear as read bindings (``<name>``) and resolve
-            from globals rather than locals.
+        step_globals: Snapshot of referenced module-level names. Filtered to only names that appear as read bindings (``<name>``) and resolve from globals rather than locals.
     """
 
     natural_program: str
     binding_names: list[str]
     binding_name_to_type: dict[str, object]
-    allowed_step_kinds: tuple[str, ...]
+    allowed_step_kinds: tuple[StepKind, ...]
     step_locals: dict[str, object]
     step_globals: dict[str, object]
 
@@ -54,7 +49,7 @@ class StepResponse:
     """Scripted response for a single Natural block execution.
 
     Attributes:
-        bindings: Mapping from write binding names to their values. Names not
+        bindings: Mapping from write binding names to their values. Names not in the step's ``binding_names`` are silently ignored.
             in the step's ``binding_names`` are silently ignored.
         outcome: The step outcome. Defaults to ``PassStepOutcome``.
     """
@@ -67,7 +62,7 @@ def _build_step_call(
     processed_natural_program: str,
     step_context: StepContext,
     binding_names: list[str],
-    allowed_step_kinds: tuple[str, ...],
+    allowed_step_kinds: tuple[StepKind, ...],
 ) -> StepCall:
     referenced_global_names = (
         step_context.read_binding_names | set(step_context.implicit_reference_name_to_value.keys())
@@ -128,7 +123,7 @@ class ScriptedExecutor:
         processed_natural_program: str,
         step_context: StepContext,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
         call = _build_step_call(processed_natural_program, step_context, binding_names, allowed_step_kinds)
         self.calls.append(call)
@@ -167,7 +162,7 @@ class CallbackExecutor:
         processed_natural_program: str,
         step_context: StepContext,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
         call = _build_step_call(processed_natural_program, step_context, binding_names, allowed_step_kinds)
         self.calls.append(call)

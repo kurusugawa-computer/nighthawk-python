@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter
 
 from nighthawk.errors import ExecutionError
-from nighthawk.runtime.step_contract import StepOutcome
+from nighthawk.runtime.step_contract import StepKind, StepOutcome
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class StubExecutor:
         processed_natural_program: str,
         step_context: object,
         binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
+        allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[StepOutcome, dict[str, object]]:
         _ = step_context
         _ = allowed_step_kinds

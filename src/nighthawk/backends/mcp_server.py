@@ -23,6 +23,7 @@ from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.tools import ToolDefinition
 
+from ..errors import NighthawkError
 from ..runtime.step_context import (
     DEFAULT_TOOL_RESULT_RENDERING_POLICY,
     StepContext,
@@ -203,7 +204,7 @@ async def mcp_server_if_needed(
     parent_otel_context = otel_context.get_current()
     parent_run_context = get_current_run_context()
     if parent_run_context is None:
-        raise RuntimeError("Codex MCP tool server requires an active RunContext")
+        raise NighthawkError("Codex MCP tool server requires an active RunContext")
     typed_parent_run_context = cast(RunContext[StepContext], parent_run_context)
     tool_result_rendering_policy = typed_parent_run_context.deps.tool_result_rendering_policy
     if tool_result_rendering_policy is None:

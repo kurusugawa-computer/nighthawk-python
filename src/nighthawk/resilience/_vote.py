@@ -53,12 +53,9 @@ def vote(
 ):
     """Create a majority voting transformer.
 
-    Calls the wrapped function *count* times and aggregates results
-    using the *decide* function.
+    Calls the wrapped function *count* times and aggregates results using the *decide* function.
 
-    For async functions, all calls execute concurrently via
-    :func:`asyncio.gather`. For sync functions, calls execute
-    sequentially.
+    For async functions, all calls execute concurrently via :func:`asyncio.gather`. For sync functions, calls execute sequentially.
 
     Args:
         count: Number of times to call the function.
@@ -80,6 +77,10 @@ def vote(
         raise ValueError("vote count must be at least 1")
 
     effective_min_success = min_success if min_success is not None else math.ceil(count / 2)
+    if effective_min_success < 1:
+        raise ValueError("vote min_success must be at least 1")
+    if effective_min_success > count:
+        raise ValueError("vote min_success must be less than or equal to count")
 
     def decorator[**P, R](function: Callable[P, R]) -> Callable[P, R]:
         if inspect.iscoroutinefunction(function):

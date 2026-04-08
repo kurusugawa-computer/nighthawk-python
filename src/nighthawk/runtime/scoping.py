@@ -18,20 +18,15 @@ from ..tools.registry import tool_scope
 from ..ulid import generate_ulid
 
 if TYPE_CHECKING:
+    from ..oversight import Oversight
     from .step_executor import AgentStepExecutor, StepExecutor
 
 
 @dataclass(frozen=True)
-class ExecutionContext:
-    """Immutable snapshot of the current execution context.
-
-    Attributes:
-        run_id: Unique identifier for the run.
-        scope_id: Unique identifier for the current scope.
-    """
-
+class ExecutionRef:
     run_id: str
     scope_id: str
+    step_id: str | None = None
 
 
 class UsageMeter:
@@ -94,13 +89,25 @@ _step_executor_var: ContextVar[StepExecutor | None] = ContextVar(
     default=None,
 )
 
-_execution_context_var: ContextVar[ExecutionContext | None] = ContextVar(
-    "nighthawk_execution_context",
+_execution_ref_var: ContextVar[ExecutionRef | None] = ContextVar(
+    "nighthawk_execution_ref",
     default=None,
 )
 
 _usage_meter_var: ContextVar[UsageMeter | None] = ContextVar(
     "nighthawk_usage_meter",
+    default=None,
+)
+
+
+class _UnsetOversightType:
+    pass
+
+
+_UNSET_OVERSIGHT = _UnsetOversightType()
+
+_oversight_var: ContextVar[Oversight | None] = ContextVar(
+    "nighthawk_oversight",
     default=None,
 )
 
@@ -157,21 +164,36 @@ def get_step_executor() -> StepExecutor:
     return step_executor
 
 
-def get_execution_context() -> ExecutionContext:
-    """Return the active execution context.
+def get_execution_ref() -> ExecutionRef:
+    """Return the active execution identity.
 
     Raises:
-        NighthawkError: If no execution context is set (i.e. called outside a run context).
+        NighthawkError: If no execution identity is set (i.e. called outside a run context).
     """
-    execution_context = _execution_context_var.get()
-    if execution_context is None:
-        raise NighthawkError("ExecutionContext is not set")
-    return execution_context
+    execution_ref = _execution_ref_var.get()
+    if execution_ref is None:
+        raise NighthawkError("ExecutionRef is not set")
+    return execution_ref
 
 
 def get_current_usage_meter() -> UsageMeter | None:
     """Return the active usage meter, or ``None`` if outside a run context."""
     return _usage_meter_var.get()
+
+
+def get_oversight() -> Oversight | None:
+    return _oversight_var.get()
+
+
+@contextmanager
+def step_execution_ref_scope(*, step_id: str) -> Iterator[ExecutionRef]:
+    current_execution_ref = get_execution_ref()
+    step_execution_ref = replace(current_execution_ref, step_id=step_id)
+    step_execution_ref_token = _execution_ref_var.set(step_execution_ref)
+    try:
+        yield step_execution_ref
+    finally:
+        _execution_ref_var.reset(step_execution_ref_token)
 
 
 def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
@@ -262,15 +284,17 @@ def run(
             result = my_natural_function()
         ```
     """
-    execution_context = ExecutionContext(
+    execution_ref = ExecutionRef(
         run_id=run_id or generate_ulid(),
         scope_id=generate_ulid(),
+        step_id=None,
     )
     usage_meter = UsageMeter()
 
     with tool_scope():
         step_executor_token = _step_executor_var.set(step_executor)
-        execution_context_token = _execution_context_var.set(execution_context)
+        execution_ref_token = _execution_ref_var.set(execution_ref)
+        oversight_token = _oversight_var.set(None)
         system_fragments_token = _system_prompt_suffix_fragments_var.set(())
         user_fragments_token = _user_prompt_suffix_fragments_var.set(())
         implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set({})
@@ -279,7 +303,7 @@ def run(
             with span(
                 "nighthawk.run",
                 **{
-                    RUN_ID: execution_context.run_id,
+                    RUN_ID: execution_ref.run_id,
                 },
             ):
                 yield
@@ -288,7 +312,8 @@ def run(
             _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
             _user_prompt_suffix_fragments_var.reset(user_fragments_token)
             _system_prompt_suffix_fragments_var.reset(system_fragments_token)
-            _execution_context_var.reset(execution_context_token)
+            _oversight_var.reset(oversight_token)
+            _execution_ref_var.reset(execution_ref_token)
             _step_executor_var.reset(step_executor_token)
 
 
@@ -298,19 +323,21 @@ def scope(
     mode: Literal["inherit", "replace"] = "inherit",
     step_executor_configuration: StepExecutorConfiguration | None = None,
     step_executor: StepExecutor | None = None,
+    oversight: Oversight | None | _UnsetOversightType = _UNSET_OVERSIGHT,
     system_prompt_suffix_fragments: Sequence[str] | None = None,
     user_prompt_suffix_fragments: Sequence[str] | None = None,
     implicit_references: ImplicitReferenceNameToValue | None = None,
 ) -> Iterator[StepExecutor]:
-    """Open a nested scope that can override the active execution context.
+    """Open a nested scope that can override the active execution identity.
 
-    Must be called inside an active run context. Creates a new ``scope_id`` while inheriting the ``run_id`` from the parent context.
+    Must be called inside an active run context. Creates a new ``scope_id`` while inheriting the ``run_id`` from the parent identity.
 
     Args:
         mode: Scope composition mode. ``"inherit"`` appends/merges values into the current scope. ``"replace"`` fully replaces provided list/dict values.
-            In both modes, ``None`` means no change.
+            In both modes, ``None`` means no change except for ``oversight``, where omitted means no change and explicit ``None`` clears the active oversight.
         step_executor_configuration: Full replacement configuration for the step executor.
         step_executor: Replacement step executor for this scope.
+        oversight: Scope-level oversight hooks. Omit to inherit the current oversight. Pass ``None`` to clear it for the nested scope.
         system_prompt_suffix_fragments: Additional system prompt suffix fragments.
             In ``mode="inherit"``, fragments are appended. In ``mode="replace"``, provided fragments fully replace the current fragments.
         user_prompt_suffix_fragments: Additional user prompt suffix fragments.
@@ -333,7 +360,7 @@ def scope(
         ```
     """
     current_step_executor = get_step_executor()
-    current_execution_context = get_execution_context()
+    current_execution_ref = get_execution_ref()
 
     next_step_executor = current_step_executor
     if step_executor is not None:
@@ -345,14 +372,19 @@ def scope(
             configuration=step_executor_configuration,
         )
 
-    next_execution_context = replace(
-        current_execution_context,
+    next_execution_ref = replace(
+        current_execution_ref,
         scope_id=generate_ulid(),
+        step_id=None,
     )
 
+    next_oversight = _oversight_var.get()
     next_system_prompt_suffix_fragments = _system_prompt_suffix_fragments_var.get()
     next_user_prompt_suffix_fragments = _user_prompt_suffix_fragments_var.get()
     next_implicit_reference_name_to_value = _implicit_reference_name_to_value_var.get()
+
+    if not isinstance(oversight, _UnsetOversightType):
+        next_oversight = oversight
 
     if system_prompt_suffix_fragments is not None:
         if mode == "inherit":
@@ -377,7 +409,8 @@ def scope(
 
     with tool_scope():
         step_executor_token = _step_executor_var.set(next_step_executor)
-        execution_context_token = _execution_context_var.set(next_execution_context)
+        execution_ref_token = _execution_ref_var.set(next_execution_ref)
+        oversight_token = _oversight_var.set(next_oversight)
         system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
         user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
         implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set(next_implicit_reference_name_to_value)
@@ -385,8 +418,8 @@ def scope(
             with span(
                 "nighthawk.scope",
                 **{
-                    RUN_ID: next_execution_context.run_id,
-                    SCOPE_ID: next_execution_context.scope_id,
+                    RUN_ID: next_execution_ref.run_id,
+                    SCOPE_ID: next_execution_ref.scope_id,
                 },
             ):
                 yield next_step_executor
@@ -394,5 +427,6 @@ def scope(
             _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
             _user_prompt_suffix_fragments_var.reset(user_fragments_token)
             _system_prompt_suffix_fragments_var.reset(system_fragments_token)
-            _execution_context_var.reset(execution_context_token)
+            _oversight_var.reset(oversight_token)
+            _execution_ref_var.reset(execution_ref_token)
             _step_executor_var.reset(step_executor_token)
