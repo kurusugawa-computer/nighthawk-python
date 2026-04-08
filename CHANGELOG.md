@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0]
+
 ### Added
 - Scope-level oversight hooks in `nh.scope(oversight=...)` for synchronous tool-call inspection and step-commit inspection.
 - Oversight trace events and backend/wrapper coverage for accept/reject decision paths.
@@ -15,8 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Finalized committed binding validation at step boundaries, added write-root dirty tracking for dotted `nh_assign`, and aligned prompt/docs with the new validation contract.
-- Redesigned `nh.scope()` around `mode` semantics (`"inherit"` default, `"replace"` for explicit replacement).
-- Scope prompt suffix arguments now use list-based forms: `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`.
 - Introduced `ExecutionRef` (`run_id`, `scope_id`, optional `step_id`) and renamed runtime accessor to `get_execution_ref`.
 - Added top-level module access for `oversight` and `resilience`, with docs and public API tests aligned.
 - Consolidated tool-call oversight inspection to a single wrapper-side entry point and removed duplicate inspection guard state.
@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Backend handler now preserves wrapped tool error payloads (`{"value": ..., "error": ...}`) without dropping error details.
 - Tool-call context propagation now preserves step identity in execution ref during step execution.
+
+## [0.9.0]
+
+### Changed
+
+- Redesigned `nh.scope()` around `mode` semantics (`"inherit"` default, `"replace"` for explicit replacement).
+- Scope prompt suffix arguments now use list-based forms: `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments`.
 
 ### Removed
 - Removed `step_executor_configuration_patch` from `nh.scope()`.
@@ -156,7 +163,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.6.0...v0.6.1
