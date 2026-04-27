@@ -24,8 +24,8 @@ from .scoping import (
     RUN_ID,
     SCOPE_ID,
     STEP_ID,
+    _current_user_prompt_suffix_fragments,
     get_execution_ref,
-    get_user_prompt_suffix_fragments,
 )
 from .step_context import _MISSING, StepContext, resolve_name_in_step_context
 
@@ -829,7 +829,7 @@ def build_user_prompt(
 
     suffix_fragments = (
         *configuration.user_prompt_suffix_fragments,
-        *get_user_prompt_suffix_fragments(),
+        *_current_user_prompt_suffix_fragments(),
     )
     if suffix_fragments:
         content_part_list: list[UserContent] = list(prompt_content)

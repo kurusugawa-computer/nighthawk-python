@@ -22,7 +22,10 @@
         - get_current_step_context
         - get_current_usage_meter
         - get_execution_ref
+        - get_implicit_references
         - get_step_executor
+        - get_system_prompt_suffix_fragments
+        - get_user_prompt_suffix_fragments
         - resilience
         - UsageMeter
         - oversight

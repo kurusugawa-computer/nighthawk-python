@@ -27,8 +27,8 @@ from .scoping import (
     RUN_ID,
     SCOPE_ID,
     STEP_ID,
+    _current_implicit_references,
     get_execution_ref,
-    get_implicit_reference_name_to_value,
     get_oversight,
     span,
     step_execution_ref_scope,
@@ -322,7 +322,7 @@ class Runner:
         allowed_step_kinds = _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
 
         step_globals = _build_step_globals(python_globals)
-        scoped_implicit_reference_name_to_value = get_implicit_reference_name_to_value()
+        scoped_implicit_reference_name_to_value = _current_implicit_references()
         step_globals.update(scoped_implicit_reference_name_to_value)
         step_locals = _build_step_locals(python_locals)
 

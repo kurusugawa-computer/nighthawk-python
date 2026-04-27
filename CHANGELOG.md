@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Native Pydantic AI multimodal binding support for Natural block prompts, including `BinaryContent`, URL-based media, `UploadedFile`, and explicit dotted multimodal references.
 - Multimodal tool-result transport for coding-agent backends, preserving mixed text/media order and carrying MCP image/audio content natively where supported.
+- Public scope snapshot getters: `get_implicit_references`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`.
 
 ### Changed
 - Coding-agent backends now text-project multimodal user prompts into local file paths or URL placeholders while provider-backed executors pass `UserContent` natively.

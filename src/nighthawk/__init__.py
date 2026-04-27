@@ -16,7 +16,18 @@ from .errors import (
 )
 from .json_renderer import JsonableValue, to_jsonable_value
 from .natural.decorator import natural_function
-from .runtime.scoping import ExecutionRef, UsageMeter, get_current_usage_meter, get_execution_ref, get_step_executor, run, scope
+from .runtime.scoping import (
+    ExecutionRef,
+    UsageMeter,
+    get_current_usage_meter,
+    get_execution_ref,
+    get_implicit_references,
+    get_step_executor,
+    get_system_prompt_suffix_fragments,
+    get_user_prompt_suffix_fragments,
+    run,
+    scope,
+)
 from .runtime.step_context import StepContext, get_current_step_context
 from .runtime.step_executor import AgentStepExecutor, StepExecutor
 from .tools.registry import tool
@@ -40,7 +51,10 @@ __all__ = [
     "get_current_step_context",
     "get_current_usage_meter",
     "get_execution_ref",
+    "get_implicit_references",
     "get_step_executor",
+    "get_system_prompt_suffix_fragments",
+    "get_user_prompt_suffix_fragments",
     "oversight",
     "natural_function",
     "resilience",

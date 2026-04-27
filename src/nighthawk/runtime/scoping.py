@@ -152,6 +152,11 @@ def _merge_implicit_reference_name_to_value_with_conflict_check(
     return merged_implicit_reference_name_to_value
 
 
+def _require_active_run(function_name: str) -> None:
+    if _step_executor_var.get() is None:
+        raise NighthawkError(f"{function_name} requires an active nighthawk.run() context")
+
+
 def get_step_executor() -> StepExecutor:
     """Return the active step executor.
 
@@ -196,16 +201,55 @@ def step_execution_ref_scope(*, step_id: str) -> Iterator[ExecutionRef]:
         _execution_ref_var.reset(step_execution_ref_token)
 
 
-def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
+def _current_system_prompt_suffix_fragments() -> tuple[str, ...]:
     return _system_prompt_suffix_fragments_var.get()
 
 
-def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
+def _current_user_prompt_suffix_fragments() -> tuple[str, ...]:
     return _user_prompt_suffix_fragments_var.get()
 
 
-def get_implicit_reference_name_to_value() -> dict[str, object]:
+def _current_implicit_references() -> Mapping[str, object]:
     return dict(_implicit_reference_name_to_value_var.get())
+
+
+def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
+    """Return the system prompt suffix fragments active in the current scope.
+
+    Configuration-level baseline fragments from ``StepExecutorConfiguration``
+    are not included; only fragments accumulated via ``scope`` are returned.
+
+    Raises:
+        NighthawkError: If called outside a run context.
+    """
+    _require_active_run("get_system_prompt_suffix_fragments")
+    return _current_system_prompt_suffix_fragments()
+
+
+def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
+    """Return the user prompt suffix fragments active in the current scope.
+
+    Configuration-level baseline fragments from ``StepExecutorConfiguration``
+    are not included; only fragments accumulated via ``scope`` are returned.
+
+    Raises:
+        NighthawkError: If called outside a run context.
+    """
+    _require_active_run("get_user_prompt_suffix_fragments")
+    return _current_user_prompt_suffix_fragments()
+
+
+def get_implicit_references() -> Mapping[str, object]:
+    """Return the implicit references active in the current scope.
+
+    The returned mapping is an independent snapshot; mutating it does not
+    affect the active scope.
+
+    Raises:
+        NighthawkError: If called outside a run context.
+    """
+    _require_active_run("get_implicit_references")
+    return _current_implicit_references()
 
 
 @contextmanager

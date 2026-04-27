@@ -133,17 +133,17 @@ def test_scope_implicit_references_additive_across_nested_scopes() -> None:
     child_function = object()
 
     with nh.run(StubExecutor()):
-        assert runtime_scoping.get_implicit_reference_name_to_value() == {}
+        assert nh.get_implicit_references() == {}
 
         with nh.scope(implicit_references={"parent": parent_function}):
-            assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function}
+            assert nh.get_implicit_references() == {"parent": parent_function}
 
             with nh.scope(implicit_references={"child": child_function, "parent": parent_function}):
-                assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function, "child": child_function}
+                assert nh.get_implicit_references() == {"parent": parent_function, "child": child_function}
 
-            assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function}
+            assert nh.get_implicit_references() == {"parent": parent_function}
 
-        assert runtime_scoping.get_implicit_reference_name_to_value() == {}
+        assert nh.get_implicit_references() == {}
 
 
 def test_scope_implicit_references_rejects_conflicting_values_in_inherit_mode() -> None:
@@ -161,21 +161,21 @@ def test_scope_implicit_references_rejects_conflicting_values_in_inherit_mode() 
 
 def test_scope_implicit_references_accepts_mapping() -> None:
     with nh.run(StubExecutor()), nh.scope(implicit_references={"one": object(), "two": object()}):
-        assert set(runtime_scoping.get_implicit_reference_name_to_value().keys()) == {"one", "two"}
+        assert set(nh.get_implicit_references().keys()) == {"one", "two"}
 
 
 def test_scope_replace_mode_none_keeps_inherited_implicit_references() -> None:
     parent_function = object()
 
     with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(mode="replace", implicit_references=None):
-        assert runtime_scoping.get_implicit_reference_name_to_value() == {"parent": parent_function}
+        assert nh.get_implicit_references() == {"parent": parent_function}
 
 
 def test_scope_replace_mode_explicit_empty_mapping_clears_implicit_references() -> None:
     parent_function = object()
 
     with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(mode="replace", implicit_references={}):
-        assert runtime_scoping.get_implicit_reference_name_to_value() == {}
+        assert nh.get_implicit_references() == {}
 
 
 def test_scope_replace_mode_replaces_implicit_references_mapping() -> None:
@@ -187,17 +187,17 @@ def test_scope_replace_mode_replaces_implicit_references_mapping() -> None:
         nh.scope(implicit_references={"parent": parent_function}),
         nh.scope(mode="replace", implicit_references={"replacement": replacement_function}),
     ):
-        assert runtime_scoping.get_implicit_reference_name_to_value() == {"replacement": replacement_function}
+        assert nh.get_implicit_references() == {"replacement": replacement_function}
 
 
 def test_scope_replace_mode_none_keeps_inherited_prompt_suffix_fragments() -> None:
     with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(mode="replace", system_prompt_suffix_fragments=None):
-        assert runtime_scoping.get_system_prompt_suffix_fragments() == ("parent",)
+        assert nh.get_system_prompt_suffix_fragments() == ("parent",)
 
 
 def test_scope_replace_mode_explicit_empty_prompt_suffix_fragments_clears() -> None:
     with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(mode="replace", system_prompt_suffix_fragments=[]):
-        assert runtime_scoping.get_system_prompt_suffix_fragments() == ()
+        assert nh.get_system_prompt_suffix_fragments() == ()
 
 
 def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
@@ -206,12 +206,64 @@ def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
         nh.scope(system_prompt_suffix_fragments=["parent"]),
         nh.scope(mode="replace", system_prompt_suffix_fragments=["child_1", "child_2"]),
     ):
-        assert runtime_scoping.get_system_prompt_suffix_fragments() == ("child_1", "child_2")
+        assert nh.get_system_prompt_suffix_fragments() == ("child_1", "child_2")
 
 
 def test_scope_mode_defaults_to_inherit() -> None:
     with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": object()}), nh.scope(implicit_references={"child": object()}):
-        assert set(runtime_scoping.get_implicit_reference_name_to_value().keys()) == {"parent", "child"}
+        assert set(nh.get_implicit_references().keys()) == {"parent", "child"}
+
+
+def test_get_implicit_references_is_public() -> None:
+    assert hasattr(nh, "get_implicit_references")
+    assert "get_implicit_references" in nh.__all__
+    with nh.run(StubExecutor()):
+        assert nh.get_implicit_references() == {}
+
+
+def test_get_prompt_suffix_fragments_are_public() -> None:
+    assert hasattr(nh, "get_system_prompt_suffix_fragments")
+    assert hasattr(nh, "get_user_prompt_suffix_fragments")
+    assert "get_system_prompt_suffix_fragments" in nh.__all__
+    assert "get_user_prompt_suffix_fragments" in nh.__all__
+    with nh.run(StubExecutor()):
+        assert nh.get_system_prompt_suffix_fragments() == ()
+        assert nh.get_user_prompt_suffix_fragments() == ()
+
+
+def test_ambient_getters_outside_run_raise() -> None:
+    with pytest.raises(NighthawkError):
+        nh.get_implicit_references()
+    with pytest.raises(NighthawkError):
+        nh.get_system_prompt_suffix_fragments()
+    with pytest.raises(NighthawkError):
+        nh.get_user_prompt_suffix_fragments()
+
+
+def test_get_implicit_references_reflects_nested_replace_scope() -> None:
+    parent_function = object()
+    replacement_function = object()
+
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
+        assert nh.get_implicit_references() == {"parent": parent_function}
+
+        with nh.scope(mode="replace", implicit_references={"replacement": replacement_function}):
+            assert nh.get_implicit_references() == {"replacement": replacement_function}
+
+        assert nh.get_implicit_references() == {"parent": parent_function}
+
+
+def test_get_implicit_references_returns_snapshot_not_view() -> None:
+    parent_function = object()
+    child_function = object()
+
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
+        snapshot = nh.get_implicit_references()
+
+        with nh.scope(implicit_references={"child": child_function}):
+            assert dict(snapshot) == {"parent": parent_function}
+
+        assert dict(snapshot) == {"parent": parent_function}
 
 
 def test_scope_replace_mode_replaces_step_executor_configuration() -> None:
@@ -247,7 +299,7 @@ def test_scope_inherit_mode_appends_prompt_suffix_fragments() -> None:
         nh.scope(system_prompt_suffix_fragments=["parent"]),
         nh.scope(mode="inherit", system_prompt_suffix_fragments=["child"]),
     ):
-        assert runtime_scoping.get_system_prompt_suffix_fragments() == ("parent", "child")
+        assert nh.get_system_prompt_suffix_fragments() == ("parent", "child")
 
 
 def test_scope_inherit_mode_rejects_invalid_implicit_reference_conflicts() -> None:

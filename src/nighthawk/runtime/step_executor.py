@@ -14,8 +14,8 @@ from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
 from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program
 from .scoping import (
+    _current_system_prompt_suffix_fragments,
     get_current_usage_meter,
-    get_system_prompt_suffix_fragments,
     system_prompt_suffix_fragment_scope,
 )
 from .step_context import (
@@ -123,7 +123,7 @@ def _new_agent_step_executor(
     def _system_prompt_suffixes() -> str | None:  # pyright: ignore[reportUnusedFunction]
         suffix_fragments = (
             *configuration.system_prompt_suffix_fragments,
-            *get_system_prompt_suffix_fragments(),
+            *_current_system_prompt_suffix_fragments(),
         )
         if not suffix_fragments:
             return None

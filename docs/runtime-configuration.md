@@ -151,6 +151,29 @@ with nh.scope(mode="replace", system_prompt_suffix_fragments=None):
 
 The same `replace` semantics apply to `user_prompt_suffix_fragments`.
 
+## Reading the active scope
+
+Within an active `nh.run()` context, three snapshot getters expose the current scope's accumulated state:
+
+- `nh.get_implicit_references()` returns a `Mapping[str, object]` snapshot of implicit references.
+- `nh.get_system_prompt_suffix_fragments()` returns the system prompt suffix fragments as a `tuple[str, ...]`.
+- `nh.get_user_prompt_suffix_fragments()` returns the user prompt suffix fragments as a `tuple[str, ...]`.
+
+The prompt suffix getters return only fragments accumulated via `nh.scope(...)`; configuration-level baseline fragments from `StepExecutorConfiguration` are not included.
+
+Use these when composing nested scopes from a host helper: read the parent state, derive a subset, then re-enter via `nh.scope(mode="replace", ...)`. Both narrowing (keeping a subset) and masking (removing specific keys) are expressed by deriving a new mapping and passing it under `mode="replace"`.
+
+```py
+with nh.run(step_executor):
+    with nh.scope(implicit_references={"a": helper_a, "b": helper_b}):
+        current = nh.get_implicit_references()
+        narrowed = {name: value for name, value in current.items() if name != "b"}
+        with nh.scope(mode="replace", implicit_references=narrowed):
+            triage_issue(ticket_text)
+```
+
+All three getters require an active run context. Outside `nh.run()` they raise `NighthawkError`, matching `nh.get_step_executor()` semantics. Catch `NighthawkError` if a helper needs to detect the absence of a run.
+
 ## Synchronous oversight in scopes
 
 Use `nh.scope(oversight=...)` when the host needs synchronous inspection around tool calls or a final rewrite/reject checkpoint before Nighthawk commits a step result.
