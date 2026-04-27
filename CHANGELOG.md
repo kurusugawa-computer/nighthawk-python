@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0]
+
 ### Added
 - Native Pydantic AI multimodal binding support for Natural block prompts, including `BinaryContent`, URL-based media, `UploadedFile`, and explicit dotted multimodal references.
 - Multimodal tool-result transport for coding-agent backends, preserving mixed text/media order and carrying MCP image/audio content natively where supported.
@@ -177,7 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.7.0...v0.8.0
