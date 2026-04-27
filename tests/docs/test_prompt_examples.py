@@ -23,6 +23,7 @@ import pytest
 from nighthawk.configuration import StepExecutorConfiguration
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import build_user_prompt
+from tests.execution.prompt_test_helpers import prompt_content_to_text
 
 _DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
 _NATURAL_BLOCKS_PATH = _DOCS_DIR / "natural-blocks.md"
@@ -69,10 +70,12 @@ def _build_prompt(
         read_binding_names=frozenset(),
         implicit_reference_name_to_value={},
     )
-    return build_user_prompt(
-        processed_natural_program=processed_natural_program,
-        step_context=step_context,
-        configuration=_DEFAULT_CONFIGURATION,
+    return prompt_content_to_text(
+        build_user_prompt(
+            processed_natural_program=processed_natural_program,
+            step_context=step_context,
+            configuration=_DEFAULT_CONFIGURATION,
+        )
     )
 
 

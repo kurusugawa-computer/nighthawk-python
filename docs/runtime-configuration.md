@@ -178,7 +178,7 @@ with nh.run(step_executor):
         inspected_step(ticket_text)
 ```
 
-Tool rejections are returned to the model as a normal tool result envelope with `error.kind == "oversight"`. Step rejections raise `nh.oversight.OversightRejectedError` to the host. Rewrite values still flow through the normal step finalization path. For the normative boundary rule on which tool-call failures are envelope-wrapped versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tool-boundary-contract-built-in-tooling).
+Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections raise `nh.oversight.OversightRejectedError` to the host. Rewrite values still flow through the normal step finalization path. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tool-boundary-contract-built-in-tooling).
 
 ## Mixing executors
 

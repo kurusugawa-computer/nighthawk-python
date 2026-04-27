@@ -122,6 +122,9 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
         if isinstance(value, (set, frozenset)):
             return _set_to_jsonable(value, active_object_id_set=active_object_id_set)
 
+        if _is_namedtuple_instance(value):
+            return _namedtuple_to_jsonable(value, active_object_id_set=active_object_id_set)
+
         if isinstance(value, Sequence):
             return _sequence_to_jsonable(value, active_object_id_set=active_object_id_set)
 
@@ -130,6 +133,20 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
         return _SENTINEL_NONSERIALIZABLE
     finally:
         active_object_id_set.remove(object_id)
+
+
+def _is_namedtuple_instance(value: object) -> bool:
+    return isinstance(value, tuple) and hasattr(value, "_fields") and callable(getattr(value, "_asdict", None))
+
+
+def _namedtuple_to_jsonable(value: object, *, active_object_id_set: set[int]) -> JsonableValue:
+    as_dict_method = getattr(value, "_asdict", None)
+    if not callable(as_dict_method):
+        return _SENTINEL_NONSERIALIZABLE
+    as_dict = as_dict_method()
+    if not isinstance(as_dict, Mapping):
+        return _SENTINEL_NONSERIALIZABLE
+    return _mapping_to_jsonable(as_dict, active_object_id_set=active_object_id_set)
 
 
 def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set: set[int]) -> JsonableValue:

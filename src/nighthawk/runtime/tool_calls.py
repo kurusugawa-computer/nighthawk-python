@@ -8,6 +8,7 @@ from typing import Any
 from pydantic_ai import RunContext
 from pydantic_ai._instrumentation import InstrumentationNames
 
+from ..tools.contracts import ToolHandlerResult
 from ..ulid import generate_ulid
 
 
@@ -73,10 +74,11 @@ async def run_tool_instrumented(
     *,
     tool_name: str,
     arguments: dict[str, Any],
-    call: Callable[[], Awaitable[str]],
+    call: Callable[[], Awaitable[ToolHandlerResult]],
+    build_trace_text: Callable[[ToolHandlerResult], str | None],
     run_context: RunContext[Any],
     tool_call_id: str | None,
-) -> str:
+) -> ToolHandlerResult:
     instrumentation_names = _resolve_instrumentation_names(run_context=run_context)
     include_content = _resolve_trace_include_content(run_context=run_context)
 
@@ -94,7 +96,8 @@ async def run_tool_instrumented(
         instrumentation_names=instrumentation_names,
         run_context=run_context,
     ) as span:
-        result_text = await call()
-        if include_content and span.is_recording():
-            span.set_attribute(instrumentation_names.tool_result_attr, result_text)
-        return result_text
+        tool_handler_result = await call()
+        trace_text = build_trace_text(tool_handler_result)
+        if include_content and span.is_recording() and trace_text is not None:
+            span.set_attribute(instrumentation_names.tool_result_attr, trace_text)
+        return tool_handler_result

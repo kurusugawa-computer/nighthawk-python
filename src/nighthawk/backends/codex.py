@@ -20,6 +20,7 @@ from pydantic_ai.usage import RequestUsage
 from ..tools.registry import get_visible_tools
 from .base import BackendModelBase, BackendModelSettings
 from .mcp_server import mcp_server_if_needed
+from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
 
 type SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
 type ModelReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
@@ -192,17 +193,24 @@ class CodexModel(BackendModelBase):
         model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
 
         output_schema_file: IO[str] | None = None
+        projected_request: TextProjectedRequest | None = None
 
         try:
-            _, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
+            codex_model_settings = CodexModelSettings.from_model_settings(model_settings)
+            staging_root_directory = resolve_text_projection_staging_root_directory(
+                working_directory=codex_model_settings.working_directory,
+            )
+            prepared_projected_request = self._prepare_text_projected_request(
                 messages=messages,
                 model_request_parameters=model_request_parameters,
+                staging_root_directory=staging_root_directory,
+                empty_prompt_exception_factory=UserError,
             )
+            projected_request = prepared_projected_request.projected_request
+            user_prompt_text = prepared_projected_request.user_prompt_text
 
-            prompt_parts = [p for p in [system_prompt_text, user_prompt_text] if p]
+            prompt_parts = [p for p in [prepared_projected_request.system_prompt_text, user_prompt_text] if p]
             prompt_text = "\n\n".join(prompt_parts)
-
-            codex_model_settings = CodexModelSettings.from_model_settings(model_settings)
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
@@ -326,3 +334,5 @@ class CodexModel(BackendModelBase):
             if output_schema_file is not None:
                 with contextlib.suppress(Exception):
                     output_schema_file.close()
+            if projected_request is not None:
+                projected_request.cleanup()

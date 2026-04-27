@@ -32,7 +32,10 @@ Trust boundaries:
 
 Notes:
 - In async Natural functions, expressions may use `await`.
-- Tool calls return {"value": ..., "error": ...}; "value" is a preview (max $tool_result_max_tokens tokens), so persist large/intermediate data via nh_assign and inspect with focused nh_eval reads.
+- Tool results may be native tool payloads or host-projected previews, depending on the backend path.
+- When a tool result is a preview, it may be lossy and must not be treated as canonical runtime state.
+- The preview rendering budget is max $tool_result_max_tokens tokens.
+- To preserve large or structured intermediate state across steps, persist it via nh_assign and re-read with focused nh_eval expressions.
 """
 
 

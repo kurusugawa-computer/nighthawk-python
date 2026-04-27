@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from pydantic_ai.messages import BinaryContent, CachePoint, FileUrl, ImageUrl, TextContent, UploadedFile, UserContent
+
 import nighthawk as nh
 from nighthawk.runtime.prompt import build_user_prompt
 from nighthawk.runtime.runner import _discover_implicit_type_alias_reference_names
@@ -19,7 +21,7 @@ class FakeRunResult:
 
 class FakeAgent:
     def __init__(self) -> None:
-        self.seen_prompts: list[str] = []
+        self.seen_prompts: list[str | tuple[UserContent, ...]] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
         from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
@@ -61,6 +63,53 @@ def build_user_prompt_text(
     step_context: StepContext,
     configuration: nh.StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
 ) -> str:
+    return prompt_content_to_text(
+        build_user_prompt(
+            processed_natural_program=processed_natural_program,
+            step_context=step_context,
+            configuration=configuration,
+        )
+    )
+
+
+def _is_image_content_for_test(content: object) -> bool:
+    if isinstance(content, ImageUrl):
+        return True
+    if isinstance(content, BinaryContent):
+        return content.is_image
+    media_type = getattr(content, "media_type", None)
+    return isinstance(media_type, str) and media_type.startswith("image/")
+
+
+def prompt_content_to_text(prompt_content: str | tuple[UserContent, ...]) -> str:
+    if isinstance(prompt_content, str):
+        return prompt_content
+
+    text_part_list: list[str] = []
+
+    for content in prompt_content:
+        if isinstance(content, str):
+            text_part_list.append(content)
+            continue
+        if isinstance(content, TextContent):
+            text_part_list.append(content.content)
+            continue
+        if isinstance(content, (BinaryContent, FileUrl, UploadedFile)):
+            text_part_list.append("<image>" if _is_image_content_for_test(content) else "<file>")
+            continue
+        if isinstance(content, CachePoint):
+            continue
+        raise TypeError(f"Unsupported UserContent type in test helper: {type(content).__name__}")
+
+    return "".join(text_part_list)
+
+
+def build_user_prompt_content(
+    *,
+    processed_natural_program: str,
+    step_context: StepContext,
+    configuration: nh.StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
+) -> tuple[UserContent, ...]:
     return build_user_prompt(
         processed_natural_program=processed_natural_program,
         step_context=step_context,

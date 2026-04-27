@@ -14,6 +14,7 @@ You are expected to write, review, and debug Python code that uses Nighthawk as 
 - Prefer explicit, typed write bindings. Runtime inference exists for unannotated write bindings, but new code should not rely on it.
 - Keep outputs narrow and typed, especially when using coding agent backends. A block may do broad internal work, but the Python boundary should stay small.
 - When prompt context is truncated and you see `<snipped>`, first reduce context surface or split the block. Increase `StepContextLimits` only after simplification fails.
+- Explicit dotted multimodal references such as `<holder.photo>` can still be omitted under tight `locals_max_items` / `locals_max_tokens`; resize budgets rather than assuming hoisting is unconditional.
 
 ## 2. First decision: should this be Natural at all?
 

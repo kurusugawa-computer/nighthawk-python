@@ -176,6 +176,25 @@ class TestBoundaryRules:
             url_fragment = f"/nighthawk-python/{slug}/"
             assert url_fragment in readme_text, f"README.md is missing documentation link for '{nav_file}' (expected URL containing '{url_fragment}')"
 
+    def test_spec_documents_attribute_only_dotted_resolution_and_tool_retry_policy(self) -> None:
+        """specification.md should describe attribute-only dotted resolution and tool retry policy."""
+        specification_text = (_DOCS_DIR / "specification.md").read_text(encoding="utf-8")
+        assert "Dotted-path resolution is attribute-oriented only." in specification_text
+        assert "does not treat `Mapping` keys as attribute segments" in specification_text
+        assert "MUST NOT automatically suppress otherwise eligible LOCALS entries" in specification_text
+        assert "Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`, `oversight`." in specification_text
+        assert "SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts" in specification_text
+        assert "the dedicated retry-prompt path is reserved for tool argument validation failures before tool execution" in specification_text
+
+    def test_coding_agent_backends_documents_text_projected_multimodal_inputs(self) -> None:
+        """coding-agent-backends.md should explain text projection for multimodal user prompts."""
+        coding_agent_backends_text = (_DOCS_DIR / "coding-agent-backends.md").read_text(encoding="utf-8")
+        assert "Coding agent backends do not receive native VLM-style user-prompt multimodal input." in coding_agent_backends_text
+        assert "`UploadedFile` user-prompt content is rejected" in coding_agent_backends_text
+        assert "mixed top-level text/multimodal tool-result sequences preserve their original order" in coding_agent_backends_text
+        assert "the projected prompt stays header-only" in coding_agent_backends_text
+        assert "This differs from provider-backed executors" in coding_agent_backends_text
+
 
 # -- Philosophy structure -----------------------------------------------------
 

@@ -1,15 +1,59 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
-from pydantic_ai.messages import ModelMessage, ModelRequest, RetryPromptPart, SystemPromptPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import (
+    CachePoint,
+    ModelMessage,
+    ModelRequest,
+    RetryPromptPart,
+    SystemPromptPart,
+    TextContent,
+    ToolReturnPart,
+    UploadedFile,
+    UserContent,
+    UserPromptPart,
+    is_multi_modal_content,
+)
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
 from .tool_bridge import ToolHandler, prepare_allowed_tools
+
+if TYPE_CHECKING:
+    from .text_projection import TextProjectedRequest
+
+type RequestPromptPart = tuple[UserContent, ...] | ToolReturnPart
+type RequestPromptPartList = list[RequestPromptPart]
+
+
+def _validate_coding_agent_user_prompt_content_item(*, item: UserContent, backend_label: str) -> None:
+    """Enforce the coding-agent-backend user-prompt admission policy.
+
+    This layers two checks:
+
+    1. Structural check (policy-free): reject anything outside the Pydantic AI
+       ``UserContent`` union (``str | TextContent | CachePoint | <multimodal>``).
+    2. Admission policy (coding-agent-specific): reject ``UploadedFile`` even
+       though it is a legal ``UserContent`` member, because coding-agent
+       backends cannot resolve provider-owned file references.
+
+    Only backends subclassing :class:`BackendModelBase` (the coding-agent
+    backends) route through this helper; provider-backed executors send
+    ``UserContent`` natively and bypass this path.
+    """
+    if isinstance(item, UploadedFile):
+        raise UserError(
+            f"{backend_label} does not support UploadedFile user prompt content; provider-owned uploaded files cannot be resolved by this backend"
+        )
+    if isinstance(item, str | TextContent | CachePoint) or is_multi_modal_content(item):
+        return
+    raise UserError(f"{backend_label} does not support user prompt content type {type(item).__name__}")
 
 
 def _find_most_recent_model_request(messages: list[ModelMessage]) -> ModelRequest:
@@ -27,20 +71,42 @@ def _collect_system_prompt_text(model_request: ModelRequest) -> str:
     return "\n\n".join(parts)
 
 
-def _collect_user_prompt_text(model_request: ModelRequest, *, backend_label: str) -> str:
-    parts: list[str] = []
+@dataclass(frozen=True)
+class PreparedRequestParts:
+    system_prompt_text: str
+    request_prompt_part_list: RequestPromptPartList
+
+
+@dataclass(frozen=True)
+class PreparedTextProjectedRequest:
+    system_prompt_text: str
+    user_prompt_text: str
+    projected_request: TextProjectedRequest
+
+
+def _normalize_user_prompt_content(content: str | Sequence[UserContent], *, backend_label: str) -> tuple[UserContent, ...]:
+    if isinstance(content, str):
+        return (content,)
+
+    normalized_content_list: list[UserContent] = []
+    for item in content:
+        _validate_coding_agent_user_prompt_content_item(item=item, backend_label=backend_label)
+        normalized_content_list.append(item)
+
+    return tuple(normalized_content_list)
+
+
+def _collect_request_prompt_part_list(model_request: ModelRequest, *, backend_label: str) -> RequestPromptPartList:
+    request_prompt_part_list: RequestPromptPartList = []
     for part in model_request.parts:
         if isinstance(part, UserPromptPart):
-            if isinstance(part.content, str):
-                parts.append(part.content)
-            else:
-                raise UserError(f"{backend_label} does not support non-text user prompts")
+            request_prompt_part_list.append(_normalize_user_prompt_content(part.content, backend_label=backend_label))
         elif isinstance(part, RetryPromptPart):
-            parts.append(part.model_response())
+            request_prompt_part_list.append((part.model_response(),))
         elif isinstance(part, ToolReturnPart):
-            raise UserError(f"{backend_label} does not support tool-return parts")
+            request_prompt_part_list.append(part)
 
-    return "\n\n".join(p for p in parts if p)
+    return request_prompt_part_list
 
 
 class BackendModelBase(Model):
@@ -63,7 +129,7 @@ class BackendModelBase(Model):
         *,
         messages: list[ModelMessage],
         model_request_parameters: ModelRequestParameters,
-    ) -> tuple[ModelRequest, str, str]:
+    ) -> PreparedRequestParts:
         if model_request_parameters.builtin_tools:
             raise UserError(f"{self.backend_label} does not support builtin tools")
 
@@ -78,11 +144,40 @@ class BackendModelBase(Model):
         if instructions:
             system_prompt_text = "\n\n".join([system_prompt_text, instructions]) if system_prompt_text else instructions
 
-        user_prompt_text = _collect_user_prompt_text(model_request, backend_label=self.backend_label)
-        if user_prompt_text.strip() == "":
-            raise UserError(f"{self.backend_label} requires a non-empty user prompt")
+        request_prompt_part_list = _collect_request_prompt_part_list(model_request, backend_label=self.backend_label)
+        return PreparedRequestParts(
+            system_prompt_text=system_prompt_text,
+            request_prompt_part_list=request_prompt_part_list,
+        )
 
-        return model_request, system_prompt_text, user_prompt_text
+    def _prepare_text_projected_request(
+        self,
+        *,
+        messages: list[ModelMessage],
+        model_request_parameters: ModelRequestParameters,
+        staging_root_directory: Path,
+        empty_prompt_exception_factory: Callable[[str], Exception],
+    ) -> PreparedTextProjectedRequest:
+        from .text_projection import project_request_prompt_part_list_to_text
+
+        prepared_request_parts = self._prepare_common_request_parts(
+            messages=messages,
+            model_request_parameters=model_request_parameters,
+        )
+        projected_request = project_request_prompt_part_list_to_text(
+            prepared_request_parts.request_prompt_part_list,
+            staging_root_directory=staging_root_directory,
+        )
+        user_prompt_text = projected_request.prompt_text
+        if user_prompt_text.strip() == "":
+            projected_request.cleanup()
+            raise empty_prompt_exception_factory(f"{self.backend_label} requires a non-empty user prompt")
+
+        return PreparedTextProjectedRequest(
+            system_prompt_text=prepared_request_parts.system_prompt_text,
+            user_prompt_text=user_prompt_text,
+            projected_request=projected_request,
+        )
 
     async def _prepare_allowed_tools(
         self,

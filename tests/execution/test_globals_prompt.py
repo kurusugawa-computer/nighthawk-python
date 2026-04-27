@@ -3,9 +3,20 @@ from __future__ import annotations
 import builtins
 import logging
 
+from pydantic_ai.messages import BinaryContent
+
 import nighthawk as nh
 from nighthawk.runtime.prompt import build_user_prompt
-from tests.execution.prompt_test_helpers import build_step_context, build_user_prompt_text, globals_section, locals_section
+from tests.execution.prompt_test_helpers import (
+    build_step_context,
+    build_user_prompt_content,
+    build_user_prompt_text,
+    globals_section,
+    locals_section,
+    prompt_content_to_text,
+)
+
+_VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
 
 def test_globals_markers_present_even_when_empty(tmp_path) -> None:
@@ -213,11 +224,12 @@ def test_user_prompt_template_can_inject_tool_result_max_tokens() -> None:
             configuration=configuration,
         )
 
-    assert "limit=4321" in prompt
-    assert "$tool_result_max_tokens" not in prompt
-    assert "<<<NH:PROGRAM>>>" in prompt
-    assert "<<<NH:LOCALS>>>" in prompt
-    assert "<<<NH:GLOBALS>>>" in prompt
+    prompt_text = prompt_content_to_text(prompt)
+    assert "limit=4321" in prompt_text
+    assert "$tool_result_max_tokens" not in prompt_text
+    assert "<<<NH:PROGRAM>>>" in prompt_text
+    assert "<<<NH:LOCALS>>>" in prompt_text
+    assert "<<<NH:GLOBALS>>>" in prompt_text
 
 
 def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
@@ -269,7 +281,7 @@ def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
     logger.removeHandler(handler)
     logger.setLevel(original_level)
 
-    locals_text = locals_section(prompt)
+    locals_text = locals_section(prompt_content_to_text(prompt))
     assert "<snipped>" in locals_text
 
     truncation_log_record_list = [record for record in seen_log_record_list if "prompt_context_truncated" in record.getMessage()]
@@ -279,3 +291,25 @@ def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
     assert "'nighthawk.prompt_context.reason': 'token_limit'" in message
     assert "'nighthawk.prompt_context.max_tokens': 10" in message
     assert "'step.id': 'test'" in message
+
+
+def test_custom_user_prompt_template_preserves_multimodal_placeholder_order() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"photo": BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png")},
+    )
+    configuration = nh.StepExecutorConfiguration(
+        prompts=nh.StepPromptTemplates(step_user_prompt_template=("before\n$locals\nbetween\n$program\nafter\n$globals\n"))
+    )
+
+    prompt_content = build_user_prompt_content(
+        processed_natural_program="Inspect <photo>.",
+        step_context=step_context,
+        configuration=configuration,
+    )
+
+    photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
+    assert prompt_content[photo_index - 1] == "before\nphoto: BinaryContent = "
+    content_after_photo = prompt_content[photo_index + 1]
+    assert isinstance(content_after_photo, str)
+    assert content_after_photo.startswith("\nbetween\nInspect <photo>.\nafter\n")

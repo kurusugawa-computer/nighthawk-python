@@ -27,6 +27,13 @@ DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
 )
 
 
+def resolve_tool_result_rendering_policy(policy: ToolResultRenderingPolicy | None) -> ToolResultRenderingPolicy:
+    """Return *policy* when set, else :data:`DEFAULT_TOOL_RESULT_RENDERING_POLICY`."""
+    if policy is None:
+        return DEFAULT_TOOL_RESULT_RENDERING_POLICY
+    return policy
+
+
 @dataclass
 class StepContext:
     """Mutable, per-step execution context passed to tools and executors.

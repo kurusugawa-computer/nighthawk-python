@@ -63,6 +63,7 @@ Three sections:
 
 - **`<<<NH:PROGRAM>>>`** -- your Natural block text (after sentinel removal and `textwrap.dedent`).
 - **`<<<NH:LOCALS>>>`** -- step locals, rendered alphabetically as `name: type = value`.
+  Nighthawk renders the full current locals snapshot by design; control context size by deciding which locals exist before the block.
 - **`<<<NH:GLOBALS>>>`** -- module-level names referenced via `<name>` that are not in step locals.
 
 ### One block, one task
@@ -160,6 +161,17 @@ When the LLM assigns a value to `verdict`, Nighthawk validates and coerces it to
 ### Prompt appearance of bindings
 
 Read and write bindings are rendered identically in the LOCALS section (e.g., `name: type = value`). The `<name>` vs `<:name>` distinction in the Natural program text is the signal that tells the LLM which names it may update. At runtime, Nighthawk enforces the distinction: read bindings block rebinding, while write bindings allow rebinding and commit values back to Python locals.
+
+### Multimodal bindings
+
+A binding may hold a Pydantic AI multimodal value -- `BinaryContent`, `ImageUrl`, `AudioUrl`, `DocumentUrl`, `VideoUrl`, or `UploadedFile`. These are first-class binding values: reference them with `<name>` like any other binding, and Nighthawk renders the inline placeholder (`<image>` for image media, `<file>` otherwise) in the LOCALS or GLOBALS line. Explicit dotted leaf references use the same mechanism, and dotted `list` / `tuple` leaves are hoisted when they satisfy the same `UserContent` rule as top-level bindings. `UploadedFile` is only usable as native user-prompt content on provider-backed executors that can resolve the provider-owned file reference; coding-agent backends reject it at the user-prompt boundary.
+
+Transport depends on the executor:
+
+- Provider-backed executors that accept Pydantic AI `UserContent` send the value natively to the VLM API.
+- Coding-agent backends text-project the value (staged local files or URL references). See [Coding agent backends: multimodal inputs](coding-agent-backends.md#multimodal-inputs).
+
+For the normative rendering and transport rules, including dotted-reference hoisting and the remaining v0.11.0 nesting restrictions, see [Specification Section 8.2](specification.md#82-locals-summary).
 
 ### f-string injection
 
@@ -322,6 +334,8 @@ python_average: (numbers)
 ### Keep locals minimal
 
 Function parameters and local variables appear in LOCALS. Module-level names referenced via `<name>` that are _not_ in locals appear in GLOBALS. Nighthawk renders callable entries with their full signature and docstring intent -- but only when type information is available.
+
+This is a deliberate tradeoff: LOCALS stays a flat, predictable snapshot of what Python has already bound. If you want less prompt context, keep fewer locals alive at the block boundary. Section truncation still follows the normal lexicographic rendering order, so under tight budgets an explicitly referenced dotted multimodal leaf can still be omitted along with any other later entry.
 
 When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type.
 

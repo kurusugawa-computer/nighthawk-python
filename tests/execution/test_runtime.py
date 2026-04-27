@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 
 import pytest
 from pydantic import BaseModel, Field, model_validator
+from pydantic_ai.messages import BinaryContent
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
@@ -763,6 +764,70 @@ def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
             return result.value
 
         assert f() == 9
+
+
+def test_agent_executor_passes_plain_string_to_text_only_custom_agent() -> None:
+    class FakeRunResult:
+        def __init__(self, output: object) -> None:
+            self.output = output
+
+    class RecordingAgent:
+        def __init__(self) -> None:
+            self.seen_prompt_type_list: list[type[object]] = []
+
+        def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            assert deps is not None
+            _ = kwargs
+            self.seen_prompt_type_list.append(type(user_prompt))
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+
+    recording_agent = RecordingAgent()
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=recording_agent)):
+
+        @nh.natural_function
+        def f() -> None:
+            """natural
+            Say hi.
+            """
+
+        f()
+
+    assert recording_agent.seen_prompt_type_list == [str]
+
+
+def test_agent_executor_passes_multimodal_tuple_to_custom_agent() -> None:
+    class FakeRunResult:
+        def __init__(self, output: object) -> None:
+            self.output = output
+
+    class RecordingAgent:
+        def __init__(self) -> None:
+            self.seen_prompt_list: list[object] = []
+
+        def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            assert deps is not None
+            _ = kwargs
+            self.seen_prompt_list.append(user_prompt)
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+
+    recording_agent = RecordingAgent()
+    image = BinaryContent(data=b"\x89PNG\r\n\x1a\n", media_type="image/png", identifier="img")
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=recording_agent)):
+
+        @nh.natural_function
+        def f(photo: BinaryContent) -> None:
+            """natural
+            Inspect <photo>.
+            """
+
+        f(image)
+
+    assert len(recording_agent.seen_prompt_list) == 1
+    seen_prompt = recording_agent.seen_prompt_list[0]
+    assert isinstance(seen_prompt, tuple)
+    assert any(isinstance(content, BinaryContent) for content in seen_prompt)
 
 
 def test_natural_function_can_override_step_executor_configuration_model_within_scope() -> None:

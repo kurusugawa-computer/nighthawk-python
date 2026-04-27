@@ -38,6 +38,18 @@ All three backends provide capabilities not available with Pydantic AI providers
 - **Callable discoverability:** Same rules as [Natural blocks](natural-blocks.md#functions-and-discoverability).
 - **Project-scoped files:** The CLI loads its own project files (CLAUDE.md, AGENTS.md) from `working_directory`.
 
+### Multimodal inputs
+
+Coding agent backends do not receive native VLM-style user-prompt multimodal input. Nighthawk projects multimodal prompt content into the CLI text channel instead:
+
+- `BinaryContent` is staged to a local file and referenced in the prompt with `<image>` / `<file>` plus a local file path.
+- URL-based content (`ImageUrl`, `AudioUrl`, `DocumentUrl`, `VideoUrl`) is referenced by URL in the projected prompt text.
+- `UploadedFile` user-prompt content is rejected because these backends cannot resolve provider-owned file identifiers. Tool results still preserve the rest of the payload and replace only the `UploadedFile` item with explanatory fallback text.
+- Tool results cross the backend boundary as MCP content. Image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items travel natively as `ImageContent` / `AudioContent`; all other `BinaryContent` and `FileUrl` items project to `TextContent` so the MCP path stays symmetric with the text-projected prompt path. When mixed top-level text/multimodal tool-result sequences preserve their original order they satisfy the same `UserContent` rule used for prompt hoisting. The user prompt itself remains text-projected for these backends.
+- When a successful tool result splits to no text and no user content, the projected prompt stays header-only rather than inserting the preview JSON envelope.
+
+This differs from provider-backed executors that can pass a `tuple[UserContent, ...]` to a multimodal-capable provider API directly.
+
 ### Working directory
 
 All three backends accept `working_directory` in their model settings. This absolute path determines:

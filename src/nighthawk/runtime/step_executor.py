@@ -4,6 +4,7 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, StructuredDict
+from pydantic_ai.messages import UserContent
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import StepExecutorConfiguration
@@ -187,7 +188,7 @@ class AgentStepExecutor:
     async def _run_agent(
         self,
         *,
-        user_prompt: str,
+        user_prompt: tuple[UserContent, ...],
         step_context: StepContext,
         toolset: ToolResultWrapperToolset,
         structured_output_type: object,
@@ -195,9 +196,13 @@ class AgentStepExecutor:
         if self.agent is None:
             raise ExecutionError("AgentStepExecutor.agent is not initialized")
 
+        normalized_user_prompt: str | tuple[UserContent, ...] = (
+            user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
+        )
+
         if isinstance(self.agent, AsyncExecutionAgent):
             return await self.agent.run(
-                user_prompt,
+                normalized_user_prompt,
                 deps=step_context,
                 toolsets=[toolset],
                 output_type=structured_output_type,
@@ -205,7 +210,7 @@ class AgentStepExecutor:
 
         if isinstance(self.agent, SyncExecutionAgent):
             return self.agent.run_sync(
-                user_prompt,
+                normalized_user_prompt,
                 deps=step_context,
                 toolsets=[toolset],
                 output_type=structured_output_type,

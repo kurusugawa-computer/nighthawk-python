@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 from contextvars import copy_context
 from typing import Any, cast
 
-import tiktoken
 from opentelemetry import context as otel_context
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UnexpectedModelBehavior
@@ -25,11 +24,12 @@ from pydantic_ai.tools import ToolDefinition
 
 from ..errors import NighthawkError
 from ..runtime.step_context import (
-    DEFAULT_TOOL_RESULT_RENDERING_POLICY,
     StepContext,
     ToolResultRenderingPolicy,
+    resolve_tool_result_rendering_policy,
 )
-from .mcp_boundary import call_tool_for_low_level_mcp_server
+from ..tools.contracts import ToolHandlerResult, ToolOutcome, build_tool_result_observation
+from .mcp_boundary import call_tool_for_low_level_mcp_server, tool_handler_result_to_low_level_mcp_content
 
 
 class McpServer:
@@ -39,7 +39,7 @@ class McpServer:
         self,
         *,
         tool_name_to_tool_definition: dict[str, ToolDefinition],
-        tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
+        tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[ToolHandlerResult]]],
         tool_result_rendering_policy: ToolResultRenderingPolicy,
         parent_otel_context: Any,
     ) -> None:
@@ -95,27 +95,25 @@ class McpServer:
 
         @mcp_server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
-            from mcp import types as mcp_types
-
-            from ..tools.contracts import render_tool_result_json_text
-
             handler = self._tool_name_to_handler.get(name)
             if handler is None:
-                policy = self._tool_result_rendering_policy
-                result_text = render_tool_result_json_text(
-                    value=None,
-                    error={"kind": "resolution", "message": f"Unknown tool: {name}", "guidance": "Choose a visible tool name and retry."},
-                    max_tokens=policy.tool_result_max_tokens,
-                    encoding=tiktoken.get_encoding(policy.tokenizer_encoding_name),
-                    style=policy.json_renderer_style,
+                tool_outcome: ToolOutcome = {
+                    "payload": None,
+                    "error": {"kind": "resolution", "message": f"Unknown tool: {name}", "guidance": "Choose a visible tool name and retry."},
+                }
+                tool_handler_result: ToolHandlerResult = build_tool_result_observation(tool_outcome=tool_outcome)
+                return tool_handler_result_to_low_level_mcp_content(
+                    tool_name=name,
+                    tool_handler_result=tool_handler_result,
+                    rendering_policy=self._tool_result_rendering_policy,
                 )
-                return [mcp_types.TextContent(type="text", text=result_text)]
 
             return await call_tool_for_low_level_mcp_server(
                 tool_name=name,
                 arguments=arguments,
                 tool_handler=handler,
                 parent_otel_context=self._parent_otel_context,
+                rendering_policy=self._tool_result_rendering_policy,
             )
 
         session_manager = StreamableHTTPSessionManager(app=mcp_server)
@@ -193,7 +191,7 @@ async def _wait_for_tcp_listen(host: str, port: int, *, timeout_seconds: float) 
 async def mcp_server_if_needed(
     *,
     tool_name_to_tool_definition: dict[str, ToolDefinition],
-    tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[str]]],
+    tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[ToolHandlerResult]]],
 ) -> AsyncIterator[str | None]:
     if not tool_name_to_handler:
         yield None
@@ -206,9 +204,9 @@ async def mcp_server_if_needed(
     if parent_run_context is None:
         raise NighthawkError("Codex MCP tool server requires an active RunContext")
     typed_parent_run_context = cast(RunContext[StepContext], parent_run_context)
-    tool_result_rendering_policy = typed_parent_run_context.deps.tool_result_rendering_policy
-    if tool_result_rendering_policy is None:
-        tool_result_rendering_policy = DEFAULT_TOOL_RESULT_RENDERING_POLICY
+    if not isinstance(typed_parent_run_context.deps, StepContext):
+        raise UnexpectedModelBehavior("Codex MCP tool server requires StepContext dependencies")
+    tool_result_rendering_policy = resolve_tool_result_rendering_policy(typed_parent_run_context.deps.tool_result_rendering_policy)
 
     server = McpServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,

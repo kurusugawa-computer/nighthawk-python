@@ -88,7 +88,7 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
         - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
         - `step_user_prompt_template`: full user prompt template including section delimiters.
     - `context_limits`: limits for rendering dynamic context into the prompt.
-    - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and tool result envelopes. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
+    - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and projected tool-result previews. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
     - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 
@@ -240,7 +240,7 @@ The template uses `$program`, `$locals`, and `$globals` placeholders, substitute
 
 #### 8.2.2. Locals summary
 
-The locals summary renders selected names from `step_locals`.
+The locals summary renders selected names from `step_locals`. It is a transparent projection of Python-visible local state at the Natural block boundary. Nighthawk MUST NOT automatically suppress otherwise eligible LOCALS entries based on reference frequency, VLM cost, or multimodal payload type; users control prompt cost by reducing the Python locals that exist at the block boundary.
 
 Selection:
 
@@ -269,6 +269,19 @@ Rendering format:
     - Method expansion is bounded by `context_limits.object_max_methods`; field expansion is bounded by `context_limits.object_max_fields`; each field value preview is bounded by `context_limits.object_field_value_max_tokens`.
     - If object member limits are exceeded, explicit omission lines are added: `name.<methods>: <snipped N public methods>` and/or `name.<fields>: <snipped N public fields>`.
 - Other non-callable values: `name: type_name = json_value`, where `json_value` is bounded by `context_limits.value_max_tokens`.
+- Top-level Pydantic AI multimodal values are rendered as `name: TypeName = ` followed by inline user content in the prompt payload.
+    - This applies to top-level locals/globals entries.
+- Top-level `list` / `tuple` values are also rendered as inline user content when every item is valid Pydantic AI `UserContent` and at least one item is multimodal.
+    - The binding line still renders once, for example `photos: list = `, followed by the original top-level item order.
+    - Pure text-only sequences do not use this rule; they remain preview-rendered values.
+- Explicit dotted references whose resolved leaf resolves to hoistable inline user content add a separate section line for that full dotted path (for example `holder.photo: BinaryContent = ` followed by inline user content).
+    - Only explicitly referenced dotted paths are added this way.
+    - This is a leaf-only rendering rule, not recursive object-graph extraction.
+    - Dotted-path resolution is attribute-oriented only. Each segment after the top-level name is resolved against discovered object fields using the same safe field sources as object capability rendering.
+    - Dotted-path resolution does not treat `Mapping` keys as attribute segments. For mapping access, use Python expressions or helper functions (for example `nh_eval("payload['photo']")`) rather than `<payload.photo>`.
+    - `list` / `tuple` leaves follow the same hoisting rule as top-level bindings: the sequence is hoisted when every item is valid Pydantic AI `UserContent` and at least one item is multimodal.
+    - Non-multimodal dotted references remain preview text inside object capability rendering.
+    - When a dotted multimodal reference is rendered as a separate section line, the corresponding field is omitted from the owning object capability block to avoid duplication. The field still consumes a slot in the `object_max_fields` budget.
 
 Callable disambiguation considers both top-level callable entries and object method entries in the same section.
 
@@ -290,6 +303,7 @@ Token budgeting:
 - Section budgets remain governed by `locals_max_tokens` / `globals_max_tokens` and item budgets by `locals_max_items` / `globals_max_items`.
 - Object method and field expansion is additionally governed by object-specific limits listed above.
 - Line-level token counting includes newline separators during budget checks.
+- Each rendered multimodal content item is charged a fixed internal budgeting heuristic against the section budget so that multimodal-heavy sections still trigger truncation. This is not a provider-side token estimate.
 
 Observability:
 
@@ -300,6 +314,7 @@ Truncation:
 
 - Rendering is bounded by `context_limits.locals_max_tokens` and `context_limits.locals_max_items`.
 - When the limit is reached before all entries are rendered, a `<snipped>` marker is appended and a diagnostic log message is emitted on the `nighthawk` logger.
+- Because section rendering remains lexicographic, tight item or token budgets can affect which bindings remain visible, including explicitly referenced dotted multimodal leaves.
 
 #### 8.2.3. Globals summary
 
@@ -308,7 +323,7 @@ The globals summary renders module-level names that are referenced in the Natura
 Reference extraction:
 
 - The Natural program text is scanned for unescaped `<name>` tokens (both read bindings `<name>` and dotted references `<name.field>`).
-- For dotted references, only the top-level name (before the first `.`) is extracted.
+- For dotted references, the top-level name (before the first `.`) participates in globals selection, and the full dotted path remains available for multimodal leaf rendering.
 - Escaped references (`\<name>`) are not extracted. The backslash is removed in the program text passed to the model.
 
 Selection:
@@ -442,21 +457,46 @@ Write tool return value:
     - validation details (when relevant)
     - error details (on failure)
 
-Tool result JSON format:
+Tool result transport contract:
 
-All tool results are wrapped in a JSON envelope with the following structure:
+- Internally, tool execution produces a canonical `ToolOutcome` with:
+    - `payload`: the success payload, which may include native Pydantic AI multimodal values
+    - `error`: `null` on success or a structured error object on failure
+- The host also derives a projected preview observation for text-only transports, logging, and tracing.
+    - This projection may be derived lazily at the transport or tracing boundary rather than eagerly at tool execution time.
+- The projected preview uses the following JSON shape:
+    - Success: `{"value": <bounded JSON rendering>, "error": null}`
+    - Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
+- Multimodal-capable transports MAY send top-level multimodal payload items natively instead of embedding them into the preview text.
+    - When they do, they preserve the original top-level content item order from the tool payload, including text/media adjacency for qualifying mixed `list` / `tuple` payloads.
+    - In v0.11.0, the MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Future expansion of native carriage to document or video items via `mcp.types.EmbeddedResource` is intentionally out of scope in v0.11.0 and is not guaranteed by this specification. Multimodal-capable providers that bypass MCP still send those items natively via `ToolReturnPart.files`.
+- Provider-backed backends that use Pydantic AI's standard tool loop SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts.
+    - In v0.11.0, the dedicated retry-prompt path is reserved for tool argument validation failures before tool execution (for example via `RetryPromptPart.model_response()`).
+    - When a provider-backed backend surfaces a tool failure without native multimodal content, it SHOULD use the same structured preview envelope shape described above.
+- User-prompt transport is backend-dependent.
+    - Provider-backed executors that accept Pydantic AI `UserContent` MAY send user-prompt multimodal content natively.
+    - Text-projected backends (including coding agent backends that must talk to a CLI text channel) project multimodal user prompt content to text placeholders plus local file paths or URL references instead of sending native VLM input.
+- For tool results, backends SHOULD preserve top-level mixed text/multimodal order when the payload is a `list` / `tuple` whose items are all valid `UserContent` and at least one item is multimodal.
+- When that ordered-segmentation rule does not apply, text-projected transports SHOULD derive tool-return text from Pydantic AI's `ToolReturnPart.model_response_str_and_user_content()` and project the returned `user_content` separately.
+- MCP transports SHOULD use the same fallback split when ordered segmentation does not apply: one text observation derived from `tool_response_text`, followed by the extracted `user_content` items in order.
+- If a rich transport fails while projecting an otherwise recoverable tool result, the backend SHOULD degrade to the projected preview text rather than fail the step.
+- When Pydantic AI reports a successful empty split (`tool_response_text == ""` and extracted `user_content` is empty), backends MUST preserve that as an empty success rather than falling back to the projected preview envelope.
+    - Text-projected transports render only their normal tool-return framing with no preview JSON body.
+    - MCP-style native transports return an empty content list for that tool result.
+- `BinaryContent` values can be staged to local files for text-projected transports because the host already has the bytes.
+- URL-based values such as `ImageUrl` / `FileUrl` MAY be transported natively by multimodal-capable provider backends, but text-projected backends and the MCP tool-return transport treat them as URL references only.
+- In v0.11.0, nested multimodal values inside dict/model/object structure are not hoisted; they remain part of the preview rendering only, except for top-level or explicitly referenced dotted-leaf `list` / `tuple` bindings whose items are valid `UserContent`.
+- `UploadedFile` values are provider-owned references. Backends that cannot resolve the provider file identifier MUST reject them at the user-prompt boundary.
+- For tool results, backends that cannot resolve an `UploadedFile` MUST preserve the rest of the top-level payload and replace only that item with an explanatory text fallback instead of silently dropping it.
 
-- Success: `{"value": <bounded JSON rendering>, "error": null}`
-- Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
-
-Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`.
+Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`, `oversight`.
 
 Boundary rule for tool-call failures:
 
-- If the model can recover by changing tool arguments, choosing another tool, or continuing without the tool, the failure MUST be returned in the JSON envelope (`{"value": null, "error": ...}`).
-- Host invariant violations (for example, broken runtime contract or invalid host-side oversight hook contract) MAY propagate as Python exceptions to the host instead of being envelope-wrapped.
+- If the model can recover by changing tool arguments, choosing another tool, or continuing without the tool, the failure MUST be projected back to the model as a structured error observation.
+- Host invariant violations (for example, broken runtime contract or invalid host-side oversight hook contract) MAY propagate as Python exceptions to the host instead of being projected.
 
-The `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
+The projected `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
 
 Atomicity requirement:
 

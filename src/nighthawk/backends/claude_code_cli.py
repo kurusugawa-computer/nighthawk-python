@@ -20,6 +20,7 @@ from ..tools.registry import get_visible_tools
 from .base import BackendModelBase
 from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_server import mcp_server_if_needed
+from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
 
 
 class ClaudeCodeCliModelSettings(ClaudeCodeModelSettings):
@@ -157,16 +158,24 @@ class ClaudeCodeCliModel(BackendModelBase):
     ) -> ModelResponse:
         system_prompt_file: IO[str] | None = None
         mcp_configuration_file: IO[str] | None = None
+        projected_request: TextProjectedRequest | None = None
 
         try:
             model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
-
-            _, system_prompt_text, user_prompt_text = self._prepare_common_request_parts(
-                messages=messages,
-                model_request_parameters=model_request_parameters,
+            claude_code_cli_model_settings = ClaudeCodeCliModelSettings.from_model_settings(model_settings)
+            staging_root_directory = resolve_text_projection_staging_root_directory(
+                working_directory=claude_code_cli_model_settings.working_directory,
             )
 
-            claude_code_cli_model_settings = ClaudeCodeCliModelSettings.from_model_settings(model_settings)
+            prepared_projected_request = self._prepare_text_projected_request(
+                messages=messages,
+                model_request_parameters=model_request_parameters,
+                staging_root_directory=staging_root_directory,
+                empty_prompt_exception_factory=UserError,
+            )
+            projected_request = prepared_projected_request.projected_request
+            system_prompt_text = prepared_projected_request.system_prompt_text
+            user_prompt_text = prepared_projected_request.user_prompt_text
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
@@ -301,3 +310,5 @@ class ClaudeCodeCliModel(BackendModelBase):
             if mcp_configuration_file is not None:
                 with contextlib.suppress(Exception):
                     mcp_configuration_file.close()
+            if projected_request is not None:
+                projected_request.cleanup()

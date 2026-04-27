@@ -21,19 +21,44 @@ from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..errors import NighthawkError
-from ..runtime.step_context import DEFAULT_TOOL_RESULT_RENDERING_POLICY, StepContext, ToolResultRenderingPolicy
+from ..runtime.step_context import (
+    StepContext,
+    ToolResultRenderingPolicy,
+    resolve_tool_result_rendering_policy,
+)
 from ..runtime.tool_calls import generate_tool_call_id, run_tool_instrumented
-from ..tools.contracts import ToolBoundaryError, render_tool_result_json_text
+from ..tools.contracts import (
+    RetryPromptObservation,
+    ToolError,
+    ToolHandlerResult,
+    ToolOutcome,
+    build_tool_handler_result_trace_text,
+    build_tool_result_observation,
+)
 from ..tools.execution import ToolResultWrapperToolset
 
-type ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
+type ToolHandler = Callable[[dict[str, Any]], Awaitable[ToolHandlerResult]]
 
 
-def resolve_tool_result_rendering_policy(run_context: RunContext[StepContext]) -> ToolResultRenderingPolicy:
-    policy = run_context.deps.tool_result_rendering_policy
-    if policy is None:
-        return DEFAULT_TOOL_RESULT_RENDERING_POLICY
-    return policy
+def _build_retry_prompt_observation(*, retry_text: str) -> RetryPromptObservation:
+    return {
+        "kind": "retry_prompt",
+        "retry_text": retry_text,
+    }
+
+
+def build_tool_handler_result_trace_payload_text(
+    *,
+    tool_handler_result: ToolHandlerResult,
+    rendering_policy: ToolResultRenderingPolicy,
+    encoding: tiktoken.Encoding,
+) -> str:
+    return build_tool_handler_result_trace_text(
+        tool_handler_result=tool_handler_result,
+        max_tokens=rendering_policy.tool_result_max_tokens,
+        encoding=encoding,
+        style=rendering_policy.json_renderer_style,
+    )
 
 
 def get_current_run_context_required() -> RunContext[StepContext]:
@@ -72,10 +97,8 @@ async def execute_tool_call(
     arguments: dict[str, Any],
     run_context: RunContext[StepContext],
     tool_call_id: str,
-    rendering_policy: ToolResultRenderingPolicy,
-    encoding: tiktoken.Encoding,
-) -> str:
-    """Execute a single tool call: validate arguments, call the toolset, and render the result."""
+) -> ToolHandlerResult:
+    """Execute a single tool call and build model/trace observations."""
     with set_current_run_context(run_context):
         try:
             validated_arguments = tool.args_validator.validate_python(arguments)
@@ -85,72 +108,49 @@ async def execute_tool_call(
                 try:
                     error_details = errors_method(include_url=False, include_context=False)
                     if isinstance(error_details, list):
-                        return RetryPromptPart(
+                        retry_text = RetryPromptPart(
                             tool_name=tool_name,
                             content=error_details,
                             tool_call_id=tool_call_id,
                         ).model_response()
+                        return _build_retry_prompt_observation(retry_text=retry_text)
                 except Exception:
                     pass
 
-            return RetryPromptPart(
+            retry_text = RetryPromptPart(
                 tool_name=tool_name,
                 content=str(exception) or "Invalid tool arguments",
                 tool_call_id=tool_call_id,
             ).model_response()
+            return _build_retry_prompt_observation(retry_text=retry_text)
 
         try:
-            tool_result = await toolset.call_tool(tool_name, validated_arguments, run_context, tool)
+            tool_outcome = await toolset.call_tool_outcome(tool_name, validated_arguments, run_context, tool)
         except (ModelRetry, CallDeferred, ApprovalRequired):
             raise
-        except ToolBoundaryError as exception:
-            return render_tool_result_json_text(
-                value=None,
-                error={"kind": exception.kind, "message": str(exception), "guidance": exception.guidance},
-                max_tokens=rendering_policy.tool_result_max_tokens,
-                encoding=encoding,
-                style=rendering_policy.json_renderer_style,
-            )
-        except (UserError, UnexpectedModelBehavior) as exception:
-            return render_tool_result_json_text(
-                value=None,
-                error={"kind": "internal", "message": str(exception), "guidance": "The tool backend failed. Retry or report this error."},
-                max_tokens=rendering_policy.tool_result_max_tokens,
-                encoding=encoding,
-                style=rendering_policy.json_renderer_style,
-            )
         except NighthawkError:
-            # Preserve host-invariant failures as Python exceptions; these are not LLM-recoverable tool-call errors and must propagate to the host.
             raise
+        # Errors below originate from the Pydantic AI toolset plumbing layer
+        # (outside ToolResultWrapperToolset._run_tool_and_normalize, which
+        # normalizes tool-body exceptions into ToolOutcome error payloads).
+        # These catch blocks convert plumbing failures into ToolOutcome so the
+        # model receives an actionable error observation rather than a crash.
+        except (UserError, UnexpectedModelBehavior) as exception:
+            tool_error: ToolError = {
+                "kind": "internal",
+                "message": str(exception),
+                "guidance": "The tool backend failed. Retry or report this error.",
+            }
+            tool_outcome = cast(ToolOutcome, {"payload": None, "error": tool_error})
         except Exception as exception:
-            return render_tool_result_json_text(
-                value=None,
-                error={
-                    "kind": "internal",
-                    "message": str(exception) or "Tool execution failed",
-                    "guidance": "The tool execution raised an unexpected error. Retry or report this error.",
-                },
-                max_tokens=rendering_policy.tool_result_max_tokens,
-                encoding=encoding,
-                style=rendering_policy.json_renderer_style,
-            )
+            tool_error = {
+                "kind": "internal",
+                "message": str(exception) or "Tool execution failed",
+                "guidance": "The tool execution raised an unexpected error. Retry or report this error.",
+            }
+            tool_outcome = cast(ToolOutcome, {"payload": None, "error": tool_error})
 
-    if isinstance(tool_result, dict) and set(tool_result.keys()) == {"value", "error"}:
-        return render_tool_result_json_text(
-            value=tool_result["value"],
-            error=tool_result["error"],
-            max_tokens=rendering_policy.tool_result_max_tokens,
-            encoding=encoding,
-            style=rendering_policy.json_renderer_style,
-        )
-
-    return render_tool_result_json_text(
-        value=tool_result,
-        error=None,
-        max_tokens=rendering_policy.tool_result_max_tokens,
-        encoding=encoding,
-        style=rendering_policy.json_renderer_style,
-    )
+    return build_tool_result_observation(tool_outcome=tool_outcome)
 
 
 async def build_tool_name_to_handler(
@@ -177,7 +177,7 @@ async def build_tool_name_to_handler(
             *,
             tool_name: str = tool_name,
             tool: Any = tool,
-        ) -> str:
+        ) -> ToolHandlerResult:
             tool_call_id = generate_tool_call_id()
             from dataclasses import replace
 
@@ -187,10 +187,10 @@ async def build_tool_name_to_handler(
                 tool_call_id=tool_call_id,
             )
 
-            rendering_policy = resolve_tool_result_rendering_policy(run_context)
+            rendering_policy = resolve_tool_result_rendering_policy(run_context.deps.tool_result_rendering_policy)
             encoding = tiktoken.get_encoding(rendering_policy.tokenizer_encoding_name)
 
-            async def call() -> str:
+            async def call() -> ToolHandlerResult:
                 return await execute_tool_call(
                     tool_name=tool_name,
                     tool=tool,
@@ -198,6 +198,13 @@ async def build_tool_name_to_handler(
                     arguments=arguments,
                     run_context=tool_run_context,
                     tool_call_id=tool_call_id,
+                )
+
+            def build_trace_text(tool_handler_result: ToolHandlerResult) -> str | None:
+                if not tool_run_context.trace_include_content:
+                    return None
+                return build_tool_handler_result_trace_payload_text(
+                    tool_handler_result=tool_handler_result,
                     rendering_policy=rendering_policy,
                     encoding=encoding,
                 )
@@ -206,6 +213,7 @@ async def build_tool_name_to_handler(
                 tool_name=tool_name,
                 arguments=arguments,
                 call=call,
+                build_trace_text=build_trace_text,
                 run_context=tool_run_context,
                 tool_call_id=tool_call_id,
             )
