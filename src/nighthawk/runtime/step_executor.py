@@ -12,7 +12,7 @@ from ..errors import ExecutionError
 from ..tools.execution import ToolResultWrapperToolset
 from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
-from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program
+from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
 from .scoping import (
     _current_system_prompt_suffix_fragments,
     get_current_usage_meter,
@@ -127,7 +127,13 @@ def _new_agent_step_executor(
         )
         if not suffix_fragments:
             return None
-        return "\n\n".join(suffix_fragments)
+        return "\n\n".join(
+            resolve_step_system_prompt_template_text(
+                template_text=fragment,
+                tool_result_max_tokens=configuration.context_limits.tool_result_max_tokens,
+            )
+            for fragment in suffix_fragments
+        )
 
     return agent
 

@@ -17,7 +17,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..tools.registry import get_visible_tools
-from .base import BackendModelBase
+from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
 from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_server import mcp_server_if_needed
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
@@ -184,6 +184,7 @@ class ClaudeCodeCliModel(BackendModelBase):
             )
 
             if allowed_tool_names:
+                system_prompt_text = append_text_projected_tool_result_preview_prompt(system_prompt_text=system_prompt_text)
                 system_prompt_text = "\n".join(
                     [
                         system_prompt_text,

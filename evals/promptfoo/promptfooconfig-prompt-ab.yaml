@@ -14,23 +14,23 @@ prompts:
   - "{{natural_program}}"
 
 providers:
-  # --- Control: eval_default + eval_examples (winner from prior eval) ---
+  # --- Legacy control: previous production prompt + examples ---
   - id: file://provider.py
-    label: "control: eval_default + examples"
+    label: "legacy: eval_legacy_default + examples"
+    config:
+      model: "openai-responses:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_legacy_default.txt
+      tool_preset: "eval_examples"
+
+  # --- Current production candidate: focused default + examples ---
+  - id: file://provider.py
+    label: "focused: eval_default + examples"
     config:
       model: "openai-responses:gpt-5.4-mini"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
 
-  # --- Variant A: eval_sequenced + eval_examples ---
-  - id: file://provider.py
-    label: "eval_sequenced + examples"
-    config:
-      model: "openai-responses:gpt-5.4-mini"
-      system_prompt_file: prompts/eval_sequenced.txt
-      tool_preset: "eval_examples"
-
-  # --- Variant B: eval_mutation_aware + eval_examples ---
+  # --- Variant A: eval_mutation_aware + examples ---
   - id: file://provider.py
     label: "eval_mutation_aware + examples"
     config:
@@ -38,9 +38,9 @@ providers:
       system_prompt_file: prompts/eval_mutation_aware.txt
       tool_preset: "eval_examples"
 
-  # --- Variant C: eval_default + eval_mutation_hint ---
+  # --- Variant B: focused default + mutation_hint ---
   - id: file://provider.py
-    label: "eval_default + mutation_hint"
+    label: "focused: eval_default + mutation_hint"
     config:
       model: "openai-responses:gpt-5.4-mini"
       system_prompt_file: prompts/eval_default.txt

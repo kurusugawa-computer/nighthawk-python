@@ -193,13 +193,22 @@ def build_step_system_prompt_suffix_fragment(
 
     allowed_kinds_text = " | ".join(allowed_kinds)
 
-    lines: list[str] = [
-        'Output {"result": {"kind": "<kind>", ...}}.',
-        f"kind: {allowed_kinds_text}. Default: pass.",
-    ]
+    lines: list[str] = ['Output {"result": {"kind": "<kind>", ...}}.']
+
+    kind_line = f"kind: {allowed_kinds_text}."
+    if "pass" in allowed_kinds:
+        kind_line += " Default: pass."
+    lines.append(kind_line)
 
     if "pass" in allowed_kinds:
         lines.append("Choose pass after completing the work. Most blocks end with pass.")
+
+    if "break" in allowed_kinds and "continue" in allowed_kinds:
+        lines.append("Use continue for instructions like continue or next iteration; use break for instructions like break or stop the loop.")
+    elif "break" in allowed_kinds:
+        lines.append("Use break for instructions like break or stop the loop.")
+    elif "continue" in allowed_kinds:
+        lines.append("Use continue for instructions like continue or next iteration.")
 
     if "return" in allowed_kinds:
         lines.append(

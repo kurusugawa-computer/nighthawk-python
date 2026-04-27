@@ -18,7 +18,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..tools.registry import get_visible_tools
-from .base import BackendModelBase, BackendModelSettings
+from .base import BackendModelBase, BackendModelSettings, append_text_projected_tool_result_preview_prompt
 from .mcp_server import mcp_server_if_needed
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
 
@@ -208,15 +208,19 @@ class CodexModel(BackendModelBase):
             )
             projected_request = prepared_projected_request.projected_request
             user_prompt_text = prepared_projected_request.user_prompt_text
-
-            prompt_parts = [p for p in [prepared_projected_request.system_prompt_text, user_prompt_text] if p]
-            prompt_text = "\n\n".join(prompt_parts)
+            system_prompt_text = prepared_projected_request.system_prompt_text
 
             tool_name_to_tool_definition, tool_name_to_handler, allowed_tool_names = await self._prepare_allowed_tools(
                 model_request_parameters=model_request_parameters,
                 configured_allowed_tool_names=codex_model_settings.allowed_tool_names,
                 visible_tools=get_visible_tools(),
             )
+
+            if allowed_tool_names:
+                system_prompt_text = append_text_projected_tool_result_preview_prompt(system_prompt_text=system_prompt_text)
+
+            prompt_parts = [p for p in [system_prompt_text, user_prompt_text] if p]
+            prompt_text = "\n\n".join(prompt_parts)
 
             output_object = model_request_parameters.output_object
             if output_object is None:

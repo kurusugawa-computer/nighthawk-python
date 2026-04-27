@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Coding-agent backends now text-project multimodal user prompts into local file paths or URL placeholders while provider-backed executors pass `UserContent` natively.
 - Tool results now retain `ToolOutcome` payloads through backend boundaries so multimodal-capable transports can render native content before falling back to JSON previews.
+- Optimize Natural block runtime prompt
 - Update dependencies
 
 ### Fixed

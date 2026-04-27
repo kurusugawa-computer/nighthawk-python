@@ -19,23 +19,23 @@ prompts:
   - "{{natural_program}}"
 
 providers:
-  # --- Control: current production suffix text ---
+  # --- Legacy control: previous production suffix text ---
   - id: file://provider.py
-    label: "control (current suffix)"
+    label: "legacy suffix"
+    config:
+      model: "openai-responses:gpt-5.4-mini"
+      system_prompt_file: prompts/eval_default.txt
+      tool_preset: "eval_examples"
+      suffix_variant: "legacy"
+
+  # --- Current production suffix text ---
+  - id: file://provider.py
+    label: "production suffix"
     config:
       model: "openai-responses:gpt-5.4-mini"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
       suffix_variant: "control"
-
-  # --- Variant A: Terse (minimal prose, rely on JSON schema) ---
-  - id: file://provider.py
-    label: "suffix: terse"
-    config:
-      model: "openai-responses:gpt-5.4-mini"
-      system_prompt_file: prompts/eval_default.txt
-      tool_preset: "eval_examples"
-      suffix_variant: "terse"
 
   # --- Variant B: Examples (one JSON example per allowed kind) ---
   - id: file://provider.py

@@ -15,7 +15,7 @@ Do the work described in <<<NH:PROGRAM>>>.
 Bindings:
 - `<name>`: read binding. The value is visible but the name will not be rebound after this block.
 - `<:name>`: write binding. Use nh_assign to set it; the new value is committed back into Python locals.
-- Mutable read bindings (lists, dicts, etc.) can be mutated in-place with nh_eval.
+- Mutable read bindings (lists, dicts, etc.) can be mutated in-place with nh_eval. Do not create a separate local when the program asks to change them.
 
 Tool selection:
 - To evaluate an expression, call a function, or mutate an object in-place: nh_eval.
@@ -31,11 +31,14 @@ Trust boundaries:
 - Snapshots may be stale after tool calls; prefer tool results.
 
 Notes:
-- In async Natural functions, expressions may use `await`.
-- Tool results may be native tool payloads or host-projected previews, depending on the backend path.
-- When a tool result is a preview, it may be lossy and must not be treated as canonical runtime state.
-- The preview rendering budget is max $tool_result_max_tokens tokens.
+- Expressions may use `await`.
 - To preserve large or structured intermediate state across steps, persist it via nh_assign and re-read with focused nh_eval expressions.
+"""
+
+
+TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT = """\
+- Tool result previews may be lossy; do not treat previews as canonical runtime state.
+- Preview budget: max $tool_result_max_tokens tokens.
 """
 
 

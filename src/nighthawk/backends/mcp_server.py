@@ -15,21 +15,19 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import copy_context
-from typing import Any, cast
+from typing import Any
 
 from opentelemetry import context as otel_context
-from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.tools import ToolDefinition
 
-from ..errors import NighthawkError
 from ..runtime.step_context import (
-    StepContext,
     ToolResultRenderingPolicy,
     resolve_tool_result_rendering_policy,
 )
 from ..tools.contracts import ToolHandlerResult, ToolOutcome, build_tool_result_observation
 from .mcp_boundary import call_tool_for_low_level_mcp_server, tool_handler_result_to_low_level_mcp_content
+from .tool_bridge import get_current_step_run_context_required
 
 
 class McpServer:
@@ -197,16 +195,9 @@ async def mcp_server_if_needed(
         yield None
         return
 
-    from pydantic_ai._run_context import get_current_run_context
-
     parent_otel_context = otel_context.get_current()
-    parent_run_context = get_current_run_context()
-    if parent_run_context is None:
-        raise NighthawkError("Codex MCP tool server requires an active RunContext")
-    typed_parent_run_context = cast(RunContext[StepContext], parent_run_context)
-    if not isinstance(typed_parent_run_context.deps, StepContext):
-        raise UnexpectedModelBehavior("Codex MCP tool server requires StepContext dependencies")
-    tool_result_rendering_policy = resolve_tool_result_rendering_policy(typed_parent_run_context.deps.tool_result_rendering_policy)
+    parent_run_context = get_current_step_run_context_required(boundary_name="Codex MCP tool server")
+    tool_result_rendering_policy = resolve_tool_result_rendering_policy(parent_run_context.deps.tool_result_rendering_policy)
 
     server = McpServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,

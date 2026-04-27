@@ -752,12 +752,23 @@ def _resolve_step_user_prompt_content(
     return coalesce_user_content(content_part_list)
 
 
-def _resolve_step_system_prompt_text(*, configuration: StepExecutorConfiguration) -> str:
+def resolve_step_system_prompt_template_text(
+    *,
+    template_text: str,
+    tool_result_max_tokens: int,
+) -> str:
     return _resolve_step_prompt_template_text(
-        template_text=configuration.prompts.step_system_prompt_template,
+        template_text=template_text,
         name_to_value={
-            "tool_result_max_tokens": str(configuration.context_limits.tool_result_max_tokens),
+            "tool_result_max_tokens": str(tool_result_max_tokens),
         },
+    )
+
+
+def _resolve_step_system_prompt_text(*, configuration: StepExecutorConfiguration) -> str:
+    return resolve_step_system_prompt_template_text(
+        template_text=configuration.prompts.step_system_prompt_template,
+        tool_result_max_tokens=configuration.context_limits.tool_result_max_tokens,
     )
 
 

@@ -12,8 +12,9 @@ from typing import Any, cast
 import tiktoken
 from pydantic_ai import RunContext
 
-# NOTE: pydantic_ai private API — no public alternative for custom backends
-# that need to set RunContext for tool execution. Monitor pydantic_ai releases.
+# NOTE: pydantic_ai private API -- no public alternative for custom backends
+# that need to bridge RunContext across non-Pydantic-AI transports. Monitor
+# pydantic_ai releases and keep private access centralized in this module.
 from pydantic_ai._run_context import set_current_run_context
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import RetryPromptPart
@@ -22,6 +23,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..errors import NighthawkError
 from ..runtime.step_context import (
+    DEFAULT_TOOL_RESULT_RENDERING_POLICY,
     StepContext,
     ToolResultRenderingPolicy,
     resolve_tool_result_rendering_policy,
@@ -61,13 +63,35 @@ def build_tool_handler_result_trace_payload_text(
     )
 
 
-def get_current_run_context_required() -> RunContext[StepContext]:
+def _get_current_pydantic_ai_run_context() -> object | None:
     from pydantic_ai._run_context import get_current_run_context
 
-    run_context = get_current_run_context()
-    if run_context is None:
-        raise NighthawkError("Nighthawk tool boundaries require an active RunContext")
+    return get_current_run_context()
+
+
+def get_current_step_run_context_optional() -> RunContext[StepContext] | None:
+    run_context = _get_current_pydantic_ai_run_context()
+    deps = getattr(run_context, "deps", None)
+    if run_context is None or not isinstance(deps, StepContext):
+        return None
     return cast(RunContext[StepContext], run_context)
+
+
+def get_current_step_run_context_required(*, boundary_name: str) -> RunContext[StepContext]:
+    run_context = _get_current_pydantic_ai_run_context()
+    if run_context is None:
+        raise NighthawkError(f"{boundary_name} requires an active RunContext")
+    deps = getattr(run_context, "deps", None)
+    if not isinstance(deps, StepContext):
+        raise UnexpectedModelBehavior(f"{boundary_name} requires StepContext dependencies")
+    return cast(RunContext[StepContext], run_context)
+
+
+def resolve_current_tool_result_rendering_policy() -> ToolResultRenderingPolicy:
+    run_context = get_current_step_run_context_optional()
+    if run_context is None:
+        return DEFAULT_TOOL_RESULT_RENDERING_POLICY
+    return resolve_tool_result_rendering_policy(run_context.deps.tool_result_rendering_policy)
 
 
 def resolve_allowed_tool_names(
@@ -158,7 +182,7 @@ async def build_tool_name_to_handler(
     model_request_parameters: ModelRequestParameters,
     visible_tools: list[Any],
 ) -> dict[str, ToolHandler]:
-    run_context = get_current_run_context_required()
+    run_context = get_current_step_run_context_required(boundary_name="Nighthawk function tool boundary")
 
     toolset = ToolResultWrapperToolset(FunctionToolset(visible_tools))
 

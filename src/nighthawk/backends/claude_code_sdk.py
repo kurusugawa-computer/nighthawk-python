@@ -4,10 +4,9 @@ import contextlib
 import json
 import os
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from opentelemetry import context as otel_context
-from pydantic_ai import RunContext
 from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -17,13 +16,12 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..json_renderer import to_jsonable_value
-from ..runtime.step_context import DEFAULT_TOOL_RESULT_RENDERING_POLICY, StepContext, resolve_tool_result_rendering_policy
 from ..tools.registry import get_visible_tools
-from .base import BackendModelBase
+from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
 from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_boundary import call_tool_for_claude_code_sdk
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
-from .tool_bridge import ToolHandler
+from .tool_bridge import ToolHandler, resolve_current_tool_result_rendering_policy
 
 
 def _normalize_timestamp(value: object) -> datetime:
@@ -145,17 +143,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
         staging_root_directory = resolve_text_projection_staging_root_directory(
             working_directory=claude_code_model_settings.working_directory,
         )
-        from pydantic_ai._run_context import get_current_run_context
-
-        parent_run_context = get_current_run_context()
-        if parent_run_context is None:
-            tool_result_rendering_policy = DEFAULT_TOOL_RESULT_RENDERING_POLICY
-        else:
-            typed_parent_run_context = cast(RunContext[StepContext], parent_run_context)
-            if not isinstance(typed_parent_run_context.deps, StepContext):
-                raise UnexpectedModelBehavior("Claude Code SDK backend requires StepContext dependencies")
-            tool_result_rendering_policy = resolve_tool_result_rendering_policy(typed_parent_run_context.deps.tool_result_rendering_policy)
-
+        tool_result_rendering_policy = resolve_current_tool_result_rendering_policy()
         parent_otel_context = otel_context.get_current()
 
         projected_request: TextProjectedRequest | None = None
@@ -176,6 +164,9 @@ class ClaudeCodeSdkModel(BackendModelBase):
                 configured_allowed_tool_names=claude_code_model_settings.allowed_tool_names,
                 visible_tools=get_visible_tools(),
             )
+
+            if allowed_tool_names:
+                system_prompt_text = append_text_projected_tool_result_preview_prompt(system_prompt_text=system_prompt_text)
 
             mcp_tools: list[Any] = []
             for tool_name, handler in tool_name_to_handler.items():

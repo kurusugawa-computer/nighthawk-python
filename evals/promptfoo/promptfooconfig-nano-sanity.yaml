@@ -1,0 +1,39 @@
+# Nighthawk Natural Block System Prompt Sanity Check
+#
+# Run:
+#   cd evals/promptfoo
+#   set -a; source ../../.env; set +a
+#   PROMPTFOO_PYTHON="$(uv python find)" npx promptfoo@latest eval \
+#     -c promptfooconfig-nano-sanity.yaml --no-cache
+#
+# View results:
+#   npx promptfoo@latest view
+
+description: "Nighthawk prompt sanity: gpt-5.4-nano default model"
+
+prompts:
+  - "{{natural_program}}"
+
+providers:
+  - id: file://provider.py
+    label: "gpt-5.4-nano + eval_default + examples"
+    config:
+      model: "openai-responses:gpt-5.4-nano"
+      system_prompt_file: prompts/eval_default.txt
+      tool_preset: "eval_examples"
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: python
+      value: file://assertions/outcome_kind.py
+
+tests:
+  - file://test_cases/binding_operations.yaml
+  - file://test_cases/outcome_kinds.yaml
+  - file://test_cases/tool_selection.yaml
+  - file://test_cases/edge_cases.yaml
+  - file://test_cases/loop_outcomes.yaml
+  - file://test_cases/loop_outcomes_ja.yaml
+  - file://test_cases/multi_step.yaml
+  - file://test_cases/null_handling.yaml

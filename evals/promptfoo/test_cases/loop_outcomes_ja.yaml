@@ -1,0 +1,18 @@
+# Category: Loop Outcomes (Japanese smoke test)
+#
+# Single Japanese-language case used by promptfooconfig-nano-sanity.yaml only.
+# Not a regression gate. Promote to the shared loop_outcomes.yaml in a separate
+# PR if multi-language coverage becomes a goal.
+
+# P-OUTCOME-JA-001: Continue outcome from a Japanese instruction
+- description: "P-OUTCOME-JA-001: 日本語で次の反復への指示"
+  vars:
+    natural_program: "次の反復へ進む。"
+    input_bindings: '{}'
+    output_binding_names: '[]'
+    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+  assert:
+    - type: python
+      value: file://assertions/outcome_kind.py
+      config:
+        expected_outcome_kind: "continue"

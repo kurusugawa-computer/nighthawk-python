@@ -23,7 +23,9 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
-from .tool_bridge import ToolHandler, prepare_allowed_tools
+from ..configuration import TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT
+from ..runtime.prompt import resolve_step_system_prompt_template_text
+from .tool_bridge import ToolHandler, prepare_allowed_tools, resolve_current_tool_result_rendering_policy
 
 if TYPE_CHECKING:
     from .text_projection import TextProjectedRequest
@@ -69,6 +71,26 @@ def _collect_system_prompt_text(model_request: ModelRequest) -> str:
         if isinstance(part, SystemPromptPart) and part.content:
             parts.append(part.content)
     return "\n\n".join(parts)
+
+
+def _resolve_current_tool_result_max_tokens() -> int:
+    return resolve_current_tool_result_rendering_policy().tool_result_max_tokens
+
+
+def append_text_projected_tool_result_preview_prompt(*, system_prompt_text: str) -> str:
+    """Append the text-projected tool-result preview warning to a system prompt.
+
+    Backends should call this only after confirming that at least one Nighthawk
+    tool will actually be exposed to the model. If no tool is exposed, the
+    preview-loss caveat is irrelevant and adds prompt noise.
+    """
+    fragment = resolve_step_system_prompt_template_text(
+        template_text=TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT,
+        tool_result_max_tokens=_resolve_current_tool_result_max_tokens(),
+    )
+    if not system_prompt_text:
+        return fragment
+    return "\n".join([system_prompt_text, fragment])
 
 
 @dataclass(frozen=True)
@@ -164,6 +186,8 @@ class BackendModelBase(Model):
             messages=messages,
             model_request_parameters=model_request_parameters,
         )
+        system_prompt_text = prepared_request_parts.system_prompt_text
+
         projected_request = project_request_prompt_part_list_to_text(
             prepared_request_parts.request_prompt_part_list,
             staging_root_directory=staging_root_directory,
@@ -174,7 +198,7 @@ class BackendModelBase(Model):
             raise empty_prompt_exception_factory(f"{self.backend_label} requires a non-empty user prompt")
 
         return PreparedTextProjectedRequest(
-            system_prompt_text=prepared_request_parts.system_prompt_text,
+            system_prompt_text=system_prompt_text,
             user_prompt_text=user_prompt_text,
             projected_request=projected_request,
         )

@@ -10,7 +10,7 @@ from pydantic_ai.messages import BinaryContent
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
-from nighthawk.runtime.prompt import build_system_prompt
+from nighthawk.runtime.prompt import build_system_prompt, resolve_step_system_prompt_template_text
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepFinalResult, StepKind
 from tests.execution.stub_executor import StubExecutor
@@ -716,7 +716,7 @@ def test_frontmatter_deny_return_allows_bindings():
         assert f(10) == 11
 
 
-def test_step_system_prompt_injects_tool_result_max_tokens() -> None:
+def test_step_system_prompt_omits_preview_budget_by_default() -> None:
     configuration = nh.StepExecutorConfiguration(
         context_limits=nh.StepContextLimits(
             locals_max_tokens=8_000,
@@ -732,8 +732,31 @@ def test_step_system_prompt_injects_tool_result_max_tokens() -> None:
     )
 
     resolved_system_prompt_text = build_system_prompt(configuration=configuration)
-    assert "max 4321 tokens" in resolved_system_prompt_text
+    assert "max 4321 tokens" not in resolved_system_prompt_text
     assert "$tool_result_max_tokens" not in resolved_system_prompt_text
+
+
+def test_system_prompt_suffix_fragment_injects_tool_result_max_tokens() -> None:
+    configuration = nh.StepExecutorConfiguration(
+        context_limits=nh.StepContextLimits(
+            locals_max_tokens=8_000,
+            locals_max_items=80,
+            globals_max_tokens=4_000,
+            globals_max_items=40,
+            value_max_tokens=200,
+            object_max_methods=16,
+            object_max_fields=16,
+            object_field_value_max_tokens=120,
+            tool_result_max_tokens=4_321,
+        )
+    )
+
+    resolved_fragment_text = resolve_step_system_prompt_template_text(
+        template_text="Preview budget: max $tool_result_max_tokens tokens.",
+        tool_result_max_tokens=configuration.context_limits.tool_result_max_tokens,
+    )
+
+    assert resolved_fragment_text == "Preview budget: max 4321 tokens."
 
 
 def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:

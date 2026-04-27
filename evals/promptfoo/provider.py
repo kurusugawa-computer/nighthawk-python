@@ -9,7 +9,7 @@ Usage in promptfooconfig.yaml:
         config:
           model: "openai-responses:gpt-5.4-mini"
           tool_preset: "baseline"  # or "eval_functional", "py_functional", etc.
-          suffix_variant: "control"  # or "terse", "examples"
+          suffix_variant: "control"  # or "legacy", "examples"
 """
 
 from __future__ import annotations
@@ -63,12 +63,12 @@ AgentStepExecutor._run_agent = _capturing_run_agent  # type: ignore[assignment,m
 _original_suffix_builder = _step_executor_module.build_step_system_prompt_suffix_fragment
 
 
-def _build_suffix_terse(
+def _build_suffix_legacy(
     *,
     allowed_kinds: tuple[StepKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> str:
-    """Variant A — Terse: minimal prose, rely on JSON schema for structure."""
+    """Legacy production suffix text before schema-semantic shortening."""
     allowed_kinds_text = " | ".join(allowed_kinds)
 
     lines: list[str] = [
@@ -131,7 +131,7 @@ def _build_suffix_examples(
 
 
 _SUFFIX_VARIANT_BUILDERS: dict[str, Any] = {
-    "terse": _build_suffix_terse,
+    "legacy": _build_suffix_legacy,
     "examples": _build_suffix_examples,
 }
 
@@ -328,7 +328,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
         suffix_variant (str, optional): Suffix fragment variant. Default: "control".
             Available variants:
               "control"     - Current production suffix text (no change)
-              "terse"       - Minimal prose, rely on JSON schema
+              "legacy"      - Previous production suffix text
               "examples"    - One concrete JSON example per allowed kind
     """
     test_variables = context.get("vars", {})

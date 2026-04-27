@@ -464,6 +464,7 @@ Tool result transport contract:
     - `error`: `null` on success or a structured error object on failure
 - The host also derives a projected preview observation for text-only transports, logging, and tracing.
     - This projection may be derived lazily at the transport or tracing boundary rather than eagerly at tool execution time.
+- Text-projected backends that expose Nighthawk tools automatically add system-prompt guidance that tool-result previews may be lossy and are bounded by `context_limits.tool_result_max_tokens`.
 - The projected preview uses the following JSON shape:
     - Success: `{"value": <bounded JSON rendering>, "error": null}`
     - Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
