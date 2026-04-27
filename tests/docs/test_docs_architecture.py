@@ -184,7 +184,9 @@ class TestBoundaryRules:
         assert "MUST NOT automatically suppress otherwise eligible LOCALS entries" in specification_text
         assert "Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`, `oversight`." in specification_text
         assert "SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts" in specification_text
-        assert "the dedicated retry-prompt path is reserved for tool argument validation failures before tool execution" in specification_text
+        assert "dedicated retry-prompt path is reserved for tool argument validation failures before tool execution" in specification_text
+        assert "Nested multimodal values inside dict/model/object structure are not recursively hoisted" in specification_text
+        assert "Native MCP video carriage is intentionally not part of this contract" in specification_text
 
     def test_coding_agent_backends_documents_text_projected_multimodal_inputs(self) -> None:
         """coding-agent-backends.md should explain text projection for multimodal user prompts."""
@@ -192,8 +194,15 @@ class TestBoundaryRules:
         assert "Coding agent backends do not receive native VLM-style user-prompt multimodal input." in coding_agent_backends_text
         assert "`UploadedFile` user-prompt content is rejected" in coding_agent_backends_text
         assert "mixed top-level text/multimodal tool-result sequences preserve their original order" in coding_agent_backends_text
+        assert "Native MCP video carriage is intentionally unsupported for now" in coding_agent_backends_text
         assert "the projected prompt stays header-only" in coding_agent_backends_text
         assert "This differs from provider-backed executors" in coding_agent_backends_text
+
+    def test_natural_blocks_documents_nested_multimodal_helper_binding_pattern(self) -> None:
+        """natural-blocks.md should recommend explicit helper bindings for nested media."""
+        natural_blocks_text = (_DOCS_DIR / "natural-blocks.md").read_text(encoding="utf-8")
+        assert "Nested multimodal values inside dicts, models, and objects are not recursively hoisted" in natural_blocks_text
+        assert "lifting the media-bearing leaf into a helper variable" in natural_blocks_text
 
 
 # -- Philosophy structure -----------------------------------------------------

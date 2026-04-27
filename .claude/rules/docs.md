@@ -39,7 +39,7 @@ Public API documentation layering:
 | `coding-agent-backends.md` | Backend users | Backend reference | Backend-specific settings, shared capabilities, skills, MCP tool exposure, working directory, troubleshooting. |
 | `for-coding-agents.md` | Coding agents (LLMs) | Operational guide | Condensed, decision-oriented rules derived from human-oriented docs. Self-contained with absolute URLs. |
 | `specification.md` | Implementors | Canonical spec | Syntax, state layers, tools, outcomes, frontmatter, runtime semantics, observability contract, and custom backend capability/protocol semantics. Numbered section headings. |
-| `philosophy.md` | Evaluators | Design rationale | Execution model, harness evidence, design consequences (resilience, scoped execution contexts, tool exposure, multi-agent coordination, tradeoffs), runtime evaluation rationale, design landscape. |
+| `philosophy.md` | Evaluators | Design rationale | Execution model, design landscape, boundary-first consequences, trust and safety boundaries, tradeoffs, and runtime evaluation rationale. |
 | `api.md` | Developers | API reference | Auto-generated from docstrings, including protocol and extension-hook symbols. |
 | `roadmap.md` | Contributors | Future directions | Ideas only. Remove when implemented. |
 | `docs/AGENTS.md` | Coding agents editing docs | Documentation governance | Canonical ownership, page roles, routing rules, and docs test invariants. Symlink to `.claude/rules/docs.md`. |
@@ -171,7 +171,7 @@ Pages in the Getting started, Patterns & verification, and Configuration nav gro
 
 **`philosophy.md`**
 
-- Owns the cumulative argument: execution model, harness evidence, design consequences (resilience, scoped execution contexts, tool exposure, multi-agent coordination, tradeoffs), runtime evaluation rationale, and design landscape.
+- Owns the cumulative argument: execution model, design landscape, boundary-first consequences (resilience, scoped execution contexts, tool exposure, multi-agent coordination), trust and safety boundaries, tradeoffs, and runtime evaluation rationale.
 - External references acceptable. Prefer stable URLs with enough inline context to survive link rot.
 - No how-to code examples for patterns in `natural-blocks.md` or `patterns.md`. Exception: positioning examples may reuse function names from those pages.
 

@@ -171,7 +171,21 @@ Transport depends on the executor:
 - Provider-backed executors that accept Pydantic AI `UserContent` send the value natively to the VLM API.
 - Coding-agent backends text-project the value (staged local files or URL references). See [Coding agent backends: multimodal inputs](coding-agent-backends.md#multimodal-inputs).
 
-For the normative rendering and transport rules, including dotted-reference hoisting and the remaining v0.11.0 nesting restrictions, see [Specification Section 8.2](specification.md#82-locals-summary).
+Nested multimodal values inside dicts, models, and objects are not recursively hoisted. Keep the prompt boundary explicit by lifting the media-bearing leaf into a helper variable before the Natural block:
+
+```py
+def summarize_report(report: Report) -> str:
+    report_scan = report.attachments.scan_image
+    summary = ""
+    """natural
+    Read <report_scan> and summarize the visual evidence in <:summary>.
+    """
+    return summary
+```
+
+This keeps the media selection visible in ordinary Python, avoids accidental traversal of large object graphs, and lets normal LOCALS budgeting decide whether the helper variable is rendered.
+
+For the normative rendering and transport rules, including dotted-reference hoisting and nested multimodal behavior, see [Specification Section 8.2](specification.md#82-locals-summary).
 
 ### f-string injection
 

@@ -61,7 +61,7 @@ The LLM interprets the mixed-format input list via `<numbers>`, calls the Python
 
 ## Background and project
 
-- **[Philosophy](philosophy.md)** -- Design rationale: execution model, harness evidence, design consequences (resilience, scoped execution contexts, tool exposure, multi-agent coordination, tradeoffs), runtime evaluation rationale, and design landscape.
+- **[Philosophy](philosophy.md)** -- Design rationale: execution model, design landscape, boundary-first consequences, trust and safety boundaries, tradeoffs, and runtime evaluation rationale.
 - **[Roadmap](roadmap.md)** -- Future directions and open questions.
 
 ## Origins

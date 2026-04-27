@@ -102,6 +102,14 @@ The f-string binding span validation uses a NUL byte (`\x00`) as a placeholder f
 
 Resolve backend-specific limitations in combining MCP tool exposure with structured output (e.g., Codex CLI "stream disconnected" errors when MCP tools and `--output-schema` are used together).
 
+### MCP document transport capability
+
+Consider native MCP document transport only when a backend can advertise and verify stable document-resource support. Until then, document content should remain text-projected so coding-agent backends preserve predictable fallback behavior.
+
+Non-goal:
+
+- Native video transport is intentionally not on the short-term roadmap because video-modal API and client requirements are still unstable.
+
 ### New backend integration criteria
 
 Define criteria and a minimal interface for adding new coding agent backends, reducing integration effort for future CLI agents.
