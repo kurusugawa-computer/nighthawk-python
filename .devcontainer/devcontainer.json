@@ -6,7 +6,7 @@
 	"shutdownAction": "stopCompose",
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/devcontainers/features/node:1": {}
+		"ghcr.io/devcontainers/features/node:2": {}
 	},
 	"postCreateCommand": "npm install -g pyright @openai/codex && pip install --no-cache-dir uv && curl -fsSL https://claude.ai/install.sh | bash",
 	"remoteEnv": {
