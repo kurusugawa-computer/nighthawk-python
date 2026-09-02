@@ -10,7 +10,6 @@ Use `nh.scope()` to override execution settings within an existing run. Each sco
 
 ```py
 with nh.run(step_executor):
-
     # Inherit mode (default): merge/append into current scope state
     with nh.scope(
         step_executor_configuration=nh.StepExecutorConfiguration(
@@ -82,6 +81,7 @@ Text-projected backends that expose Nighthawk tools automatically add a short to
 
 ```py
 def search_repository(query: str) -> list[str]: ...
+
 
 with nh.run(step_executor):
     with nh.scope(implicit_references={"search_repository": search_repository}):
@@ -221,7 +221,7 @@ deep_executor = nh.AgentStepExecutor.from_configuration(
 )
 
 with nh.run(fast_executor):
-    label = classify_ticket(text)             # fast, cheap
+    label = classify_ticket(text)  # fast, cheap
     with nh.scope(step_executor=deep_executor):
         diagnosis = inspect_repository(text)  # deep, autonomous
 ```
@@ -254,9 +254,9 @@ Each `nh.run()` generates an `ExecutionRef` with a unique `run_id` (trace root) 
 
 ```py
 execution_ref = nh.get_execution_ref()
-execution_ref.run_id    # trace root -- stable across nested scopes
+execution_ref.run_id  # trace root -- stable across nested scopes
 execution_ref.scope_id  # current scope -- changes with each nh.scope()
-execution_ref.step_id   # None outside active step execution
+execution_ref.step_id  # None outside active step execution
 ```
 
 Use `run_id` to correlate distributed agent processes in logs and traces. Use `scope_id` to identify the current logical execution context. See [Specification Section 10](specification.md#10-runtime-scoping) for the full specification and [Verification: observability](verification.md#observability) for tracing integration.
@@ -266,10 +266,10 @@ Use `run_id` to correlate distributed agent processes in logs and traces. Use `s
 Each `nh.run()` creates a `UsageMeter` that accumulates LLM token usage across all Natural block executions in the run. The meter is thread-safe and updated automatically after each step.
 
 ```py
-meter = nh.get_current_usage_meter()   # None outside nh.run()
+meter = nh.get_current_usage_meter()  # None outside nh.run()
 if meter is not None:
-    meter.total_tokens     # cumulative input + output tokens
-    meter.snapshot()       # independent RunUsage copy of current totals
+    meter.total_tokens  # cumulative input + output tokens
+    meter.snapshot()  # independent RunUsage copy of current totals
 ```
 
 `get_current_usage_meter()` returns `None` outside an active `nh.run()` context. Use the meter to inspect cumulative cost at decision points -- for example, to choose a cheaper model mid-pipeline when spend is high. For automatic budget enforcement, see [Patterns: Budget](patterns.md#budget).

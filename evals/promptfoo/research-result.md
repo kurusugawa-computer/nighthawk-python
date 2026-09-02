@@ -122,6 +122,7 @@ A custom Python provider wraps a Nighthawk Natural function execution as a promp
 ```python
 # nighthawk_provider.py
 
+
 def call_api(prompt: str, options: dict, context: dict) -> dict:
     """
     Parameters:

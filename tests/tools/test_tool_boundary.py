@@ -81,7 +81,7 @@ def _new_step_context() -> StepContext:
 
 
 @pytest.fixture
-def tool_span_exporter() -> Generator[tuple[InMemorySpanExporter, TracerProvider], None, None]:
+def tool_span_exporter() -> Generator[tuple[InMemorySpanExporter, TracerProvider]]:
     span_exporter = InMemorySpanExporter()
     tracer_provider = TracerProvider()
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))

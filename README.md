@@ -33,12 +33,12 @@ For other providers, see [Pydantic AI providers](https://kurusugawa-computer.git
 ```py
 import nighthawk as nh
 
+
 def python_average(numbers):
     return sum(numbers) / len(numbers)
 
-step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
-)
+
+step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano"))
 
 with nh.run(step_executor):
 

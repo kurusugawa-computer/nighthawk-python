@@ -27,9 +27,11 @@ def classify(text: str) -> str:
 
 
 def test_classify_returns_scripted_label():
-    executor = ScriptedExecutor(responses=[
-        pass_response(label="positive"),
-    ])
+    executor = ScriptedExecutor(
+        responses=[
+            pass_response(label="positive"),
+        ]
+    )
     with nh.run(executor):
         result = classify("Great product!")
 
@@ -51,10 +53,13 @@ def test_classify_returns_scripted_label():
 ```py
 from nighthawk.testing import raise_response
 
+
 def test_fallback_on_error():
-    executor = ScriptedExecutor(responses=[
-        raise_response("cannot interpret input", error_type="ValueError"),
-    ])
+    executor = ScriptedExecutor(
+        responses=[
+            raise_response("cannot interpret input", error_type="ValueError"),
+        ]
+    )
     with nh.run(executor):
         try:
             result = classify("???")
@@ -68,10 +73,12 @@ def test_fallback_on_error():
 
 ```py
 def test_pipeline_classify_then_summarize():
-    executor = ScriptedExecutor(responses=[
-        pass_response(category="bug"),
-        pass_response(summary="Login crash on mobile"),
-    ])
+    executor = ScriptedExecutor(
+        responses=[
+            pass_response(category="bug"),
+            pass_response(summary="Login crash on mobile"),
+        ]
+    )
     with nh.run(executor):
         result = triage_pipeline("App crashes when I log in on my phone")
 
@@ -104,8 +111,8 @@ def test_helper_is_discoverable():
         analyze(query="test")
 
     call = executor.calls[0]
-    assert "helper" in call.step_globals   # binding function visible in GLOBALS
-    assert "query" in call.step_locals     # parameter visible in LOCALS
+    assert "helper" in call.step_globals  # binding function visible in GLOBALS
+    assert "query" in call.step_locals  # parameter visible in LOCALS
     assert "result" in call.binding_names  # write binding registered
 ```
 
@@ -114,11 +121,13 @@ def test_helper_is_discoverable():
 ```py
 from nighthawk.testing import CallbackExecutor, StepCall, StepResponse
 
+
 def handler(call: StepCall) -> StepResponse:
     text = call.step_locals.get("text", "")
     if isinstance(text, str) and "urgent" in text:
         return pass_response(priority="high")
     return pass_response(priority="normal")
+
 
 def test_urgent_routing():
     executor = CallbackExecutor(handler)

@@ -793,6 +793,7 @@ Any object implementing `SyncStepExecutor` or `AsyncStepExecutor` can serve as a
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import AsyncStepExecutor, StepOutcome
 
+
 class MyExecutor(AsyncStepExecutor):
     async def run_step_async(
         self,

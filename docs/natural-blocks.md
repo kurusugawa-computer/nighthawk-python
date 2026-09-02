@@ -139,10 +139,12 @@ Write bindings can use Pydantic models for structured output with automatic vali
 ```py
 from pydantic import BaseModel
 
+
 class ReviewVerdict(BaseModel):
     approved: bool
     reason: str
     risk_level: str
+
 
 @nh.natural_function
 def judge_review(review_data: str) -> ReviewVerdict:
@@ -194,6 +196,7 @@ Inline f-string blocks embed Python expressions directly into the Natural progra
 ```py
 PROJECT_POLICY = ["safety-first", "concise-output", "cite-assumptions"]
 
+
 @nh.natural_function
 def choose_policy(post: str) -> str:
     selected_policy = ""
@@ -233,9 +236,11 @@ Member accesses and function results work too:
 ```py
 from pydantic import BaseModel
 
+
 class Config(BaseModel):
     max_length: int = 100
     style: str = "formal"
+
 
 @nh.natural_function
 def generate(config: Config, topic: str) -> str:
@@ -309,6 +314,7 @@ When a Natural block references a module-level name via `<name>`, it appears in 
 ```py
 def python_average(numbers):
     return sum(numbers) / len(numbers)
+
 
 @nh.natural_function
 def calculate_average(numbers):
@@ -389,10 +395,12 @@ For deterministic functions (no Natural blocks), the boundary is at the function
 ```py
 from pydantic import BaseModel
 
+
 class ScoreInput(BaseModel):
     base: int
     bonus: int
     multiplier: float = 1.0
+
 
 def compute_score(score_input: ScoreInput) -> int:
     return int((score_input.base + score_input.bonus) * score_input.multiplier)
@@ -406,10 +414,12 @@ For judgment-heavy functions (containing Natural blocks), the boundary moves *in
 from pydantic import BaseModel
 from nighthawk import JsonableValue
 
+
 class ReviewVerdict(BaseModel):
     approved: bool
     reason: str
     risk_level: str
+
 
 @nh.natural_function
 def judge_review(review_data: str | JsonableValue) -> ReviewVerdict:
@@ -483,6 +493,7 @@ This principle extends to project architecture: compose domain-specific helper f
 def get_feedback_summary(topic: str, max_items: int = 10) -> str:
     items = fetch_feedback(topic=topic, limit=max_items)
     return format_summary(items)
+
 
 # Natural block sees only what it needs
 @nh.natural_function

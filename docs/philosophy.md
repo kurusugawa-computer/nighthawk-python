@@ -22,6 +22,7 @@ Python controls sequencing: loops, conditionals, error handling, retries, fallba
 def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
+
 @nh.natural_function
 def calculate_average(numbers: list[object]) -> float:
     result: float = 0.0
@@ -30,6 +31,7 @@ def calculate_average(numbers: list[object]) -> float:
     then compute <:result> by calling <python_average> with the mapped list.
     """
     return result
+
 
 calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
 ```

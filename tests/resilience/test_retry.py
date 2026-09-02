@@ -17,7 +17,7 @@ from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
 
 
 @pytest.fixture
-def run_span_exporter() -> Generator[InMemorySpanExporter, None, None]:
+def run_span_exporter() -> Generator[InMemorySpanExporter]:
     span_exporter = InMemorySpanExporter()
     tracer_provider = TracerProvider()
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))

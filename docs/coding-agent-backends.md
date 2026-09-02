@@ -281,6 +281,7 @@ Example Natural function that invokes the skill:
 ```py
 import nighthawk as nh
 
+
 @nh.natural_function
 def summarize_feedback(feedback_items: list[str]) -> str:
     def group_feedback_by_topic(feedback_items: list[str]) -> dict[str, list[str]]:

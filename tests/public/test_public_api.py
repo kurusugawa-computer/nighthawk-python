@@ -22,7 +22,7 @@ class FakeMemory(BaseModel):
 
 
 @pytest.fixture
-def step_span_exporter() -> Generator[InMemorySpanExporter, None, None]:
+def step_span_exporter() -> Generator[InMemorySpanExporter]:
     span_exporter = InMemorySpanExporter()
     tracer_provider = TracerProvider()
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))

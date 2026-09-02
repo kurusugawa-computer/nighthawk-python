@@ -14,12 +14,12 @@ The same mechanism handles lightweight LLM judgments ("classify this sentiment")
 ```py
 import nighthawk as nh
 
+
 def python_average(numbers):
     return sum(numbers) / len(numbers)
 
-step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
-)
+
+step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano"))
 
 with nh.run(step_executor):
 

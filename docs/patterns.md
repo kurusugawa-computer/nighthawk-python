@@ -117,6 +117,7 @@ def validate(data: str) -> str:
     """
     return result
 
+
 try:
     validate("corrupted-input")
 except nh.ExecutionError as e:
@@ -131,6 +132,7 @@ When a Natural block references exception types visible in step locals or global
 class InputError(Exception):
     pass
 
+
 @nh.natural_function
 def strict_validate(data: str) -> str:
     result = ""
@@ -139,6 +141,7 @@ def strict_validate(data: str) -> str:
     Otherwise set <:result> to "valid".
     """
     return result
+
 
 try:
     strict_validate("bad")
@@ -165,6 +168,7 @@ async def summarize_async(text: str) -> str:
     """
     return result
 
+
 summary = await summarize_async("A long document about climate change...")
 ```
 
@@ -180,6 +184,7 @@ Async binding functions work as expected:
 async def fetch_data(query: str) -> list[str]:
     """Fetch data matching the query from an external API."""
     ...
+
 
 @nh.natural_function
 async def analyze(query: str) -> str:
@@ -199,6 +204,7 @@ Async natural functions are ordinary coroutines, so you can run multiple Natural
 ```py
 import asyncio
 
+
 @nh.natural_function
 async def classify(text: str) -> str:
     label: str = ""
@@ -206,6 +212,7 @@ async def classify(text: str) -> str:
     Read <text> and set <:label> to one of: positive, negative, neutral.
     """
     return label
+
 
 async def classify_batch(texts: list[str]) -> list[str]:
     return list(await asyncio.gather(*(classify(t) for t in texts)))
@@ -242,6 +249,7 @@ def step_1(carry: list[str]) -> int:
     """
     return result
 
+
 @nh.natural_function
 def step_2(carry: list[str]) -> int:
     result = 0
@@ -253,9 +261,10 @@ def step_2(carry: list[str]) -> int:
     """
     return result
 
+
 carry: list[str] = []
-r1 = step_1(carry)   # carry now has 1 entry
-r2 = step_2(carry)   # carry now has 2 entries
+r1 = step_1(carry)  # carry now has 1 entry
+r2 = step_2(carry)  # carry now has 2 entries
 ```
 
 Any mutable object works -- `list`, `dict`, Pydantic models, custom classes.
@@ -293,7 +302,7 @@ seed_step(carry)
 carry_a = carry.copy()
 carry_b = carry.copy()
 
-result_a = branch_add(carry_a)       # diverges from here
+result_a = branch_add(carry_a)  # diverges from here
 result_b = branch_multiply(carry_b)  # independent path
 ```
 
@@ -443,8 +452,10 @@ For monetary budgets, supply a `cost_function` that converts `RunUsage` to a flo
 ```py
 from pydantic_ai.usage import RunUsage
 
+
 def dollar_cost(usage: RunUsage) -> float:
     return usage.input_tokens * 3e-6 + usage.output_tokens * 15e-6
+
 
 budgeted = budget(cost=1.00, cost_function=dollar_cost)(classify)
 ```
@@ -459,7 +470,7 @@ Prevent repeated calls to a failing service. After `fail_threshold` consecutive 
 from nighthawk.resilience import circuit_breaker, CircuitState
 
 protected_api = circuit_breaker(fail_threshold=5, reset_timeout=60)(call_api)
-protected_api.state    # CircuitState.CLOSED
+protected_api.state  # CircuitState.CLOSED
 protected_api.reset()  # manual reset
 ```
 
@@ -471,11 +482,11 @@ All transformers produce callables with the original signature, so they compose 
 
 ```py
 robust_classify = fallback(
-    retrying(attempts=2)(                      # 3. Retry the voted call
-        vote(count=3)(classify_gpt4)           # 2. Vote 3x with GPT-4
-    ),                                         # 1. Try GPT-4 first
-    retrying(attempts=2)(classify_mini),       # 4. Fall back to mini
-    default="unknown",                         # 5. Last resort
+    retrying(attempts=2)(  # 3. Retry the voted call
+        vote(count=3)(classify_gpt4)  # 2. Vote 3x with GPT-4
+    ),  # 1. Try GPT-4 first
+    retrying(attempts=2)(classify_mini),  # 4. Fall back to mini
+    default="unknown",  # 5. Last resort
 )
 
 result = robust_classify(text)
@@ -498,6 +509,7 @@ Recommended composition order (innermost to outermost):
 
 ```py
 from functools import lru_cache
+
 
 @lru_cache(maxsize=256)
 @nh.natural_function
