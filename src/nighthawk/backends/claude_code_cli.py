@@ -8,7 +8,6 @@ import tempfile
 from typing import IO, TypedDict
 
 from pydantic import field_validator
-from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import ModelRequestParameters
@@ -137,7 +136,7 @@ class ClaudeCodeCliModel(BackendModelBase):
                 supports_json_object_output=False,
                 supports_image_output=False,
                 default_structured_output_mode="native",
-                supported_builtin_tools=frozenset([AbstractBuiltinTool]),
+                supported_native_tools=frozenset(),
             ),
         )
         self._model_name = model_name

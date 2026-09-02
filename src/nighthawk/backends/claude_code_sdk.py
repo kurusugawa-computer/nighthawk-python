@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any
 
 from opentelemetry import context as otel_context
-from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import ModelRequestParameters
@@ -111,7 +110,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
                 supports_json_object_output=False,
                 supports_image_output=False,
                 default_structured_output_mode="native",
-                supported_builtin_tools=frozenset([AbstractBuiltinTool]),
+                supported_native_tools=frozenset(),
             ),
         )
         self._model_name = model_name

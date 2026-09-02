@@ -8,7 +8,6 @@ from dataclasses import replace
 from typing import IO, Any, Literal, TypedDict
 
 from pydantic import field_validator
-from pydantic_ai.builtin_tools import AbstractBuiltinTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import ModelRequestParameters
@@ -165,7 +164,7 @@ class CodexModel(BackendModelBase):
                 supports_json_object_output=False,
                 supports_image_output=False,
                 default_structured_output_mode="native",
-                supported_builtin_tools=frozenset([AbstractBuiltinTool]),
+                supported_native_tools=frozenset(),
                 json_schema_transformer=_CodexJsonSchemaTransformer,
             ),
         )

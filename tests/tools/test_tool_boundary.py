@@ -803,7 +803,7 @@ def test_user_content_union_members_are_covered_by_text_projection_predicate() -
     assert len(annotated_member_list) == 1
 
     multimodal_member_union = get_args(annotated_member_list[0])[0]
-    multimodal_member_set = set(get_args(multimodal_member_union))
+    multimodal_member_set = {get_args(member)[0] if get_origin(member) is Annotated else member for member in get_args(multimodal_member_union)}
     assert multimodal_member_set == {
         ImageUrl,
         AudioUrl,

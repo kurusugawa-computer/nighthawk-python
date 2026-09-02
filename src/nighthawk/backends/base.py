@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import (
     CachePoint,
+    InstructionPart,
     ModelMessage,
     ModelRequest,
     RetryPromptPart,
@@ -71,6 +72,31 @@ def _collect_system_prompt_text(model_request: ModelRequest) -> str:
         if isinstance(part, SystemPromptPart) and part.content:
             parts.append(part.content)
     return "\n\n".join(parts)
+
+
+def _collect_instruction_text(
+    messages: list[ModelMessage],
+    model_request_parameters: ModelRequestParameters,
+) -> str | None:
+    instruction_parts = model_request_parameters.instruction_parts
+    if instruction_parts is not None:
+        return InstructionPart.join(instruction_parts)
+
+    model_request_list = [message for message in reversed(messages) if isinstance(message, ModelRequest)]
+    if not model_request_list:
+        return None
+
+    most_recent_model_request = model_request_list[0]
+    if most_recent_model_request.instructions is not None:
+        return most_recent_model_request.instructions
+
+    if len(model_request_list) < 2:
+        return None
+
+    if all(isinstance(part, ToolReturnPart | RetryPromptPart) for part in most_recent_model_request.parts):
+        return model_request_list[1].instructions
+
+    return None
 
 
 def _resolve_current_tool_result_max_tokens() -> int:
@@ -152,8 +178,8 @@ class BackendModelBase(Model):
         messages: list[ModelMessage],
         model_request_parameters: ModelRequestParameters,
     ) -> PreparedRequestParts:
-        if model_request_parameters.builtin_tools:
-            raise UserError(f"{self.backend_label} does not support builtin tools")
+        if model_request_parameters.native_tools:
+            raise UserError(f"{self.backend_label} does not support native tools")
 
         if model_request_parameters.allow_image_output:
             raise UserError(f"{self.backend_label} does not support image output")
@@ -162,7 +188,7 @@ class BackendModelBase(Model):
 
         system_prompt_text = _collect_system_prompt_text(model_request)
 
-        instructions = self._get_instructions(messages, model_request_parameters)
+        instructions = _collect_instruction_text(messages, model_request_parameters)
         if instructions:
             system_prompt_text = "\n\n".join([system_prompt_text, instructions]) if system_prompt_text else instructions
 
