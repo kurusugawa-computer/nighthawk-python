@@ -7,10 +7,12 @@ from typing import Annotated, Literal
 import pytest
 from pydantic import BaseModel, Field, model_validator
 from pydantic_ai.messages import BinaryContent
+from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime.prompt import build_system_prompt, resolve_step_system_prompt_template_text
+from nighthawk.runtime.scoping import get_current_usage_meter
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepFinalResult, StepKind
 from tests.execution.stub_executor import StubExecutor
@@ -787,6 +789,32 @@ def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
             return result.value
 
         assert f() == 9
+
+
+def test_agent_executor_records_run_result_usage() -> None:
+    class FakeRunResult:
+        output = StepFinalResult(result=PassStepOutcome(kind="pass"))
+        usage = RunUsage(input_tokens=11, output_tokens=7)
+
+    class FakeAgent:
+        def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            assert deps is not None
+            _ = user_prompt
+            _ = kwargs
+            return FakeRunResult()
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
+
+        @nh.natural_function
+        def f() -> None:
+            """natural
+            Say hi.
+            """
+
+        f()
+        usage_meter = get_current_usage_meter()
+        assert usage_meter is not None
+        assert usage_meter.snapshot().total_tokens == 18
 
 
 def test_agent_executor_passes_plain_string_to_text_only_custom_agent() -> None:
