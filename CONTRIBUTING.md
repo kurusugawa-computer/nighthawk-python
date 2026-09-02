@@ -12,6 +12,14 @@
 uv sync --all-extras --all-groups
 ```
 
+`uv` manages the project virtual environment in `.venv`. Do not create or
+activate a separate virtual environment; run project commands through `uv run`.
+The `.venv` directory is generated and ignored by Git. It can be deleted to
+rebuild the local environment, and the next `uv sync` or `uv run` recreates it.
+
+Declare project dependencies in `pyproject.toml` through `uv add`, rather than
+installing them directly into `.venv` with `uv pip install`.
+
 If you see a `uv` warning about hardlinking (common in containers or cross-filesystem workspaces), suppress it with:
 
 ```bash
@@ -39,13 +47,8 @@ uv run pytest -q       # quiet output
 
 ### Integration tests
 
-Integration tests require provider packages and API keys. Install the provider you need:
-
-```bash
-uv pip install pydantic-ai-slim[openai]
-```
-
-Then run with your `.env` loaded:
+The full setup command installs the OpenAI provider development dependency.
+Run integration tests with your `.env` loaded:
 
 ```bash
 set -a; source .env; set +a; uv run pytest -q

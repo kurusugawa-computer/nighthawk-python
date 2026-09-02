@@ -6,6 +6,12 @@
 
 version: 2
 updates:
+ - package-ecosystem: "uv"
+   directory: "/"
+   schedule:
+     interval: weekly
+   cooldown:
+     default-days: 7
  - package-ecosystem: "devcontainers"
    directory: "/"
    schedule:
