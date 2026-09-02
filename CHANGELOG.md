@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified the boundary-first philosophy page.
 - Clarified multimodal documentation and specification.
 - Raised the minimum Pydantic AI version to 2.37.0 and migrated coding-agent backends to its native-tool and structured-instruction APIs.
+- Raised the MCP minimum version to 2.1.1 and migrated the embedded tool server and content types to the MCP 2 API.
 
 ## [0.11.0]
 

@@ -92,10 +92,10 @@ def _tool_outcome_to_mcp_content_list(
 
         if isinstance(content_item, BinaryContent):
             if content_item.is_image:
-                content_block_list.append(mcp_types.ImageContent(type="image", data=content_item.base64, mimeType=content_item.media_type))
+                content_block_list.append(mcp_types.ImageContent(type="image", data=content_item.base64, mime_type=content_item.media_type))
                 continue
             if content_item.is_audio:
-                content_block_list.append(mcp_types.AudioContent(type="audio", data=content_item.base64, mimeType=content_item.media_type))
+                content_block_list.append(mcp_types.AudioContent(type="audio", data=content_item.base64, mime_type=content_item.media_type))
                 continue
             # Non-image / non-audio blobs project to text per spec §8.3:
             # MCP's rich transport only has first-class slots for image and

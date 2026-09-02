@@ -1359,7 +1359,7 @@ def test_mcp_boundary_low_level_mcp_server_returns_rich_image_content() -> None:
     assert content[1].text == "This is file img1:"
     item: Any = content[2]
     assert item.type == "image"
-    assert item.mimeType == "image/png"
+    assert item.mime_type == "image/png"
 
 
 def test_mcp_boundary_claude_code_returns_rich_image_content() -> None:
@@ -1474,11 +1474,11 @@ def test_mcp_boundary_preserves_tool_result_item_order_for_mixed_text_and_images
     assert isinstance(content[0], TextContent)
     assert content[0].text == "before"
     assert isinstance(content[1], ImageContent)
-    assert content[1].mimeType == "image/png"
+    assert content[1].mime_type == "image/png"
     assert isinstance(content[2], TextContent)
     assert content[2].text == "after"
     assert isinstance(content[3], AudioContent)
-    assert content[3].mimeType == "audio/mpeg"
+    assert content[3].mime_type == "audio/mpeg"
 
 
 def test_mcp_boundary_claude_code_preserves_tool_result_item_order_for_mixed_text_and_images() -> None:
@@ -1536,11 +1536,11 @@ def test_mcp_boundary_preserves_tool_result_item_order_for_text_content_and_imag
     assert isinstance(content[0], TextContent)
     assert content[0].text == "before"
     assert isinstance(content[1], ImageContent)
-    assert content[1].mimeType == "image/png"
+    assert content[1].mime_type == "image/png"
     assert isinstance(content[2], TextContent)
     assert content[2].text == "after"
     assert isinstance(content[3], AudioContent)
-    assert content[3].mimeType == "audio/mpeg"
+    assert content[3].mime_type == "audio/mpeg"
 
 
 def test_mcp_boundary_claude_code_preserves_tool_result_item_order_for_text_content_and_images() -> None:
@@ -1618,7 +1618,7 @@ def test_mcp_boundary_replaces_uploaded_file_with_text_fallback() -> None:
     assert isinstance(content[0], TextContent)
     assert content[0].text == "caption"
     assert isinstance(content[1], ImageContent)
-    assert content[1].mimeType == "image/png"
+    assert content[1].mime_type == "image/png"
     assert isinstance(content[2], TextContent)
     assert "UploadedFile: provider=openai, file_id=file-123 (not resolvable by MCP transport)" in content[2].text
 

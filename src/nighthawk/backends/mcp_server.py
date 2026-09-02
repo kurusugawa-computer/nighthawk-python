@@ -15,7 +15,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import copy_context
-from typing import Any
+from typing import Any, cast
 
 from opentelemetry import context as otel_context
 from pydantic_ai.exceptions import UnexpectedModelBehavior
@@ -62,20 +62,20 @@ class McpServer:
             raise RuntimeError("MCP tool server is already started")
 
         import uvicorn
-        from mcp.server.fastmcp.server import StreamableHTTPASGIApp
-        from mcp.server.lowlevel.server import Server as McpLowLevelServer
+        from mcp import types as mcp_types
+        from mcp.server import Server as McpLowLevelServer
+        from mcp.server import ServerRequestContext
         from mcp.server.streamable_http_manager import (
+            StreamableHTTPASGIApp,
             StreamableHTTPSessionManager,
         )
         from starlette.applications import Starlette
         from starlette.routing import Route
 
-        mcp_server = McpLowLevelServer("nighthawk")
-
-        @mcp_server.list_tools()
-        async def list_tools() -> list[Any]:
-            from mcp import types as mcp_types
-
+        async def list_tools(
+            _context: ServerRequestContext[Any, Any],
+            _parameters: mcp_types.PaginatedRequestParams | None,
+        ) -> mcp_types.ListToolsResult:
             tools: list[mcp_types.Tool] = []
             for tool_name in sorted(self._tool_name_to_handler.keys()):
                 tool_definition = self._tool_name_to_tool_definition.get(tool_name)
@@ -86,13 +86,17 @@ class McpServer:
                     mcp_types.Tool(
                         name=tool_name,
                         description=tool_definition.description or "",
-                        inputSchema=tool_definition.parameters_json_schema,
+                        input_schema=tool_definition.parameters_json_schema,
                     )
                 )
-            return tools
+            return mcp_types.ListToolsResult(tools=tools)
 
-        @mcp_server.call_tool(validate_input=False)
-        async def call_tool(name: str, arguments: dict[str, Any]) -> Any:
+        async def call_tool(
+            _context: ServerRequestContext[Any, Any],
+            parameters: mcp_types.CallToolRequestParams,
+        ) -> mcp_types.CallToolResult:
+            name = parameters.name
+            arguments = parameters.arguments or {}
             handler = self._tool_name_to_handler.get(name)
             if handler is None:
                 tool_outcome: ToolOutcome = {
@@ -100,19 +104,27 @@ class McpServer:
                     "error": {"kind": "resolution", "message": f"Unknown tool: {name}", "guidance": "Choose a visible tool name and retry."},
                 }
                 tool_handler_result: ToolHandlerResult = build_tool_result_observation(tool_outcome=tool_outcome)
-                return tool_handler_result_to_low_level_mcp_content(
+                content_block_list = tool_handler_result_to_low_level_mcp_content(
                     tool_name=name,
                     tool_handler_result=tool_handler_result,
                     rendering_policy=self._tool_result_rendering_policy,
                 )
+                return mcp_types.CallToolResult(content=cast(list[mcp_types.ContentBlock], content_block_list))
 
-            return await call_tool_for_low_level_mcp_server(
+            content_block_list = await call_tool_for_low_level_mcp_server(
                 tool_name=name,
                 arguments=arguments,
                 tool_handler=handler,
                 parent_otel_context=self._parent_otel_context,
                 rendering_policy=self._tool_result_rendering_policy,
             )
+            return mcp_types.CallToolResult(content=cast(list[mcp_types.ContentBlock], content_block_list))
+
+        mcp_server = McpLowLevelServer(
+            "nighthawk",
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+        )
 
         session_manager = StreamableHTTPSessionManager(app=mcp_server)
         streamable_http_asgi = StreamableHTTPASGIApp(session_manager)

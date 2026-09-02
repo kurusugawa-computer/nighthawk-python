@@ -198,7 +198,7 @@ async def _run() -> None:
     if not isinstance(mcp_url, str) or mcp_url == "":
         raise RuntimeError("Missing mcp_server_url")
 
-    async with streamable_http_client(mcp_url) as (read, write, _get_session_id):
+    async with streamable_http_client(mcp_url) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             response = await session.call_tool("nh_eval", arguments={"expression": "1 + 1"})
