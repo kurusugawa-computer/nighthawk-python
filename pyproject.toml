@@ -38,7 +38,7 @@ Changelog = "https://github.com/kurusugawa-computer/nighthawk-python/blob/main/C
 
 [project.optional-dependencies]
 claude-code-sdk = [
-  "claude-agent-sdk==0.1.48",
+  "claude-agent-sdk==0.2.151",
 ]
 claude-code-cli = [
   "mcp>=2.1.1",

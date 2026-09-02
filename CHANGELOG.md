@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified multimodal documentation and specification.
 - Raised the minimum Pydantic AI version to 2.37.0 and migrated coding-agent backends to its native-tool and structured-instruction APIs.
 - Raised the MCP minimum version to 2.1.1 and migrated the embedded tool server and content types to the MCP 2 API.
+- Updated the Claude Agent SDK integration to 0.2.151.
 
 ## [0.11.0]
 
