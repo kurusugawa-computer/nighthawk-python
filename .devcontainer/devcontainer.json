@@ -1,23 +1,15 @@
 {
-	"name": "Python 3.13 with Claude Code CLI",
-	"dockerComposeFile": "docker-compose.yaml",
-	"service": "devcontainer",
-	"workspaceFolder": "/workspace",
-	"shutdownAction": "stopCompose",
+	"name": "Python 3.13",
+	"image": "mcr.microsoft.com/devcontainers/python:3-3.13-bookworm",
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/devcontainers/features/node:2": {}
+		"ghcr.io/devcontainers/features/docker-in-docker:4.1.0": {},
+		"ghcr.io/devcontainers/features/node:2.1.0": {}
 	},
-	"postCreateCommand": "npm install -g pyright @openai/codex && pip install --no-cache-dir uv && curl -fsSL https://claude.ai/install.sh | bash",
-	"remoteEnv": {
-		"ANTHROPIC_BASE_URL": "http://litellm:4000",
-		"ANTHROPIC_AUTH_TOKEN": "sk-dummy"
-	},
+	"postCreateCommand": "/bin/sh .devcontainer/postCreateCommand.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"charliermarsh.ruff",
-				"Anthropic.claude-code"
+				"charliermarsh.ruff"
 			]
 		}
 	}
