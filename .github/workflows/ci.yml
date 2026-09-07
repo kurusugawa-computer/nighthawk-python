@@ -19,13 +19,17 @@ jobs:
     name: Lint and type check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v7
+      # setup-uv publishes no floating major tag since v8, so pin an exact release.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: "3.13"
+          # Same dependency set and cache key as "test (3.13)". Only that job
+          # saves the entry; concurrent writers race to reserve the same key.
+          save-cache: false
 
       - name: Install dependencies
         run: uv sync --all-extras --all-groups
@@ -48,11 +52,12 @@ jobs:
         python-version: ["3.13", "3.14"]
     continue-on-error: ${{ matrix.python-version != '3.13' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v7
+      # Sole writer of the per-Python-version dependency cache.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -67,11 +72,15 @@ jobs:
     needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v7
+      # "uv build" only resolves the build backend, so a cache entry would add
+      # no measurable benefit while colliding with the docs workflow key.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: false
 
       - name: Build sdist and wheel
         run: uv build

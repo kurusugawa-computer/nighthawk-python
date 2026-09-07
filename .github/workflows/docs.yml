@@ -24,9 +24,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v7
+      # setup-uv publishes no floating major tag since v8, so pin an exact release.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+          # The docs group is a subset of the cache "test (3.13)" saves under
+          # this key, so restore it here but never overwrite it.
+          save-cache: false
 
       - name: Install dependencies
         run: uv sync --group docs
