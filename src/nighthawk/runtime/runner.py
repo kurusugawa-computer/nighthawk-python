@@ -398,6 +398,10 @@ class Runner:
                         lifecycle.on_step_finished(finished)
                 except BaseException as delivery_exception:
                     step_span.add_event("nighthawk.step.delivery_failed", {"exception.type": type(delivery_exception).__name__})
+                    if delivery_exception is original_exception:
+                        # A host may rethrow its already-recorded exception. Keep its
+                        # existing cause instead of creating an exception self-cycle.
+                        raise
                     if isinstance(finished, StepInterrupted):
                         raise finished.original_exception from delivery_exception
                     if original_exception is not None:

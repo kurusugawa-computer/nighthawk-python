@@ -350,7 +350,7 @@ def test_partial_assignment_failure_reports_only_completed_writes() -> None:
     assert event.assigned_binding_name_to_value == {"first": 1}
 
 
-@pytest.mark.parametrize("exception", [KeyboardInterrupt(), SystemExit(3)])
+@pytest.mark.parametrize("exception", [KeyboardInterrupt(), SystemExit(3), GeneratorExit()])
 def test_process_control_is_interruption(exception: BaseException) -> None:
     events: list[StepFinished] = []
 
@@ -530,3 +530,101 @@ def test_lifecycle_is_captured_before_executor_work(monkeypatch: pytest.MonkeyPa
     with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(events.append)):
         workflow()
     assert len(events) == 1 and not redirected
+
+
+@pytest.mark.parametrize("interruption", [asyncio.CancelledError(), GeneratorExit()])
+def test_handler_rethrowing_interruption_preserves_its_cause(interruption: BaseException) -> None:
+    original_cause = ValueError("original cause")
+    interruption.__cause__ = original_cause
+    notifications: list[StepFinished] = []
+
+    class Executor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: nh.StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[StepKind, ...],
+        ) -> tuple[StepOutcome, dict[str, object]]:
+            raise interruption
+
+    def finished(event: StepFinished) -> None:
+        notifications.append(event)
+        assert isinstance(event, StepInterrupted)
+        raise event.original_exception
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Finish.
+        """
+
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(type(interruption)) as caught:
+        workflow()
+    assert caught.value is interruption
+    assert caught.value.__cause__ is original_cause
+    assert len(notifications) == 1
+
+
+def test_handler_rethrowing_prepared_domain_exception_has_no_self_cause() -> None:
+    notifications: list[StepFinished] = []
+
+    def finished(event: StepFinished) -> None:
+        notifications.append(event)
+        assert isinstance(event, StepRaised)
+        raise event.exception
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        <ValueError>
+        {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "ValueError"}, "bindings": {}}
+        """
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(ValueError) as caught:
+        workflow()
+    assert caught.value.__cause__ is None
+    assert len(notifications) == 1
+    event = notifications[0]
+    assert isinstance(event, StepRaised) and event.exception is caught.value
+
+
+def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() -> None:
+    events: list[StepFinished] = []
+    bypass_references: list[nh.ExecutionReference] = []
+    configuration = StepLifecycle(events.append)
+
+    class Executor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: nh.StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[StepKind, ...],
+        ) -> tuple[StepOutcome, dict[str, object]]:
+            if nh.get_lifecycle() is not configuration:
+                # The host boundary must record bypass itself: delivery has been cleared.
+                bypass_references.append(step_context.execution_reference)
+                raise RuntimeError("mediation bypass")
+            return PassStepOutcome(kind="pass"), {}
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Finish.
+        """
+
+    with nh.run(Executor()), nh.scope(lifecycle=configuration):
+        with nh.scope(lifecycle=None), pytest.raises(nh.ExecutionError, match="mediation bypass") as caught:
+            workflow()
+        assert caught.value.step_failed is not None
+        assert caught.value.step_failed.execution_reference == bypass_references[0]
+        assert events == []
+        assert nh.get_lifecycle() is configuration
+        workflow()
+    assert len(bypass_references) == len(events) == 1
+    assert events[0].execution_reference != bypass_references[0]
+    with pytest.raises(nh.NighthawkError):
+        nh.get_lifecycle()

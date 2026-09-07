@@ -247,6 +247,12 @@ with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(record_finished)):
 
 This example is an in-memory history. Durable storage, serialization, and deduplication belong to the host. Callback failures do not roll back assignments or retry execution. See [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers) for exception chaining, cancellation, and storage failure handling.
 
+For a host ledger, use the executor boundary for admission and execution accounting, `inspect_step_commit` for approval before assignment, and StepLifecycle for terminal recording and exception translation. Correlate them with `execution_reference.step_execution_id`, which is unique per invocation; `source_location` only groups executions of the same source block. Preparation failures may have no admission record.
+
+If an earlier host boundary already stored a failure and raised its public exception, the lifecycle handler still receives StepFailed. Skip a duplicate append only after verifying that exception refers to the stored event for this same execution, then rethrow the same exception. Core preserves its original cause. Merely returning from the handler results in an ExecutionError wrapper; suppressing all exceptions of the host type would incorrectly omit parent events for failed nested executions.
+
+At a host-controlled admission boundary, `nh.get_lifecycle() is expected_lifecycle` can verify that the required callback is configured. If it has been cleared, record the bypass through that still-active boundary: the missing lifecycle cannot record its own absence. Delivery is one in-process attempt with a configured handler, not guaranteed persistence. A callback exception after successful assignment propagates without undoing writes; host delivery-failure and anomaly records are separate from the completed core record. The full rules are in [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers).
+
 ## Synchronous oversight in scopes
 
 Use `nh.scope(oversight=...)` when the host needs synchronous inspection around tool calls or a final rewrite/reject checkpoint before Nighthawk commits a step result.
@@ -283,6 +289,8 @@ Acceptance preserves validated values without repeating validators. Replacements
 Inspection mappings are shallow read-only reference views: their entries retain Python types and identity. Trusted hooks must not mutate referenced objects; use `Rewrite`. Copy or serialize explicitly for durable history. Rejection cannot roll back effects of tools, validators, or return expressions. See [Specification](specification.md#102-host-commit-boundary) for the complete contract.
 
 Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections produce a failed terminal record and raise `nh.ExecutionError` chained from `nh.oversight.OversightRejectedError`, unless the lifecycle callback supplies a host exception. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
+
+For return approval, a host may parse `ReturnExpression.expression` and permit only a bare name present in `validated_binding_name_to_value`. Declaration alone does not prove that this candidate supplied a validated value. This policy does not skip return validation, prevent awaiting an awaitable binding, or keep the return synchronized with later binding rewrites. Arbitrary constants also bypass write bindings. Keep `deny: [return]` if the host's value policy has not admitted these behaviors; see [return approval semantics](specification.md#103-return-expression-approval).
 
 ## Caller-authenticated models
 

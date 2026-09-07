@@ -100,6 +100,8 @@ class StepLifecycle:
 
     A callback may persist a record and raise a host exception referencing it.
     Callback errors never trigger another execution notification or rollback.
+    Rethrowing the exact original exception preserves its existing cause.
+    Host deduplication must match both execution identity and the stored event.
     """
 
     on_step_finished: Callable[[StepFinished], None] | None = None

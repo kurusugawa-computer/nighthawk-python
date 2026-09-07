@@ -85,7 +85,12 @@ class StepCommit:
 
 @dataclass(frozen=True)
 class ReturnExpression:
-    """Trusted expression approval before core evaluation, await, and validation."""
+    """Trusted expression approval before core evaluation, await, and validation.
+
+    The mapping contains writes supplied and validated for this candidate, not
+    every declared write binding. A bare name can still refer to an awaitable;
+    return validation and later rewrites can change the relationship to writes.
+    """
 
     execution_reference: ExecutionReference
     expression: str

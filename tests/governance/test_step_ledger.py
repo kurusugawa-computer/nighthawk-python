@@ -33,7 +33,16 @@ class Ledger:
 
     def finished(self, event: StepFinished) -> None:
         execution_id = event.execution_reference.step_execution_id
-        assert execution_id is not None and execution_id not in self.execution_id_to_event
+        assert execution_id is not None
+        if isinstance(event, StepFailed):
+            original = event.original_exception
+            if (
+                isinstance(original, NaturalExecutionError)
+                and original.event.execution_reference == event.execution_reference
+                and self.execution_id_to_event.get(execution_id) is original.event
+            ):
+                raise original
+        assert execution_id not in self.execution_id_to_event
         self.execution_id_to_event[execution_id] = event
         if isinstance(event, (StepFailed, StepRaised)):
             raise NaturalExecutionError(event)
@@ -323,3 +332,131 @@ def test_cancellation_is_stored_without_host_translation() -> None:
         asyncio.run(workflow())
     event = next(iter(ledger.execution_id_to_event.values()))
     assert isinstance(event, StepInterrupted) and event.original_exception is interruption
+
+
+@pytest.mark.parametrize("boundary", ["executor", "commit_inspection"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStage, asynchronous: bool) -> None:
+    ledger = Ledger()
+    original_cause = ValueError("admission failed")
+    notifications: list[StepFinished] = []
+    host_exceptions: list[NaturalExecutionError] = []
+
+    def record_early_failure() -> None:
+        reference = nh.get_execution_reference()
+        assert reference.step_execution_id is not None
+        event = StepFailed(execution_reference=reference, failure_stage=boundary, original_exception=original_cause)
+        ledger.execution_id_to_event[reference.step_execution_id] = event
+        exception = NaturalExecutionError(event)
+        host_exceptions.append(exception)
+        raise exception from original_cause
+
+    class Executor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: nh.StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[StepKind, ...],
+        ) -> tuple[StepOutcome, dict[str, object]]:
+            assert step_context.execution_reference == nh.get_execution_reference()
+            if boundary == "executor":
+                record_early_failure()
+            return PassStepOutcome(kind="pass"), {}
+
+    def inspect_commit(commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
+        record_early_failure()
+        return nh.oversight.Accept()
+
+    def finished(event: StepFinished) -> None:
+        notifications.append(event)
+        ledger.finished(event)
+
+    @nh.natural_function
+    def synchronous() -> None:
+        """natural
+        Finish.
+        """
+
+    @nh.natural_function
+    async def asynchronous_function() -> None:
+        """natural
+        Finish.
+        """
+
+    with (
+        nh.run(Executor()),
+        nh.scope(
+            lifecycle=StepLifecycle(finished),
+            oversight=nh.oversight.Oversight(inspect_step_commit=inspect_commit),
+        ),
+        pytest.raises(NaturalExecutionError) as caught,
+    ):
+        asyncio.run(asynchronous_function()) if asynchronous else synchronous()
+    assert len(notifications) == len(ledger.execution_id_to_event) == len(host_exceptions) == 1
+    assert caught.value is host_exceptions[0]
+    assert caught.value.__cause__ is original_cause
+    event = notifications[0]
+    assert isinstance(event, StepFailed) and event.failure_stage == boundary
+    assert event.original_exception is caught.value
+    assert next(iter(ledger.execution_id_to_event.values())) is caught.value.event
+
+
+def test_nested_host_exception_still_records_each_execution() -> None:
+    ledger = Ledger()
+
+    @nh.natural_function
+    def inner() -> None:
+        """natural
+        {"step_outcome": {"kind": "return", "return_expression": "1/0"}, "bindings": {}}
+        """
+
+    @nh.natural_function
+    def outer() -> None:
+        """natural
+        <inner>
+        {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
+        """
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+        outer()
+    assert len(ledger.execution_id_to_event) == 2
+    inner_event, outer_event = ledger.execution_id_to_event.values()
+    assert caught.value.event is outer_event
+    assert isinstance(caught.value.__cause__, NaturalExecutionError)
+    assert caught.value.__cause__.event is inner_event
+    assert inner_event.execution_reference.step_execution_id != outer_event.execution_reference.step_execution_id
+
+
+def test_returning_handler_does_not_preserve_host_exception_type() -> None:
+    event = StepFailed(
+        execution_reference=nh.ExecutionReference("earlier-run", "scope", "earlier-step", "test:1"),
+        failure_stage="executor",
+        original_exception=ValueError("earlier"),
+    )
+    original = NaturalExecutionError(event)
+    notifications: list[StepFinished] = []
+
+    class Executor:
+        def run_step(
+            self,
+            *,
+            processed_natural_program: str,
+            step_context: nh.StepContext,
+            binding_names: list[str],
+            allowed_step_kinds: tuple[StepKind, ...],
+        ) -> tuple[StepOutcome, dict[str, object]]:
+            raise original
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Finish.
+        """
+
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(notifications.append)), pytest.raises(nh.ExecutionError) as caught:
+        workflow()
+    assert len(notifications) == 1
+    assert caught.value.__cause__ is original
+    assert caught.value.step_failed is notifications[0]

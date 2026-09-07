@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completion tracing follows actual caller assignments. Cancellation retains priority if terminal delivery fails. Delivery errors never retry execution or undo effects.
 - Natural functions preserve original closure cells for nonlocal assignments and source locations for generated execution.
 
+### Fixed
+
+- Lifecycle handlers can rethrow an already-recorded host exception or interruption without replacing its original cause with a self-reference.
+- Host integration guidance distinguishes one delivery attempt from ledger deduplication and explains the validation, await, and rewrite limits of name-only return approval.
+
 ### Removed
 
 - `ExecutionRef`, `get_execution_ref`, and `step_id`, without compatibility aliases. Span attributes use `step.execution.id` and `step.source_location`.
