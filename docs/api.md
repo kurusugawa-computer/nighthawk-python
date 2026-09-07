@@ -106,6 +106,29 @@
         - get_step_context
         - step_context_scope
 
+## Step Contracts
+
+Import these types from `nighthawk.runtime.step_contract` when implementing a custom
+`StepExecutor` or constructing a `nighthawk.testing.StepResponse`.
+`StepKind` describes the allowed outcome kinds, and `StepOutcome` is the union of
+the five outcome models, discriminated by their `kind` field.
+
+These models describe executor results before the runner resolves them for
+oversight. In particular, `ReturnStepOutcome.return_expression` holds a Python
+expression that the runner evaluates, whereas `nighthawk.oversight.Return.value`
+holds the evaluated value. Oversight hooks use `nighthawk.oversight.StepResult`.
+
+::: nighthawk.runtime.step_contract
+    options:
+      members:
+        - StepKind
+        - StepOutcome
+        - PassStepOutcome
+        - ReturnStepOutcome
+        - BreakStepOutcome
+        - ContinueStepOutcome
+        - RaiseStepOutcome
+
 ## Tool Contracts
 
 ::: nighthawk.tools.contracts
