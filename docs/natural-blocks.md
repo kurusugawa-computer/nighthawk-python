@@ -13,7 +13,7 @@ All examples assume the [Quickstart](quickstart.md) setup:
 import nighthawk as nh
 
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano"),
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
 )
 
 with nh.run(step_executor):

@@ -7,7 +7,7 @@ Usage in promptfooconfig.yaml:
     providers:
       - id: file://provider.py
         config:
-          model: "openai-responses:gpt-5.4-mini"
+          model: "openai-responses:gpt-5.6-luna"
           tool_preset: "baseline"  # or "eval_functional", "py_functional", etc.
           suffix_variant: "control"  # or "legacy", "examples"
 """
@@ -311,7 +311,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
         allowed_step_kinds (JSON str, optional): Override for allowed step kinds.
 
     Expected options.config:
-        model (str): Model identifier (e.g. "openai-responses:gpt-5.4-mini").
+        model (str): Model identifier (e.g. "openai-responses:gpt-5.6-luna").
         system_prompt_file (str, optional): Path to system prompt template file.
         reasoning_effort (str, optional): Reasoning effort level.
         tool_preset (str, optional): Tool preset name. Default: "eval_examples".
@@ -361,7 +361,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
     step_globals["__builtins__"] = builtins.__dict__
 
     # -- Build configuration --
-    model = provider_configuration.get("model", "openai-responses:gpt-5.4-mini")
+    model = provider_configuration.get("model", "openai-responses:gpt-5.6-luna")
 
     prompt_templates = nh.StepPromptTemplates()
     system_prompt_file = provider_configuration.get("system_prompt_file", None)

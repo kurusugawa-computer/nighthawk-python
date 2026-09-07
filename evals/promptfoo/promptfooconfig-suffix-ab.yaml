@@ -13,7 +13,7 @@
 # View results:
 #   npx promptfoo@latest view
 
-description: "Nighthawk suffix fragment A/B testing: gpt-5.4-mini only"
+description: "Nighthawk suffix fragment A/B testing: gpt-5.6-luna only"
 
 prompts:
   - "{{natural_program}}"
@@ -23,7 +23,7 @@ providers:
   - id: file://provider.py
     label: "legacy suffix"
     config:
-      model: "openai-responses:gpt-5.4-mini"
+      model: "openai-responses:gpt-5.6-luna"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
       suffix_variant: "legacy"
@@ -32,7 +32,7 @@ providers:
   - id: file://provider.py
     label: "production suffix"
     config:
-      model: "openai-responses:gpt-5.4-mini"
+      model: "openai-responses:gpt-5.6-luna"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
       suffix_variant: "control"
@@ -41,7 +41,7 @@ providers:
   - id: file://provider.py
     label: "suffix: examples"
     config:
-      model: "openai-responses:gpt-5.4-mini"
+      model: "openai-responses:gpt-5.6-luna"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
       suffix_variant: "examples"

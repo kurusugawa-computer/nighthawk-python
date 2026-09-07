@@ -13,7 +13,7 @@ with nh.run(step_executor):
     # Inherit mode (default): merge/append into current scope state
     with nh.scope(
         step_executor_configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.4-mini",
+            model="openai-responses:gpt-5.6-luna",
         ),
     ) as scoped_executor:
         expensive_analysis(data)
@@ -269,7 +269,7 @@ Use `nh.scope(step_executor=...)` to switch executors within a single run. This 
 
 ```py
 fast_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini"),
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
 )
 
 deep_executor = nh.AgentStepExecutor.from_configuration(
@@ -290,7 +290,7 @@ The LOCALS and GLOBALS sections are bounded by token and item limits configured 
 
 ```py
 configuration = nh.StepExecutorConfiguration(
-    model="openai-responses:gpt-5.4-mini",
+    model="openai-responses:gpt-5.6-luna",
     context_limits=nh.StepContextLimits(
         locals_max_tokens=4096,
         locals_max_items=50,

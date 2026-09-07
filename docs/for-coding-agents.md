@@ -79,7 +79,7 @@ def summarize(text: str) -> str:
 
 executor = nh.AgentStepExecutor.from_configuration(
     configuration=nh.StepExecutorConfiguration(
-        model="openai-responses:gpt-5.4-mini",
+        model="openai-responses:gpt-5.6-luna",
     ),
 )
 
@@ -99,7 +99,7 @@ import nighthawk as nh
 
 fast_executor = nh.AgentStepExecutor.from_configuration(
     configuration=nh.StepExecutorConfiguration(
-        model="openai-responses:gpt-5.4-mini",
+        model="openai-responses:gpt-5.6-luna",
     ),
 )
 

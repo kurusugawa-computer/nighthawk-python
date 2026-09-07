@@ -21,7 +21,7 @@ Save as `quickstart.py`:
 ```py
 import nighthawk as nh
 
-step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano"))
+step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"))
 
 with nh.run(step_executor):
 

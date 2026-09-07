@@ -24,9 +24,9 @@ providers:
 
   # --- codex ---
   - id: file://provider.py
-    label: "codex:gpt-5.4-mini + coding_agent + examples"
+    label: "codex:gpt-5.6-luna + coding_agent + examples"
     config:
-      model: "codex:gpt-5.4-mini"
+      model: "codex:gpt-5.6-luna"
       system_prompt_file: prompts/eval_coding_agent.txt
       tool_preset: "eval_examples"
 

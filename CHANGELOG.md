@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nh.oversight.StepCommit.return_value` exposes the resolved, validated return value to `inspect_step_commit`; `nh.oversight.Rewrite(return_value=...)` replaces it directly.
 
 ### Changed
+- The default model is now `openai-responses:gpt-5.6-luna` (previously `openai-responses:gpt-5.4-nano`); documentation, evaluation configurations, and tests use `gpt-5.6-luna` in place of `gpt-5.4-mini` and `gpt-5.4-nano`.
 - `Oversight.inspect_step_commit` now runs after write-binding validation and return resolution. It receives `StepCommit` with validated, coerced values; only rewritten values are validated again. Executor output that fails validation raises `ExecutionError` before the hook is consulted.
 - `nh.oversight.StepCommitProposal` is renamed to `StepCommit`; its `proposed_step_outcome` and `proposed_binding_name_to_value` fields are now `step_outcome` and `binding_name_to_value`.
 - `nh.oversight.Rewrite` fields `rewritten_step_outcome` and `rewritten_binding_name_to_value` are renamed to `step_outcome` and `binding_name_to_value`.

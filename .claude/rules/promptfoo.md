@@ -21,7 +21,7 @@ paths:
 4. Once validated, port the change to the corresponding production code (see mapping below).
 5. Run `uv run pytest -q` to confirm no regressions.
 
-**`--filter-providers` caveat**: The flag takes a regex pattern, not an exact label. A pattern like `"gpt-5.4-mini"` matches every provider whose label contains that substring (e.g. both `openai-responses` and `codex` labels). Use an anchored or label-specific pattern (e.g. `"^gpt-5.4-mini"`, `"codex:"`) to target a single provider.
+**`--filter-providers` caveat**: The flag takes a regex pattern, not an exact label. A pattern like `"gpt-5.6-luna"` matches every provider whose label contains that substring (e.g. both `openai-responses` and `codex` labels). Use an anchored or label-specific pattern (e.g. `"^gpt-5.6-luna"`, `"codex:"`) to target a single provider.
 
 ## Prompt variant cleanup (deletion timing and criteria)
 

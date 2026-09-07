@@ -85,7 +85,7 @@ def test_scope_configuration_replaces_executor_configuration():
             raise AssertionError
 
     configuration_1 = nh.StepExecutorConfiguration()
-    configuration_2 = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")
+    configuration_2 = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4")
 
     with nh.run(
         nh.AgentStepExecutor.from_agent(
@@ -273,8 +273,8 @@ def test_scope_replace_mode_replaces_step_executor_configuration() -> None:
             _ = kwargs
             raise AssertionError
 
-    first_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
-    second_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-mini")
+    first_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
+    second_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4")
 
     with (
         nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=first_configuration)),
@@ -322,7 +322,7 @@ def test_scope_mode_validation_is_enforced_by_typing_contract() -> None:
 
 def test_run_configuration_model_default_applies():
     configuration = nh.StepExecutorConfiguration()
-    assert configuration.model == "openai-responses:gpt-5.4-nano"
+    assert configuration.model == "openai-responses:gpt-5.6-luna"
 
 
 def test_run_configuration_model_requires_provider_model_format():
@@ -330,13 +330,13 @@ def test_run_configuration_model_requires_provider_model_format():
         nh.StepExecutorConfiguration(model="openai-responses")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(model=":gpt-5.4-nano")
+        nh.StepExecutorConfiguration(model=":gpt-5.6-luna")
 
     with pytest.raises(ValueError, match="provider:model"):
         nh.StepExecutorConfiguration(model="openai-responses:")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano:extra")
+        nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna:extra")
 
 
 def test_agent_step_executor_constructor_supports_standard_path_with_agent() -> None:
@@ -347,7 +347,7 @@ def test_agent_step_executor_constructor_supports_standard_path_with_agent() -> 
             raise AssertionError
 
     step_executor = nh.AgentStepExecutor(agent=FakeAgent())
-    assert step_executor.configuration.model == "openai-responses:gpt-5.4-nano"
+    assert step_executor.configuration.model == "openai-responses:gpt-5.6-luna"
 
 
 def test_decorated_function_requires_step_executor():

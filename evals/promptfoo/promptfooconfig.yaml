@@ -18,9 +18,9 @@ prompts:
 providers:
   # --- Winner: openai-responses + eval_default + eval_examples ---
   - id: file://provider.py
-    label: "gpt-5.4-mini + eval_default + examples"
+    label: "gpt-5.6-luna + eval_default + examples"
     config:
-      model: "openai-responses:gpt-5.4-mini"
+      model: "openai-responses:gpt-5.6-luna"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
 
@@ -34,9 +34,9 @@ providers:
 
   # --- Coding agent: codex ---
   - id: file://provider.py
-    label: "codex:gpt-5.4-mini + coding_agent + examples"
+    label: "codex:gpt-5.6-luna + coding_agent + examples"
     config:
-      model: "codex:gpt-5.4-mini"
+      model: "codex:gpt-5.6-luna"
       system_prompt_file: prompts/eval_coding_agent.txt
       tool_preset: "eval_examples"
 

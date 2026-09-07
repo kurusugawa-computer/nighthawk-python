@@ -78,8 +78,8 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 ### 5.2. Configuration
 
 - `StepExecutorConfiguration`
-    - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5.4-nano` (see [Pydantic AI providers](pydantic-ai-providers.md)).
-        - Examples: `openai-responses:gpt-5.4-mini`, `openai-responses:gpt-5.4-nano`.
+    - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5.6-luna` (see [Pydantic AI providers](pydantic-ai-providers.md)).
+        - Examples: `openai-responses:gpt-5.6-luna`, `openai-responses:gpt-5.4`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
     - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.

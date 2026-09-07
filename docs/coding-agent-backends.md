@@ -25,7 +25,7 @@ Codex:
 configuration = nh.StepExecutorConfiguration(model="codex:default")
 ```
 
-The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-5.4-mini`). Available aliases depend on the backend CLI version.
+The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-5.6-luna`). Available aliases depend on the backend CLI version.
 
 Backend-specific settings are configured via the `model_settings` field of `StepExecutorConfiguration`. Each backend provides a settings class (`ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`, `CodexModelSettings`) that can be passed directly — `StepExecutorConfiguration` auto-converts `BaseModel` instances to dicts internally.
 

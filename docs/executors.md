@@ -33,11 +33,11 @@ See [Philosophy](philosophy.md) for the full design rationale, including the des
 ```py
 import nighthawk as nh
 
-configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4-nano")
+configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
 step_executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
 ```
 
-The `model` field accepts a `provider:model` format identifier. The default model is `openai-responses:gpt-5.4-nano`.
+The `model` field accepts a `provider:model` format identifier. The default model is `openai-responses:gpt-5.6-luna`.
 
 All Natural functions must be called inside a `with nh.run(step_executor):` context:
 
@@ -57,7 +57,7 @@ For most cases, wrap a Pydantic AI `Agent` using `AgentStepExecutor`:
 ```py
 from pydantic_ai import Agent
 
-agent = Agent(model="openai-responses:gpt-5.4-nano", ...)
+agent = Agent(model="openai-responses:gpt-5.6-luna", ...)
 executor = nh.AgentStepExecutor.from_agent(agent=agent)
 ```
 

@@ -9,16 +9,16 @@
 # View results:
 #   npx promptfoo@latest view
 
-description: "Nighthawk prompt sanity: gpt-5.4-nano default model"
+description: "Nighthawk prompt sanity: gpt-5.6-luna default model"
 
 prompts:
   - "{{natural_program}}"
 
 providers:
   - id: file://provider.py
-    label: "gpt-5.4-nano + eval_default + examples"
+    label: "gpt-5.6-luna + eval_default + examples"
     config:
-      model: "openai-responses:gpt-5.4-nano"
+      model: "openai-responses:gpt-5.6-luna"
       system_prompt_file: prompts/eval_default.txt
       tool_preset: "eval_examples"
 
