@@ -10,7 +10,8 @@ Use `nh.scope()` to override execution settings within an existing run. Each sco
 
 ```py
 with nh.run(step_executor):
-    # Replace the full executor configuration; omitted fields inherit scope state
+    # Replace the full executor configuration, including defaults for its omitted fields.
+    # Other omitted scope arguments inherit the parent scope values.
     with nh.scope(
         step_executor_configuration=nh.StepExecutorConfiguration(
             model="openai-responses:gpt-5.6-luna",
@@ -219,7 +220,7 @@ with nh.run(step_executor):
             triage_issue(ticket_text)
 ```
 
-The getters other than `nh.get_oversight()` require an active run context. Outside `nh.run()` they raise `NighthawkError`, matching `nh.get_step_executor()` semantics. Catch `NighthawkError` if a helper needs to detect the absence of a run.
+All getters listed above, including `nh.get_oversight()`, require an active run context. Outside `nh.run()` they raise `NighthawkError`, matching `nh.get_step_executor()` semantics. Catch `NighthawkError` if a helper needs to detect the absence of a run.
 
 ## Synchronous oversight in scopes
 
