@@ -362,7 +362,7 @@ def run(
     Example:
         ```python
         executor = AgentStepExecutor.from_configuration(
-            configuration=StepExecutorConfiguration(model="openai:gpt-5.4"),
+            configuration=StepExecutorConfiguration(model="openai:gpt-5.6-terra"),
         )
         with nighthawk.run(executor):
             result = my_natural_function()

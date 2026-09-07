@@ -907,7 +907,7 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
             return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
 
     initial_model_identifier = "openai-responses:gpt-5.6-luna"
-    overridden_model_identifier = "openai-responses:gpt-5.4"
+    overridden_model_identifier = "openai-responses:gpt-5.6-terra"
     recording_agent = RecordingAgent()
     step_executor_configuration = nh.StepExecutorConfiguration(model=initial_model_identifier)
     step_executor = nh.AgentStepExecutor.from_agent(
@@ -925,7 +925,7 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
             """
             first_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4")):
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-terra")):
                 """natural
                 <:observed_model_identifier>
                 Record the current model identifier.

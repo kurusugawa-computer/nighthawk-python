@@ -4,7 +4,7 @@
 #   cd evals/promptfoo
 #   set -a; source ../../.env; set +a
 #   PROMPTFOO_PYTHON="$(uv python find)" npx promptfoo@latest eval \
-#     -c promptfooconfig-nano-sanity.yaml --no-cache
+#     -c promptfooconfig-luna-sanity.yaml --no-cache
 #
 # View results:
 #   npx promptfoo@latest view

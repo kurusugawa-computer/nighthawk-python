@@ -84,7 +84,7 @@ PFOO="cd evals/promptfoo && PROMPTFOO_PYTHON=\"$(uv python find)\" npx promptfoo
 |---|---|
 | `eval $PFOO eval` | Full regression (all backends, all tests) |
 | `eval $PFOO eval -c promptfooconfig-prompt-ab.yaml` | Prompt A/B test (gpt-5.6-luna only) |
-| `eval $PFOO eval -c promptfooconfig-nano-sanity.yaml --no-cache` | Default-model sanity check (gpt-5.6-luna only) |
+| `eval $PFOO eval -c promptfooconfig-luna-sanity.yaml --no-cache` | Default-model sanity check (gpt-5.6-luna only) |
 | `eval $PFOO eval -c promptfooconfig-agents.yaml` | Coding agent backends (reduced test set) |
 | `eval $PFOO eval -c promptfooconfig.yaml --filter-pattern "P-BIND-001"` | Single test |
 | `eval $PFOO eval -c promptfooconfig.yaml --filter-providers "claude-code-cli"` | Single backend |
@@ -94,7 +94,7 @@ PFOO="cd evals/promptfoo && PROMPTFOO_PYTHON=\"$(uv python find)\" npx promptfoo
 
 - `promptfooconfig.yaml` — Regression: winner prompt combo across openai-responses, claude-code-cli, and codex backends. All test cases.
 - `promptfooconfig-prompt-ab.yaml` — A/B testing: 4 prompt/tool variants on gpt-5.6-luna. All test cases.
-- `promptfooconfig-nano-sanity.yaml` — Default-model sanity check on openai-responses:gpt-5.6-luna. All test cases.
+- `promptfooconfig-luna-sanity.yaml` — Default-model sanity check on openai-responses:gpt-5.6-luna. All test cases.
 - `promptfooconfig-agents.yaml` — Coding agent only: claude-code-cli and codex with reduced test set.
 
 #### Directory layout

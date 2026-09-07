@@ -10,7 +10,7 @@ import nighthawk as nh
 configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
 ```
 
-The default model is `openai-responses:gpt-5.6-luna`. Recommended model for quality: `openai-responses:gpt-5.4`.
+The default model is `openai-responses:gpt-5.6-luna`. Recommended model for quality: `openai-responses:gpt-5.6-terra`.
 
 ## Pydantic AI providers
 

@@ -1,6 +1,6 @@
 # Category: Loop Outcomes (Japanese smoke test)
 #
-# Single Japanese-language case used by promptfooconfig-nano-sanity.yaml only.
+# Single Japanese-language case used by promptfooconfig-luna-sanity.yaml only.
 # Not a regression gate. Promote to the shared loop_outcomes.yaml in a separate
 # PR if multi-language coverage becomes a goal.
 

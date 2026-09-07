@@ -85,7 +85,7 @@ def test_scope_configuration_replaces_executor_configuration():
             raise AssertionError
 
     configuration_1 = nh.StepExecutorConfiguration()
-    configuration_2 = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4")
+    configuration_2 = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-terra")
 
     with nh.run(
         nh.AgentStepExecutor.from_agent(
@@ -274,7 +274,7 @@ def test_scope_replace_mode_replaces_step_executor_configuration() -> None:
             raise AssertionError
 
     first_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
-    second_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.4")
+    second_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-terra")
 
     with (
         nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=first_configuration)),
