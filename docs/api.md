@@ -134,10 +134,14 @@ holds the evaluated value. Oversight hooks use `nighthawk.oversight.StepResult`.
 ::: nighthawk.tools.contracts
     options:
       members:
-        - ToolResult
+        - ToolOutcome
         - ToolBoundaryError
-        - Error
+        - ToolError
         - ErrorKind
+
+::: nighthawk.tools.execution
+    options:
+      members:
         - ToolResultWrapperToolset
 
 ## Resilience

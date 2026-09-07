@@ -231,7 +231,6 @@ Each Nighthawk execution produces a tree of spans:
 | `nighthawk.run` | `nh.run()` context manager | `run.id` |
 | `nighthawk.scope` | `nh.scope()` context manager | `scope.id` |
 | `nighthawk.step` | Each Natural block execution | `step.execution.id` (invocation), `step.source_location` (`python_module:line`) |
-| `nighthawk.step_executor` | The step executor's LLM call | -- |
 
 ### Step events
 

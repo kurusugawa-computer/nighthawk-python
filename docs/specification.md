@@ -188,7 +188,7 @@ The Natural program may contain bindings with angle brackets:
 Resolution note:
 
 - Read binding reads resolve names using Python lexical rules (LEGB: locals, enclosing, globals, builtins).
-- If a name is missing or unbound, the error is surfaced as a Python exception type where feasible (for example `NameError`, `UnboundLocalError`).
+- If a read binding is missing or unbound, preparation fails with the original `NameError` or `UnboundLocalError` stored in `StepFailed.original_exception`. Unless terminal delivery supplies a host exception, the caller receives `ExecutionError` chained from that original exception (see [Section 10.4](#104-terminal-delivery-and-host-ledgers)).
 
 Constraints:
 
@@ -231,7 +231,7 @@ Nighthawk uses multiple state layers.
 - It is initialized at the start of each Natural block execution, in the following order:
     1. If a parent step context exists on the step context stack, start from its `step_locals` values.
     2. Overlay the caller frame's current `python_locals` (so current Python locals always win over inherited step-context state).
-    3. For each read binding (`<name>`), resolve the name using Python lexical rules (locals, enclosing cell scopes, name scopes, globals, builtins) and place the resolved value into `step_locals`.
+    3. For each read binding (`<name>`), resolve the name using Python lexical rules (locals, enclosing cell scopes, name scopes, globals, builtins). Values resolved from locals, enclosing cell scopes, or name scopes are placed into `step_locals`. Values resolved from globals or builtins remain available through `step_globals` or its builtins namespace; they are not copied into `step_locals`. All resolved read bindings are included in `input_binding_name_to_value` for commit inspection and terminal records.
 - During execution, the LLM can update `step_locals` via tools (Section 8.3).
 - At the end of execution, values for `<:name>` bindings are committed into Python locals.
 
@@ -610,12 +610,11 @@ Implementation note:
 
 ### 8.5. Async execution model
 
-Natural functions may be declared `async`. The async execution model extends the sync model with the following behaviors:
+Natural functions may be declared `async`. Tool execution and the final return expression have distinct awaitable-handling rules:
 
-- Expression evaluation: if an `nh_eval` or `nh_assign` expression produces an awaitable, the host awaits it before returning the result to the model.
+- Tool expression evaluation: if an `nh_eval` or `nh_assign` expression produces an awaitable, the host awaits it before returning the result to the model, including when the surrounding Natural function is synchronous.
 - Return validation: if a `return` outcome's `return_expression` evaluates to an awaitable and the surrounding function is async, the host awaits it before return type validation. If the surrounding function is sync and the evaluated value is awaitable, execution fails with `ExecutionError`.
-- Binding function calls: async binding functions produce awaitables that are auto-awaited in async natural functions.
-- Sync/async interoperability: if a sync natural function encounters an awaitable from an async binding function, execution fails with `ExecutionError`. The caller must be async to handle awaitable results.
+- Binding function calls: async binding functions called through `nh_eval` or `nh_assign` are auto-awaited in both sync and async Natural functions. The synchronous execution path bridges tool execution to an event loop; the awaitable-return restriction applies to the final `return_expression`, not to tool expressions.
 - Concurrency: async natural functions are ordinary coroutines. Concurrent execution via `asyncio.gather` is safe for Natural blocks that do not share mutable bindings, since each block executes with an independent step context.
 
 ## 9. Return value
@@ -680,7 +679,6 @@ Runtime spans:
 - `nighthawk.run`
 - `nighthawk.scope`
 - `nighthawk.step`
-- `nighthawk.step_executor`
 
 Identity attributes:
 
@@ -787,26 +785,25 @@ For practical examples and design tips, see [Patterns](patterns.md#cross-block-c
 
 ## 13. Error handling
 
-Nighthawk defines a hierarchy of exceptions rooted at `NighthawkError`.
+Nighthawk defines public library errors rooted at `NighthawkError`, plus an internal `ToolBoundaryError` signal for recoverable tool failures.
 
 Exception hierarchy:
 
-- `NighthawkError`: Base class for all Nighthawk exceptions.
+- `NighthawkError`: Base class for public Nighthawk library errors.
     - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
 - `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
     - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
 - `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception. A DSL Raise without an explicit type may also construct this exception with a message and no failure record.
     - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
-- `ToolEvaluationError(NighthawkError)`: Expression evaluation inside a tool call failed.
-    - Raised when: `eval()` raises during `nh_eval` or `nh_assign` expression evaluation.
-- `ToolValidationError(NighthawkError)`: Type validation/coercion failed during `nh_assign`.
-    - Raised when: the assigned value does not match the expected binding type.
+- `ToolEvaluationError(NighthawkError)`: Low-level expression evaluation helper failure. Built-in tool boundaries convert this into a structured failure observation.
+- `ToolValidationError(NighthawkError)`: Exported exception type; the built-in `nh_assign` implementation does not raise it.
+- `ToolBoundaryError(Exception)`: Internal tool boundary signal with an `ErrorKind` and optional guidance. A failed `nh_assign` value validation raises this signal with `kind="invalid_input"`; the tool wrapper converts it into `ToolOutcome.error` for the model. It is not a `NighthawkError` subclass.
 - `ToolDeclarationError(NighthawkError)`: Invalid tool declaration.
 - `NameConflictError(NighthawkError)`: Distinct declarations claim the same name.
 - `ToolNameConflictError(ToolDeclarationError, NameConflictError)`: Tool name collision, including reserved built-in names.
     - Raised when: a tool name is invalid, collides with a built-in tool, or is declared twice within the visible scope.
 
-All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.
+Exceptions propagated to the host can be caught with standard `try`/`except`. Recoverable tool failures are instead returned to the model as structured observations, as specified in [Section 8.3](#83-tools-available-to-the-llm). Internal step failures follow the `ExecutionError` and terminal-delivery rules in [Section 10.4](#104-terminal-delivery-and-host-ledgers).
 
 ## 14. Step executor
 

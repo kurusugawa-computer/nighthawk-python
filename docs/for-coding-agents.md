@@ -151,7 +151,7 @@ with nh.run(fast_executor):
 - `nh.scope()` must run inside `nh.run()`; it keeps `run_id` and creates a new `scope_id`.
 - Omission or `nh.UNSET` inherits; ordinary values replace and `[]`/`{}` clear collections.
 - Use `nh.Extend([...])` to append suffix fragments and `nh.Merge({...})` to merge implicit references by identity.
-- Only `oversight` accepts `None` to clear hooks; other scope fields reject it.
+- `oversight` and `lifecycle` accept `None` to clear their hooks; other scope fields reject it.
 - Executor replacement precedes full configuration replacement. Managed Model instances retain identity; external agents own their model selection.
 
 ## 4. The standard contract shape
@@ -321,9 +321,9 @@ Error-handling rule:
 
 Async rule:
 
-- Async natural functions can use async binding functions.
-- If a sync natural function triggers an async binding function and gets an awaitable, Nighthawk raises `ExecutionError`.
-- Fix that by making the natural function `async`.
+- Both sync and async Natural functions can call async binding functions through tools; tool expressions await their results.
+- Only an async Natural function may have a final return expression that produces an awaitable. A sync Natural function rejects that final result with `ExecutionError`.
+- Make the Natural function `async` when it needs an awaitable final return expression, not merely because it uses an async binding function.
 
 Resilience rule:
 

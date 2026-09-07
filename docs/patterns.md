@@ -224,12 +224,12 @@ Each concurrent Natural block executes independently -- there is no shared messa
 
 Async natural functions can call sync binding functions, and sync natural functions can reference async binding functions. Nighthawk detects awaitable return values and handles them automatically:
 
-- In async natural functions: awaitable results from `nh_eval` and `nh_assign` expressions are awaited before returning to the LLM.
-- In sync natural functions: if the resolved return value is awaitable, execution fails (the caller must be async to await).
+- Tool expressions await async binding function results in both sync and async Natural functions before returning them to the LLM.
+- A final return expression may produce an awaitable only in an async Natural function. A sync Natural function rejects an awaitable final return value.
 
-This means you can mix sync and async binding functions freely in async natural functions without special handling.
+You can therefore use async binding functions through tools without changing a synchronous Natural function into an async function.
 
-**Failure mode:** if a sync natural function references an async binding function and the LLM calls it, the expression produces an awaitable that cannot be awaited in a sync context. Nighthawk raises an `ExecutionError`. To fix, make the natural function `async`.
+**Failure mode:** if a sync Natural function selects a return expression such as `fetch_result()` and that expression produces an awaitable, Nighthawk raises `ExecutionError`. Make the Natural function `async` to permit an awaitable final return expression. This restriction does not apply when the model calls `fetch_result()` through a tool and writes its resolved result to a binding. See [async execution semantics](specification.md#85-async-execution-model).
 
 ## Cross-block composition
 

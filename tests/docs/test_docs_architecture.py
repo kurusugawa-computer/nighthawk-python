@@ -3,6 +3,7 @@
 Guards against stale references, canonical example drift, and orphan pages.
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -244,3 +245,34 @@ class TestPhilosophyStructure:
         self_anchors = re.findall(r"\]\(#([A-Za-z0-9_-]+)\)", text)
         for anchor in self_anchors:
             assert anchor in valid_anchors, f"philosophy.md self-reference #{anchor} does not resolve. Valid anchors: {sorted(valid_anchors)}"
+
+
+def test_explicit_api_members_exist_in_their_documented_modules() -> None:
+    """MkDocs silently omits unknown members; validate every explicit inventory entry."""
+    api_text = (_DOCS_DIR / "api.md").read_text(encoding="utf-8")
+    module_sections = re.split(r"^::: ([\w.]+)\s*$", api_text, flags=re.MULTILINE)
+    for module_name, section in zip(module_sections[1::2], module_sections[2::2], strict=True):
+        member_names = re.findall(r"^        - (\w+)\s*$", section, flags=re.MULTILINE)
+        if not member_names:
+            continue
+        module_path = _REPO_ROOT / "src" / module_name.replace(".", "/")
+        source_path = module_path.with_suffix(".py")
+        if not source_path.is_file():
+            source_path = module_path / "__init__.py"
+        module = ast.parse(source_path.read_text(encoding="utf-8"))
+        defined_names: set[str] = set()
+        for statement in module.body:
+            if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                defined_names.add(statement.name)
+            elif isinstance(statement, ast.ImportFrom):
+                defined_names.update(alias.asname or alias.name for alias in statement.names)
+            elif isinstance(statement, ast.Import):
+                defined_names.update(alias.asname or alias.name.split(".")[0] for alias in statement.names)
+            elif isinstance(statement, ast.Assign):
+                defined_names.update(target.id for target in statement.targets if isinstance(target, ast.Name))
+            elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+                defined_names.add(statement.target.id)
+            elif isinstance(statement, ast.TypeAlias):
+                defined_names.add(statement.name.id)
+        missing_names = set(member_names) - defined_names
+        assert not missing_names, f"API members missing from {module_name}: {sorted(missing_names)}"
