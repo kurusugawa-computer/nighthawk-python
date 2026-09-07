@@ -290,8 +290,7 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
                     return await transformed_async(*args, **kwargs)
             return await transformed_async(*args, **kwargs)
 
-        # ``__wrapped__`` points at the transformed function so ``inspect.unwrap`` reaches the code that runs.
-        async_wrapper.__wrapped__ = transformed  # type: ignore[attr-defined]
+        async_wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
         return cast(NaturalFunctionCallable, async_wrapper)  # type: ignore[return-value]
 
     @wraps(func)
@@ -301,5 +300,28 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
                 return transformed(*args, **kwargs)
         return transformed(*args, **kwargs)
 
-    wrapper.__wrapped__ = transformed  # type: ignore[attr-defined]
+    wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
     return cast(NaturalFunctionCallable, wrapper)  # type: ignore[return-value]
+
+
+def get_transformed_function(function: Callable[..., object]) -> Callable[..., object]:
+    """Find a Natural function's compiled body through conventional wrapper chains.
+
+    Standard inspect.unwrap follows the original source. This accessor exposes the
+    transformed body for inspection; normal execution should use the decorated callable
+    to establish its runtime context. Invalid inputs and wrapper cycles raise TypeError.
+    """
+    current: object = function
+    seen_identity_set: set[int] = set()
+    while id(current) not in seen_identity_set:
+        seen_identity_set.add(id(current))
+        if isinstance(current, (staticmethod, classmethod)) or inspect.ismethod(current):
+            current = current.__func__
+            continue
+        transformed = getattr(current, "__nighthawk_transformed_function__", None)
+        if callable(transformed):
+            return transformed
+        current = getattr(current, "__wrapped__", None)
+        if current is None:
+            break
+    raise TypeError("Expected a Natural function or a conventional wrapper around one")

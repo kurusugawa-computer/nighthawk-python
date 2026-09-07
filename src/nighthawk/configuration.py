@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 import tiktoken
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_serializer, field_validator
+from pydantic_ai.models import Model
+from pydantic_core import PydanticSerializationError
 
 from .json_renderer import JsonRendererStyle
 
@@ -113,7 +115,10 @@ class StepExecutorConfiguration(BaseModel):
     """Configuration for a step executor.
 
     Attributes:
-        model: Model identifier in "provider:model" format (e.g. "openai:gpt-4o").
+        model: Provider-qualified identifier or borrowed Pydantic AI Model instance.
+            Instances retain identity; the host owns client lifetime. Serialization
+            must explicitly exclude a live model field, including in nested records.
+            Configuration representations omit the model to avoid traversing credentials.
         model_settings: Provider-specific model settings. Accepts a dict or a
             backend-specific BaseModel instance (auto-converted to dict).
         prompts: Prompt templates for step execution.
@@ -128,7 +133,7 @@ class StepExecutorConfiguration(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model: str = "openai-responses:gpt-5.6-luna"
+    model: str | InstanceOf[Model] = Field(default="openai-responses:gpt-5.6-luna", repr=False)
     model_settings: dict[str, Any] | BaseModel | None = None
 
     @field_validator("model_settings", mode="before")
@@ -147,8 +152,14 @@ class StepExecutorConfiguration(BaseModel):
 
     @field_validator("model")
     @classmethod
-    def _validate_model(cls, value: str) -> str:
-        return _validate_model_identifier(value)
+    def _validate_model(cls, value: str | Model) -> str | Model:
+        return _validate_model_identifier(value) if isinstance(value, str) else value
+
+    @field_serializer("model")
+    def _serialize_model(self, value: str | Model) -> str:
+        if not isinstance(value, str):
+            raise PydanticSerializationError("A runtime Model cannot be serialized; exclude the model field explicitly")
+        return value
 
     def resolve_token_encoding(self) -> tiktoken.Encoding:
         """Return the tiktoken encoding for this configuration.
@@ -160,7 +171,7 @@ class StepExecutorConfiguration(BaseModel):
         if self.tokenizer_encoding is not None:
             return tiktoken.get_encoding(self.tokenizer_encoding)
 
-        _, model_name = self.model.split(":", 1)
+        model_name = self.model.split(":", 1)[1] if isinstance(self.model, str) else self.model.model_name
 
         try:
             return tiktoken.encoding_for_model(model_name)

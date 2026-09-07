@@ -25,14 +25,14 @@ from pydantic_ai.tools import Tool
 
 import nighthawk as nh
 import nighthawk.runtime.step_executor as _step_executor_module
-import nighthawk.tools.registry as _registry_module
+import nighthawk.tools.declarations as _declarations_module
 from nighthawk.natural.blocks import parse_frontmatter, validate_frontmatter_deny
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import StepKind
 from nighthawk.runtime.step_executor import AgentStepExecutor
 from nighthawk.tools.assignment import assign_tool, eval_expression
 from nighthawk.tools.contracts import ToolBoundaryError
-from nighthawk.tools.registry import _builtin_tool_name_to_tool
+from nighthawk.tools.declarations import _builtin_tool_name_to_tool
 
 # ---------------------------------------------------------------------------
 # Token usage capture — monkey-patch _run_agent to store RunUsage
@@ -223,7 +223,7 @@ def _install_tool_preset(preset_name: str) -> None:
     """Replace the built-in tool set with a specific tool preset."""
     _builtin_tool_name_to_tool.clear()
     _builtin_tool_name_to_tool.update(_build_tool_preset(preset_name))
-    _registry_module._builtin_tools_registered = True  # noqa: SLF001
+    _declarations_module._builtin_tools_registered = True  # noqa: SLF001
 
 
 # ---------------------------------------------------------------------------

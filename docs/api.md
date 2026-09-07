@@ -8,10 +8,16 @@
 ::: nighthawk
     options:
       members:
+        - UNSET
+        - UnsetType
+        - Extend
+        - Merge
+        - get_transformed_function
         - natural_function
         - run
         - scope
         - AgentStepExecutor
+        - StepExecutor
         - StepExecutorConfiguration
         - StepPromptTemplates
         - StepContextLimits
@@ -19,8 +25,8 @@
         - to_jsonable_value
         - ExecutionRef
         - get_capabilities
-        - get_current_step_context
-        - get_current_usage_meter
+        - get_step_context
+        - get_usage_meter
         - get_execution_ref
         - get_implicit_references
         - get_oversight
@@ -95,7 +101,7 @@
       members:
         - StepContext
         - ToolResultRenderingPolicy
-        - get_current_step_context
+        - get_step_context
         - step_context_scope
 
 ## Tool Contracts
@@ -130,3 +136,22 @@
 ## Testing
 
 ::: nighthawk.testing
+
+::: nighthawk.oversight
+    options:
+      members:
+        - Pass
+        - Return
+        - Break
+        - Continue
+        - Raise
+        - StepResult
+        - StepCommit
+        - Rewrite
+        - Accept
+        - Reject
+        - ToolCall
+        - Oversight
+        - OversightRejectedError
+        - StepCommitDecision
+        - ToolCallDecision

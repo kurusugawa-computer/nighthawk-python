@@ -16,7 +16,7 @@ from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
-from ..tools.registry import get_visible_tools
+from ..tools.declarations import get_visible_tools
 from .base import BackendModelBase, BackendModelSettings, append_text_projected_tool_result_preview_prompt
 from .mcp_server import mcp_server_if_needed
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory

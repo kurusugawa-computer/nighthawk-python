@@ -15,7 +15,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..json_renderer import to_jsonable_value
-from ..tools.registry import get_visible_tools
+from ..tools.declarations import get_visible_tools
 from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
 from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_boundary import call_tool_for_claude_code_sdk

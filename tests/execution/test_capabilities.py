@@ -50,16 +50,16 @@ def test_scope_capabilities_inherit_appends_and_replace_substitutes() -> None:
         with nh.scope(capabilities=[first]):
             assert nh.get_capabilities() == (first,)
 
-            with nh.scope(capabilities=[second]):
+            with nh.scope(capabilities=nh.Extend([second])):
                 assert nh.get_capabilities() == (first, second)
 
-            with nh.scope(mode="replace", capabilities=[third]):
+            with nh.scope(capabilities=[third]):
                 assert nh.get_capabilities() == (third,)
 
-            with nh.scope(mode="replace", capabilities=[]):
+            with nh.scope(capabilities=[]):
                 assert nh.get_capabilities() == ()
 
-            with nh.scope(mode="replace", capabilities=None):
+            with nh.scope(capabilities=nh.UNSET):
                 assert nh.get_capabilities() == (first,)
 
         assert nh.get_capabilities() == ()

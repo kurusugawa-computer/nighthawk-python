@@ -5,9 +5,9 @@ from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 import nighthawk as nh
-from nighthawk.errors import NighthawkError, ToolRegistrationError
+from nighthawk.errors import NighthawkError, ToolDeclarationError
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.tools.registry import get_visible_tools
+from nighthawk.tools.declarations import get_visible_tools
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -29,7 +29,7 @@ def test_builtin_tools_are_always_visible() -> None:
 
     with nh.run(StubExecutor()):
         assert {"nh_eval", "nh_assign"} <= _visible_tool_name_set()
-        with nh.scope(mode="replace", tools=[]):
+        with nh.scope(tools=[]):
             assert _visible_tool_name_set() == {"nh_eval", "nh_assign"}
 
 
@@ -70,17 +70,17 @@ def test_tool_instance_keeps_custom_name_and_description() -> None:
 
 
 def test_inherit_mode_appends_tools_from_outer_scopes() -> None:
-    with nh.run(StubExecutor()), nh.scope(tools=[greet]), nh.scope(tools=[read_step_id]):
+    with nh.run(StubExecutor()), nh.scope(tools=[greet]), nh.scope(tools=nh.Extend([read_step_id])):
         assert [tool.name for tool in nh.get_tools()] == ["greet", "read_step_id"]
 
 
 def test_replace_mode_hides_outer_tools() -> None:
     with nh.run(StubExecutor()), nh.scope(tools=[greet]):
-        with nh.scope(mode="replace", tools=[read_step_id]):
+        with nh.scope(tools=[read_step_id]):
             assert [tool.name for tool in nh.get_tools()] == ["read_step_id"]
             assert "greet" not in _visible_tool_name_set()
 
-        with nh.scope(mode="replace", tools=None):
+        with nh.scope(tools=nh.UNSET):
             assert [tool.name for tool in nh.get_tools()] == ["greet"]
 
         assert [tool.name for tool in nh.get_tools()] == ["greet"]
@@ -90,8 +90,8 @@ def test_duplicate_tool_name_raises_in_inherit_mode() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(tools=[greet]),
-        pytest.raises(ToolRegistrationError, match="Tool name conflict"),
-        nh.scope(tools=[Tool(read_step_id, name="greet")]),
+        pytest.raises(ToolDeclarationError, match="Tool name conflict"),
+        nh.scope(tools=nh.Extend([Tool(read_step_id, name="greet")])),
     ):
         pass
 
@@ -99,7 +99,7 @@ def test_duplicate_tool_name_raises_in_inherit_mode() -> None:
 def test_duplicate_tool_name_within_one_scope_raises() -> None:
     with (
         nh.run(StubExecutor()),
-        pytest.raises(ToolRegistrationError, match="Tool name conflict"),
+        pytest.raises(ToolDeclarationError, match="Tool name conflict"),
         nh.scope(tools=[greet, Tool(read_step_id, name="greet")]),
     ):
         pass
@@ -108,8 +108,8 @@ def test_duplicate_tool_name_within_one_scope_raises() -> None:
 def test_builtin_tool_name_cannot_be_shadowed() -> None:
     with (
         nh.run(StubExecutor()),
-        pytest.raises(ToolRegistrationError, match="built-in"),
-        nh.scope(mode="replace", tools=[Tool(greet, name="nh_eval")]),
+        pytest.raises(ToolDeclarationError, match="built-in"),
+        nh.scope(tools=[Tool(greet, name="nh_eval")]),
     ):
         pass
 
@@ -117,7 +117,7 @@ def test_builtin_tool_name_cannot_be_shadowed() -> None:
 def test_invalid_tool_name_raises() -> None:
     with (
         nh.run(StubExecutor()),
-        pytest.raises(ToolRegistrationError, match="must match"),
+        pytest.raises(ToolDeclarationError, match="must match"),
         nh.scope(tools=[Tool(greet, name="not-valid")]),
     ):
         pass

@@ -8,15 +8,15 @@ from pydantic_ai.messages import UserContent
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import StepExecutorConfiguration
-from ..errors import ExecutionError
+from ..errors import ExecutionError, NighthawkError
+from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
-from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
 from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
 from .scoping import (
     _current_capabilities,
     _current_system_prompt_suffix_fragments,
-    get_current_usage_meter,
+    get_usage_meter,
     system_prompt_suffix_fragment_scope,
 )
 from .step_context import (
@@ -88,23 +88,25 @@ def _new_agent_step_executor(
     configuration: StepExecutorConfiguration,
 ) -> StepExecutionAgent:
     model_identifier = configuration.model
-    provider, provider_model_name = model_identifier.split(":", 1)
+    model: object = model_identifier
+    if isinstance(model_identifier, str):
+        provider, provider_model_name = model_identifier.split(":", 1)
 
-    match provider:
-        case "claude-code-sdk":
-            from ..backends.claude_code_sdk import ClaudeCodeSdkModel
+        match provider:
+            case "claude-code-sdk":
+                from ..backends.claude_code_sdk import ClaudeCodeSdkModel
 
-            model: object = ClaudeCodeSdkModel(model_name=(provider_model_name if provider_model_name != "default" else None))
-        case "claude-code-cli":
-            from ..backends.claude_code_cli import ClaudeCodeCliModel
+                model = ClaudeCodeSdkModel(model_name=(provider_model_name if provider_model_name != "default" else None))
+            case "claude-code-cli":
+                from ..backends.claude_code_cli import ClaudeCodeCliModel
 
-            model = ClaudeCodeCliModel(model_name=(provider_model_name if provider_model_name != "default" else None))
-        case "codex":
-            from ..backends.codex import CodexModel
+                model = ClaudeCodeCliModel(model_name=(provider_model_name if provider_model_name != "default" else None))
+            case "codex":
+                from ..backends.codex import CodexModel
 
-            model = CodexModel(model_name=(provider_model_name if provider_model_name != "default" else None))
-        case _:
-            model = model_identifier
+                model = CodexModel(model_name=(provider_model_name if provider_model_name != "default" else None))
+            case _:
+                model = model_identifier
 
     constructor_arguments: dict[str, Any] = {}
     if configuration.model_settings is not None:
@@ -158,6 +160,8 @@ class AgentStepExecutor:
         agent: StepExecutionAgent | None = None,
     ) -> None:
         self.configuration = configuration or StepExecutorConfiguration()
+        if agent is not None and not isinstance(self.configuration.model, str):
+            raise NighthawkError("The external agent owns model selection; configuration.model must be a string")
         self.agent_is_managed = agent is None
         self.agent = agent if agent is not None else _new_agent_step_executor(self.configuration)
         self.token_encoding = self.configuration.resolve_token_encoding()
@@ -339,7 +343,7 @@ class AgentStepExecutor:
                 structured_output_type=structured_output_type,
             )
 
-        usage_meter = get_current_usage_meter()
+        usage_meter = get_usage_meter()
         if usage_meter is not None and hasattr(result, "usage"):
             usage_meter.record(result.usage, kind="step")
 

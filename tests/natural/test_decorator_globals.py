@@ -91,7 +91,7 @@ def test_async_natural_function_sees_module_names_defined_after_decoration(probe
 
 
 def test_transformed_function_shares_module_globals_without_pollution(probe_module: ModuleType) -> None:
-    transformed = probe_module.uses_later_helper.__wrapped__
+    transformed = nh.get_transformed_function(probe_module.uses_later_helper)
     assert transformed is not probe_module.uses_later_helper
     assert "__nighthawk_runner__" in transformed.__code__.co_freevars
     assert transformed.__globals__ is probe_module.__dict__

@@ -13,7 +13,7 @@ from pydantic_ai.messages import BinaryContent, FileUrl, TextContent, UploadedFi
 from ..runtime.step_context import (
     DEFAULT_TOOL_RESULT_RENDERING_POLICY,
     ToolResultRenderingPolicy,
-    get_current_step_context,
+    get_step_context,
     resolve_tool_result_rendering_policy,
 )
 from ..tools._tool_return_content import resolve_tool_return_segments
@@ -38,7 +38,7 @@ _logger = logging.getLogger("nighthawk")
 
 def _resolve_tool_result_rendering_policy() -> ToolResultRenderingPolicy:
     try:
-        step_context = get_current_step_context()
+        step_context = get_step_context()
     except Exception:
         return DEFAULT_TOOL_RESULT_RENDERING_POLICY
     return resolve_tool_result_rendering_policy(step_context.tool_result_rendering_policy)

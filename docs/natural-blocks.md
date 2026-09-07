@@ -187,7 +187,7 @@ def summarize_report(report: Report) -> str:
 
 This keeps the media selection visible in ordinary Python, avoids accidental traversal of large object graphs, and lets normal LOCALS budgeting decide whether the helper variable is rendered.
 
-For the normative rendering and transport rules, including dotted-reference hoisting and nested multimodal behavior, see [Specification Section 8.2](specification.md#82-locals-summary).
+For the normative rendering and transport rules, including dotted-reference hoisting and nested multimodal behavior, see [Specification Section 8.2](specification.md#822-locals-summary).
 
 ### f-string injection
 

@@ -8,42 +8,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `nh.run(usage_meter=...)` and `nh.scope(usage_meter=...)` let a host install its own `UsageMeter` for a run or meter a nested scope in isolation.
-- `nh.scope(tools=...)` declares native tools per scope, accepting plain callables or Pydantic AI `Tool` instances, with `mode="replace"` to hide inherited tools.
-- `nh.scope(capabilities=...)` passes Pydantic AI capabilities (for example `Hooks(before_model_request=...)` or `Instrumentation()`) to every step in the scope, for managed and externally supplied agents alike.
-- Public snapshot getters `nh.get_tools()`, `nh.get_capabilities()`, and `nh.get_oversight()`.
-- `nh.oversight.StepCommit.return_value` exposes the resolved, validated return value to `inspect_step_commit`; `nh.oversight.Rewrite(return_value=...)` replaces it directly.
+
+- `nh.UNSET`, `nh.UnsetType`, `nh.Extend`, and `nh.Merge` express inheritance and per-field scope composition.
+- Caller-constructed Pydantic AI Models in `StepExecutorConfiguration.model`, retaining identity and the managed execution contract. Clients are borrowed; hosts own authentication delivery and lifetime.
+- Host-installed usage meters, scoped native tools and Pydantic AI capabilities, and public scope getters.
+- Resolved `Pass`, `Return`, `Break`, `Continue`, and `Raise` outcomes through `nh.oversight`, with explicit `Rewrite(return_value=None)` support.
+- `nh.get_transformed_function()` for compiled-body inspection through conventional wrappers.
 
 ### Changed
-- The default model is now `openai-responses:gpt-5.6-luna` (previously `openai-responses:gpt-5.4-nano`); documentation, evaluation configurations, and tests use `gpt-5.6-luna` in place of `gpt-5.4-mini` and `gpt-5.4-nano`.
-- `Oversight.inspect_step_commit` now runs after write-binding validation and return resolution. It receives `StepCommit` with validated, coerced values; only rewritten values are validated again. Executor output that fails validation raises `ExecutionError` before the hook is consulted.
-- `nh.oversight.StepCommitProposal` is renamed to `StepCommit`; its `proposed_step_outcome` and `proposed_binding_name_to_value` fields are now `step_outcome` and `binding_name_to_value`.
-- `nh.oversight.Rewrite` fields `rewritten_step_outcome` and `rewritten_binding_name_to_value` are renamed to `step_outcome` and `binding_name_to_value`.
-- `natural_function` now executes the transformed function against the module's real globals instead of a copy taken at decoration time: names defined in the module after the decorated function are visible to Natural blocks, no helper names are injected into the module namespace, and `__wrapped__` refers to the transformed function.
+
+- The default model is now `openai-responses:gpt-5.6-luna` (previously `openai-responses:gpt-5.4-nano`).
+- Scope omission inherits; ordinary values replace and empty collections clear. Only oversight accepts `None`. Executor replacement precedes full configuration replacement.
+- Run getters require a run; `get_step_context()` requires a step. Budget wrappers retain optional private meter discovery.
+- Repeated identical tool declarations are idempotent. Conflicts use `NameConflictError` and `ToolNameConflictError`; invalid tools use `ToolDeclarationError`.
+- `StepCommit.outcome` contains resolved Python values in variants. Inspection mappings preserve contained types and identity through shallow read-only views. Trusted hooks must not mutate references.
+- One validated candidate is inspected, then supplied rewrites are validated before final assignment. Bindings-only rewrites preserve the resolved return; return expressions are never replayed. Rejection cannot roll back preceding host side effects.
+- Decorated functions share real module globals; `__wrapped__` and `inspect.unwrap` follow the original function.
+- Live Model configuration serialization requires explicit model-field exclusion, including nested records. External agents reject Model injection and configured model switches rather than silently changing a label.
 
 ### Removed
-- `@nighthawk.tool` and the process-global tool registry, including `overwrite` and call-scoped registration. Declare tools with `nh.scope(tools=[...])` instead.
-- `StepCommitProposal` (renamed, see Changed).
+
+- Global `scope(mode=...)`, the old `get_current_usage_meter` and `get_current_step_context` names, and `ToolRegistrationError`; no deprecated aliases remain.
+- `@nighthawk.tool` and the process-global tool registry. Declare tools in scopes.
+- `StepCommitProposal`, old proposed/rewritten fields, and parallel `StepCommit.step_outcome`/`return_value` fields.
 
 ### Compatibility
-- The supported public API is `nighthawk.__all__` plus the modules listed in `docs/api.md`. Underscore-prefixed names are private and may change without notice. Within the 0.x series, minor releases may contain breaking changes; each is listed in this file.
+
+The supported public API is `nighthawk.__all__` plus the modules listed in `docs/api.md`. Private names may change without notice. Minor releases in the 0.x series may contain the breaking changes listed here.
 
 ### Migration notes for hosts
 
-| Before (0.12) | After |
+| Before | After |
 |---|---|
-| `nighthawk.runtime.scoping._usage_meter_var.set(meter)` | `nh.run(step_executor, usage_meter=meter)` or `nh.scope(usage_meter=meter)` |
-| `@nh.tool` / `@nh.tool(name=..., overwrite=True)` at import time | `nh.scope(tools=[fn])` or `nh.scope(tools=[Tool(fn, name=...)])` around the code that needs the tool |
-| Detecting unwanted global tools through `nighthawk.tools.registry.get_visible_tools` | Not needed; `nh.scope(mode="replace", tools=[...])` makes only the listed tools (plus built-ins) visible; inspect with `nh.get_tools()` |
-| `nighthawk.runtime.scoping.get_oversight` (undocumented) | `nh.get_oversight()` |
-| Validating bindings inside a `StepExecutor` and neutralizing `step_context.binding_name_to_type` to avoid re-validation | Inspect `StepCommit.binding_name_to_value` in `Oversight.inspect_step_commit`; values are already validated and are validated only once |
-| Removing `return` from `allowed_step_kinds` because the outcome was resolved after the executor returned | Read `StepCommit.return_value` in `inspect_step_commit`; rewrite it with `Rewrite(return_value=...)` |
-| `Agent.override(model=WrapperModel(...))` to observe or gate each model request | `nh.scope(capabilities=[Hooks(before_model_request=..., after_model_request=...)])`; add `Instrumentation()` for per-request OpenTelemetry spans |
-| Locating the transformed function through the decorator closure to rebind globals | The transformed function shares the module's real globals; `inspect.unwrap(natural_fn)` returns it |
-| `StepCommitProposal`, `.proposed_step_outcome`, `.proposed_binding_name_to_value` | `StepCommit`, `.step_outcome`, `.binding_name_to_value` |
-| `Rewrite(rewritten_step_outcome=..., rewritten_binding_name_to_value=...)` | `Rewrite(step_outcome=..., binding_name_to_value=..., return_value=...)` |
+| `scope(mode="inherit", tools=[fn])` | `scope(tools=nh.Extend([fn]))` |
+| `scope(mode="replace", implicit_references={})` | `scope(implicit_references={})` |
+| `scope(implicit_references=None)` to inherit | Omit the field or use `nh.UNSET`; use `nh.Merge(mapping)` to compose |
+| `get_current_usage_meter()` / `get_current_step_context()` | `get_usage_meter()` / `get_step_context()`; missing context raises |
+| `ToolRegistrationError` | `ToolDeclarationError`; catch `NameConflictError` across namespaces |
+| Private meter context writes | `nh.run(executor, usage_meter=meter)` or `nh.scope(usage_meter=meter)` |
+| `@nh.tool` at import time | `nh.scope(tools=[fn])` or an explicit Pydantic AI `Tool` |
+| `StepCommit.return_value` | Check `isinstance(commit.outcome, nh.oversight.Return)`, then read `.value` |
+| Expression-based `Rewrite(step_outcome=...)` | `Rewrite(outcome=nh.oversight.Return(value=...))` |
+| Bindings rewrite that implicitly recalculates return | Supply both replacement bindings and `return_value` explicitly |
+| `inspect.unwrap(function)` to find compiled code | `nh.get_transformed_function(function)` |
+| Credential transport via environment for managed construction | Construct authenticated Provider/Model in memory and use `StepExecutorConfiguration(model=model)` |
+| Dumping configuration containing a live Model | Explicitly exclude `model`; the partial dump cannot reconstruct it |
+| Changing an external agent's configured model | Replace the executor with a managed executor or a host-configured external agent |
 
-`inspect_step_commit` no longer sees executor output that fails validation; that output raises `ExecutionError` before the hook runs. Hosts that repaired invalid output in a `Rewrite` should wrap the Natural function with `nighthawk.resilience` retry instead. `Oversight.inspect_tool_call` is unchanged.
+Invalid initial results fail before oversight; use resilience retries to recover. `from_configuration(configuration=...)` retains its signature. String model settings remain serializable, and environment-configured provider strings remain supported.
 
 ## [0.12.0]
 

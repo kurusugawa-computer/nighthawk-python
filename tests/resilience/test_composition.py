@@ -17,7 +17,7 @@ from nighthawk.resilience import (
     timeout,
     vote,
 )
-from nighthawk.runtime.scoping import get_current_usage_meter
+from nighthawk.runtime.scoping import get_usage_meter
 from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
 
 # ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ class TestBudgetWithRetry:
         def expensive(_text: str) -> str:
             nonlocal call_count
             call_count += 1
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             if meter is not None:
                 meter.record(RunUsage(input_tokens=40, output_tokens=40))
             raise ValueError("fail")
@@ -248,7 +248,7 @@ class TestBudgetWithRetry:
 class TestBudgetWithFallback:
     def test_fallback_triggered_on_budget_exceeded(self) -> None:
         def primary(_text: str) -> str:
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             if meter is not None:
                 meter.record(RunUsage(input_tokens=100, output_tokens=100))
             return "primary_result"

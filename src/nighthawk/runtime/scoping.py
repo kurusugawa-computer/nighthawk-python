@@ -7,15 +7,16 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import copy
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry.trace import Span, get_tracer_provider
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.usage import RunUsage
 
+from ..composition import UNSET, Extend, Merge, UnsetType
 from ..configuration import StepExecutorConfiguration
-from ..errors import NighthawkError
-from ..tools.registry import ToolEntry, get_scoped_tools, resolve_scoped_tools, scoped_tools_var
+from ..errors import NameConflictError, NighthawkError
+from ..tools.declarations import ToolEntry, get_scoped_tools, resolve_scoped_tools, scoped_tools_var
 from ..ulid import generate_ulid
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ class ExecutionRef:
 class UsageMeter:
     """Accumulates LLM token usage across all steps in a run.
 
-    Thread-safe. Created automatically by :func:`run` and accessible via :func:`get_current_usage_meter`.
+    Thread-safe. Created automatically by :func:`run` and accessible via :func:`get_usage_meter`.
     """
 
     def __init__(self) -> None:
@@ -104,12 +105,6 @@ _usage_meter_var: ContextVar[UsageMeter | None] = ContextVar(
 )
 
 
-class _UnsetOversightType:
-    pass
-
-
-_UNSET_OVERSIGHT = _UnsetOversightType()
-
 _oversight_var: ContextVar[Oversight | None] = ContextVar(
     "nighthawk_oversight",
     default=None,
@@ -150,7 +145,7 @@ def _merge_implicit_reference_name_to_value_with_conflict_check(
             if current_implicit_reference_value is not scope_implicit_reference_value:
                 current_implicit_reference_type_name = type(current_implicit_reference_value).__name__
                 scope_implicit_reference_type_name = type(scope_implicit_reference_value).__name__
-                raise NighthawkError(
+                raise NameConflictError(
                     f"Conflict for implicit reference {implicit_reference_name!r}: "
                     f"current scope has {current_implicit_reference_type_name}, "
                     f"new scope has {scope_implicit_reference_type_name}"
@@ -190,13 +185,21 @@ def get_execution_ref() -> ExecutionRef:
     return execution_ref
 
 
-def get_current_usage_meter() -> UsageMeter | None:
-    """Return the active usage meter, or ``None`` if outside a run context."""
+def _optional_usage_meter() -> UsageMeter | None:
     return _usage_meter_var.get()
+
+
+def get_usage_meter() -> UsageMeter:
+    """Return the active usage meter; require an active run."""
+    _require_active_run("get_usage_meter")
+    meter = _usage_meter_var.get()
+    assert meter is not None
+    return meter
 
 
 def get_oversight() -> Oversight | None:
     """Return the oversight hooks active in the current scope, or ``None`` if none are installed."""
+    _require_active_run("get_oversight")
     return _oversight_var.get()
 
 
@@ -329,6 +332,8 @@ def _replace_step_executor_with_configuration(
     if current_step_executor.agent_is_managed:
         return AgentStepExecutor.from_configuration(configuration=configuration)
 
+    if not isinstance(configuration.model, str) or configuration.model != current_step_executor.configuration.model:
+        raise NighthawkError("The external agent owns model selection; scope cannot switch its model")
     if current_step_executor.agent is None:
         raise NighthawkError("AgentStepExecutor.agent is not initialized")
     return AgentStepExecutor.from_agent(
@@ -342,7 +347,7 @@ def run(
     step_executor: StepExecutor,
     *,
     run_id: str | None = None,
-    usage_meter: UsageMeter | None = None,
+    usage_meter: UsageMeter | UnsetType = UNSET,
 ) -> Iterator[None]:
     """Start an execution run with the given step executor.
 
@@ -373,7 +378,9 @@ def run(
         scope_id=generate_ulid(),
         step_id=None,
     )
-    run_usage_meter = usage_meter if usage_meter is not None else UsageMeter()
+    if not isinstance(usage_meter, (UsageMeter, UnsetType)):
+        raise TypeError("usage_meter must be a UsageMeter or UNSET")
+    run_usage_meter = UsageMeter() if isinstance(usage_meter, UnsetType) else usage_meter
 
     step_executor_token = _step_executor_var.set(step_executor)
     execution_ref_token = _execution_ref_var.set(execution_ref)
@@ -404,120 +411,77 @@ def run(
         _step_executor_var.reset(step_executor_token)
 
 
+def _compose_sequence[T](current: tuple[T, ...], supplied: Sequence[T] | Extend[T] | UnsetType) -> tuple[T, ...]:
+    if isinstance(supplied, UnsetType):
+        return current
+    if isinstance(supplied, Extend):
+        return (*current, *supplied.values)
+    if not isinstance(supplied, Sequence) or isinstance(supplied, (str, bytes, bytearray)):
+        raise TypeError("Scope collections require a sequence, Extend, or UNSET")
+    return tuple(supplied)
+
+
 @contextmanager
 def scope(
     *,
-    mode: Literal["inherit", "replace"] = "inherit",
-    step_executor_configuration: StepExecutorConfiguration | None = None,
-    step_executor: StepExecutor | None = None,
-    usage_meter: UsageMeter | None = None,
-    oversight: Oversight | None | _UnsetOversightType = _UNSET_OVERSIGHT,
-    system_prompt_suffix_fragments: Sequence[str] | None = None,
-    user_prompt_suffix_fragments: Sequence[str] | None = None,
-    implicit_references: ImplicitReferenceNameToValue | None = None,
-    tools: Sequence[ToolEntry] | None = None,
-    capabilities: Sequence[AbstractCapability[StepContext]] | None = None,
+    step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
+    step_executor: StepExecutor | UnsetType = UNSET,
+    usage_meter: UsageMeter | UnsetType = UNSET,
+    oversight: Oversight | None | UnsetType = UNSET,
+    system_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
+    user_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
+    implicit_references: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
+    tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET,
+    capabilities: Sequence[AbstractCapability[StepContext]] | Extend[AbstractCapability[StepContext]] | UnsetType = UNSET,
 ) -> Iterator[StepExecutor]:
-    """Open a nested scope that can override the active execution identity.
+    """Compose a nested execution scope and restore its parent on exit.
 
-    Must be called inside an active run context. Creates a new ``scope_id`` while inheriting the ``run_id`` from the parent identity.
-
-    Args:
-        mode: Scope composition mode. ``"inherit"`` appends/merges values into the current scope. ``"replace"`` fully replaces provided list/dict values.
-            In both modes, ``None`` means no change except for ``oversight``, where omitted means no change and explicit ``None`` clears the active oversight.
-        step_executor_configuration: Full replacement configuration for the step executor.
-        step_executor: Replacement step executor for this scope.
-        usage_meter: Replacement usage meter for this scope. Steps executed inside the scope record into this meter
-            instead of the enclosing one; totals are not forwarded to the enclosing meter. ``mode`` does not apply.
-        oversight: Scope-level oversight hooks. Omit to inherit the current oversight. Pass ``None`` to clear it for the nested scope.
-        system_prompt_suffix_fragments: Additional system prompt suffix fragments.
-            In ``mode="inherit"``, fragments are appended. In ``mode="replace"``, provided fragments fully replace the current fragments.
-        user_prompt_suffix_fragments: Additional user prompt suffix fragments.
-            In ``mode="inherit"``, fragments are appended. In ``mode="replace"``, provided fragments fully replace the current fragments.
-        implicit_references: Implicit global references for this scope.
-            In ``mode="inherit"``, values are merged with conflict checks. In ``mode="replace"``, provided mappings fully replace the current mapping.
-        tools: Native tools visible to Natural blocks in this scope, as plain callables or ``pydantic_ai.tools.Tool`` instances.
-            Built-in tools (``nh_eval``, ``nh_assign``) are always visible and cannot be shadowed.
-            In ``mode="inherit"``, tools are appended; duplicate names raise ``ToolRegistrationError``.
-            In ``mode="replace"``, provided tools fully replace the current tools; an empty list leaves only the built-in tools.
-            Prefer ``implicit_references`` for Python helpers; use ``tools`` only when native tool calling is required.
-        capabilities: Pydantic AI capabilities (for example ``Hooks(before_model_request=...)`` or ``Instrumentation()``)
-            passed to ``Agent.run(capabilities=...)`` for every step executed in this scope.
-            In ``mode="inherit"``, capabilities are appended. In ``mode="replace"``, provided capabilities fully replace the current ones.
-
-    Yields:
-        The step executor active within this scope.
-
-    Example:
-        ```python
-        with nighthawk.run(executor):
-            with nighthawk.scope(
-                mode="replace",
-                implicit_references={},
-                system_prompt_suffix_fragments=["Use concise answers."],
-            ) as scoped_executor:
-                result = my_natural_function()
-        ```
+    Omission or UNSET inherits. Ordinary values replace; empty collections clear.
+    Extend appends ordered entries; Merge combines implicit references by identity.
+    Only oversight accepts None, which clears its hooks. Resolve all changes before
+    installing context. Executor replacement precedes full configuration replacement.
     """
+    from ..oversight import Oversight
+    from .step_executor import AsyncStepExecutor, SyncStepExecutor
+
     current_step_executor = get_step_executor()
     current_execution_ref = get_execution_ref()
-
-    next_step_executor = current_step_executor
-    if step_executor is not None:
-        next_step_executor = step_executor
-
-    if step_executor_configuration is not None:
-        next_step_executor = _replace_step_executor_with_configuration(
-            next_step_executor,
-            configuration=step_executor_configuration,
-        )
-
-    next_execution_ref = replace(
-        current_execution_ref,
-        scope_id=generate_ulid(),
-        step_id=None,
-    )
-
-    next_usage_meter = _usage_meter_var.get()
-    if usage_meter is not None:
-        next_usage_meter = usage_meter
-
-    next_oversight = _oversight_var.get()
-    next_system_prompt_suffix_fragments = _system_prompt_suffix_fragments_var.get()
-    next_user_prompt_suffix_fragments = _user_prompt_suffix_fragments_var.get()
+    if not isinstance(step_executor, (UnsetType, AsyncStepExecutor, SyncStepExecutor)):
+        raise TypeError("step_executor must implement the step executor protocol or be UNSET")
+    if not isinstance(step_executor_configuration, (UnsetType, StepExecutorConfiguration)):
+        raise TypeError("step_executor_configuration must be StepExecutorConfiguration or UNSET")
+    if not isinstance(usage_meter, (UnsetType, UsageMeter)):
+        raise TypeError("usage_meter must be UsageMeter or UNSET")
+    if oversight is not None and not isinstance(oversight, (UnsetType, Oversight)):
+        raise TypeError("oversight must be Oversight, None, or UNSET")
+    next_step_executor = current_step_executor if isinstance(step_executor, UnsetType) else step_executor
+    if not isinstance(step_executor_configuration, UnsetType):
+        next_step_executor = _replace_step_executor_with_configuration(next_step_executor, configuration=step_executor_configuration)
+    next_execution_ref = replace(current_execution_ref, scope_id=generate_ulid(), step_id=None)
+    next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
+    next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight
+    next_system_prompt_suffix_fragments = _compose_sequence(_system_prompt_suffix_fragments_var.get(), system_prompt_suffix_fragments)
+    next_user_prompt_suffix_fragments = _compose_sequence(_user_prompt_suffix_fragments_var.get(), user_prompt_suffix_fragments)
+    if any(not isinstance(fragment, str) for fragment in (*next_system_prompt_suffix_fragments, *next_user_prompt_suffix_fragments)):
+        raise TypeError("Prompt fragments must be strings")
+    next_capabilities = _compose_sequence(_capabilities_var.get(), capabilities)
+    if any(not isinstance(capability, AbstractCapability) for capability in next_capabilities):
+        raise TypeError("Capabilities must be AbstractCapability instances")
     next_implicit_reference_name_to_value = _implicit_reference_name_to_value_var.get()
+    if isinstance(implicit_references, Merge):
+        next_implicit_reference_name_to_value = _merge_implicit_reference_name_to_value_with_conflict_check(
+            next_implicit_reference_name_to_value, implicit_references.name_to_value
+        )
+    elif not isinstance(implicit_references, UnsetType):
+        if not isinstance(implicit_references, Mapping) or any(not isinstance(name, str) for name in implicit_references):
+            raise TypeError("implicit_references requires a string-keyed mapping, Merge, or UNSET")
+        next_implicit_reference_name_to_value = dict(implicit_references)
     next_tools = scoped_tools_var.get()
-    next_capabilities = _capabilities_var.get()
-
-    if not isinstance(oversight, _UnsetOversightType):
-        next_oversight = oversight
-
-    if system_prompt_suffix_fragments is not None:
-        if mode == "inherit":
-            next_system_prompt_suffix_fragments = (*next_system_prompt_suffix_fragments, *system_prompt_suffix_fragments)
-        else:
-            next_system_prompt_suffix_fragments = tuple(system_prompt_suffix_fragments)
-
-    if user_prompt_suffix_fragments is not None:
-        if mode == "inherit":
-            next_user_prompt_suffix_fragments = (*next_user_prompt_suffix_fragments, *user_prompt_suffix_fragments)
-        else:
-            next_user_prompt_suffix_fragments = tuple(user_prompt_suffix_fragments)
-
-    if implicit_references is not None:
-        if mode == "inherit":
-            next_implicit_reference_name_to_value = _merge_implicit_reference_name_to_value_with_conflict_check(
-                next_implicit_reference_name_to_value,
-                implicit_references,
-            )
-        else:
-            next_implicit_reference_name_to_value = dict(implicit_references)
-
-    if tools is not None:
-        next_tools = resolve_scoped_tools(next_tools, tools, mode=mode)
-
-    if capabilities is not None:
-        next_capabilities = (*next_capabilities, *capabilities) if mode == "inherit" else tuple(capabilities)
+    if isinstance(tools, Extend):
+        next_tools = resolve_scoped_tools(next_tools, tools.values)
+    elif not isinstance(tools, UnsetType):
+        entries = _compose_sequence((), tools)
+        next_tools = resolve_scoped_tools((), entries)
 
     step_executor_token = _step_executor_var.set(next_step_executor)
     execution_ref_token = _execution_ref_var.set(next_execution_ref)

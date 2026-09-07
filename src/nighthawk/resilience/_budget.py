@@ -11,7 +11,7 @@ from opentelemetry.trace import get_current_span
 from pydantic_ai.usage import RunUsage
 
 from ..errors import NighthawkError
-from ..runtime.scoping import get_current_usage_meter
+from ..runtime.scoping import _optional_usage_meter
 
 _logger = logging.getLogger("nighthawk.resilience")
 
@@ -43,7 +43,7 @@ class BudgetExceededError(NighthawkError):
 
 
 def _get_usage_snapshot() -> RunUsage | None:
-    usage_meter = get_current_usage_meter()
+    usage_meter = _optional_usage_meter()
     if usage_meter is None:
         return None
     return usage_meter.snapshot()

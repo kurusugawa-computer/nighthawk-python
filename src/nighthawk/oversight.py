@@ -5,37 +5,16 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from opentelemetry.trace import get_current_span
-from pydantic import BaseModel
 
+from .composition import UNSET, UnsetType
 from .errors import NighthawkError
 from .runtime.scoping import ExecutionRef
-from .runtime.step_contract import StepKind, StepOutcome
+from .runtime.step_contract import StepKind
+from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
-def _snapshot_value(value: object) -> object:
-    if isinstance(value, BaseModel):
-        return value.model_copy(deep=True)
-    if isinstance(value, Mapping):
-        return MappingProxyType({key: _snapshot_value(item) for key, item in value.items()})
-    if isinstance(value, tuple):
-        return tuple(_snapshot_value(item) for item in value)
-    if isinstance(value, list):
-        return tuple(_snapshot_value(item) for item in value)
-    if isinstance(value, set):
-        return frozenset(_snapshot_value(item) for item in value)
-    if isinstance(value, frozenset):
-        return frozenset(_snapshot_value(item) for item in value)
-    return value
-
-
-def _snapshot_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, object]:
-    return MappingProxyType({name: _snapshot_value(value) for name, value in name_to_value.items()})
-
-
-def _snapshot_optional_step_outcome(step_outcome: StepOutcome | None) -> StepOutcome | None:
-    if step_outcome is None:
-        return None
-    return _snapshot_value(step_outcome)  # type: ignore[return-value]
+def _reference_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(dict(name_to_value))
 
 
 class OversightRejectedError(NighthawkError):
@@ -53,7 +32,7 @@ class ToolCall:
         object.__setattr__(
             self,
             "argument_name_to_value",
-            _snapshot_mapping(self.argument_name_to_value),
+            _reference_mapping(self.argument_name_to_value),
         )
 
 
@@ -62,15 +41,16 @@ class StepCommit:
     """Validated step result presented to ``Oversight.inspect_step_commit`` before it is committed.
 
     ``binding_name_to_value`` holds the write bindings after Pydantic validation and coercion.
-    ``return_value`` holds the resolved and validated return value when ``step_outcome.kind == "return"``; otherwise ``None``.
+    ``outcome`` is a resolved variant. Values retain type and identity in shallow
+    read-only mapping views. Trusted hooks must not mutate these references; use
+    Rewrite for changes and copy or serialize explicitly for durable history.
     """
 
     execution_ref: ExecutionRef
     processed_natural_program: str
     input_binding_name_to_value: Mapping[str, object]
-    step_outcome: StepOutcome
+    outcome: StepResult
     binding_name_to_value: Mapping[str, object]
-    return_value: object | None
     allowed_step_kinds: tuple[StepKind, ...]
     output_binding_name_set: frozenset[str]
     binding_name_to_type: Mapping[str, object]
@@ -79,22 +59,12 @@ class StepCommit:
         object.__setattr__(
             self,
             "input_binding_name_to_value",
-            _snapshot_mapping(self.input_binding_name_to_value),
-        )
-        object.__setattr__(
-            self,
-            "step_outcome",
-            _snapshot_value(self.step_outcome),
+            _reference_mapping(self.input_binding_name_to_value),
         )
         object.__setattr__(
             self,
             "binding_name_to_value",
-            _snapshot_mapping(self.binding_name_to_value),
-        )
-        object.__setattr__(
-            self,
-            "return_value",
-            _snapshot_value(self.return_value),
+            _reference_mapping(self.binding_name_to_value),
         )
         object.__setattr__(
             self,
@@ -104,7 +74,7 @@ class StepCommit:
         object.__setattr__(
             self,
             "binding_name_to_type",
-            _snapshot_mapping(self.binding_name_to_type),
+            _reference_mapping(self.binding_name_to_type),
         )
 
 
@@ -120,36 +90,29 @@ class Reject:
 
 @dataclass(frozen=True)
 class Rewrite:
-    """Replace parts of a step commit. Rewritten values are validated again before commit.
+    """Replace supplied commit fields; UNSET inherits and explicit None is a return.
 
-    ``binding_name_to_value`` replaces the whole committed mapping. ``return_value`` is honored only when the effective
-    step outcome kind is ``return``; it bypasses ``return_expression`` evaluation and is validated against the return annotation.
+    A mapping replaces all writes. A return_value patch requires an existing Return.
+    Use outcome=Return(value=...) to change another allowed outcome into a return.
+    Replacements are validated before commit without replaying return expressions.
     """
 
-    step_outcome: StepOutcome | None = None
-    binding_name_to_value: Mapping[str, object] | None = None
-    return_value: object | None = None
+    outcome: StepResult | UnsetType = UNSET
+    binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
+    return_value: object = UNSET
     reason: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "step_outcome",
-            _snapshot_optional_step_outcome(self.step_outcome),
-        )
-        if self.binding_name_to_value is not None:
-            object.__setattr__(
-                self,
-                "binding_name_to_value",
-                _snapshot_mapping(self.binding_name_to_value),
-            )
-        object.__setattr__(
-            self,
-            "return_value",
-            _snapshot_value(self.return_value),
-        )
-        if self.step_outcome is None and self.binding_name_to_value is None and self.return_value is None:
-            raise ValueError("Rewrite must change step_outcome, binding_name_to_value, or return_value")
+        if not isinstance(self.outcome, (UnsetType, Pass, Return, Break, Continue, Raise)):
+            raise TypeError("Rewrite outcome must be a resolved StepResult or UNSET")
+        if self.outcome is not UNSET and self.return_value is not UNSET:
+            raise ValueError("Rewrite cannot supply both outcome and return_value")
+        if not isinstance(self.binding_name_to_value, UnsetType):
+            if not isinstance(self.binding_name_to_value, Mapping):
+                raise TypeError("Rewrite binding_name_to_value must be a mapping or UNSET")
+            object.__setattr__(self, "binding_name_to_value", _reference_mapping(self.binding_name_to_value))
+        if self.outcome is UNSET and self.binding_name_to_value is UNSET and self.return_value is UNSET:
+            raise ValueError("Rewrite must change outcome, binding_name_to_value, or return_value")
 
 
 type ToolCallDecision = Accept | Reject
@@ -192,6 +155,12 @@ def record_oversight_decision(
 
 
 __all__ = [
+    "Pass",
+    "Return",
+    "Break",
+    "Continue",
+    "Raise",
+    "StepResult",
     "Accept",
     "Oversight",
     "OversightRejectedError",

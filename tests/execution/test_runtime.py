@@ -12,7 +12,7 @@ from pydantic_ai.usage import RunUsage
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime.prompt import build_system_prompt, resolve_step_system_prompt_template_text
-from nighthawk.runtime.scoping import get_current_usage_meter
+from nighthawk.runtime.scoping import get_usage_meter
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepFinalResult, StepKind
 from tests.execution.stub_executor import StubExecutor
@@ -275,7 +275,8 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
             async def calculate() -> int:
                 return 17
 
-            return ReturnStepOutcome(kind="return", return_expression="result"), {"result": calculate()}
+            step_context.step_locals["calculate"] = calculate
+            return ReturnStepOutcome(kind="return", return_expression="calculate()"), {}
 
     with nh.run(AssertingExecutor()):
 
@@ -312,7 +313,8 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
-            return ReturnStepOutcome(kind="return", return_expression="result"), {"result": AwaitableInt()}
+            step_context.step_locals["result"] = AwaitableInt()
+            return ReturnStepOutcome(kind="return", return_expression="result"), {}
 
     with nh.run(AssertingExecutor()):
 
@@ -812,7 +814,7 @@ def test_agent_executor_records_run_result_usage() -> None:
             """
 
         f()
-        usage_meter = get_current_usage_meter()
+        usage_meter = get_usage_meter()
         assert usage_meter is not None
         assert usage_meter.snapshot().total_tokens == 18
 
@@ -881,7 +883,7 @@ def test_agent_executor_passes_multimodal_tuple_to_custom_agent() -> None:
     assert any(isinstance(content, BinaryContent) for content in seen_prompt)
 
 
-def test_natural_function_can_override_step_executor_configuration_model_within_scope() -> None:
+def test_natural_function_rejects_external_agent_model_switch() -> None:
     class FakeRunResult:
         def __init__(self, output: object) -> None:
             self.output = output
@@ -901,13 +903,13 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
             current_step_executor = nh.get_step_executor()
             assert isinstance(current_step_executor, nh.AgentStepExecutor)
             current_model_identifier = current_step_executor.configuration.model
+            assert isinstance(current_model_identifier, str)
             self.seen_model_identifiers.append(current_model_identifier)
             assign_tool(deps, "observed_model_identifier", repr(current_model_identifier))
 
             return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
 
     initial_model_identifier = "openai-responses:gpt-5.6-luna"
-    overridden_model_identifier = "openai-responses:gpt-5.6-terra"
     recording_agent = RecordingAgent()
     step_executor_configuration = nh.StepExecutorConfiguration(model=initial_model_identifier)
     step_executor = nh.AgentStepExecutor.from_agent(
@@ -944,17 +946,11 @@ def test_natural_function_can_override_step_executor_configuration_model_within_
                 third_model_identifier,
             )
 
-        assert f() == (
-            initial_model_identifier,
-            overridden_model_identifier,
-            initial_model_identifier,
-        )
+        with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
+            f()
+        assert nh.get_step_executor() is step_executor
 
-    assert recording_agent.seen_model_identifiers == [
-        initial_model_identifier,
-        overridden_model_identifier,
-        initial_model_identifier,
-    ]
+    assert recording_agent.seen_model_identifiers == [initial_model_identifier]
 
 
 def test_natural_function_rejects_step_executor_configuration_updates_for_non_agent_step_executor() -> None:

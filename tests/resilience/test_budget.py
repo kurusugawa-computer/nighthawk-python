@@ -14,7 +14,7 @@ from pydantic_ai.usage import RunUsage
 import nighthawk as nh
 from nighthawk.resilience import BudgetExceededError, budget
 from nighthawk.runtime import scoping as runtime_scoping
-from nighthawk.runtime.scoping import get_current_usage_meter, span
+from nighthawk.runtime.scoping import get_usage_meter, span
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -57,7 +57,7 @@ def _make_function_that_records_usage(
     """Create a sync function that records usage to the current meter."""
 
     def fn(text: str) -> str:
-        meter = get_current_usage_meter()
+        meter = get_usage_meter()
         if meter is not None:
             meter.record(RunUsage(input_tokens=input_tokens, output_tokens=output_tokens))
         return f"result:{text}"
@@ -73,7 +73,7 @@ def _make_async_function_that_records_usage(
     """Create an async function that records usage to the current meter."""
 
     async def fn(text: str) -> str:
-        meter = get_current_usage_meter()
+        meter = get_usage_meter()
         if meter is not None:
             meter.record(RunUsage(input_tokens=input_tokens, output_tokens=output_tokens))
         return f"result:{text}"
@@ -92,7 +92,7 @@ class TestBudgetPreCheck:
         budgeted = budget(tokens=50)(fn)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=30, output_tokens=30))
 
@@ -115,7 +115,7 @@ class TestBudgetPreCheck:
         budgeted = budget(tokens=50)(fn)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=25, output_tokens=25))
 
@@ -148,7 +148,7 @@ class TestBudgetPostCheck:
         budgeted = budget(tokens=100)(fn)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=25, output_tokens=25))
 
@@ -189,7 +189,7 @@ class TestBudgetCombined:
         budgeted = budget(tokens=50, tokens_per_call=100)(fn)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=10, output_tokens=10))
 
@@ -210,7 +210,7 @@ class TestBudgetAsync:
         budgeted = budget(tokens=50)(fn)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=30, output_tokens=30))
 
@@ -245,16 +245,20 @@ class TestBudgetAsync:
 
 class TestBudgetNoRunContext:
     def test_no_enforcement_without_run_context(self) -> None:
-        fn = _make_function_that_records_usage(input_tokens=1000, output_tokens=1000)
-        budgeted = budget(tokens=10)(fn)
-        result = budgeted("hello")
-        assert result == "result:hello"
+        def function(value: str) -> str:
+            with pytest.raises(nh.NighthawkError):
+                get_usage_meter()
+            return f"result:{value}"
+
+        assert budget(tokens=0)(function)("hello") == "result:hello"
 
     def test_async_no_enforcement_without_run_context(self) -> None:
-        fn = _make_async_function_that_records_usage(input_tokens=1000, output_tokens=1000)
-        budgeted = budget(tokens=10)(fn)
-        result = asyncio.run(budgeted("hello"))
-        assert result == "result:hello"
+        async def function(value: str) -> str:
+            with pytest.raises(nh.NighthawkError):
+                get_usage_meter()
+            return f"result:{value}"
+
+        assert asyncio.run(budget(tokens=0)(function)("hello")) == "result:hello"
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +384,7 @@ class TestBudgetEstimate:
         def expensive(text: str) -> str:
             nonlocal call_count
             call_count += 1
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             if meter is not None:
                 meter.record(RunUsage(input_tokens=5, output_tokens=5))
             return f"result:{text}"
@@ -391,7 +395,7 @@ class TestBudgetEstimate:
         budgeted = budget(tokens=50, estimate_usage=estimate_usage)(expensive)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=15, output_tokens=15))
 
@@ -438,7 +442,7 @@ class TestBudgetCostFunction:
         budgeted = budget(cost=0.005, cost_function=_dollar_per_thousand_tokens)(fn)
 
         with nh.run(StubExecutor()):
-            meter = get_current_usage_meter()
+            meter = get_usage_meter()
             assert meter is not None
             meter.record(RunUsage(input_tokens=500, output_tokens=500))
 

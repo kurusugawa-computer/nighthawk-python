@@ -143,7 +143,7 @@ def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:
     return _python_lookup_state_var.get().python_cell_scope_stack
 
 
-def get_current_step_context() -> StepContext:
+def get_step_context() -> StepContext:
     """Return the innermost active step context.
 
     Raises:

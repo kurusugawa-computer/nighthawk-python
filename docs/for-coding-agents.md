@@ -149,10 +149,10 @@ with nh.run(fast_executor):
 
 - `implicit_references` inject helper functions as block capabilities.
 - `nh.scope()` must run inside `nh.run()`; it keeps `run_id` and creates a new `scope_id`.
-- `mode` affects only `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, and `implicit_references`.
-- `inherit`: suffix lists append; `implicit_references` merge with conflict check (same key + different object => `NighthawkError`).
-- `replace`: explicit list/mapping fully replace; `[]`/`{}` clear; `None` keeps inherited value.
-- `step_executor` / `step_executor_configuration` are resolved independently of `mode`.
+- Omission or `nh.UNSET` inherits; ordinary values replace and `[]`/`{}` clear collections.
+- Use `nh.Extend([...])` to append suffix fragments and `nh.Merge({...})` to merge implicit references by identity.
+- Only `oversight` accepts `None` to clear hooks; other scope fields reject it.
+- Executor replacement precedes full configuration replacement. Managed Model instances retain identity; external agents own their model selection.
 
 ## 4. The standard contract shape
 

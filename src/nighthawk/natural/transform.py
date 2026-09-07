@@ -326,11 +326,9 @@ def build_runtime_call_and_assignments(
         statements.extend(ast.parse(f'if "{name}" in __nh_bindings__:\n    {name} = __nh_bindings__["{name}"]\n').body)
 
     # Add outcome extraction and dispatch.
-    statements.extend(ast.parse('__nh_step_outcome__ = __nh_envelope__["step_outcome"]').body)
+    statements.extend(ast.parse('__nh_step_outcome__ = __nh_envelope__["outcome"]').body)
 
-    outcome_source = (
-        'if __nh_step_outcome__ is not None:\n    if __nh_step_outcome__.kind == "return":\n        return __nh_envelope__["return_value"]\n'
-    )
+    outcome_source = 'if __nh_step_outcome__ is not None:\n    if __nh_step_outcome__.kind == "return":\n        return __nh_step_outcome__.value\n'
     if is_in_loop:
         outcome_source += (
             '    if __nh_step_outcome__.kind == "break":\n        break\n    if __nh_step_outcome__.kind == "continue":\n        continue\n'

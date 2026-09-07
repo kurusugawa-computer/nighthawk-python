@@ -153,7 +153,7 @@ except InputError as e:
 
 All Nighthawk exceptions inherit from `NighthawkError`. The most common exception in application code is `ExecutionError`, raised when a Natural block produces an invalid outcome, a disallowed outcome type, or a validation failure.
 
-For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolRegistrationError`), see [Specification Section 13](specification.md#13-error-handling).
+For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolDeclarationError`), see [Specification Section 13](specification.md#13-error-handling).
 
 ## Async Natural functions
 

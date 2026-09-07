@@ -74,11 +74,12 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
     - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
     - Compilation happens at decoration time, and Natural blocks are executed at function call time.
     - Note: The decorator requires the function source to be available for inspection.
+    - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional. `nh.get_transformed_function(function)` exposes the compiled body sharing the original module globals. It follows outer wrappers and supported method descriptors, requires no run, and raises `TypeError` for invalid inputs or wrapper cycles. Execute through the decorated function to establish runtime context.
 
 ### 5.2. Configuration
 
 - `StepExecutorConfiguration`
-    - `model`: Model identifier in `provider:model` format. Default: `openai-responses:gpt-5.6-luna` (see [Pydantic AI providers](pydantic-ai-providers.md)).
+    - `model`: Provider-qualified string or an existing Pydantic AI `Model` instance. Default: `openai-responses:gpt-5.6-luna` (see [Pydantic AI providers](pydantic-ai-providers.md)).
         - Examples: `openai-responses:gpt-5.6-luna`, `openai-responses:gpt-5.6-terra`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
@@ -91,6 +92,16 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
     - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and projected tool-result previews. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
     - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
+
+Runtime Models are borrowed resources. Configuration validation, shallow derivation, managed Agent construction, and scope replacement preserve the exact supplied Model. Two instances with the same name can have different authentication. Nighthawk does not clone, reconstruct, mutate, enter, or close supplied clients. The host owns client lifetime and any SDK restrictions on threads or event loops.
+
+A managed executor uses one common prompt, tools, dynamic output contract, capability, settings, and oversight path for either model form. Configuration model settings override Model defaults under Pydantic AI's existing precedence, with per-run capabilities retaining their ordinary behavior. Explicit tokenizer encoding wins; otherwise inference uses the string's model component or `Model.model_name`, falling back to `o200k_base` for unknown names. Invalid explicit encoding fails.
+
+Model instances cannot be reconstructed from mappings. Configuration `repr` and `str` omit the model without invoking its representation. Python and JSON serialization including a live model field raises `PydanticSerializationError` with no traversal of the Model; explicit exclusion or inclusion of only other fields succeeds, including nested Pydantic records. String configurations remain serializable. A partial dump cannot reconstruct authenticated execution resources. `model_copy(update=...)` preserves Model identity by default but does not validate updates; callers must supply valid typed settings.
+
+Hosts supply authenticated Providers and Models in memory. Nighthawk does not extract credentials or transport them through environment variables, operating-system process launch arguments, prompts, or its diagnostic payloads. Pydantic AI environment reads and existing provider-string authentication are supported. Docker credential delivery, arbitrary Model behavior, and external logging are host concerns. Forwarding settings such as `openai_store=False` proves request forwarding, not remote retention compliance.
+
+External agents own model selection: both the constructor and `from_agent` reject instance-valued configuration models. Replacing their configuration with a different model string raises `NighthawkError` before scope installation. Keeping the configured string permits rendering changes. For managed agents, full configuration replacement selects its supplied Model and restores the exact parent executor on exit or error.
 
 ### 5.3. Supporting types
 
@@ -111,7 +122,7 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 
 ### 5.4. Runtime accessors
 
-- `nighthawk.get_current_step_context() -> StepContext`
+- `nighthawk.get_step_context() -> StepContext`
     - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
 See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_ref`).
@@ -361,12 +372,13 @@ Tools are Python callables exposed to the LLM via pydantic-ai tool calling. Ther
 
 Declaration API:
 
-- `nighthawk.scope(tools: Sequence[ToolEntry] | None = None, mode=...)` where `ToolEntry = Callable[..., Any] | pydantic_ai.tools.Tool[StepContext]`.
+- `nighthawk.scope(tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET)` where `ToolEntry = Callable[..., Any] | pydantic_ai.tools.Tool[StepContext]`.
     - A plain callable is wrapped with `Tool(callable)`: the name is the function `__name__`, the description is the docstring, and a leading `RunContext[StepContext]` parameter is detected automatically.
     - A `Tool` instance is used as-is, allowing name, description, and metadata overrides.
 - Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
-- `mode="inherit"`: declared tools are appended to the inherited tools. A name already visible (inherited or built-in) raises `ToolRegistrationError`.
-- `mode="replace"`: declared tools fully replace inherited tools. `tools=[]` leaves only built-in tools visible. `None` means no change.
+- Ordinary sequences replace inherited tools; `tools=[]` leaves only built-ins. Omission or `UNSET` inherits; `None` is invalid. `Extend` appends.
+- A repeated identical plain callable or exact explicit `Tool` object is idempotent, preserving the first normalized tool and its order. That normalized object can itself be supplied again. Different wrappers, or a plain callable versus a distinct explicit wrapper, conflict even if their function is identical.
+- Names colliding with built-ins or distinct declarations raise `ToolNameConflictError`, which is both `ToolDeclarationError` and `NameConflictError`. Invalid entries or names raise `ToolDeclarationError`. Declaration checks never call user-defined equality. Tool and implicit-reference names are separate namespaces.
 - Built-in tool names cannot be declared in any mode.
 - `nighthawk.get_tools()` returns the scoped tools (excluding built-in tools) for the current scope.
 
@@ -632,35 +644,30 @@ Nighthawk does not own workspace filesystem concerns (such as include resolution
 Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When empty (default `""`), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:
 
-- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | None = None)`
+- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | UnsetType = UNSET)`
     - Replaces the current context step executor with the provided step executor.
-    - Installs `usage_meter` as the run-level meter when given; otherwise creates a fresh `UsageMeter`.
+    - Installs `usage_meter` as the run-level meter when given; omission or `UNSET` creates a fresh `UsageMeter`; `None` is invalid.
     - Resets scoped tools and capabilities to empty for the run.
     - Generates a new `ExecutionRef` for the duration of the `with`.
     - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
-- `nighthawk.scope(*, mode: Literal["inherit", "replace"] = "inherit", step_executor_configuration: StepExecutorConfiguration | None = None, step_executor: StepExecutor | None = None, usage_meter: UsageMeter | None = None, oversight: Oversight | None = None, system_prompt_suffix_fragments: Sequence[str] | None = None, user_prompt_suffix_fragments: Sequence[str] | None = None, implicit_references: Mapping[str, object] | None = None, tools: Sequence[ToolEntry] | None = None, capabilities: Sequence[AbstractCapability[StepContext]] | None = None) -> Iterator[StepExecutor]`
-    - Enter a nested scope within the current run.
-    - Requires an existing step executor.
-    - Generates a new `scope_id` (keeps the current `run_id`).
-    - `oversight` omitted means inherit the current hooks; explicit `None` clears them for the nested scope.
-    - `usage_meter` replaces the enclosing meter for the scope; `None` keeps it. Totals are not forwarded to the enclosing meter.
-    - `capabilities` are passed to Pydantic AI `Agent.run(capabilities=...)` for every step in the scope.
-    - `mode="inherit"` (default):
-        - Appends prompt suffix fragment lists, `tools`, and `capabilities`.
-        - Merges `implicit_references` additively with conflict checks.
-        - Rejects `tools` whose names are already visible with `ToolRegistrationError`.
-    - `mode="replace"`:
-        - Replaces provided list/mapping values.
-        - `None` means no change.
-        - Explicit `[]` / `{}` clears inherited list/mapping values.
-        - Explicit list/mapping values (for example `[e1, e2]` or `{k1: v1, k2: v2}`) fully replace inherited values.
-    - Yields the resolved `StepExecutor` for the scope.
+- `nighthawk.scope(...) -> Iterator[StepExecutor]`
+    - Every configurable parameter defaults to `UNSET`; omission and explicit `UNSET` inherit.
+    - Ordinary values replace; empty sequences or mappings clear inherited collections.
+    - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
+    - `Merge(mapping)` merges implicit references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
+    - Only `oversight` accepts `None`, clearing hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
+    - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
+    - Executor replacement precedes full configuration replacement. Configuration updates require an `AgentStepExecutor` and respect managed/external ownership.
+    - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
+    - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.
 - `nighthawk.get_step_executor() -> StepExecutor`
     - Get the current step executor. Raises if unset.
 - `nighthawk.get_execution_ref() -> ExecutionRef`
     - Get the current runtime execution identity. Raises if unset.
+
+All run-scoped public getters, including `get_usage_meter()` and `get_oversight()`, require an active run and raise `NighthawkError` outside it. The meter is non-optional; oversight may be `None` only inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Private optional meter discovery preserves budget behavior outside runs.
 
 ### 10.1. Observability contract (OpenTelemetry span/event)
 
@@ -699,6 +706,18 @@ Semantics:
 - `raise` outcome is treated as domain-level behavior, represented by `nighthawk.step.raised`.
 - Nighthawk-side internal failures are represented by `nighthawk.step.failed`, and the span records exception + error status.
 - There is no in-memory step trace API.
+
+### 10.2. Host commit boundary
+
+The executor/model contract remains the expression-based `StepOutcome`. Before inspection, the runner checks allowed kinds, validates writes, and evaluates and validates a return expression once, including awaiting it once for async functions. Invalid initial results fail before inspection. An initial raise has an empty output mapping, never unvalidated writes.
+
+`StepCommit.outcome` is a resolved `StepResult`: frozen `Pass()`, `Return(value)`, `Break()`, `Continue()`, or `Raise(message, error_type=None)` records exported through `nh.oversight`. Each has a fixed non-init `kind`. Only `Return` has a value; `Return(None)` is distinct from `Pass()`. Raise's optional error type is a Python binding name resolved by existing exception rules. The internal runner envelope and generated return/break/continue dispatch use the same resolved variants.
+
+The hook runs once. `Accept` retains validated values without repeating validators. `Reject` raises `OversightRejectedError` before final bindings are assigned. `Rewrite` fields `outcome`, `binding_name_to_value`, and `return_value` default to `UNSET`. A supplied mapping replaces all committed writes, including an empty mapping. Empty rewrites, invalid outcome/mapping shapes, or both outcome and return_value are errors. `Rewrite(return_value=None)` explicitly supplies a return subject to annotation validation; `UNSET` cannot represent an application return through this patch field.
+
+A return_value patch requires an existing Return. Changing another allowed kind to return uses `Rewrite(outcome=Return(value=...))`. Rewrites recheck allowed kinds and validate supplied replacements before any final assignment, without a second inspection. Bindings-only rewrites retain the resolved return and never replay its expression. Undeclared output names are rejected. A final Raise commits no writes; a nonempty replacement mapping paired with Raise is invalid. Rewriting away from an initial raise inherits an empty mapping unless replacements are supplied, so unvalidated output cannot reappear.
+
+`StepCommit` and `ToolCall` capture top-level mapping membership in shallow read-only views. Contained lists, models, and arbitrary objects retain type and identity; frozen records do not deeply isolate application objects. Trusted hooks must use Rewrite rather than mutate these references. Views support synchronous inspection; durable history requires host copying or serialization. Logical commit guarantees cannot roll back tool, validator, or return-expression side effects.
 
 ## 11. Interpolation (opt-in, f-strings only)
 
@@ -751,7 +770,9 @@ Exception hierarchy:
     - Raised when: `eval()` raises during `nh_eval` or `nh_assign` expression evaluation.
 - `ToolValidationError(NighthawkError)`: Type validation/coercion failed during `nh_assign`.
     - Raised when: the assigned value does not match the expected binding type.
-- `ToolRegistrationError(NighthawkError)`: Tool registration failed.
+- `ToolDeclarationError(NighthawkError)`: Invalid tool declaration.
+- `NameConflictError(NighthawkError)`: Distinct declarations claim the same name.
+- `ToolNameConflictError(ToolDeclarationError, NameConflictError)`: Tool name collision, including reserved built-in names.
     - Raised when: a tool name is invalid, collides with a built-in tool, or is declared twice within the visible scope.
 
 All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.

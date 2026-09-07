@@ -21,5 +21,13 @@ class ToolValidationError(NighthawkError):
     """Raised when tool input validation fails."""
 
 
-class ToolRegistrationError(NighthawkError):
-    """Raised when tool registration fails."""
+class ToolDeclarationError(NighthawkError):
+    """Raised when a tool declaration is invalid."""
+
+
+class NameConflictError(NighthawkError):
+    """Raised when distinct declarations claim the same name."""
+
+
+class ToolNameConflictError(ToolDeclarationError, NameConflictError):
+    """Raised when tool declarations claim the same or a reserved name."""

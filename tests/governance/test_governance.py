@@ -16,7 +16,6 @@ import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime import scoping as runtime_scoping
 from nighthawk.runtime.scoping import get_oversight
-from nighthawk.runtime.step_contract import ReturnStepOutcome
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -156,7 +155,7 @@ def test_invalid_step_rewrite_flows_through_finalize_validation() -> None:
     def rewrite_step(review: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = review
         return nh.oversight.Rewrite(
-            step_outcome=ReturnStepOutcome(kind="return", return_expression="result"),
+            outcome=nh.oversight.Return(value="not an int"),
             binding_name_to_value={"result": "not an int"},
         )
 
@@ -221,15 +220,15 @@ def test_step_commit_receives_validated_bindings_and_return_value() -> None:
     assert len(observed_commits) == 1
     step_commit = observed_commits[0]
     assert step_commit.binding_name_to_value["result"] == 41
-    assert step_commit.step_outcome.kind == "return"
-    assert step_commit.return_value == 42
+    assert isinstance(step_commit.outcome, nh.oversight.Return)
+    assert step_commit.outcome.value == 42
 
 
-def test_step_commit_return_value_is_none_for_pass_outcome() -> None:
+def test_step_commit_pass_has_no_return_value() -> None:
     observed_return_values: list[object] = []
 
     def observe(step_commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
-        observed_return_values.append(step_commit.return_value)
+        observed_return_values.append(step_commit.outcome)
         return nh.oversight.Accept()
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
@@ -244,7 +243,7 @@ def test_step_commit_return_value_is_none_for_pass_outcome() -> None:
 
         assert natural_value_function() == 3
 
-    assert observed_return_values == [None]
+    assert observed_return_values == [nh.oversight.Pass()]
 
 
 def test_invalid_executor_output_fails_before_oversight_is_consulted() -> None:
@@ -274,7 +273,8 @@ def test_invalid_executor_output_fails_before_oversight_is_consulted() -> None:
 
 def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
-        assert step_commit.return_value == 5
+        assert isinstance(step_commit.outcome, nh.oversight.Return)
+        assert step_commit.outcome.value == 5
         return nh.oversight.Rewrite(return_value="7")
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
@@ -332,7 +332,7 @@ def test_rewrite_bindings_with_invalid_value_raises_execution_error() -> None:
 def test_rewrite_to_disallowed_step_kind_raises_execution_error() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = step_commit
-        return nh.oversight.Rewrite(step_outcome=ReturnStepOutcome(kind="return", return_expression="result"))
+        return nh.oversight.Rewrite(outcome=nh.oversight.Return(value=5))
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 

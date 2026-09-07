@@ -101,3 +101,7 @@ The model identifier must be in `provider:model` format (e.g., `openai-responses
 **Provider authentication errors**
 
 Each Pydantic AI provider requires its own credentials (e.g., `OPENAI_API_KEY` for OpenAI). Nighthawk does not manage provider credentials -- see the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for provider-specific credential setup.
+
+## In-memory authentication
+
+Pydantic AI Providers accept caller-owned authentication clients or keys through Python constructors. Construct an authenticated Model and pass it through `StepExecutorConfiguration.model`; see [Caller-authenticated models](runtime-configuration.md#caller-authenticated-models) for the handoff and [the configuration contract](specification.md#52-configuration) for ownership and serialization. The Docker host supplies its own credential input channel. This option does not remove environment-configured provider strings.

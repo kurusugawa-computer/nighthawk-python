@@ -15,7 +15,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel, CodexModelSettings, _parse_codex_jsonl_lines
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.tools.registry import get_visible_tools
+from nighthawk.tools.declarations import get_visible_tools
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 

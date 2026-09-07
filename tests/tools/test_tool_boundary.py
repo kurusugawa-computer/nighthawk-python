@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections import namedtuple
 from collections.abc import Generator
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Annotated, Any, cast, get_args, get_origin
 
@@ -57,8 +58,8 @@ from nighthawk.tools.contracts import (
     ToolOutcome,
     render_tool_handler_result_preview_text,
 )
+from nighthawk.tools.declarations import get_visible_tools
 from nighthawk.tools.execution import ToolResultWrapperToolset
-from nighthawk.tools.registry import get_visible_tools
 from tests.execution.stub_executor import StubExecutor
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
@@ -100,6 +101,7 @@ def _call_wrapped_tool(
     name: str,
     function: Any,
     tool_args: dict[str, object] | None = None,
+    inherit_run: bool = False,
 ) -> object:
     run_context = _new_run_context()
     toolset = FunctionToolset([function])
@@ -108,7 +110,7 @@ def _call_wrapped_tool(
     async def run() -> object:
         tool_name_to_tool = await wrapped_toolset.get_tools(run_context)
         tool = tool_name_to_tool[name]
-        with set_current_run_context(run_context):
+        with nullcontext() if inherit_run else nh.run(StubExecutor()), set_current_run_context(run_context):
             return await wrapped_toolset.call_tool(name, tool_args or {}, run_context, tool)
 
     return anyio.run(run)
@@ -119,6 +121,7 @@ def _call_wrapped_tool_outcome(
     name: str,
     function: Any,
     tool_args: dict[str, object] | None = None,
+    inherit_run: bool = False,
 ) -> ToolOutcome:
     run_context = _new_run_context()
     toolset = FunctionToolset([function])
@@ -127,7 +130,7 @@ def _call_wrapped_tool_outcome(
     async def run() -> ToolOutcome:
         tool_name_to_tool = await wrapped_toolset.get_tools(run_context)
         tool = tool_name_to_tool[name]
-        with set_current_run_context(run_context):
+        with nullcontext() if inherit_run else nh.run(StubExecutor()), set_current_run_context(run_context):
             return await wrapped_toolset.call_tool_outcome(name, tool_args or {}, run_context, tool)
 
     return anyio.run(run)
@@ -273,7 +276,7 @@ def test_wrapper_call_tool_outcome_converts_oversight_rejection_to_tool_error() 
         return nh.oversight.Reject("human rejected tool")
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)):
-        tool_outcome = _call_wrapped_tool_outcome(name="test_denied_tool", function=test_denied_tool)
+        tool_outcome = _call_wrapped_tool_outcome(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
     assert tool_outcome["payload"] is None
     assert tool_outcome["error"] is not None
     assert tool_outcome["error"]["kind"] == "oversight"
@@ -291,7 +294,7 @@ def test_wrapper_call_tool_returns_error_envelope_for_oversight_rejection() -> N
         return nh.oversight.Reject("human rejected tool")
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)):
-        result = _call_wrapped_tool(name="test_denied_tool", function=test_denied_tool)
+        result = _call_wrapped_tool(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
 
     assert result == {
         "value": None,
@@ -860,7 +863,8 @@ def test_backend_handler_wraps_recoverable_tool_boundary_error() -> None:
         with set_current_run_context(run_context):
             return await handler({})
 
-    tool_handler_result = anyio.run(call_handler)
+    with nh.run(StubExecutor()):
+        tool_handler_result = anyio.run(call_handler)
     parsed = json.loads(_render_preview_text_for_test(tool_handler_result))
     assert parsed["value"] is None
     assert parsed["error"]["kind"] == "execution"
@@ -942,7 +946,8 @@ def test_provider_tool_loop_surfaces_tool_failure_as_standard_tool_result() -> N
         model_request_list = [message for message in result.all_messages() if isinstance(message, ModelRequest)]
         return result.output, model_request_list
 
-    output, model_request_list = anyio.run(run_agent)
+    with nh.run(StubExecutor()):
+        output, model_request_list = anyio.run(run_agent)
     assert output == "done"
     assert tool_call_count == 1
 

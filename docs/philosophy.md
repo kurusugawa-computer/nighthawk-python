@@ -118,11 +118,13 @@ Nighthawk keeps resilience in Python. The `nighthawk.resilience` primitives are 
 
 The host controls exactly which calls are retried, how many attempts are allowed, which exceptions trigger fallback, what gets logged, and what happens on exhaustion. This applies to lightweight provider-backed judgments and to autonomous coding-agent executions. See [Patterns](patterns.md#resilience-patterns) for examples.
 
+Hosts inspect one validated candidate per step. Acceptance preserves its values; explicit replacements are validated before final assignment. The read-only inspection mappings retain references to application values, so trusted hooks use rewrites rather than in-place mutations. Return expressions run once, and rejection cannot undo their side effects.
+
 ### Scoped execution contexts
 
 `run()` establishes the execution boundary by linking a step executor to the current context through an explicit Python `with` statement. `scope()` narrows configuration within an existing run: model override, prompt suffix, executor replacement, implicit references, or oversight.
 
-Nesting follows Python lexical structure. The host program's control flow, not a framework runtime, determines which configuration is active at any point. Runtime behavior lives in Python structures rather than in prose-only instructions or static configuration. See [Runtime configuration](runtime-configuration.md) for details.
+Configuration follows the active execution context and propagates through calls and async tasks using Python context variables. The host program's control flow, not a framework runtime, determines which configuration is active at any point. Runtime behavior lives in Python structures rather than in prose-only instructions or static configuration. See [Runtime configuration](runtime-configuration.md) for details.
 
 ### Tool exposure efficiency
 

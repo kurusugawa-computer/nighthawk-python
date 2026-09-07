@@ -2,7 +2,7 @@
 
 > This page assumes you have completed [Executors](executors.md).
 
-This page covers how to configure execution at runtime: scoping modes, prompt suffix fragments, context limits, JSON rendering, and execution identity. These settings are independent of executor choice and apply equally to Pydantic AI providers and coding agent backends.
+This page covers how to configure execution at runtime: scope composition, prompt suffix fragments, context limits, JSON rendering, and execution identity. These settings are independent of executor choice and apply equally to Pydantic AI providers and coding agent backends.
 
 ## Scoped overrides with `nh.scope()`
 
@@ -10,7 +10,7 @@ Use `nh.scope()` to override execution settings within an existing run. Each sco
 
 ```py
 with nh.run(step_executor):
-    # Inherit mode (default): merge/append into current scope state
+    # Replace the full executor configuration; omitted fields inherit scope state
     with nh.scope(
         step_executor_configuration=nh.StepExecutorConfiguration(
             model="openai-responses:gpt-5.6-luna",
@@ -18,10 +18,8 @@ with nh.run(step_executor):
     ) as scoped_executor:
         expensive_analysis(data)
 
-    # Replace mode: replace only explicitly provided values
-    # None means "no change". [] / {} means "clear".
+    # Replace explicitly provided values. [] / {} clear collections.
     with nh.scope(
-        mode="replace",
         system_prompt_suffix_fragments=["Always respond in formal English."],
         implicit_references={},
     ):
@@ -47,7 +45,6 @@ with nh.run(step_executor):
 
 Parameters:
 
-- `mode`: scope composition mode. Default: `"inherit"`.
 - `step_executor_configuration`: replace the entire configuration.
 - `step_executor`: replace the step executor entirely.
 - `usage_meter`: replace the `UsageMeter` that steps in this scope record into. See [Usage metering](#usage-metering).
@@ -58,22 +55,18 @@ Parameters:
 - `tools`: scope-level native tools. See [Scoped tools](#scoped-tools).
 - `capabilities`: scope-level Pydantic AI capabilities. See [Pydantic AI capabilities in scopes](#pydantic-ai-capabilities-in-scopes).
 
-Mode semantics:
+Composition is selected by each supplied value:
 
-- `mode="inherit"` (default):
-  - `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, `tools`, and `capabilities` are appended.
-  - `implicit_references` are merged additively with conflict checks.
-  - `tools` whose names collide with inherited or built-in tools raise `ToolRegistrationError`.
-- `mode="replace"`:
-  - `None` means no change.
-  - Explicit `[]` or `{}` clears inherited list/dict values.
-  - Explicit list/dict values (for example `[e1, e2]` or `{k1: v1, k2: v2}`) fully replace inherited values.
+- Omission or `nh.UNSET` inherits the parent value.
+- Ordinary values replace; `[]` and `{}` clear their collections.
+- `nh.Extend(sequence)` appends prompt fragments, tools, or capabilities.
+- `nh.Merge(mapping)` merges implicit references, rejecting a same-name value unless it is the identical Python object.
 
-For `oversight`, omitted means inherit the current hooks, while explicit `None` clears them for the nested scope. `usage_meter` is a plain replacement: `None` keeps the enclosing meter, and `mode` does not apply.
+Only `oversight` accepts `None`, which clears the hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Resolution errors leave the parent context intact.
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
-`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments for the whole run. In `mode="inherit"`, scope-level fragments are appended after configuration-level fragments.
+`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments for the whole run. Resolved scope fragments follow configuration-level baseline fragments. Clearing scope fragments preserves that configuration baseline.
 
 System prompt suffix fragments are rendered with the same `$tool_result_max_tokens` placeholder used by built-in prompt templates. Use `$$tool_result_max_tokens` if the literal text must appear in the final prompt.
 
@@ -92,26 +85,25 @@ with nh.run(step_executor):
         triage_issue(ticket_text)
 ```
 
-In `mode="inherit"` (default), nested scopes merge additively with conflict checks.
-In `mode="replace"`, explicit mappings fully replace inherited mappings.
+Mappings replace inherited references. Use `nh.Merge({"child": search_repository})` to add references with identity-based conflict checks.
 
 ```py
 with nh.run(step_executor), nh.scope(implicit_references={"parent": search_repository}):
-    with nh.scope(mode="replace", implicit_references={}):
+    with nh.scope(implicit_references={}):
         triage_issue(ticket_text)
 ```
 
 The inner scope above clears inherited implicit references.
 
 ```py
-with nh.scope(mode="replace", implicit_references={"child": search_repository}):
+with nh.scope(implicit_references={"child": search_repository}):
     triage_issue(ticket_text)
 ```
 
 This fully replaces inherited references with the provided mapping.
 
 ```py
-with nh.scope(mode="replace", implicit_references=None):
+with nh.scope(implicit_references=nh.UNSET):
     triage_issue(ticket_text)
 ```
 
@@ -138,7 +130,7 @@ with nh.run(step_executor):
 
 Each element is either a plain callable or a Pydantic AI `Tool`. A plain callable is wrapped with `Tool(callable)`: the tool name is the function name, the description is the docstring, and a leading `RunContext[StepContext]` parameter is detected automatically. Pass a `Tool` instance to override the name, description, or metadata.
 
-In `mode="inherit"` (default), tools are appended to those of enclosing scopes; a duplicate name raises `ToolRegistrationError`. In `mode="replace"`, the provided list fully replaces inherited tools, and `tools=[]` leaves only Nighthawk's built-in tools visible. Built-in tools are always visible and cannot be shadowed.
+A plain sequence replaces tools; `tools=[]` clears scoped declarations. `nh.Extend([lookup])` appends tools. Repeating an identical callable or exact `Tool` object is idempotent and retains the first normalized tool and order. Different wrappers conflict, even when they wrap the same callable. `ToolNameConflictError` is both a `ToolDeclarationError` and a `NameConflictError`. Built-in names remain reserved.
 
 `implicit_references` and `tools` have distinct roles. `implicit_references` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_tool_call`, and is served to coding-agent backends over MCP. Prefer `implicit_references` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
 
@@ -160,7 +152,7 @@ with nh.run(step_executor):
         triage_issue(ticket_text)
 ```
 
-Use capabilities to observe, gate, or instrument model requests with Pydantic AI's own hook vocabulary (`before_model_request`, `after_model_request`, `wrap_model_request`, and the rest of `AbstractCapability`). Nighthawk's `oversight` covers the two boundaries Nighthawk owns, tool calls and step commits; the model request boundary belongs to Pydantic AI. In `mode="inherit"`, capabilities are appended; in `mode="replace"`, the provided list replaces inherited capabilities.
+Use capabilities to observe, gate, or instrument model requests with Pydantic AI's own hook vocabulary (`before_model_request`, `after_model_request`, `wrap_model_request`, and the rest of `AbstractCapability`). Nighthawk's `oversight` covers the two boundaries Nighthawk owns, tool calls and step commits; the model request boundary belongs to Pydantic AI. Use `nh.Extend([capability])` to append capabilities; a plain list replaces them. Repeated capability entries are preserved.
 
 ## Prompt suffix fragments in scopes
 
@@ -179,26 +171,25 @@ with nh.scope(user_prompt_suffix_fragments=["Focus on actionable output."]):
     summarize_ticket(ticket_text)
 ```
 
-In `mode="inherit"`, provided lists are appended.
-In `mode="replace"`, provided lists fully replace inherited lists.
+Use `nh.Extend(["child"])` to append fragments; plain sequences replace inherited scope fragments.
 
 ```py
 with nh.run(step_executor), nh.scope(system_prompt_suffix_fragments=["parent"]):
-    with nh.scope(mode="replace", system_prompt_suffix_fragments=["child_1", "child_2"]):
+    with nh.scope(system_prompt_suffix_fragments=["child_1", "child_2"]):
         summarize_ticket(ticket_text)
 ```
 
 Pass `[]` to clear inherited fragments.
 
 ```py
-with nh.scope(mode="replace", system_prompt_suffix_fragments=[]):
+with nh.scope(system_prompt_suffix_fragments=[]):
     summarize_ticket(ticket_text)
 ```
 
-Pass `None` to keep inherited fragments unchanged.
+Omit the field or pass `nh.UNSET` to keep inherited fragments unchanged.
 
 ```py
-with nh.scope(mode="replace", system_prompt_suffix_fragments=None):
+with nh.scope(system_prompt_suffix_fragments=nh.UNSET):
     summarize_ticket(ticket_text)
 ```
 
@@ -217,14 +208,14 @@ Within an active `nh.run()` context, snapshot getters expose the current scope's
 
 The prompt suffix getters return only fragments accumulated via `nh.scope(...)`; configuration-level baseline fragments from `StepExecutorConfiguration` are not included.
 
-Use these when composing nested scopes from a host helper: read the parent state, derive a subset, then re-enter via `nh.scope(mode="replace", ...)`. Both narrowing (keeping a subset) and masking (removing specific keys) are expressed by deriving a new mapping and passing it under `mode="replace"`.
+Use these when composing nested scopes from a host helper: read the parent state, derive a subset, then re-enter via `nh.scope(...)`. Both narrowing (keeping a subset) and masking (removing specific keys) are expressed by deriving a new mapping and passing it as an ordinary mapping.
 
 ```py
 with nh.run(step_executor):
     with nh.scope(implicit_references={"a": helper_a, "b": helper_b}):
         current = nh.get_implicit_references()
         narrowed = {name: value for name, value in current.items() if name != "b"}
-        with nh.scope(mode="replace", implicit_references=narrowed):
+        with nh.scope(implicit_references=narrowed):
             triage_issue(ticket_text)
 ```
 
@@ -257,11 +248,40 @@ with nh.run(step_executor):
         inspected_step(ticket_text)
 ```
 
-`inspect_step_commit` runs after Nighthawk has validated the step: `StepCommit.binding_name_to_value` holds the write bindings after Pydantic validation and coercion, and `StepCommit.return_value` holds the resolved, validated return value for a `return` outcome (`None` otherwise). The hook therefore sees exactly what will be committed to Python. Executor output that fails validation raises `ExecutionError` before the hook is consulted; recovering from that is the job of [resilience](patterns.md#resilience-patterns), not oversight.
+`inspect_step_commit` receives one validated candidate. Its `binding_name_to_value` contains validated writes; `outcome` is `Pass`, `Return(value=...)`, `Break`, `Continue`, or `Raise(message=..., error_type=...)`. `Return(value=None)` is distinct from `Pass()`. Invalid initial results fail before inspection.
 
-`Rewrite` may replace `step_outcome`, `binding_name_to_value` (the whole mapping), or `return_value`. Only rewritten values are validated again, so each validator runs once per value. `return_value` is honored when the effective outcome is `return` and bypasses `return_expression` evaluation.
+`Rewrite` accepts `outcome`, `binding_name_to_value` (a complete replacement mapping), or `return_value`. Omitted fields use `nh.UNSET`. `Rewrite(return_value=None)` explicitly returns `None` when the function annotation permits it and the candidate already returns. Use `Rewrite(outcome=nh.oversight.Return(value=7))` to change an allowed pass to return. Supplying both return forms is invalid.
 
-Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections raise `nh.oversight.OversightRejectedError` to the host. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tool-boundary-contract-built-in-tooling).
+Acceptance preserves validated values without repeating validators. Replacements are validated before any final assignment, and inspection is not repeated. Bindings-only rewrites retain the already resolved return; its expression is evaluated and, when appropriate, awaited only once.
+
+Inspection mappings are shallow read-only reference views: their entries retain Python types and identity. Trusted hooks must not mutate referenced objects; use `Rewrite`. Copy or serialize explicitly for durable history. Rejection cannot roll back effects of tools, validators, or return expressions. See [Specification](specification.md#102-host-commit-boundary) for the complete contract.
+
+Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections raise `nh.oversight.OversightRejectedError` to the host. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
+
+## Caller-authenticated models
+
+A host can receive credentials in memory and construct a Pydantic AI Model before handing it to the ordinary managed executor:
+
+```py
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
+model = OpenAIResponsesModel("gpt-5.6-luna", provider=OpenAIProvider(api_key=credentials.api_key))
+configuration = nh.StepExecutorConfiguration(
+    model=model,
+    model_settings={"openai_store": False},
+    tokenizer_encoding="o200k_base",
+)
+executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+with nh.run(executor):
+    result = workflow()
+```
+
+Here `credentials` is supplied by the host. The host owns credential delivery, including Docker input channels, and the client lifetime. Nighthawk borrows the Model without extracting keys or transporting them through environment variables, process launch arguments, prompts, or its diagnostics. Pydantic AI may read environment variables; existing string-based provider authentication remains supported.
+
+Managed scopes can replace the Model, including with another instance of the same name, and restore the exact parent executor. For prompt-only changes, `configuration.model_copy(update={"prompts": nh.StepPromptTemplates(step_system_prompt_template="Updated instructions")})` retains the Model. Supply valid typed updates: `model_copy` does not validate them. External agents own model selection: `from_agent` rejects instance-valued configuration models, and scopes reject changes to their configured model string.
+
+Live Models are runtime resources, not portable settings. Configuration representations omit the model. Dumps containing it raise `PydanticSerializationError`; use `configuration.model_dump(exclude={"model"})` for partial settings. Explicit tokenizer encoding wins; otherwise the model name is used, with `o200k_base` as fallback. Configuration settings override Model defaults under Pydantic AI's usual precedence. Forwarding `openai_store=False` sets the request field; it does not certify remote retention behavior. The [specification](specification.md#52-configuration) owns this contract.
 
 ## Mixing executors
 
@@ -322,13 +342,13 @@ Use `run_id` to correlate distributed agent processes in logs and traces. Use `s
 Each `nh.run()` creates a `UsageMeter` that accumulates LLM token usage across all Natural block executions in the run. The meter is thread-safe and updated automatically after each step. Pass `nh.run(step_executor, usage_meter=meter)` to supply your own meter, and `nh.scope(usage_meter=meter)` to meter a nested section in isolation: steps inside the scope record into the scoped meter only, and totals are not forwarded to the enclosing meter.
 
 ```py
-meter = nh.get_current_usage_meter()  # None outside nh.run()
-if meter is not None:
-    meter.total_tokens  # cumulative input + output tokens
+with nh.run(step_executor):
+    meter = nh.get_usage_meter()
+    meter.total_tokens  # cumulative tokens
     meter.snapshot()  # independent RunUsage copy of current totals
 ```
 
-`get_current_usage_meter()` returns `None` outside an active `nh.run()` context. Use the meter to inspect cumulative cost at decision points -- for example, to choose a cheaper model mid-pipeline when spend is high. For automatic budget enforcement, see [Patterns: Budget](patterns.md#budget).
+`get_usage_meter()` requires an active `nh.run()` context. Use the meter to inspect cumulative cost at decision points -- for example, to choose a cheaper model mid-pipeline when spend is high. For automatic budget enforcement, see [Patterns: Budget](patterns.md#budget).
 
 ## Next steps
 

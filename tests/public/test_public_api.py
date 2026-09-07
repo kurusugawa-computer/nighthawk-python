@@ -85,7 +85,7 @@ def test_scope_configuration_replaces_executor_configuration():
             raise AssertionError
 
     configuration_1 = nh.StepExecutorConfiguration()
-    configuration_2 = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-terra")
+    configuration_2 = nh.StepExecutorConfiguration(user_prompt_suffix_fragments=("child",))
 
     with nh.run(
         nh.AgentStepExecutor.from_agent(
@@ -138,7 +138,7 @@ def test_scope_implicit_references_additive_across_nested_scopes() -> None:
         with nh.scope(implicit_references={"parent": parent_function}):
             assert nh.get_implicit_references() == {"parent": parent_function}
 
-            with nh.scope(implicit_references={"child": child_function, "parent": parent_function}):
+            with nh.scope(implicit_references=nh.Merge({"child": child_function, "parent": parent_function})):
                 assert nh.get_implicit_references() == {"parent": parent_function, "child": child_function}
 
             assert nh.get_implicit_references() == {"parent": parent_function}
@@ -154,7 +154,7 @@ def test_scope_implicit_references_rejects_conflicting_values_in_inherit_mode() 
             NighthawkError,
             match="Conflict for implicit reference",
         ),
-        nh.scope(implicit_references={"shared": object()}),
+        nh.scope(implicit_references=nh.Merge({"shared": object()})),
     ):
         pass
 
@@ -164,17 +164,17 @@ def test_scope_implicit_references_accepts_mapping() -> None:
         assert set(nh.get_implicit_references().keys()) == {"one", "two"}
 
 
-def test_scope_replace_mode_none_keeps_inherited_implicit_references() -> None:
+def test_scope_replace_mode_unset_keeps_inherited_implicit_references() -> None:
     parent_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(mode="replace", implicit_references=None):
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(implicit_references=nh.UNSET):
         assert nh.get_implicit_references() == {"parent": parent_function}
 
 
 def test_scope_replace_mode_explicit_empty_mapping_clears_implicit_references() -> None:
     parent_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(mode="replace", implicit_references={}):
+    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(implicit_references={}):
         assert nh.get_implicit_references() == {}
 
 
@@ -185,18 +185,18 @@ def test_scope_replace_mode_replaces_implicit_references_mapping() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(implicit_references={"parent": parent_function}),
-        nh.scope(mode="replace", implicit_references={"replacement": replacement_function}),
+        nh.scope(implicit_references={"replacement": replacement_function}),
     ):
         assert nh.get_implicit_references() == {"replacement": replacement_function}
 
 
-def test_scope_replace_mode_none_keeps_inherited_prompt_suffix_fragments() -> None:
-    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(mode="replace", system_prompt_suffix_fragments=None):
+def test_scope_replace_mode_unset_keeps_inherited_prompt_suffix_fragments() -> None:
+    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(system_prompt_suffix_fragments=nh.UNSET):
         assert nh.get_system_prompt_suffix_fragments() == ("parent",)
 
 
 def test_scope_replace_mode_explicit_empty_prompt_suffix_fragments_clears() -> None:
-    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(mode="replace", system_prompt_suffix_fragments=[]):
+    with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(system_prompt_suffix_fragments=[]):
         assert nh.get_system_prompt_suffix_fragments() == ()
 
 
@@ -204,14 +204,14 @@ def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(system_prompt_suffix_fragments=["parent"]),
-        nh.scope(mode="replace", system_prompt_suffix_fragments=["child_1", "child_2"]),
+        nh.scope(system_prompt_suffix_fragments=["child_1", "child_2"]),
     ):
         assert nh.get_system_prompt_suffix_fragments() == ("child_1", "child_2")
 
 
-def test_scope_mode_defaults_to_inherit() -> None:
+def test_scope_ordinary_mapping_replaces() -> None:
     with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": object()}), nh.scope(implicit_references={"child": object()}):
-        assert set(nh.get_implicit_references().keys()) == {"parent", "child"}
+        assert set(nh.get_implicit_references().keys()) == {"child"}
 
 
 def test_get_implicit_references_is_public() -> None:
@@ -247,7 +247,7 @@ def test_get_implicit_references_reflects_nested_replace_scope() -> None:
     with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
         assert nh.get_implicit_references() == {"parent": parent_function}
 
-        with nh.scope(mode="replace", implicit_references={"replacement": replacement_function}):
+        with nh.scope(implicit_references={"replacement": replacement_function}):
             assert nh.get_implicit_references() == {"replacement": replacement_function}
 
         assert nh.get_implicit_references() == {"parent": parent_function}
@@ -274,21 +274,21 @@ def test_scope_replace_mode_replaces_step_executor_configuration() -> None:
             raise AssertionError
 
     first_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
-    second_configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-terra")
+    second_configuration = nh.StepExecutorConfiguration(user_prompt_suffix_fragments=("child",))
 
     with (
         nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=first_configuration)),
-        nh.scope(mode="replace", step_executor_configuration=second_configuration),
+        nh.scope(step_executor_configuration=second_configuration),
     ):
         scoped_step_executor = nh.get_step_executor()
         assert isinstance(scoped_step_executor, AgentStepExecutor)
         assert scoped_step_executor.configuration == second_configuration
 
 
-def test_scope_replace_mode_none_keeps_inherited_step_executor() -> None:
+def test_scope_replace_mode_unset_keeps_inherited_step_executor() -> None:
     with nh.run(StubExecutor()):
         parent_step_executor = nh.get_step_executor()
-        with nh.scope(mode="replace", step_executor=None):
+        with nh.scope(step_executor=nh.UNSET):
             child_step_executor = nh.get_step_executor()
         assert child_step_executor is parent_step_executor
 
@@ -297,7 +297,7 @@ def test_scope_inherit_mode_appends_prompt_suffix_fragments() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(system_prompt_suffix_fragments=["parent"]),
-        nh.scope(mode="inherit", system_prompt_suffix_fragments=["child"]),
+        nh.scope(system_prompt_suffix_fragments=nh.Extend(["child"])),
     ):
         assert nh.get_system_prompt_suffix_fragments() == ("parent", "child")
 
@@ -307,16 +307,16 @@ def test_scope_inherit_mode_rejects_invalid_implicit_reference_conflicts() -> No
         nh.run(StubExecutor()),
         nh.scope(implicit_references={"shared": object()}),
         pytest.raises(NighthawkError, match="Conflict for implicit reference"),
-        nh.scope(mode="inherit", implicit_references={"shared": object()}),
+        nh.scope(implicit_references=nh.Merge({"shared": object()})),
     ):
         pass
 
 
 def test_scope_mode_validation_is_enforced_by_typing_contract() -> None:
     with nh.run(StubExecutor()):
-        with nh.scope(mode="inherit"):
+        with pytest.raises(TypeError), nh.scope(mode="inherit"):  # type: ignore[call-arg]
             pass
-        with nh.scope(mode="replace"):
+        with nh.scope():
             pass
 
 
@@ -668,8 +668,8 @@ def test_usage_meter_is_importable() -> None:
     assert hasattr(nh, "UsageMeter")
 
 
-def test_get_current_usage_meter_exists_on_module() -> None:
-    assert hasattr(nh, "get_current_usage_meter")
+def test_get_usage_meter_exists_on_module() -> None:
+    assert hasattr(nh, "get_usage_meter")
 
 
 def test_budget_exceeded_error_is_importable_from_resilience() -> None:
@@ -701,7 +701,8 @@ def test_host_integration_getters_are_public() -> None:
         assert hasattr(nh, name)
         assert name in nh.__all__
 
-    assert nh.get_oversight() is None
+    with nh.run(StubExecutor()):
+        assert nh.get_oversight() is None
     with nh.run(StubExecutor()):
         assert nh.get_tools() == ()
         assert nh.get_capabilities() == ()
