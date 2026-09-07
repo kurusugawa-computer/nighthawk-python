@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+import nighthawk as nh
 from nighthawk.configuration import StepExecutorConfiguration
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.runtime.step_executor import build_user_prompt
@@ -63,7 +64,7 @@ def _build_prompt(
     python_globals: dict[str, object] | None = None,
 ) -> str:
     step_context = StepContext(
-        step_id="test",
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test", "test"),
         step_globals=python_globals if python_globals is not None else {"__builtins__": builtins},
         step_locals=python_locals,
         binding_commit_targets=set(),

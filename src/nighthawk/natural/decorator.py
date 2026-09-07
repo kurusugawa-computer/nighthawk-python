@@ -6,10 +6,12 @@ import logging
 import sys
 import textwrap
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractContextManager
 from functools import wraps
+from types import FunctionType
 from typing import Any, cast
 
-from ..runtime.runner import Runner, StepEnvelope
+from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope, python_name_scope
 from .blocks import extract_program, find_natural_blocks
@@ -20,48 +22,10 @@ type NaturalFunctionCallable = Callable[..., Any]
 
 class _RunnerProxy:
     @staticmethod
-    def run_step(
-        natural_program: str,
-        input_binding_names: list[str],
-        output_binding_names: list[str],
-        binding_name_to_type: dict[str, object],
-        return_annotation: object,
-        is_in_loop: bool,
-    ) -> StepEnvelope:
+    def execution() -> AbstractContextManager[Runner]:
         caller_frame = sys._getframe(1)
-        current_step_executor = get_step_executor()
-        runner = Runner(current_step_executor)
-        return runner.run_step(
-            natural_program,
-            input_binding_names,
-            output_binding_names,
-            binding_name_to_type,
-            return_annotation,
-            is_in_loop,
-            caller_frame=caller_frame,
-        )
-
-    @staticmethod
-    async def run_step_async(
-        natural_program: str,
-        input_binding_names: list[str],
-        output_binding_names: list[str],
-        binding_name_to_type: dict[str, object],
-        return_annotation: object,
-        is_in_loop: bool,
-    ) -> StepEnvelope:
-        caller_frame = sys._getframe(1)
-        current_step_executor = get_step_executor()
-        runner = Runner(current_step_executor)
-        return await runner.run_step_async(
-            natural_program,
-            input_binding_names,
-            output_binding_names,
-            binding_name_to_type,
-            return_annotation,
-            is_in_loop,
-            caller_frame=caller_frame,
-        )
+        runner = Runner(get_step_executor())
+        return runner.execution(caller_frame=caller_frame)
 
 
 def _extract_inline_fstring_name_set(function_source: str, *, function_name: str) -> set[str]:
@@ -222,6 +186,7 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         original_module = ast.Module(body=[], type_ignores=[])
 
     capture_name_set = _build_capture_name_set(source, func.__name__)
+    capture_name_set.update(func.__code__.co_freevars)
 
     definition_frame = inspect.currentframe()
     name_to_value: dict[str, object] = {}
@@ -231,6 +196,13 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
             for name in capture_name_set:
                 if name in caller_frame.f_locals:
                     name_to_value[name] = caller_frame.f_locals[name]
+
+    original_name_to_cell = dict(zip(func.__code__.co_freevars, func.__closure__ or (), strict=True))
+    for name, cell in original_name_to_cell.items():
+        try:
+            name_to_value[name] = cell.cell_contents
+        except ValueError:
+            name_to_value[name] = None
 
     captured_name_tuple = tuple(sorted(capture_name_set))
 
@@ -266,6 +238,25 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
     transformed = factory(factory_name_to_value)
     if not callable(transformed):
         raise RuntimeError("Transformed function not found after factory execution")
+
+    if transformed.__closure__ is not None:
+        # Preserve original Python cells, including nonlocal writes and late rebinding.
+        transformed = FunctionType(
+            transformed.__code__,
+            transformed.__globals__,
+            transformed.__name__,
+            transformed.__defaults__,
+            tuple(
+                original_name_to_cell.get(name, cell)
+                for name, cell in zip(
+                    transformed.__code__.co_freevars,
+                    transformed.__closure__,
+                    strict=True,
+                )
+            ),
+        )
+        transformed.__kwdefaults__ = func.__kwdefaults__
+        transformed.__annotations__ = func.__annotations__
 
     transformed_freevar_name_set = set(transformed.__code__.co_freevars)
     captured_name_set = set(factory_name_to_value.keys())

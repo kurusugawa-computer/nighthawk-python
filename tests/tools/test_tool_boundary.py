@@ -67,7 +67,7 @@ _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
 def _new_step_context() -> StepContext:
     return StepContext(
-        step_id="test_tool_boundary",
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_tool_boundary", "test_tool_boundary"),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),
@@ -1037,7 +1037,7 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
     assert oversight_attributes["tool.name"] == "test_once_tool"
     assert oversight_attributes["run.id"]
     assert oversight_attributes["scope.id"]
-    assert oversight_attributes["step.id"] == "test_tool_boundary"
+    assert oversight_attributes["step.execution.id"] == "test_tool_boundary"
 
     tool_span_attributes = dict(tool_spans[0].attributes or {})
     trace_payload_candidates: list[dict[str, object]] = []
@@ -1180,7 +1180,7 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
     assert oversight_attributes["nighthawk.oversight.reason"] == "needs oversight"
     assert oversight_attributes["run.id"]
     assert oversight_attributes["scope.id"]
-    assert oversight_attributes["step.id"] == "test_tool_boundary"
+    assert oversight_attributes["step.execution.id"] == "test_tool_boundary"
 
 
 def test_mcp_boundary_low_level_mcp_server_returns_text_content_and_propagates_otel_context() -> None:

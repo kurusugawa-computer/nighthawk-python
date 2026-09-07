@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from .runtime.execution_reference import ExecutionReference
 from .runtime.step_context import StepContext
 from .runtime.step_contract import (
     BreakStepOutcome,
@@ -26,6 +27,7 @@ class StepCall:
     """Recorded information about a single Natural block execution.
 
     Attributes:
+        execution_reference: Invocation identity shared with oversight and terminal delivery.
         natural_program: The processed Natural block text (after frontmatter removal and interpolation).
         binding_names: Write binding names (``<:name>`` targets) requested by the Natural function.
         binding_name_to_type: Mapping from binding name to its expected type.
@@ -36,6 +38,7 @@ class StepCall:
         step_globals: Snapshot of referenced module-level names. Filtered to only names that appear as read bindings (``<name>``) and resolve from globals rather than locals.
     """
 
+    execution_reference: ExecutionReference
     natural_program: str
     binding_names: list[str]
     binding_name_to_type: dict[str, object]
@@ -69,6 +72,7 @@ def _build_step_call(
     ) - step_context.step_locals.keys()
     filtered_globals = {name: step_context.step_globals[name] for name in referenced_global_names if name in step_context.step_globals}
     return StepCall(
+        execution_reference=step_context.execution_reference,
         natural_program=processed_natural_program,
         binding_names=list(binding_names),
         binding_name_to_type=dict(step_context.binding_name_to_type),

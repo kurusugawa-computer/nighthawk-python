@@ -44,7 +44,7 @@ def build_step_context(
         input_binding_names=input_binding_names,
     )
     return StepContext(
-        step_id="test",
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test", "test"),
         step_globals=python_globals,
         step_locals=python_locals,
         binding_commit_targets=set(),

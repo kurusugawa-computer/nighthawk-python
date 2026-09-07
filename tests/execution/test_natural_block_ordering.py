@@ -44,7 +44,7 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
             result = 0
             return result
 
-        with pytest.raises(UnboundLocalError, match="later_value"):
+        with pytest.raises(nh.ExecutionError, match="later_value"):
             f()
 
 
@@ -76,7 +76,7 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
             Hello.
             """
 
-        with pytest.raises(NameError, match="missing"):
+        with pytest.raises(nh.ExecutionError, match="missing"):
             f()
 
 
@@ -142,14 +142,15 @@ def test_agent_backend_commits_only_on_assignment() -> None:
         frame = inspect.currentframe()
         assert frame is not None
 
-        envelope = runner.run_step(
-            "Hello.",
-            input_binding_names=[],
-            output_binding_names=["result"],
-            binding_name_to_type={},
-            return_annotation=int,
-            is_in_loop=False,
-            caller_frame=frame,
-        )
+        with runner.execution(caller_frame=frame):
+            envelope = runner.run_step(
+                "Hello.",
+                input_binding_names=[],
+                output_binding_names=["result"],
+                binding_name_to_type={},
+                return_annotation=int,
+                is_in_loop=False,
+                caller_frame=frame,
+            )
 
     assert envelope["bindings"] == {}

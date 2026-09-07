@@ -8,7 +8,7 @@ from opentelemetry.trace import get_current_span
 
 from .composition import UNSET, UnsetType
 from .errors import NighthawkError
-from .runtime.scoping import ExecutionRef
+from .runtime.execution_reference import ExecutionReference
 from .runtime.step_contract import StepKind
 from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
@@ -18,12 +18,17 @@ def _reference_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, obje
 
 
 class OversightRejectedError(NighthawkError):
-    """Raised when oversight rejects a tool call or step commit."""
+    """Raised when oversight explicitly rejects an execution boundary."""
+
+    def __init__(self, reason: str, *, subject: str = "tool_call") -> None:
+        self.reason = reason
+        self.subject = subject
+        super().__init__(reason)
 
 
 @dataclass(frozen=True)
 class ToolCall:
-    execution_ref: ExecutionRef
+    execution_reference: ExecutionReference
     tool_name: str
     argument_name_to_value: Mapping[str, object]
     processed_natural_program: str
@@ -46,7 +51,7 @@ class StepCommit:
     Rewrite for changes and copy or serialize explicitly for durable history.
     """
 
-    execution_ref: ExecutionRef
+    execution_reference: ExecutionReference
     processed_natural_program: str
     input_binding_name_to_value: Mapping[str, object]
     outcome: StepResult
@@ -76,6 +81,20 @@ class StepCommit:
             "binding_name_to_type",
             _reference_mapping(self.binding_name_to_type),
         )
+
+
+@dataclass(frozen=True)
+class ReturnExpression:
+    """Trusted expression approval before core evaluation, await, and validation."""
+
+    execution_reference: ExecutionReference
+    expression: str
+    expected_type: object
+    processed_natural_program: str
+    validated_binding_name_to_value: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "validated_binding_name_to_value", _reference_mapping(self.validated_binding_name_to_value))
 
 
 @dataclass(frozen=True)
@@ -121,6 +140,7 @@ type StepCommitDecision = Accept | Reject | Rewrite
 
 @dataclass(frozen=True)
 class Oversight:
+    inspect_return_expression: Callable[[ReturnExpression], Accept | Reject] | None = None
     inspect_tool_call: Callable[[ToolCall], ToolCallDecision] | None = None
     inspect_step_commit: Callable[[StepCommit], StepCommitDecision] | None = None
 
@@ -129,20 +149,21 @@ def record_oversight_decision(
     *,
     subject: str,
     verdict: str,
-    execution_ref: ExecutionRef,
+    execution_reference: ExecutionReference,
     tool_name: str | None = None,
     reason: str | None = None,
 ) -> None:
     current_span = get_current_span()
     if not current_span.is_recording():
         return
-    if execution_ref.step_id is None:
-        raise NighthawkError("Oversight decision events require ExecutionRef.step_id")
+    if execution_reference.step_execution_id is None:
+        raise NighthawkError("Oversight decision events require ExecutionReference.step_execution_id")
 
     attributes: dict[str, str] = {
-        "run.id": execution_ref.run_id,
-        "scope.id": execution_ref.scope_id,
-        "step.id": execution_ref.step_id,
+        "run.id": execution_reference.run_id,
+        "scope.id": execution_reference.scope_id,
+        "step.execution.id": execution_reference.step_execution_id,
+        "step.source_location": execution_reference.source_location or "",
         "nighthawk.oversight.subject": subject,
         "nighthawk.oversight.verdict": verdict,
     }
@@ -167,6 +188,7 @@ __all__ = [
     "Reject",
     "Rewrite",
     "StepCommit",
+    "ReturnExpression",
     "StepCommitDecision",
     "ToolCall",
     "ToolCallDecision",

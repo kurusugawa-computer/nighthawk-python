@@ -12,6 +12,12 @@ from .blocks import (
 )
 
 
+def _copy_generated_location(statement: ast.stmt, source: ast.AST) -> ast.stmt:
+    for child in ast.walk(statement):
+        ast.copy_location(child, source)
+    return statement
+
+
 class NaturalTransformer(ast.NodeTransformer):
     def __init__(self, *, captured_name_tuple: tuple[str, ...]) -> None:
         super().__init__()
@@ -58,7 +64,7 @@ class NaturalTransformer(ast.NodeTransformer):
                         sentinel_location.end_lineno = sentinel_location.lineno
                         sentinel_location.end_col_offset = sentinel_location.col_offset
 
-                        injected_with_location = [ast.copy_location(statement, sentinel_location) for statement in injected]
+                        injected_with_location = [_copy_generated_location(statement, sentinel_location) for statement in injected]
 
                         body_without_docstring = node.body[1:]
                         node.body = injected_with_location + body_without_docstring
@@ -201,7 +207,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 sentinel_location.end_lineno = sentinel_location.lineno
                 sentinel_location.end_col_offset = sentinel_location.col_offset
 
-                return [ast.copy_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
+                return [_copy_generated_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
         if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
             _validate_joined_string_bindings_do_not_span_formatted_values(value)
@@ -233,7 +239,7 @@ class NaturalTransformer(ast.NodeTransformer):
             sentinel_location.end_lineno = sentinel_location.lineno
             sentinel_location.end_col_offset = sentinel_location.col_offset
 
-            return [ast.copy_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
+            return [_copy_generated_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
         return node
 
@@ -300,7 +306,7 @@ def build_runtime_call_and_assignments(
     method_name = "run_step_async" if is_async_function else "run_step"
     call_expression = ast.Call(
         func=ast.Attribute(
-            value=ast.Name(id="__nighthawk_runner__", ctx=ast.Load()),
+            value=ast.Name(id="__nh_execution__", ctx=ast.Load()),
             attr=method_name,
             ctx=ast.Load(),
         ),
@@ -323,7 +329,16 @@ def build_runtime_call_and_assignments(
 
     # Add binding commit assignments (dynamic per output binding).
     for name in output_binding_names:
-        statements.extend(ast.parse(f'if "{name}" in __nh_bindings__:\n    {name} = __nh_bindings__["{name}"]\n').body)
+        statements.extend(
+            ast.parse(
+                f'if "{name}" in __nh_bindings__:\n    {name} = __nh_bindings__["{name}"]\n    __nh_execution__.record_assignment("{name}", {name})\n'
+            ).body
+        )
+
+    guarded = ast.parse("with __nighthawk_runner__.execution() as __nh_execution__:\n    pass\n").body[0]
+    assert isinstance(guarded, ast.With)
+    guarded.body = statements
+    statements = [guarded]
 
     # Add outcome extraction and dispatch.
     statements.extend(ast.parse('__nh_step_outcome__ = __nh_envelope__["outcome"]').body)

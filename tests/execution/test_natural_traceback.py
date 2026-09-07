@@ -24,7 +24,7 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
         try:
             f()
             pytest.fail("Expected NameError")
-        except NameError as e:
+        except nh.ExecutionError as e:
             error = e
 
     frames = inspect.getinnerframes(error.__traceback__)  # type: ignore
@@ -69,7 +69,7 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
         try:
             f()
             pytest.fail("Expected NameError")
-        except NameError as e:
+        except nh.ExecutionError as e:
             error = e
 
     frames = inspect.getinnerframes(error.__traceback__)  # type: ignore
@@ -139,7 +139,7 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
         try:
             f()
             pytest.fail("Expected RuntimeError")
-        except RuntimeError as e:
+        except nh.ExecutionError as e:
             error = e
 
     frames = inspect.getinnerframes(error.__traceback__)  # type: ignore[arg-type]

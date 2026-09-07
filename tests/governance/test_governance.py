@@ -75,7 +75,7 @@ def test_scope_rejects_removed_governance_keyword() -> None:
         pass
 
 
-def test_step_commit_reject_raises_without_failed_step_trace(step_span_exporter: InMemorySpanExporter) -> None:
+def test_step_commit_reject_records_failed_step_trace(step_span_exporter: InMemorySpanExporter) -> None:
     def reject_step(review: nh.oversight.StepCommit) -> nh.oversight.Reject:
         _ = review
         return nh.oversight.Reject("host rejected step")
@@ -90,19 +90,19 @@ def test_step_commit_reject_raises_without_failed_step_trace(step_span_exporter:
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        with pytest.raises(nh.oversight.OversightRejectedError, match="host rejected step"):
+        with pytest.raises(nh.ExecutionError, match="host rejected step"):
             natural_value_function()
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
-    assert len(step_span.events) == 1
+    assert [event.name for event in step_span.events] == ["nighthawk.oversight.decision", "nighthawk.step.failed", "exception"]
     oversight_event = step_span.events[0]
     assert oversight_event.name == "nighthawk.oversight.decision"
     oversight_attributes = dict(oversight_event.attributes or {})
     assert oversight_attributes["nighthawk.oversight.subject"] == "step_commit"
     assert oversight_attributes["nighthawk.oversight.verdict"] == "reject"
     assert oversight_attributes["nighthawk.oversight.reason"] == "host rejected step"
-    assert str(oversight_attributes["step.id"]).startswith("test_governance:")
-    assert step_span.status.status_code != StatusCode.ERROR
+    assert str(oversight_attributes["step.source_location"]).startswith("test_governance:")
+    assert step_span.status.status_code == StatusCode.ERROR
 
 
 def test_step_commit_async_rewrite_updates_return_value() -> None:

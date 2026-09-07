@@ -23,13 +23,14 @@
         - StepContextLimits
         - JsonableValue
         - to_jsonable_value
-        - ExecutionRef
+        - ExecutionReference
         - get_capabilities
         - get_step_context
         - get_usage_meter
-        - get_execution_ref
+        - get_execution_reference
         - get_implicit_references
         - get_oversight
+        - get_lifecycle
         - get_step_executor
         - get_system_prompt_suffix_fragments
         - get_tools
@@ -37,6 +38,7 @@
         - resilience
         - UsageMeter
         - oversight
+        - lifecycle
 
 ## Errors
 
@@ -147,6 +149,7 @@
         - Raise
         - StepResult
         - StepCommit
+        - ReturnExpression
         - Rewrite
         - Accept
         - Reject
@@ -155,3 +158,17 @@
         - OversightRejectedError
         - StepCommitDecision
         - ToolCallDecision
+
+## Lifecycle
+
+::: nighthawk.lifecycle
+    options:
+      members:
+        - StepLifecycle
+        - StepFinished
+        - StepCompleted
+        - StepRaised
+        - StepFailed
+        - StepInterrupted
+        - FailureStage
+        - StepDeliveryError

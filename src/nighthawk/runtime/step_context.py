@@ -8,6 +8,7 @@ from types import CellType
 
 from ..errors import NighthawkError
 from ..json_renderer import JsonRendererStyle
+from .execution_reference import ExecutionReference
 
 _MISSING: object = object()
 """Sentinel indicating a name could not be resolved. Distinct from None."""
@@ -42,7 +43,7 @@ class StepContext:
     Direct dict writes bypass revision tracking, ``assigned_binding_names``, and ``dirty_output_binding_names`` bookkeeping, which will cause incorrect commit behavior at Natural block boundaries.
     """
 
-    step_id: str
+    execution_reference: ExecutionReference
 
     step_globals: dict[str, object]
     step_locals: dict[str, object]

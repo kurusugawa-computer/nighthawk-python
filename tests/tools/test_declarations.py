@@ -20,8 +20,8 @@ def greet(target: str) -> str:
     return f"hello, {target}"
 
 
-def read_step_id(run_context: RunContext[StepContext]) -> str:
-    return run_context.deps.step_id
+def read_step_execution_id(run_context: RunContext[StepContext]) -> str:
+    return run_context.deps.execution_reference.step_execution_id or ""
 
 
 def test_builtin_tools_are_always_visible() -> None:
@@ -52,11 +52,11 @@ def test_scope_tools_are_visible_only_inside_the_scope() -> None:
 
 
 def test_plain_callable_is_wrapped_with_pydantic_ai_tool_defaults() -> None:
-    with nh.run(StubExecutor()), nh.scope(tools=[greet, read_step_id]):
+    with nh.run(StubExecutor()), nh.scope(tools=[greet, read_step_execution_id]):
         tool_name_to_tool = {tool.name: tool for tool in nh.get_tools()}
         assert tool_name_to_tool["greet"].description == "Return a greeting."
         assert tool_name_to_tool["greet"].takes_ctx is False
-        assert tool_name_to_tool["read_step_id"].takes_ctx is True
+        assert tool_name_to_tool["read_step_execution_id"].takes_ctx is True
 
 
 def test_tool_instance_keeps_custom_name_and_description() -> None:
@@ -70,14 +70,14 @@ def test_tool_instance_keeps_custom_name_and_description() -> None:
 
 
 def test_inherit_mode_appends_tools_from_outer_scopes() -> None:
-    with nh.run(StubExecutor()), nh.scope(tools=[greet]), nh.scope(tools=nh.Extend([read_step_id])):
-        assert [tool.name for tool in nh.get_tools()] == ["greet", "read_step_id"]
+    with nh.run(StubExecutor()), nh.scope(tools=[greet]), nh.scope(tools=nh.Extend([read_step_execution_id])):
+        assert [tool.name for tool in nh.get_tools()] == ["greet", "read_step_execution_id"]
 
 
 def test_replace_mode_hides_outer_tools() -> None:
     with nh.run(StubExecutor()), nh.scope(tools=[greet]):
-        with nh.scope(tools=[read_step_id]):
-            assert [tool.name for tool in nh.get_tools()] == ["read_step_id"]
+        with nh.scope(tools=[read_step_execution_id]):
+            assert [tool.name for tool in nh.get_tools()] == ["read_step_execution_id"]
             assert "greet" not in _visible_tool_name_set()
 
         with nh.scope(tools=nh.UNSET):
@@ -91,7 +91,7 @@ def test_duplicate_tool_name_raises_in_inherit_mode() -> None:
         nh.run(StubExecutor()),
         nh.scope(tools=[greet]),
         pytest.raises(ToolDeclarationError, match="Tool name conflict"),
-        nh.scope(tools=nh.Extend([Tool(read_step_id, name="greet")])),
+        nh.scope(tools=nh.Extend([Tool(read_step_execution_id, name="greet")])),
     ):
         pass
 
@@ -100,7 +100,7 @@ def test_duplicate_tool_name_within_one_scope_raises() -> None:
     with (
         nh.run(StubExecutor()),
         pytest.raises(ToolDeclarationError, match="Tool name conflict"),
-        nh.scope(tools=[greet, Tool(read_step_id, name="greet")]),
+        nh.scope(tools=[greet, Tool(read_step_execution_id, name="greet")]),
     ):
         pass
 

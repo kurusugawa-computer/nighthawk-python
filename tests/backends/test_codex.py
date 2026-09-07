@@ -335,7 +335,9 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
 
     with nh.run(step_executor):
         step_context = StepContext(
-            step_id="test_codex_model_contract_calls_tool_via_mcp",
+            execution_reference=nh.ExecutionReference(
+                "test-run", "test-scope", "test_codex_model_contract_calls_tool_via_mcp", "test_codex_model_contract_calls_tool_via_mcp"
+            ),
             step_globals={"__builtins__": __builtins__},
             step_locals={},
             binding_commit_targets=set(),
@@ -382,7 +384,12 @@ def test_codex_model_projects_multimodal_prompt_files_into_working_directory(tmp
     codex_executable = _write_executable_codex_prompt_echo_stub(directory=tmp_path)
 
     step_context = StepContext(
-        step_id="test_codex_model_projects_multimodal_prompt_files_into_working_directory",
+        execution_reference=nh.ExecutionReference(
+            "test-run",
+            "test-scope",
+            "test_codex_model_projects_multimodal_prompt_files_into_working_directory",
+            "test_codex_model_projects_multimodal_prompt_files_into_working_directory",
+        ),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),
@@ -428,7 +435,12 @@ def test_codex_model_projects_multimodal_prompt_files_into_current_working_direc
     monkeypatch.chdir(current_working_directory)
 
     step_context = StepContext(
-        step_id="test_codex_model_projects_multimodal_prompt_files_into_current_working_directory_when_unset",
+        execution_reference=nh.ExecutionReference(
+            "test-run",
+            "test-scope",
+            "test_codex_model_projects_multimodal_prompt_files_into_current_working_directory_when_unset",
+            "test_codex_model_projects_multimodal_prompt_files_into_current_working_directory_when_unset",
+        ),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         binding_commit_targets=set(),

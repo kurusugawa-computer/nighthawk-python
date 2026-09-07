@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
 from typing import Any
 
 from pydantic import TypeAdapter
@@ -25,7 +24,6 @@ from ..oversight import (
 )
 from ..runtime._user_content import is_top_level_sequence_payload
 from ..runtime.scoping import (
-    get_execution_ref,
     get_oversight,
 )
 from ..runtime.step_context import StepContext
@@ -152,15 +150,12 @@ def _inspect_tool_call_if_needed(
     step_context = run_context.deps
     if not isinstance(step_context, StepContext):
         raise NighthawkError("Oversight tool inspection requires StepContext dependencies")
-    if not step_context.step_id:
-        raise NighthawkError("Oversight tool inspection requires StepContext.step_id")
+    if not step_context.execution_reference.step_execution_id:
+        raise NighthawkError("Oversight tool inspection requires StepContext.execution_reference.step_execution_id")
 
-    execution_ref = replace(
-        get_execution_ref(),
-        step_id=step_context.step_id,
-    )
+    execution_reference = step_context.execution_reference
     tool_call = ToolCall(
-        execution_ref=execution_ref,
+        execution_reference=execution_reference,
         tool_name=tool_name,
         argument_name_to_value=argument_name_to_value,
         processed_natural_program=step_context.processed_natural_program,
@@ -171,7 +166,7 @@ def _inspect_tool_call_if_needed(
         record_oversight_decision(
             subject="tool_call",
             verdict="reject",
-            execution_ref=execution_ref,
+            execution_reference=execution_reference,
             tool_name=tool_name,
             reason=decision.reason,
         )
@@ -182,7 +177,7 @@ def _inspect_tool_call_if_needed(
     record_oversight_decision(
         subject="tool_call",
         verdict="accept",
-        execution_ref=execution_ref,
+        execution_reference=execution_reference,
         tool_name=tool_name,
         reason=decision.reason,
     )

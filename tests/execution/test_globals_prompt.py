@@ -290,7 +290,7 @@ def test_prompt_context_token_truncation_emits_audit_log(monkeypatch) -> None:
     assert "'nighthawk.prompt_context.section': 'locals'" in message
     assert "'nighthawk.prompt_context.reason': 'token_limit'" in message
     assert "'nighthawk.prompt_context.max_tokens': 10" in message
-    assert "'step.id': 'test'" in message
+    assert "'step.execution.id': 'test'" in message
 
 
 def test_custom_user_prompt_template_preserves_multimodal_placeholder_order() -> None:

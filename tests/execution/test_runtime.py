@@ -63,8 +63,8 @@ def global_import_file(file_path: Path | str) -> str:
     return '{"step_outcome": {"kind": "pass"}, "bindings": {"result": 20}}'
 
 
-def test_sync_step_execution_sets_execution_ref_step_id() -> None:
-    observed_step_ids: list[str | None] = []
+def test_sync_step_execution_sets_execution_reference_step_execution_id() -> None:
+    observed_step_execution_ids: list[str | None] = []
 
     @dataclass
     class StepIdAssertingExecutor:
@@ -79,8 +79,8 @@ def test_sync_step_execution_sets_execution_ref_step_id() -> None:
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_step_kinds
-            observed_step_ids.append(nh.get_execution_ref().step_id)
-            assert nh.get_execution_ref().step_id == step_context.step_id
+            observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
+            assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
             return PassStepOutcome(kind="pass"), {"result": 11}
 
     with nh.run(StepIdAssertingExecutor()):
@@ -95,11 +95,11 @@ def test_sync_step_execution_sets_execution_ref_step_id() -> None:
             _ = x
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        assert nh.get_execution_ref().step_id is None
+        assert nh.get_execution_reference().step_execution_id is None
         assert f(10) == 11
-        assert nh.get_execution_ref().step_id is None
+        assert nh.get_execution_reference().step_execution_id is None
 
-    assert observed_step_ids and observed_step_ids[0] is not None
+    assert observed_step_execution_ids and observed_step_execution_ids[0] is not None
 
 
 def test_natural_function_updates_output_binding_via_docstring_step():
@@ -203,8 +203,8 @@ def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
             f()
 
 
-def test_async_step_execution_sets_execution_ref_step_id() -> None:
-    observed_step_ids: list[str | None] = []
+def test_async_step_execution_sets_execution_reference_step_execution_id() -> None:
+    observed_step_execution_ids: list[str | None] = []
 
     @dataclass
     class AsyncStepIdAssertingExecutor:
@@ -219,8 +219,8 @@ def test_async_step_execution_sets_execution_ref_step_id() -> None:
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_step_kinds
-            observed_step_ids.append(nh.get_execution_ref().step_id)
-            assert nh.get_execution_ref().step_id == step_context.step_id
+            observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
+            assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
             return PassStepOutcome(kind="pass"), {"result": 13}
 
     with nh.run(AsyncStepIdAssertingExecutor()):
@@ -233,11 +233,11 @@ def test_async_step_execution_sets_execution_ref_step_id() -> None:
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        assert nh.get_execution_ref().step_id is None
+        assert nh.get_execution_reference().step_execution_id is None
         assert asyncio.run(f()) == 13
-        assert nh.get_execution_ref().step_id is None
+        assert nh.get_execution_reference().step_execution_id is None
 
-    assert observed_step_ids and observed_step_ids[0] is not None
+    assert observed_step_execution_ids and observed_step_execution_ids[0] is not None
 
 
 def test_async_natural_function_awaits_awaitable_return_value_from_step_executor():

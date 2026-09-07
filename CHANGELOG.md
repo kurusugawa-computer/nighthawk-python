@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Scoped `nh.lifecycle.StepLifecycle` delivers typed completion, DSL raise, failure, or interruption records after generated caller assignments. Hosts can record one terminal event and translate failures with explicit exception chaining.
+- `Oversight.inspect_return_expression` approves expressions before core evaluation, await, and return validation.
+- `StepDeliveryError` supports host storage adapters without claiming persistence succeeded.
+
+### Changed
+
+- `ExecutionReference` and `get_execution_reference` replace the abbreviated identity API. `step_execution_id` identifies each invocation; `source_location` identifies its source. StepContext, inspection, testing observations, terminal records, and spans share this identity.
+- Runtime internal exceptions, including preparation and await failures, now propagate through `ExecutionError.step_failed` with the original exception as cause. Rejection is a classified failure. DSL exceptions remain distinct.
+- Completion tracing follows actual caller assignments. Cancellation retains priority if terminal delivery fails. Delivery errors never retry execution or undo effects.
+- Natural functions preserve original closure cells for nonlocal assignments and source locations for generated execution.
+
+### Removed
+
+- `ExecutionRef`, `get_execution_ref`, and `step_id`, without compatibility aliases. Span attributes use `step.execution.id` and `step.source_location`.
+
 ## [0.13.0]
 
 ### Added

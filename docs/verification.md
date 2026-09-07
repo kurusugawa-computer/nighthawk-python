@@ -230,7 +230,7 @@ Each Nighthawk execution produces a tree of spans:
 |---|---|---|
 | `nighthawk.run` | `nh.run()` context manager | `run.id` |
 | `nighthawk.scope` | `nh.scope()` context manager | `scope.id` |
-| `nighthawk.step` | Each Natural block execution | `step.id` (format: `python_module:line`) |
+| `nighthawk.step` | Each Natural block execution | `step.execution.id` (invocation), `step.source_location` (`python_module:line`) |
 | `nighthawk.step_executor` | The step executor's LLM call | -- |
 
 ### Step events
@@ -270,3 +270,5 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python my_script.py
 Traces appear in the terminal UI in real time.
 
 See [Specification Section 10.1](specification.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
+
+For authoritative execution history, install [terminal delivery](runtime-configuration.md#record-completed-executions). StepCompleted is delivered after caller assignments; StepFailed includes return-await failures and their stage. Tracing is optional and independent of ledger recording. A delivery failure can add `nighthawk.step.delivery_failed`, but never a second execution terminal event. Cancellation is recorded separately as `nighthawk.step.interrupted`.

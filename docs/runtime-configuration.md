@@ -49,7 +49,8 @@ Parameters:
 - `step_executor_configuration`: replace the entire configuration.
 - `step_executor`: replace the step executor entirely.
 - `usage_meter`: replace the `UsageMeter` that steps in this scope record into. See [Usage metering](#usage-metering).
-- `oversight`: scope-level synchronous tool-call inspection and step-commit inspection hooks.
+- `oversight`: scope-level synchronous tool-call, return-expression, and resolved step-commit inspection hooks.
+- `lifecycle`: synchronous terminal delivery after caller assignments.
 - `system_prompt_suffix_fragments`: scope-level system suffix fragments.
 - `user_prompt_suffix_fragments`: scope-level user suffix fragments.
 - `implicit_references`: scope-level implicit global references.
@@ -63,7 +64,7 @@ Composition is selected by each supplied value:
 - `nh.Extend(sequence)` appends prompt fragments, tools, or capabilities.
 - `nh.Merge(mapping)` merges implicit references, rejecting a same-name value unless it is the identical Python object.
 
-Only `oversight` accepts `None`, which clears the hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Resolution errors leave the parent context intact.
+`oversight` and `lifecycle` accept `None`, which clears their hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Resolution errors leave the parent context intact.
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
@@ -119,13 +120,13 @@ from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 
-def read_step_id(run_context: RunContext[nh.StepContext]) -> str:
+def read_step_execution_id(run_context: RunContext[nh.StepContext]) -> str:
     """Return the current step Id."""
-    return run_context.deps.step_id
+    return run_context.deps.execution_reference.step_execution_id or ""
 
 
 with nh.run(step_executor):
-    with nh.scope(tools=[read_step_id, Tool(lookup_user, name="find_user")]):
+    with nh.scope(tools=[read_step_execution_id, Tool(lookup_user, name="find_user")]):
         triage_issue(ticket_text)
 ```
 
@@ -153,7 +154,7 @@ with nh.run(step_executor):
         triage_issue(ticket_text)
 ```
 
-Use capabilities to observe, gate, or instrument model requests with Pydantic AI's own hook vocabulary (`before_model_request`, `after_model_request`, `wrap_model_request`, and the rest of `AbstractCapability`). Nighthawk's `oversight` covers the two boundaries Nighthawk owns, tool calls and step commits; the model request boundary belongs to Pydantic AI. Use `nh.Extend([capability])` to append capabilities; a plain list replaces them. Repeated capability entries are preserved.
+Use capabilities to observe, gate, or instrument model requests with Pydantic AI's own hook vocabulary (`before_model_request`, `after_model_request`, `wrap_model_request`, and the rest of `AbstractCapability`). Nighthawk's `oversight` covers tool calls, return-expression approval, and resolved step commits; the model request boundary belongs to Pydantic AI. Use `nh.Extend([capability])` to append capabilities; a plain list replaces them. Repeated capability entries are preserved.
 
 ## Prompt suffix fragments in scopes
 
@@ -205,6 +206,7 @@ Within an active `nh.run()` context, snapshot getters expose the current scope's
 - `nh.get_user_prompt_suffix_fragments()` returns the user prompt suffix fragments as a `tuple[str, ...]`.
 - `nh.get_tools()` returns the scoped native tools as a `tuple[Tool[StepContext], ...]`, excluding built-in tools.
 - `nh.get_capabilities()` returns the scoped Pydantic AI capabilities as a tuple.
+- `nh.get_lifecycle()` returns the active `StepLifecycle`, or `None`.
 - `nh.get_oversight()` returns the active `Oversight`, or `None` when none is installed.
 
 The prompt suffix getters return only fragments accumulated via `nh.scope(...)`; configuration-level baseline fragments from `StepExecutorConfiguration` are not included.
@@ -221,6 +223,29 @@ with nh.run(step_executor):
 ```
 
 All getters listed above, including `nh.get_oversight()`, require an active run context. Outside `nh.run()` they raise `NighthawkError`, matching `nh.get_step_executor()` semantics. Catch `NighthawkError` if a helper needs to detect the absence of a run.
+
+## Record completed executions
+
+Install `nh.lifecycle.StepLifecycle` to record actual execution endings, including preparation, validation, and return-await failures. The callback runs after generated assignments and can raise a host exception referring to its stored record. Return-expression approval is available separately through `Oversight.inspect_return_expression`; core retains evaluation and validation.
+
+```python
+import nighthawk as nh
+
+execution_id_to_event: dict[str, nh.lifecycle.StepFinished] = {}
+
+
+def record_finished(event: nh.lifecycle.StepFinished) -> None:
+    execution_id = event.execution_reference.step_execution_id
+    assert execution_id is not None
+    execution_id_to_event[execution_id] = event
+
+
+# Inside an active nh.run(executor):
+with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(record_finished)):
+    result = my_natural_function()
+```
+
+This example is an in-memory history. Durable storage, serialization, and deduplication belong to the host. Callback failures do not roll back assignments or retry execution. See [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers) for exception chaining, cancellation, and storage failure handling.
 
 ## Synchronous oversight in scopes
 
@@ -257,7 +282,7 @@ Acceptance preserves validated values without repeating validators. Replacements
 
 Inspection mappings are shallow read-only reference views: their entries retain Python types and identity. Trusted hooks must not mutate referenced objects; use `Rewrite`. Copy or serialize explicitly for durable history. Rejection cannot roll back effects of tools, validators, or return expressions. See [Specification](specification.md#102-host-commit-boundary) for the complete contract.
 
-Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections raise `nh.oversight.OversightRejectedError` to the host. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
+Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections produce a failed terminal record and raise `nh.ExecutionError` chained from `nh.oversight.OversightRejectedError`, unless the lifecycle callback supplies a host exception. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
 
 ## Caller-authenticated models
 
@@ -327,13 +352,14 @@ See [Specification Section 8.2](specification.md#82-prompt-context) for the full
 
 ## Runtime execution identity
 
-Each `nh.run()` generates an `ExecutionRef` with a unique `run_id` (trace root) and `scope_id`. Nested `nh.scope()` calls generate new `scope_id` values while keeping the same `run_id`.
+Each `nh.run()` generates an `ExecutionReference` with a unique `run_id` (trace root) and `scope_id`. Nested `nh.scope()` calls generate new `scope_id` values while keeping the same `run_id`.
 
 ```py
-execution_ref = nh.get_execution_ref()
-execution_ref.run_id  # trace root -- stable across nested scopes
-execution_ref.scope_id  # current scope -- changes with each nh.scope()
-execution_ref.step_id  # None outside active step execution
+execution_reference = nh.get_execution_reference()
+execution_reference.run_id  # trace root -- stable across nested scopes
+execution_reference.scope_id  # current scope -- changes with each nh.scope()
+execution_reference.step_execution_id  # Unique per invocation; None outside a step
+execution_reference.source_location  # Source module and line; None outside a step
 ```
 
 Use `run_id` to correlate distributed agent processes in logs and traces. Use `scope_id` to identify the current logical execution context. See [Specification Section 10](specification.md#10-runtime-scoping) for the full specification and [Verification: observability](verification.md#observability) for tracing integration.

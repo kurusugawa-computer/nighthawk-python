@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import copy
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from opentelemetry.trace import Span, get_tracer_provider
@@ -18,20 +18,15 @@ from ..configuration import StepExecutorConfiguration
 from ..errors import NameConflictError, NighthawkError
 from ..tools.declarations import ToolEntry, get_scoped_tools, resolve_scoped_tools, scoped_tools_var
 from ..ulid import generate_ulid
+from .execution_reference import ExecutionReference
 
 if TYPE_CHECKING:
     from pydantic_ai.tools import Tool
 
+    from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
     from .step_context import StepContext
     from .step_executor import AgentStepExecutor, StepExecutor
-
-
-@dataclass(frozen=True)
-class ExecutionRef:
-    run_id: str
-    scope_id: str
-    step_id: str | None = None
 
 
 class UsageMeter:
@@ -69,7 +64,8 @@ class UsageMeter:
 
 RUN_ID = "run.id"
 SCOPE_ID = "scope.id"
-STEP_ID = "step.id"
+STEP_EXECUTION_ID = "step.execution.id"
+SOURCE_LOCATION = "step.source_location"
 TOOL_CALL_ID = "tool_call.id"
 
 
@@ -94,8 +90,8 @@ _step_executor_var: ContextVar[StepExecutor | None] = ContextVar(
     default=None,
 )
 
-_execution_ref_var: ContextVar[ExecutionRef | None] = ContextVar(
-    "nighthawk_execution_ref",
+_execution_reference_var: ContextVar[ExecutionReference | None] = ContextVar(
+    "nighthawk_execution_reference",
     default=None,
 )
 
@@ -103,6 +99,9 @@ _usage_meter_var: ContextVar[UsageMeter | None] = ContextVar(
     "nighthawk_usage_meter",
     default=None,
 )
+
+
+_lifecycle_var: ContextVar[StepLifecycle | None] = ContextVar("nighthawk_lifecycle", default=None)
 
 
 _oversight_var: ContextVar[Oversight | None] = ContextVar(
@@ -173,16 +172,16 @@ def get_step_executor() -> StepExecutor:
     return step_executor
 
 
-def get_execution_ref() -> ExecutionRef:
+def get_execution_reference() -> ExecutionReference:
     """Return the active execution identity.
 
     Raises:
         NighthawkError: If no execution identity is set (i.e. called outside a run context).
     """
-    execution_ref = _execution_ref_var.get()
-    if execution_ref is None:
-        raise NighthawkError("ExecutionRef is not set")
-    return execution_ref
+    execution_reference = _execution_reference_var.get()
+    if execution_reference is None:
+        raise NighthawkError("ExecutionReference is not set")
+    return execution_reference
 
 
 def _optional_usage_meter() -> UsageMeter | None:
@@ -203,15 +202,21 @@ def get_oversight() -> Oversight | None:
     return _oversight_var.get()
 
 
+def get_lifecycle() -> StepLifecycle | None:
+    """Return the current terminal delivery configuration; require an active run."""
+    _require_active_run("get_lifecycle")
+    return _lifecycle_var.get()
+
+
 @contextmanager
-def step_execution_ref_scope(*, step_id: str) -> Iterator[ExecutionRef]:
-    current_execution_ref = get_execution_ref()
-    step_execution_ref = replace(current_execution_ref, step_id=step_id)
-    step_execution_ref_token = _execution_ref_var.set(step_execution_ref)
+def step_execution_reference_scope(*, source_location: str) -> Iterator[ExecutionReference]:
+    current_execution_reference = get_execution_reference()
+    step_execution_reference = replace(current_execution_reference, step_execution_id=generate_ulid(), source_location=source_location)
+    step_execution_reference_token = _execution_reference_var.set(step_execution_reference)
     try:
-        yield step_execution_ref
+        yield step_execution_reference
     finally:
-        _execution_ref_var.reset(step_execution_ref_token)
+        _execution_reference_var.reset(step_execution_reference_token)
 
 
 def _current_system_prompt_suffix_fragments() -> tuple[str, ...]:
@@ -373,17 +378,19 @@ def run(
             result = my_natural_function()
         ```
     """
-    execution_ref = ExecutionRef(
+    execution_reference = ExecutionReference(
         run_id=run_id or generate_ulid(),
         scope_id=generate_ulid(),
-        step_id=None,
+        step_execution_id=None,
+        source_location=None,
     )
     if not isinstance(usage_meter, (UsageMeter, UnsetType)):
         raise TypeError("usage_meter must be a UsageMeter or UNSET")
     run_usage_meter = UsageMeter() if isinstance(usage_meter, UnsetType) else usage_meter
 
     step_executor_token = _step_executor_var.set(step_executor)
-    execution_ref_token = _execution_ref_var.set(execution_ref)
+    execution_reference_token = _execution_reference_var.set(execution_reference)
+    lifecycle_token = _lifecycle_var.set(None)
     oversight_token = _oversight_var.set(None)
     system_fragments_token = _system_prompt_suffix_fragments_var.set(())
     user_fragments_token = _user_prompt_suffix_fragments_var.set(())
@@ -395,7 +402,7 @@ def run(
         with span(
             "nighthawk.run",
             **{
-                RUN_ID: execution_ref.run_id,
+                RUN_ID: execution_reference.run_id,
             },
         ):
             yield
@@ -406,8 +413,9 @@ def run(
         _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
         _user_prompt_suffix_fragments_var.reset(user_fragments_token)
         _system_prompt_suffix_fragments_var.reset(system_fragments_token)
+        _lifecycle_var.reset(lifecycle_token)
         _oversight_var.reset(oversight_token)
-        _execution_ref_var.reset(execution_ref_token)
+        _execution_reference_var.reset(execution_reference_token)
         _step_executor_var.reset(step_executor_token)
 
 
@@ -428,6 +436,7 @@ def scope(
     step_executor: StepExecutor | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
     oversight: Oversight | None | UnsetType = UNSET,
+    lifecycle: StepLifecycle | None | UnsetType = UNSET,
     system_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
     user_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
     implicit_references: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
@@ -438,14 +447,15 @@ def scope(
 
     Omission or UNSET inherits. Ordinary values replace; empty collections clear.
     Extend appends ordered entries; Merge combines implicit references by identity.
-    Only oversight accepts None, which clears its hooks. Resolve all changes before
+    Oversight and lifecycle accept None, which clears their hooks. Resolve all changes before
     installing context. Executor replacement precedes full configuration replacement.
     """
+    from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
     from .step_executor import AsyncStepExecutor, SyncStepExecutor
 
     current_step_executor = get_step_executor()
-    current_execution_ref = get_execution_ref()
+    current_execution_reference = get_execution_reference()
     if not isinstance(step_executor, (UnsetType, AsyncStepExecutor, SyncStepExecutor)):
         raise TypeError("step_executor must implement the step executor protocol or be UNSET")
     if not isinstance(step_executor_configuration, (UnsetType, StepExecutorConfiguration)):
@@ -454,10 +464,12 @@ def scope(
         raise TypeError("usage_meter must be UsageMeter or UNSET")
     if oversight is not None and not isinstance(oversight, (UnsetType, Oversight)):
         raise TypeError("oversight must be Oversight, None, or UNSET")
+    if lifecycle is not None and not isinstance(lifecycle, (UnsetType, StepLifecycle)):
+        raise TypeError("lifecycle must be StepLifecycle, None, or UNSET")
     next_step_executor = current_step_executor if isinstance(step_executor, UnsetType) else step_executor
     if not isinstance(step_executor_configuration, UnsetType):
         next_step_executor = _replace_step_executor_with_configuration(next_step_executor, configuration=step_executor_configuration)
-    next_execution_ref = replace(current_execution_ref, scope_id=generate_ulid(), step_id=None)
+    next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid(), step_execution_id=None, source_location=None)
     next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
     next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight
     next_system_prompt_suffix_fragments = _compose_sequence(_system_prompt_suffix_fragments_var.get(), system_prompt_suffix_fragments)
@@ -484,8 +496,9 @@ def scope(
         next_tools = resolve_scoped_tools((), entries)
 
     step_executor_token = _step_executor_var.set(next_step_executor)
-    execution_ref_token = _execution_ref_var.set(next_execution_ref)
+    execution_reference_token = _execution_reference_var.set(next_execution_reference)
     usage_meter_token = _usage_meter_var.set(next_usage_meter)
+    lifecycle_token = _lifecycle_var.set(_lifecycle_var.get() if isinstance(lifecycle, UnsetType) else lifecycle)
     oversight_token = _oversight_var.set(next_oversight)
     system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
     user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
@@ -496,8 +509,8 @@ def scope(
         with span(
             "nighthawk.scope",
             **{
-                RUN_ID: next_execution_ref.run_id,
-                SCOPE_ID: next_execution_ref.scope_id,
+                RUN_ID: next_execution_reference.run_id,
+                SCOPE_ID: next_execution_reference.scope_id,
             },
         ):
             yield next_step_executor
@@ -507,7 +520,8 @@ def scope(
         _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
         _user_prompt_suffix_fragments_var.reset(user_fragments_token)
         _system_prompt_suffix_fragments_var.reset(system_fragments_token)
+        _lifecycle_var.reset(lifecycle_token)
         _oversight_var.reset(oversight_token)
         _usage_meter_var.reset(usage_meter_token)
-        _execution_ref_var.reset(execution_ref_token)
+        _execution_reference_var.reset(execution_reference_token)
         _step_executor_var.reset(step_executor_token)

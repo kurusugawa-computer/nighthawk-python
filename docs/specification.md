@@ -57,7 +57,7 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 - Step locals (`step_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
 - Step globals (`step_globals`): a limited globals mapping used as the execution environment for LLM expressions.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
-    - Required fields include `step_id` (unique Id for the step).
+    - Required fields include `execution_reference`, containing invocation identity and source location.
     - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
 - Locals summary: a bounded text rendering of selected values from `step_locals`, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
@@ -114,18 +114,19 @@ External agents own model selection: both the constructor and `from_agent` rejec
     - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
 - `JsonableValue`
     - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
-- `ExecutionRef`
+- `ExecutionReference`
     - Frozen dataclass representing runtime execution identity.
     - `run_id`: the Id of the outermost run (trace root).
     - `scope_id`: the Id of the current scope.
-    - `step_id`: the Id of the current step when available, otherwise `None`.
+    - `step_execution_id`: a fresh Id for each runtime invocation, otherwise `None`.
+    - `source_location`: the source label (`python_module:line`) during an invocation, otherwise `None`.
 
 ### 5.4. Runtime accessors
 
 - `nighthawk.get_step_context() -> StepContext`
     - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
-See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_ref`).
+See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_reference`).
 
 ## 6. Natural block detection
 
@@ -385,12 +386,12 @@ Declaration API:
 Example:
 
 ```py
-def get_step_id(run_context: RunContext[StepContext]) -> str:
+def get_step_execution_id(run_context: RunContext[StepContext]) -> str:
     """Return the current step Id."""
-    return run_context.deps.step_id
+    return run_context.deps.execution_reference.step_execution_id or ""
 
 
-with nighthawk.run(step_executor), nighthawk.scope(tools=[get_step_id]):
+with nighthawk.run(step_executor), nighthawk.scope(tools=[get_step_execution_id]):
     ...
 ```
 
@@ -623,7 +624,7 @@ In the simplest docstring pattern, the Python function body returns a variable t
 
 - `return result`
 
-If a step requests `outcome.kind == "return"`, the runner returns the validated return value immediately.
+If a step requests `outcome.kind == "return"`, generated Python returns the validated value after binding assignments and terminal delivery.
 
 ## 10. Runtime scoping
 
@@ -633,11 +634,12 @@ The required runtime object for step execution is:
 
 - `step_executor` (required): a strategy object responsible for executing steps (Natural blocks).
 
-Runtime execution identity is modeled separately in `ExecutionRef`:
+Runtime execution identity is modeled separately in `ExecutionReference`:
 
 - `run_id`: the Id of the outermost run (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
 - `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
-- `step_id`: the Id of the current step when available. Outside active step execution it is `None`.
+- `step_execution_id`: a fresh Id for each runtime invocation, including repeated loop iterations and concurrent calls. Executor retries retain this Id; executing the block again allocates another.
+- `source_location`: the source label (`python_module:line`), shared by invocations of the same block. Both step fields are `None` outside active step execution.
 
 Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the host application layer that embeds Nighthawk.
 
@@ -647,8 +649,8 @@ API:
 - `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | UnsetType = UNSET)`
     - Replaces the current context step executor with the provided step executor.
     - Installs `usage_meter` as the run-level meter when given; omission or `UNSET` creates a fresh `UsageMeter`; `None` is invalid.
-    - Resets scoped tools and capabilities to empty for the run.
-    - Generates a new `ExecutionRef` for the duration of the `with`.
+    - Resets scoped tools and capabilities to empty, and oversight and lifecycle to `None`, for the run.
+    - Generates a new `ExecutionReference` for the duration of the `with`.
     - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
@@ -657,17 +659,17 @@ API:
     - Ordinary values replace; empty sequences or mappings clear inherited collections.
     - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
     - `Merge(mapping)` merges implicit references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
-    - Only `oversight` accepts `None`, clearing hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
+    - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
     - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
     - Executor replacement precedes full configuration replacement. Configuration updates require an `AgentStepExecutor` and respect managed/external ownership.
     - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
     - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.
 - `nighthawk.get_step_executor() -> StepExecutor`
     - Get the current step executor. Raises if unset.
-- `nighthawk.get_execution_ref() -> ExecutionRef`
+- `nighthawk.get_execution_reference() -> ExecutionReference`
     - Get the current runtime execution identity. Raises if unset.
 
-All run-scoped public getters, including `get_usage_meter()` and `get_oversight()`, require an active run and raise `NighthawkError` outside it. The meter is non-optional; oversight may be `None` only inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Private optional meter discovery preserves budget behavior outside runs.
+All run-scoped public getters, including `get_usage_meter()`, `get_oversight()`, and `get_lifecycle()`, require an active run and raise `NighthawkError` outside it. The meter is non-optional; oversight and lifecycle may be `None` inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Private optional meter discovery preserves budget behavior outside runs.
 
 ### 10.1. Observability contract (OpenTelemetry span/event)
 
@@ -684,7 +686,8 @@ Identity attributes:
 
 - `run.id: str`
 - `scope.id: str`
-- `step.id: str` (exact format: `python_module:line`, on `nighthawk.step`)
+- `step.execution.id: str` (fresh invocation Id, on `nighthawk.step`)
+- `step.source_location: str` (exact format: `python_module:line`, on `nighthawk.step`)
 
 Step events (emitted on `nighthawk.step`):
 
@@ -713,13 +716,39 @@ The executor/model contract remains the expression-based `StepOutcome`. Before i
 
 `StepCommit.outcome` is a resolved `StepResult`: frozen `Pass()`, `Return(value)`, `Break()`, `Continue()`, or `Raise(message, error_type=None)` records exported through `nh.oversight`. Each has a fixed non-init `kind`. Only `Return` has a value; `Return(None)` is distinct from `Pass()`. Raise's optional error type is a Python binding name resolved by existing exception rules. The internal runner envelope and generated return/break/continue dispatch use the same resolved variants.
 
-The hook runs once. `Accept` retains validated values without repeating validators. `Reject` raises `OversightRejectedError` before final bindings are assigned. `Rewrite` fields `outcome`, `binding_name_to_value`, and `return_value` default to `UNSET`. A supplied mapping replaces all committed writes, including an empty mapping. Empty rewrites, invalid outcome/mapping shapes, or both outcome and return_value are errors. `Rewrite(return_value=None)` explicitly supplies a return subject to annotation validation; `UNSET` cannot represent an application return through this patch field.
+The hook runs once. `Accept` retains validated values without repeating validators. `Reject` produces a `StepFailed` at `oversight_rejection` before final bindings are assigned; its original exception is `OversightRejectedError`. `Rewrite` fields `outcome`, `binding_name_to_value`, and `return_value` default to `UNSET`. A supplied mapping replaces all committed writes, including an empty mapping. Empty rewrites, invalid outcome/mapping shapes, or both outcome and return_value are errors. `Rewrite(return_value=None)` explicitly supplies a return subject to annotation validation; `UNSET` cannot represent an application return through this patch field.
 
 A return_value patch requires an existing Return. Changing another allowed kind to return uses `Rewrite(outcome=Return(value=...))`. Rewrites recheck allowed kinds and validate supplied replacements before any final assignment, without a second inspection. Bindings-only rewrites retain the resolved return and never replay its expression. Undeclared output names are rejected. A final Raise commits no writes; a nonempty replacement mapping paired with Raise is invalid. Rewriting away from an initial raise inherits an empty mapping unless replacements are supplied, so unvalidated output cannot reappear.
 
 An unchanged Raise reuses its resolved exception type; a replacement Raise resolves and validates its own type. The exception instance is constructed only for the final Raise, after inspection. Rejecting a candidate or rewriting it to another kind does not execute the original exception constructor.
 
 `StepCommit` and `ToolCall` capture top-level mapping membership in shallow read-only views. Contained lists, models, and arbitrary objects retain type and identity; frozen records do not deeply isolate application objects. Trusted hooks must use Rewrite rather than mutate these references. Views support synchronous inspection; durable history requires host copying or serialization. Logical commit guarantees cannot roll back tool, validator, or return-expression side effects.
+
+### 10.3. Return expression approval
+
+`Oversight.inspect_return_expression(ReturnExpression) -> Accept | Reject` runs after outcome admission and initial write validation, before compilation, evaluation, or await. The request carries `execution_reference`, expression text, `expected_type`, `processed_natural_program`, and `validated_binding_name_to_value` in a shallow read-only view. It cannot rewrite the expression or provide an evaluator. Invalid decisions fail at `return_inspection`; explicit rejection records `oversight_rejection`, `inspection_subject="return_expression"`, and the reason.
+
+Core owns expression evaluation, await in async functions, and return validation exactly once for the original candidate. The later resolved commit inspector still supports replacement values, which receive their own validation. An absent expression inspector preserves permitted return support; `deny: [return]` prevents both inspection and evaluation. This approves trusted execution and is not a sandbox. Hosts whose value policy permits only write bindings and capability requests must continue denying return expressions.
+
+### 10.4. Terminal delivery and host ledgers
+
+`nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=callback))` installs a synchronous callback accepting `StepFinished` and returning `None`. Omission or `UNSET` inherits; `None` clears. A new run resets lifecycle. Each execution captures the configuration on entry, before preparation, and attempts notification once while Python can unwind normally. Definition-time parsing, decorator compilation, and failure to enter a required run are outside this boundary. Identity, step context when established, and the step span remain active during delivery and restore afterward, including when delivery fails.
+
+Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
+
+`StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`. All carry `execution_reference`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_step_kinds`, and `assigned_binding_name_to_value`. Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values. Runtime references require both step identity fields. Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity. Hosts must serialize or copy deliberately for durable records.
+
+`StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Invalid exception names fail at `raise_resolution`; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. Explicit rejection additionally carries `inspection_subject` and `rejection_reason`. Invalid hook decisions remain inspection failures.
+
+`FailureStage` identifies preparation, executor, outcome_validation, binding_validation, return_inspection, return_evaluation, return_await, return_validation, commit_inspection, rewrite_validation, oversight_rejection, raise_resolution, raise_construction, or binding_assignment. Classification uses structured runtime state, not exception text. Ordinary execution exceptions propagate as `ExecutionError(step_failed)` chained from the record's original exception unless delivery supplies a host exception. DSL Raise propagates its prepared exception.
+
+The callback may append the record to a host-owned authoritative ledger and raise a public host exception containing that exact stored event. For StepFailed, core explicitly chains the callback exception from `original_exception`; for StepRaised, from the prepared domain exception. Arbitrary callback exceptions are preserved and never reclassified or redelivered. `StepDeliveryError(execution_reference, cause)` is available for host adapters reporting storage failure; its `delivery_cause` does not imply a durable event exists. During ordinary execution failure, the outward chain prioritizes the execution exception and the storage cause remains available in `delivery_cause`.
+
+`StepInterrupted` holds the active `failure_stage` and original cancellation or process-control `BaseException`. Delivery is attempted synchronously without an additional await. If delivery also fails, the original interruption still propagates, explicitly chained from the delivery exception. Cancellation, SystemExit, and KeyboardInterrupt are not translated into ordinary host execution failures.
+
+The guarantee is one in-process delivery attempt, not a transaction across Python and storage. A callback that appends and then raises cannot be distinguished automatically from an uncertain append failure. Hosts deduplicate and retry storage by `step_execution_id`, never by replaying a Natural execution. Hard process termination and unavailable storage cannot guarantee durable delivery. OpenTelemetry is optional diagnostics, not the authoritative ledger. Terminal tracing follows the typed classification: await failures receive `nighthawk.step.failed` and exception/error status; interruptions receive `nighthawk.step.interrupted`; delivery failures may add `nighthawk.step.delivery_failed` without a second execution terminal event.
+
+Host integrations can replace pending-commit correlation with the shared `execution_reference` and replace type-erasing validation workarounds with terminal records carrying already validated values. No external host code or host-specific serialization schema is provided by core. The deterministic ledger fixture in `tests/governance/test_step_ledger.py` demonstrates recording even when Python inside the Natural function catches the translated host exception.
 
 ## 11. Interpolation (opt-in, f-strings only)
 
@@ -766,7 +795,7 @@ Exception hierarchy:
     - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
 - `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
     - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
-- `ExecutionError(NighthawkError)`: Natural block execution failed.
+- `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception. A DSL Raise without an explicit type may also construct this exception with a message and no failure record.
     - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
 - `ToolEvaluationError(NighthawkError)`: Expression evaluation inside a tool call failed.
     - Raised when: `eval()` raises during `nh_eval` or `nh_assign` expression evaluation.
@@ -835,7 +864,7 @@ class MyExecutor(AsyncStepExecutor):
         #   sentinel removal, dedent, f-string evaluation, and
         #   frontmatter stripping.
         # step_context: mutable per-step context containing step_locals,
-        #   step_globals, and step_id.
+        #   step_globals, and execution_reference.
         # binding_names: names declared as <:name> write bindings.
         # allowed_step_kinds: outcome kinds permitted for this block
         #   (e.g., ("pass", "return", "raise")).

@@ -143,7 +143,7 @@ def test_reference_views_preserve_validated_values_and_freeze_only_mapping() -> 
         result = workflow()
     assert result[0] is values and result[1] is record and result[2] is unique
     assert len(captured) == 1
-    tool_call = nh.oversight.ToolCall(nh.ExecutionRef("run", "scope", "step"), "lookup", {"values": values}, "program")
+    tool_call = nh.oversight.ToolCall(nh.ExecutionReference("run", "scope", "step"), "lookup", {"values": values}, "program")
     assert tool_call.argument_name_to_value["values"] is values
 
 

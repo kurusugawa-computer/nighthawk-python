@@ -114,13 +114,13 @@ def test_scope_keeps_run_id_and_generates_new_scope_id() -> None:
         StubExecutor(),
         run_id="run-test",
     ):
-        parent_execution_ref = nh.get_execution_ref()
+        parent_execution_reference = nh.get_execution_reference()
         with nh.scope():
-            nested_execution_ref = nh.get_execution_ref()
+            nested_execution_reference = nh.get_execution_reference()
 
-        assert parent_execution_ref.run_id == "run-test"
-        assert nested_execution_ref.run_id == "run-test"
-        assert parent_execution_ref.scope_id != nested_execution_ref.scope_id
+        assert parent_execution_reference.run_id == "run-test"
+        assert nested_execution_reference.run_id == "run-test"
+        assert parent_execution_reference.scope_id != nested_execution_reference.scope_id
 
 
 def test_scope_requires_existing_step_executor():
@@ -424,7 +424,7 @@ def test_step_span_records_completed_event_for_return_outcome(step_span_exporter
     ]
 
 
-def test_step_span_keeps_step_id_attribute_format(step_span_exporter: InMemorySpanExporter) -> None:
+def test_step_span_keeps_source_location_attribute_format(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
         @nh.natural_function
@@ -438,8 +438,8 @@ def test_step_span_keeps_step_id_attribute_format(step_span_exporter: InMemorySp
         assert natural_value_function() == 23
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
-    step_id = _require_non_empty_text(_require_attribute_value(step_span, "step.id"))
-    module_name, line_text = step_id.split(":", 1)
+    source_location = _require_non_empty_text(_require_attribute_value(step_span, "step.source_location"))
+    module_name, line_text = source_location.split(":", 1)
     assert module_name == "tests.public.test_public_api"
     assert line_text.isdigit()
     assert int(line_text) > 0
@@ -529,8 +529,9 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
             fail
             """
 
-        with pytest.raises(CustomExecutionError):
+        with pytest.raises(nh.ExecutionError) as caught:
             natural_failure_function()
+        assert isinstance(caught.value.__cause__, CustomExecutionError)
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
     failed_event_attribute_by_name = {event.name: dict(event.attributes or {}) for event in step_span.events if event.name == "nighthawk.step.failed"}
@@ -553,7 +554,7 @@ def test_step_trace_symbols_are_removed_from_public_api() -> None:
 
 def test_step_span_attributes_include_run_scope_and_step_identity(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor(), run_id="trace-run"):
-        expected_scope_id = nh.get_execution_ref().scope_id
+        expected_scope_id = nh.get_execution_reference().scope_id
 
         @nh.natural_function
         def natural_value_function() -> int:
@@ -568,7 +569,7 @@ def test_step_span_attributes_include_run_scope_and_step_identity(step_span_expo
     step_span = _get_finished_step_spans(step_span_exporter)[0]
     assert _require_attribute_value(step_span, "run.id") == "trace-run"
     assert _require_attribute_value(step_span, "scope.id") == expected_scope_id
-    _require_non_empty_text(_require_attribute_value(step_span, "step.id"))
+    _require_non_empty_text(_require_attribute_value(step_span, "step.execution.id"))
 
 
 def test_step_span_event_structure_is_compact(step_span_exporter: InMemorySpanExporter) -> None:
@@ -588,7 +589,7 @@ def test_step_span_event_structure_is_compact(step_span_exporter: InMemorySpanEx
     step_event = step_span.events[0]
     assert step_event.name == "nighthawk.step.completed"
     assert _require_event_attribute_key_set(step_event) == {"nighthawk.step.outcome_kind"}
-    assert _require_attribute_key_set(step_span) == {"run.id", "scope.id", "step.id"}
+    assert _require_attribute_key_set(step_span) == {"run.id", "scope.id", "step.execution.id", "step.source_location"}
     assert len(step_span.events) == 1
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from . import oversight, resilience
+from . import lifecycle, oversight, resilience
 from .composition import UNSET, Extend, Merge, UnsetType
 from .configuration import (
     StepContextLimits,
@@ -20,11 +20,12 @@ from .errors import (
 from .json_renderer import JsonableValue, to_jsonable_value
 from .natural.decorator import get_transformed_function, natural_function
 from .runtime.scoping import (
-    ExecutionRef,
+    ExecutionReference,
     UsageMeter,
     get_capabilities,
-    get_execution_ref,
+    get_execution_reference,
     get_implicit_references,
+    get_lifecycle,
     get_oversight,
     get_step_executor,
     get_system_prompt_suffix_fragments,
@@ -46,7 +47,7 @@ __all__ = [
     "ToolNameConflictError",
     "AgentStepExecutor",
     "ExecutionError",
-    "ExecutionRef",
+    "ExecutionReference",
     "JsonableValue",
     "NaturalParseError",
     "NighthawkError",
@@ -62,7 +63,7 @@ __all__ = [
     "get_capabilities",
     "get_step_context",
     "get_usage_meter",
-    "get_execution_ref",
+    "get_execution_reference",
     "get_implicit_references",
     "get_oversight",
     "get_step_executor",
@@ -70,6 +71,8 @@ __all__ = [
     "get_system_prompt_suffix_fragments",
     "get_user_prompt_suffix_fragments",
     "oversight",
+    "lifecycle",
+    "get_lifecycle",
     "natural_function",
     "get_transformed_function",
     "resilience",

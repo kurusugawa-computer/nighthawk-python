@@ -243,11 +243,16 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                 assert nh.get_step_executor() is parent
                 assert not closed
                 for exception in (RuntimeError, nh.oversight.OversightRejectedError):
-                    with pytest.raises(exception), nh.scope(step_executor_configuration=configurations[1]):
+                    with (
+                        pytest.raises(RuntimeError if exception is RuntimeError else nh.ExecutionError) as caught,
+                        nh.scope(step_executor_configuration=configurations[1]),
+                    ):
                         if exception is RuntimeError:
                             raise RuntimeError("child failure")
                         with nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Reject("rejected"))):
                             await workflow()
+                    if exception is not RuntimeError:
+                        assert isinstance(caught.value.__cause__, exception)
                     assert nh.get_step_executor() is parent
                 derived = configurations[0].model_copy(
                     update={"prompts": nh.StepPromptTemplates(step_system_prompt_template="Replacement system prompt")}

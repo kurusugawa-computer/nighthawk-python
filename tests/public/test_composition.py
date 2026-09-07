@@ -63,7 +63,7 @@ def test_extend_rejects_non_sequences(value: object) -> None:
 def test_invalid_scope_arguments_leave_parent_intact(field: str) -> None:
     executor = StubExecutor()
     with nh.run(executor):
-        identity = nh.get_execution_ref()
+        identity = nh.get_execution_reference()
         meter = nh.get_usage_meter()
         for value in (None, nh.Merge({}), nh.Extend([])):
             if (field == "implicit_references" and isinstance(value, nh.Merge)) or (
@@ -72,7 +72,7 @@ def test_invalid_scope_arguments_leave_parent_intact(field: str) -> None:
                 continue
             with pytest.raises(TypeError), nh.scope(**{field: value}):  # type: ignore[arg-type]
                 pass
-            assert nh.get_execution_ref() is identity
+            assert nh.get_execution_reference() is identity
             assert nh.get_step_executor() is executor
             assert nh.get_usage_meter() is meter
 

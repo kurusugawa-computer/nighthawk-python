@@ -23,9 +23,9 @@ from ._user_content import (
 from .scoping import (
     RUN_ID,
     SCOPE_ID,
-    STEP_ID,
+    STEP_EXECUTION_ID,
     _current_user_prompt_suffix_fragments,
-    get_execution_ref,
+    get_execution_reference,
 )
 from .step_context import _MISSING, StepContext, resolve_name_in_step_context
 
@@ -538,7 +538,7 @@ def _render_reference_and_value_list_section(
         if token_limit_reached:
             dropped_multimodal = any(try_project_user_prompt_value(value) is not None for _, value in reference_and_value_list[shown_items:])
             log_attributes: dict[str, Any] = {
-                STEP_ID: step_context.step_id,
+                STEP_EXECUTION_ID: step_context.execution_reference.step_execution_id or "",
                 "nighthawk.prompt_context.section": section_name,
                 "nighthawk.prompt_context.reason": "token_limit",
                 "nighthawk.prompt_context.rendered_items": shown_items,
@@ -549,9 +549,9 @@ def _render_reference_and_value_list_section(
             # Spec §8.2.2: token truncation can drop explicit dotted multimodal
             # leaves because section ordering and budgets remain authoritative.
             try:
-                execution_ref = get_execution_ref()
-                log_attributes[RUN_ID] = execution_ref.run_id
-                log_attributes[SCOPE_ID] = execution_ref.scope_id
+                execution_reference = get_execution_reference()
+                log_attributes[RUN_ID] = execution_reference.run_id
+                log_attributes[SCOPE_ID] = execution_reference.scope_id
             except Exception:
                 pass
             logging.getLogger("nighthawk").info("prompt_context_truncated %s", log_attributes)
