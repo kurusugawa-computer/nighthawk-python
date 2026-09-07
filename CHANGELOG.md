@@ -27,6 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Compatibility
 - The supported public API is `nighthawk.__all__` plus the modules listed in `docs/api.md`. Underscore-prefixed names are private and may change without notice. Within the 0.x series, minor releases may contain breaking changes; each is listed in this file.
 
+### Migration notes for hosts
+
+| Before (0.12) | After |
+|---|---|
+| `nighthawk.runtime.scoping._usage_meter_var.set(meter)` | `nh.run(step_executor, usage_meter=meter)` or `nh.scope(usage_meter=meter)` |
+| `@nh.tool` / `@nh.tool(name=..., overwrite=True)` at import time | `nh.scope(tools=[fn])` or `nh.scope(tools=[Tool(fn, name=...)])` around the code that needs the tool |
+| Detecting unwanted global tools through `nighthawk.tools.registry.get_visible_tools` | Not needed; `nh.scope(mode="replace", tools=[...])` makes only the listed tools (plus built-ins) visible; inspect with `nh.get_tools()` |
+| `nighthawk.runtime.scoping.get_oversight` (undocumented) | `nh.get_oversight()` |
+| Validating bindings inside a `StepExecutor` and neutralizing `step_context.binding_name_to_type` to avoid re-validation | Inspect `StepCommit.binding_name_to_value` in `Oversight.inspect_step_commit`; values are already validated and are validated only once |
+| Removing `return` from `allowed_step_kinds` because the outcome was resolved after the executor returned | Read `StepCommit.return_value` in `inspect_step_commit`; rewrite it with `Rewrite(return_value=...)` |
+| `Agent.override(model=WrapperModel(...))` to observe or gate each model request | `nh.scope(capabilities=[Hooks(before_model_request=..., after_model_request=...)])`; add `Instrumentation()` for per-request OpenTelemetry spans |
+| Locating the transformed function through the decorator closure to rebind globals | The transformed function shares the module's real globals; `inspect.unwrap(natural_fn)` returns it |
+| `StepCommitProposal`, `.proposed_step_outcome`, `.proposed_binding_name_to_value` | `StepCommit`, `.step_outcome`, `.binding_name_to_value` |
+| `Rewrite(rewritten_step_outcome=..., rewritten_binding_name_to_value=...)` | `Rewrite(step_outcome=..., binding_name_to_value=..., return_value=...)` |
+
+`inspect_step_commit` no longer sees executor output that fails validation; that output raises `ExecutionError` before the hook runs. Hosts that repaired invalid output in a `Rewrite` should wrap the Natural function with `nighthawk.resilience` retry instead. `Oversight.inspect_tool_call` is unchanged.
+
 ## [0.12.0]
 
 ### Changed
