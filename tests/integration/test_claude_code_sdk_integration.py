@@ -10,7 +10,6 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
     import logfire
 
     logfire.configure(send_to_logfire="if-token-present")
-    logfire.instrument_mcp()
     logfire.instrument_pydantic_ai()
 
     from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
@@ -145,10 +144,7 @@ def test_claude_mcp_callback() -> None:
             verbose=True,
         ),
     )
-    logfire.instrument_mcp()
-    logfire.instrument_pydantic_ai(
-        event_mode="logs",
-    )
+    logfire.instrument_pydantic_ai()
 
     from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
