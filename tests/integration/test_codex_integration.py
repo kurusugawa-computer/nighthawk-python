@@ -46,12 +46,11 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
         configuration=run_configuration,
     )
 
-    with nh.run(step_executor):
+    def test_operation(run_context, *, a: int, b: int) -> int:  # type: ignore[no-untyped-def]
+        _ = run_context
+        return a + b
 
-        @nh.tool(name="test_operation")
-        def test_operation(run_context, *, a: int, b: int) -> int:  # type: ignore[no-untyped-def]
-            _ = run_context
-            return a + b
+    with nh.run(step_executor), nh.scope(tools=[test_operation]):
 
         @nh.natural_function
         def test_function() -> int:

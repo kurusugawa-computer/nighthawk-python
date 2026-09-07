@@ -694,3 +694,26 @@ def test_cost_function_is_importable_from_resilience() -> None:
     from nighthawk.resilience import CostFunction
 
     assert CostFunction is not None
+
+
+def test_host_integration_getters_are_public() -> None:
+    for name in ("get_tools", "get_capabilities", "get_oversight"):
+        assert hasattr(nh, name)
+        assert name in nh.__all__
+
+    assert nh.get_oversight() is None
+    with nh.run(StubExecutor()):
+        assert nh.get_tools() == ()
+        assert nh.get_capabilities() == ()
+        assert nh.get_oversight() is None
+
+
+def test_tool_decorator_is_not_public() -> None:
+    assert not hasattr(nh, "tool")
+    assert "tool" not in nh.__all__
+
+
+def test_step_commit_is_public_and_proposal_is_removed() -> None:
+    assert hasattr(nh.oversight, "StepCommit")
+    assert "StepCommit" in nh.oversight.__all__
+    assert not hasattr(nh.oversight, "StepCommitProposal")

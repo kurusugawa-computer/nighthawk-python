@@ -10,15 +10,19 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal
 
 from opentelemetry.trace import Span, get_tracer_provider
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.usage import RunUsage
 
 from ..configuration import StepExecutorConfiguration
 from ..errors import NighthawkError
-from ..tools.registry import tool_scope
+from ..tools.registry import ToolEntry, get_scoped_tools, resolve_scoped_tools, scoped_tools_var
 from ..ulid import generate_ulid
 
 if TYPE_CHECKING:
+    from pydantic_ai.tools import Tool
+
     from ..oversight import Oversight
+    from .step_context import StepContext
     from .step_executor import AgentStepExecutor, StepExecutor
 
 
@@ -127,6 +131,11 @@ _implicit_reference_name_to_value_var: ContextVar[dict[str, object]] = ContextVa
     default={},  # noqa: B039
 )
 
+_capabilities_var: ContextVar[tuple[AbstractCapability[StepContext], ...]] = ContextVar(
+    "nighthawk_capabilities",
+    default=(),
+)
+
 type ImplicitReferenceNameToValue = Mapping[str, object]
 
 
@@ -187,6 +196,7 @@ def get_current_usage_meter() -> UsageMeter | None:
 
 
 def get_oversight() -> Oversight | None:
+    """Return the oversight hooks active in the current scope, or ``None`` if none are installed."""
     return _oversight_var.get()
 
 
@@ -211,6 +221,10 @@ def _current_user_prompt_suffix_fragments() -> tuple[str, ...]:
 
 def _current_implicit_references() -> Mapping[str, object]:
     return dict(_implicit_reference_name_to_value_var.get())
+
+
+def _current_capabilities() -> tuple[AbstractCapability[StepContext], ...]:
+    return _capabilities_var.get()
 
 
 def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
@@ -250,6 +264,29 @@ def get_implicit_references() -> Mapping[str, object]:
     """
     _require_active_run("get_implicit_references")
     return _current_implicit_references()
+
+
+def get_tools() -> tuple[Tool[StepContext], ...]:
+    """Return the tools declared for the current scope, excluding built-in tools.
+
+    Raises:
+        NighthawkError: If called outside a run context.
+    """
+    _require_active_run("get_tools")
+    return get_scoped_tools()
+
+
+def get_capabilities() -> tuple[AbstractCapability[StepContext], ...]:
+    """Return the Pydantic AI capabilities active in the current scope.
+
+    Capabilities are passed to ``Agent.run(capabilities=...)`` on every model
+    request made by an :class:`AgentStepExecutor` within the scope.
+
+    Raises:
+        NighthawkError: If called outside a run context.
+    """
+    _require_active_run("get_capabilities")
+    return _current_capabilities()
 
 
 @contextmanager
@@ -305,6 +342,7 @@ def run(
     step_executor: StepExecutor,
     *,
     run_id: str | None = None,
+    usage_meter: UsageMeter | None = None,
 ) -> Iterator[None]:
     """Start an execution run with the given step executor.
 
@@ -315,6 +353,8 @@ def run(
         step_executor: The step executor to use for Natural block execution.
         run_id: Optional identifier for the run. If not provided, a ULID is
             generated automatically.
+        usage_meter: Optional meter that accumulates LLM usage for the run.
+            If not provided, a fresh :class:`UsageMeter` is created.
 
     Yields:
         None
@@ -333,32 +373,35 @@ def run(
         scope_id=generate_ulid(),
         step_id=None,
     )
-    usage_meter = UsageMeter()
+    run_usage_meter = usage_meter if usage_meter is not None else UsageMeter()
 
-    with tool_scope():
-        step_executor_token = _step_executor_var.set(step_executor)
-        execution_ref_token = _execution_ref_var.set(execution_ref)
-        oversight_token = _oversight_var.set(None)
-        system_fragments_token = _system_prompt_suffix_fragments_var.set(())
-        user_fragments_token = _user_prompt_suffix_fragments_var.set(())
-        implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set({})
-        usage_meter_token = _usage_meter_var.set(usage_meter)
-        try:
-            with span(
-                "nighthawk.run",
-                **{
-                    RUN_ID: execution_ref.run_id,
-                },
-            ):
-                yield
-        finally:
-            _usage_meter_var.reset(usage_meter_token)
-            _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
-            _user_prompt_suffix_fragments_var.reset(user_fragments_token)
-            _system_prompt_suffix_fragments_var.reset(system_fragments_token)
-            _oversight_var.reset(oversight_token)
-            _execution_ref_var.reset(execution_ref_token)
-            _step_executor_var.reset(step_executor_token)
+    step_executor_token = _step_executor_var.set(step_executor)
+    execution_ref_token = _execution_ref_var.set(execution_ref)
+    oversight_token = _oversight_var.set(None)
+    system_fragments_token = _system_prompt_suffix_fragments_var.set(())
+    user_fragments_token = _user_prompt_suffix_fragments_var.set(())
+    implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set({})
+    tools_token = scoped_tools_var.set(())
+    capabilities_token = _capabilities_var.set(())
+    usage_meter_token = _usage_meter_var.set(run_usage_meter)
+    try:
+        with span(
+            "nighthawk.run",
+            **{
+                RUN_ID: execution_ref.run_id,
+            },
+        ):
+            yield
+    finally:
+        _usage_meter_var.reset(usage_meter_token)
+        _capabilities_var.reset(capabilities_token)
+        scoped_tools_var.reset(tools_token)
+        _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
+        _user_prompt_suffix_fragments_var.reset(user_fragments_token)
+        _system_prompt_suffix_fragments_var.reset(system_fragments_token)
+        _oversight_var.reset(oversight_token)
+        _execution_ref_var.reset(execution_ref_token)
+        _step_executor_var.reset(step_executor_token)
 
 
 @contextmanager
@@ -367,10 +410,13 @@ def scope(
     mode: Literal["inherit", "replace"] = "inherit",
     step_executor_configuration: StepExecutorConfiguration | None = None,
     step_executor: StepExecutor | None = None,
+    usage_meter: UsageMeter | None = None,
     oversight: Oversight | None | _UnsetOversightType = _UNSET_OVERSIGHT,
     system_prompt_suffix_fragments: Sequence[str] | None = None,
     user_prompt_suffix_fragments: Sequence[str] | None = None,
     implicit_references: ImplicitReferenceNameToValue | None = None,
+    tools: Sequence[ToolEntry] | None = None,
+    capabilities: Sequence[AbstractCapability[StepContext]] | None = None,
 ) -> Iterator[StepExecutor]:
     """Open a nested scope that can override the active execution identity.
 
@@ -381,6 +427,8 @@ def scope(
             In both modes, ``None`` means no change except for ``oversight``, where omitted means no change and explicit ``None`` clears the active oversight.
         step_executor_configuration: Full replacement configuration for the step executor.
         step_executor: Replacement step executor for this scope.
+        usage_meter: Replacement usage meter for this scope. Steps executed inside the scope record into this meter
+            instead of the enclosing one; totals are not forwarded to the enclosing meter. ``mode`` does not apply.
         oversight: Scope-level oversight hooks. Omit to inherit the current oversight. Pass ``None`` to clear it for the nested scope.
         system_prompt_suffix_fragments: Additional system prompt suffix fragments.
             In ``mode="inherit"``, fragments are appended. In ``mode="replace"``, provided fragments fully replace the current fragments.
@@ -388,6 +436,14 @@ def scope(
             In ``mode="inherit"``, fragments are appended. In ``mode="replace"``, provided fragments fully replace the current fragments.
         implicit_references: Implicit global references for this scope.
             In ``mode="inherit"``, values are merged with conflict checks. In ``mode="replace"``, provided mappings fully replace the current mapping.
+        tools: Native tools visible to Natural blocks in this scope, as plain callables or ``pydantic_ai.tools.Tool`` instances.
+            Built-in tools (``nh_eval``, ``nh_assign``) are always visible and cannot be shadowed.
+            In ``mode="inherit"``, tools are appended; duplicate names raise ``ToolRegistrationError``.
+            In ``mode="replace"``, provided tools fully replace the current tools; an empty list leaves only the built-in tools.
+            Prefer ``implicit_references`` for Python helpers; use ``tools`` only when native tool calling is required.
+        capabilities: Pydantic AI capabilities (for example ``Hooks(before_model_request=...)`` or ``Instrumentation()``)
+            passed to ``Agent.run(capabilities=...)`` for every step executed in this scope.
+            In ``mode="inherit"``, capabilities are appended. In ``mode="replace"``, provided capabilities fully replace the current ones.
 
     Yields:
         The step executor active within this scope.
@@ -422,10 +478,16 @@ def scope(
         step_id=None,
     )
 
+    next_usage_meter = _usage_meter_var.get()
+    if usage_meter is not None:
+        next_usage_meter = usage_meter
+
     next_oversight = _oversight_var.get()
     next_system_prompt_suffix_fragments = _system_prompt_suffix_fragments_var.get()
     next_user_prompt_suffix_fragments = _user_prompt_suffix_fragments_var.get()
     next_implicit_reference_name_to_value = _implicit_reference_name_to_value_var.get()
+    next_tools = scoped_tools_var.get()
+    next_capabilities = _capabilities_var.get()
 
     if not isinstance(oversight, _UnsetOversightType):
         next_oversight = oversight
@@ -451,26 +513,37 @@ def scope(
         else:
             next_implicit_reference_name_to_value = dict(implicit_references)
 
-    with tool_scope():
-        step_executor_token = _step_executor_var.set(next_step_executor)
-        execution_ref_token = _execution_ref_var.set(next_execution_ref)
-        oversight_token = _oversight_var.set(next_oversight)
-        system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
-        user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
-        implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set(next_implicit_reference_name_to_value)
-        try:
-            with span(
-                "nighthawk.scope",
-                **{
-                    RUN_ID: next_execution_ref.run_id,
-                    SCOPE_ID: next_execution_ref.scope_id,
-                },
-            ):
-                yield next_step_executor
-        finally:
-            _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
-            _user_prompt_suffix_fragments_var.reset(user_fragments_token)
-            _system_prompt_suffix_fragments_var.reset(system_fragments_token)
-            _oversight_var.reset(oversight_token)
-            _execution_ref_var.reset(execution_ref_token)
-            _step_executor_var.reset(step_executor_token)
+    if tools is not None:
+        next_tools = resolve_scoped_tools(next_tools, tools, mode=mode)
+
+    if capabilities is not None:
+        next_capabilities = (*next_capabilities, *capabilities) if mode == "inherit" else tuple(capabilities)
+
+    step_executor_token = _step_executor_var.set(next_step_executor)
+    execution_ref_token = _execution_ref_var.set(next_execution_ref)
+    usage_meter_token = _usage_meter_var.set(next_usage_meter)
+    oversight_token = _oversight_var.set(next_oversight)
+    system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
+    user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
+    implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set(next_implicit_reference_name_to_value)
+    tools_token = scoped_tools_var.set(next_tools)
+    capabilities_token = _capabilities_var.set(next_capabilities)
+    try:
+        with span(
+            "nighthawk.scope",
+            **{
+                RUN_ID: next_execution_ref.run_id,
+                SCOPE_ID: next_execution_ref.scope_id,
+            },
+        ):
+            yield next_step_executor
+    finally:
+        _capabilities_var.reset(capabilities_token)
+        scoped_tools_var.reset(tools_token)
+        _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
+        _user_prompt_suffix_fragments_var.reset(user_fragments_token)
+        _system_prompt_suffix_fragments_var.reset(system_fragments_token)
+        _oversight_var.reset(oversight_token)
+        _usage_meter_var.reset(usage_meter_token)
+        _execution_ref_var.reset(execution_ref_token)
+        _step_executor_var.reset(step_executor_token)

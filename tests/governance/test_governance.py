@@ -77,7 +77,7 @@ def test_scope_rejects_removed_governance_keyword() -> None:
 
 
 def test_step_commit_reject_raises_without_failed_step_trace(step_span_exporter: InMemorySpanExporter) -> None:
-    def reject_step(review: nh.oversight.StepCommitProposal) -> nh.oversight.Reject:
+    def reject_step(review: nh.oversight.StepCommit) -> nh.oversight.Reject:
         _ = review
         return nh.oversight.Reject("host rejected step")
 
@@ -107,9 +107,9 @@ def test_step_commit_reject_raises_without_failed_step_trace(step_span_exporter:
 
 
 def test_step_commit_async_rewrite_updates_return_value() -> None:
-    def rewrite_step(review: nh.oversight.StepCommitProposal) -> nh.oversight.Rewrite:
-        assert review.proposed_binding_name_to_value["result"] == 11
-        return nh.oversight.Rewrite(rewritten_binding_name_to_value={"result": 29})
+    def rewrite_step(review: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
+        assert review.binding_name_to_value["result"] == 11
+        return nh.oversight.Rewrite(binding_name_to_value={"result": 29})
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
@@ -127,7 +127,7 @@ def test_step_commit_async_rewrite_updates_return_value() -> None:
 def test_invalid_step_commit_decision_raises_nighthawk_error_and_records_failed_event(
     step_span_exporter: InMemorySpanExporter,
 ) -> None:
-    def invalid_step_decision(_proposal: nh.oversight.StepCommitProposal) -> nh.oversight.StepCommitDecision:
+    def invalid_step_decision(_proposal: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
         return cast(Any, "bad")
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=invalid_step_decision)):
@@ -153,11 +153,11 @@ def test_invalid_step_commit_decision_raises_nighthawk_error_and_records_failed_
 
 
 def test_invalid_step_rewrite_flows_through_finalize_validation() -> None:
-    def rewrite_step(review: nh.oversight.StepCommitProposal) -> nh.oversight.Rewrite:
+    def rewrite_step(review: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = review
         return nh.oversight.Rewrite(
-            rewritten_step_outcome=ReturnStepOutcome(kind="return", return_expression="result"),
-            rewritten_binding_name_to_value={"result": "not an int"},
+            step_outcome=ReturnStepOutcome(kind="return", return_expression="result"),
+            binding_name_to_value={"result": "not an int"},
         )
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
@@ -175,9 +175,9 @@ def test_invalid_step_rewrite_flows_through_finalize_validation() -> None:
 
 
 def test_step_commit_rewrite_is_coerced_by_finalize_validation() -> None:
-    def rewrite_step(review: nh.oversight.StepCommitProposal) -> nh.oversight.Rewrite:
-        assert review.proposed_binding_name_to_value["result"] == {"value": 1}
-        return nh.oversight.Rewrite(rewritten_binding_name_to_value={"result": {"value": "29"}})
+    def rewrite_step(review: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
+        assert review.binding_name_to_value["result"] == GovernanceResultModel(value=1)
+        return nh.oversight.Rewrite(binding_name_to_value={"result": {"value": "29"}})
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
@@ -196,3 +196,157 @@ def test_step_commit_rewrite_is_coerced_by_finalize_validation() -> None:
 def test_empty_rewrite_is_rejected() -> None:
     with pytest.raises(ValueError, match="Rewrite must change"):
         nh.oversight.Rewrite()
+
+
+def test_step_commit_receives_validated_bindings_and_return_value() -> None:
+    observed_commits: list[nh.oversight.StepCommit] = []
+
+    def observe(step_commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
+        observed_commits.append(step_commit)
+        return nh.oversight.Accept()
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "return", "return_expression": "result + 1"}, "bindings": {"result": "41"}}
+            """
+            result: int = 0
+            return result
+
+        assert natural_value_function() == 42
+
+    assert len(observed_commits) == 1
+    step_commit = observed_commits[0]
+    assert step_commit.binding_name_to_value["result"] == 41
+    assert step_commit.step_outcome.kind == "return"
+    assert step_commit.return_value == 42
+
+
+def test_step_commit_return_value_is_none_for_pass_outcome() -> None:
+    observed_return_values: list[object] = []
+
+    def observe(step_commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
+        observed_return_values.append(step_commit.return_value)
+        return nh.oversight.Accept()
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 3}}
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert natural_value_function() == 3
+
+    assert observed_return_values == [None]
+
+
+def test_invalid_executor_output_fails_before_oversight_is_consulted() -> None:
+    hook_invocation_count = 0
+
+    def observe(step_commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
+        nonlocal hook_invocation_count
+        hook_invocation_count += 1
+        return nh.oversight.Accept()
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": "not an int"}}
+            """
+            result: int = 0
+            return result
+
+        with pytest.raises(ExecutionError, match="failed validation"):
+            natural_value_function()
+
+    assert hook_invocation_count == 0
+
+
+def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
+    def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
+        assert step_commit.return_value == 5
+        return nh.oversight.Rewrite(return_value="7")
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 5}}
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert natural_value_function() == 7
+
+
+def test_rewrite_return_value_type_mismatch_raises_execution_error() -> None:
+    def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
+        _ = step_commit
+        return nh.oversight.Rewrite(return_value="not an int")
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 5}}
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        with pytest.raises(ExecutionError, match="Return value validation failed"):
+            natural_value_function()
+
+
+def test_rewrite_bindings_with_invalid_value_raises_execution_error() -> None:
+    def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
+        _ = step_commit
+        return nh.oversight.Rewrite(binding_name_to_value={"result": "not an int"})
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 5}}
+            """
+            result: int = 0
+            return result
+
+        with pytest.raises(ExecutionError, match="failed validation"):
+            natural_value_function()
+
+
+def test_rewrite_to_disallowed_step_kind_raises_execution_error() -> None:
+    def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
+        _ = step_commit
+        return nh.oversight.Rewrite(step_outcome=ReturnStepOutcome(kind="return", return_expression="result"))
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
+
+        @nh.natural_function
+        def natural_value_function() -> int:
+            """natural
+            ---
+            deny:
+              - return
+            ---
+            <:result>
+            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 5}}
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        with pytest.raises(ExecutionError, match="not allowed"):
+            natural_value_function()

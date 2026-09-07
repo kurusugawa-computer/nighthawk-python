@@ -179,23 +179,20 @@ def test_tool_visibility_scopes():
         ),
     )
 
-    with nh.run(step_executor):
+    def hello(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
+        _ = run_context
+        return "hello"
 
-        @nh.tool(name="hello")
-        def hello(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
-            _ = run_context
-            return "hello"
+    with nh.run(step_executor), nh.scope(tools=[hello]), nh.scope(), nh.scope():
 
-        with nh.scope(), nh.scope():
+        @nh.natural_function
+        def f() -> str:
+            """natural
+            Call hello.
+            """
+            return ""
 
-            @nh.natural_function
-            def f() -> str:
-                """natural
-                Call hello.
-                """
-                return ""
-
-            f()
+        f()
 
 
 def test_provided_tools_smoke():
@@ -207,12 +204,11 @@ def test_provided_tools_smoke():
         ),
     )
 
-    with nh.run(step_executor):
+    def my_tool(run_context: RunContext[StepContext]) -> int:  # type: ignore[no-untyped-def]
+        _ = run_context
+        return 1
 
-        @nh.tool(name="my_tool")
-        def my_tool(run_context: RunContext[StepContext]) -> int:  # type: ignore[no-untyped-def]
-            _ = run_context
-            return 1
+    with nh.run(step_executor), nh.scope(tools=[my_tool]):
 
         @nh.natural_function
         def f() -> int:
@@ -233,14 +229,13 @@ def test_session_isolation(tmp_path):
         ),
     )
 
-    with nh.run(step_executor):
+    def tmp_write(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
+        _ = run_context
+        path = Path(tmp_path) / "hello.txt"
+        path.write_text("hello", encoding="utf-8")
+        return str(path)
 
-        @nh.tool(name="tmp_write")
-        def tmp_write(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
-            _ = run_context
-            path = Path(tmp_path) / "hello.txt"
-            path.write_text("hello", encoding="utf-8")
-            return str(path)
+    with nh.run(step_executor), nh.scope(tools=[tmp_write]):
 
         @nh.natural_function
         def f() -> str:
@@ -262,25 +257,22 @@ def test_provided_tools_do_not_leak_into_outer_scope(tmp_path):
         ),
     )
 
-    with nh.run(step_executor):
+    def tmp_write(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
+        _ = run_context
+        path = Path(tmp_path) / "hello.txt"
+        path.write_text("hello", encoding="utf-8")
+        return str(path)
 
-        @nh.tool(name="tmp_write")
-        def tmp_write(run_context: RunContext[StepContext]) -> str:  # type: ignore[no-untyped-def]
-            _ = run_context
-            path = Path(tmp_path) / "hello.txt"
-            path.write_text("hello", encoding="utf-8")
-            return str(path)
+    with nh.run(step_executor), nh.scope(tools=[tmp_write]), nh.scope():
 
-        with nh.scope():
+        @nh.natural_function
+        def f() -> str:
+            """natural
+            Call tmp_write() and set <:result> to its return value.
+            """
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            @nh.natural_function
-            def f() -> str:
-                """natural
-                Call tmp_write() and set <:result> to its return value.
-                """
-                return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
-
-            result = f()
+        result = f()
 
     assert isinstance(result, str)
 
@@ -335,7 +327,6 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
         ),
     )
 
-    @nh.tool(name="load_pixel_color_gallery")
     def load_pixel_color_gallery(run_context: RunContext[StepContext]) -> list[object]:  # type: ignore[no-untyped-def]
         _ = run_context
         return [
@@ -375,7 +366,7 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
         """
         return result
 
-    with nh.run(step_executor):
+    with nh.run(step_executor), nh.scope(tools=[load_pixel_color_gallery]):
         result = classify_tool_returned_pixel_colors()
 
     assert result == PixelColorClassification(

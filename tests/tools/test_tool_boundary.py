@@ -37,7 +37,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.tools import Tool, ToolDefinition
 from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
@@ -58,15 +58,10 @@ from nighthawk.tools.contracts import (
     render_tool_handler_result_preview_text,
 )
 from nighthawk.tools.execution import ToolResultWrapperToolset
-from nighthawk.tools.registry import _reset_all_tools_for_tests, get_visible_tools
+from nighthawk.tools.registry import get_visible_tools
 from tests.execution.stub_executor import StubExecutor
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
-
-
-@pytest.fixture(autouse=True)
-def _reset_tools() -> None:
-    _reset_all_tools_for_tests()
 
 
 def _new_step_context() -> StepContext:
@@ -824,7 +819,6 @@ def test_user_content_union_members_are_covered_by_text_projection_predicate() -
 
 
 def test_backend_handler_wraps_recoverable_tool_boundary_error() -> None:
-    @nh.tool(name="test_boundary_error")
     def test_boundary_error() -> int:  # type: ignore[no-untyped-def]
         raise ToolBoundaryError(
             kind="execution",
@@ -840,7 +834,8 @@ def test_backend_handler_wraps_recoverable_tool_boundary_error() -> None:
         usage=RunUsage(),
     )
 
-    visible_tools = get_visible_tools()
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(test_boundary_error, name="test_boundary_error")]):
+        visible_tools = get_visible_tools()
     base_toolset = FunctionToolset(visible_tools)
 
     async def get_tool_def():  # type: ignore[no-untyped-def]
@@ -877,7 +872,6 @@ def test_backend_handler_wraps_recoverable_tool_boundary_error() -> None:
 
 
 def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
-    @nh.tool(name="test_arg")
     def test_arg(run_context, *, x: int) -> int:  # type: ignore[no-untyped-def]
         _ = run_context
         return x
@@ -890,7 +884,8 @@ def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
         usage=RunUsage(),
     )
 
-    visible_tools = get_visible_tools()
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(test_arg, name="test_arg")]):
+        visible_tools = get_visible_tools()
 
     base_toolset = FunctionToolset(visible_tools)
 
@@ -974,7 +969,6 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
     span_exporter, tracer_provider = tool_span_exporter
     inspection_count = 0
 
-    @nh.tool(name="test_once_tool")
     def test_once_tool() -> int:  # type: ignore[no-untyped-def]
         return 3
 
@@ -993,7 +987,8 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
         instrumentation_version=1,
     )
 
-    visible_tools = get_visible_tools()
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(test_once_tool, name="test_once_tool")]):
+        visible_tools = get_visible_tools()
     base_toolset = FunctionToolset(visible_tools)
 
     async def get_tool_def():  # type: ignore[no-untyped-def]
@@ -1061,7 +1056,6 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
 
 
 def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decision() -> None:
-    @nh.tool(name="test_invalid_tool_decision")
     def test_invalid_tool_decision() -> int:  # type: ignore[no-untyped-def]
         return 5
 
@@ -1075,7 +1069,8 @@ def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decis
         usage=RunUsage(),
     )
 
-    visible_tools = get_visible_tools()
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(test_invalid_tool_decision, name="test_invalid_tool_decision")]):
+        visible_tools = get_visible_tools()
     base_toolset = FunctionToolset(visible_tools)
 
     async def get_tool_def():  # type: ignore[no-untyped-def]
@@ -1114,7 +1109,6 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
     span_exporter, tracer_provider = tool_span_exporter
     tool_call_count = 0
 
-    @nh.tool(name="test_governed_tool")
     def test_governed_tool() -> int:  # type: ignore[no-untyped-def]
         nonlocal tool_call_count
         tool_call_count += 1
@@ -1134,7 +1128,8 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
         instrumentation_version=1,
     )
 
-    visible_tools = get_visible_tools()
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(test_governed_tool, name="test_governed_tool")]):
+        visible_tools = get_visible_tools()
     base_toolset = FunctionToolset(visible_tools)
 
     async def get_tool_def():  # type: ignore[no-untyped-def]

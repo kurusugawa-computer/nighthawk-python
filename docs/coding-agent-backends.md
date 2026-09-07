@@ -63,7 +63,7 @@ If a backend CLI process fails (e.g., crashes, times out, or returns an invalid 
 
 ### Allowed tool names
 
-Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the backend via MCP. When `None` (default), all registered tools are exposed.
+Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the backend via MCP. When `None` (default), all tools visible in the current scope are exposed.
 
 ```py
 from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings

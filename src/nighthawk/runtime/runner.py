@@ -19,7 +19,7 @@ from ..oversight import (
     OversightRejectedError,
     Reject,
     Rewrite,
-    StepCommitProposal,
+    StepCommit,
     record_oversight_decision,
 )
 from .async_bridge import run_coroutine_synchronously
@@ -395,25 +395,14 @@ class Runner:
 
         return ExecutionError(f"Execution failed: {step_outcome.raise_message}")
 
-    def _apply_bindings_and_validate_kind(
+    def _require_allowed_step_kind(
         self,
         *,
-        step_context: StepContext,
         step_outcome: StepOutcome,
-        bindings: dict[str, object],
         allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[str, dict[str, object]]:
-        step_outcome_kind = step_outcome.kind
-        if step_outcome_kind not in allowed_step_kinds:
-            raise ExecutionError(f"Step '{step_outcome_kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
-        if step_outcome_kind == "raise":
-            return step_outcome_kind, dict(bindings)
-        validated_bindings = self._validate_and_coerce_output_bindings(
-            step_context=step_context,
-            bindings=bindings,
-        )
-        step_context.step_locals.update(validated_bindings)
-        return step_outcome_kind, validated_bindings
+    ) -> None:
+        if step_outcome.kind not in allowed_step_kinds:
+            raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
 
     def _validate_and_coerce_output_bindings(
         self,
@@ -439,29 +428,68 @@ class Runner:
 
         return validated_binding_name_to_value
 
-    def _apply_step_oversight_if_needed(
+    def _validate_bindings_for_outcome(
+        self,
+        *,
+        step_context: StepContext,
+        step_outcome: StepOutcome,
+        bindings: dict[str, object],
+    ) -> dict[str, object]:
+        if step_outcome.kind == "raise":
+            return dict(bindings)
+        return self._validate_and_coerce_output_bindings(step_context=step_context, bindings=bindings)
+
+    async def _resolve_return_value(
+        self,
+        *,
+        step_context: StepContext,
+        step_outcome: StepOutcome,
+        bindings: dict[str, object],
+        return_annotation: object,
+        allow_awaitable_return: bool,
+    ) -> object | None:
+        if not isinstance(step_outcome, ReturnStepOutcome):
+            return None
+
+        evaluation_locals = {**step_context.step_locals, **bindings}
+        try:
+            compiled = compile(step_outcome.return_expression, "<nighthawk-return>", "eval", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+            resolved = eval(compiled, step_context.step_globals, evaluation_locals)
+        except Exception as e:
+            raise ExecutionError(f"Failed to evaluate return_expression {step_outcome.return_expression!r}: {e}") from e
+        if inspect.isawaitable(resolved):
+            if not allow_awaitable_return:
+                raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
+            resolved = await resolved
+        return self._parse_and_coerce_return_value(resolved, return_annotation)
+
+    async def _apply_step_oversight_if_needed(
         self,
         *,
         preparation: _StepPreparation,
         step_outcome: StepOutcome,
         bindings: dict[str, object],
-    ) -> tuple[StepOutcome, dict[str, object]]:
+        return_value: object | None,
+        return_annotation: object,
+        allow_awaitable_return: bool,
+    ) -> tuple[StepOutcome, dict[str, object], object | None]:
         oversight = get_oversight()
         if oversight is None or oversight.inspect_step_commit is None:
-            return step_outcome, bindings
+            return step_outcome, bindings, return_value
 
         execution_ref = get_execution_ref()
-        step_commit_proposal = StepCommitProposal(
+        step_commit = StepCommit(
             execution_ref=execution_ref,
             processed_natural_program=preparation.processed_program,
             input_binding_name_to_value=preparation.input_binding_name_to_value,
-            proposed_step_outcome=step_outcome,
-            proposed_binding_name_to_value=bindings,
+            step_outcome=step_outcome,
+            binding_name_to_value=bindings,
+            return_value=return_value,
             allowed_step_kinds=preparation.allowed_step_kinds,
             output_binding_name_set=frozenset(preparation.step_context.binding_commit_targets),
             binding_name_to_type=preparation.step_context.binding_name_to_type,
         )
-        decision = oversight.inspect_step_commit(step_commit_proposal)
+        decision = oversight.inspect_step_commit(step_commit)
 
         if isinstance(decision, Reject):
             record_oversight_decision(
@@ -479,7 +507,7 @@ class Runner:
                 execution_ref=execution_ref,
                 reason=decision.reason,
             )
-            return step_outcome, bindings
+            return step_outcome, bindings, return_value
 
         if not isinstance(decision, Rewrite):
             raise NighthawkError("Oversight inspect_step_commit must return Accept, Reject, or Rewrite")
@@ -490,11 +518,37 @@ class Runner:
             execution_ref=execution_ref,
             reason=decision.reason,
         )
-        next_step_outcome = decision.rewritten_step_outcome if decision.rewritten_step_outcome is not None else step_outcome
-        next_binding_name_to_value = (
-            dict(decision.rewritten_binding_name_to_value) if decision.rewritten_binding_name_to_value is not None else dict(bindings)
-        )
-        return next_step_outcome, next_binding_name_to_value
+
+        step_context = preparation.step_context
+        next_step_outcome = step_outcome
+        if decision.step_outcome is not None:
+            next_step_outcome = decision.step_outcome
+            self._require_allowed_step_kind(step_outcome=next_step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
+
+        next_bindings = bindings
+        if decision.binding_name_to_value is not None:
+            next_bindings = self._validate_bindings_for_outcome(
+                step_context=step_context,
+                step_outcome=next_step_outcome,
+                bindings=dict(decision.binding_name_to_value),
+            )
+
+        next_return_value: object | None = None
+        if next_step_outcome.kind == "return":
+            if decision.return_value is not None:
+                next_return_value = self._parse_and_coerce_return_value(decision.return_value, return_annotation)
+            elif decision.step_outcome is None and decision.binding_name_to_value is None:
+                next_return_value = return_value
+            else:
+                next_return_value = await self._resolve_return_value(
+                    step_context=step_context,
+                    step_outcome=next_step_outcome,
+                    bindings=next_bindings,
+                    return_annotation=return_annotation,
+                    allow_awaitable_return=allow_awaitable_return,
+                )
+
+        return next_step_outcome, next_bindings, next_return_value
 
     async def _finalize_step(
         self,
@@ -506,42 +560,52 @@ class Runner:
         step_span: Span,
         allow_awaitable_return: bool,
     ) -> StepEnvelope:
+        step_context = preparation.step_context
+
         try:
-            step_outcome_kind, validated_bindings = self._apply_bindings_and_validate_kind(
-                step_context=preparation.step_context,
+            self._require_allowed_step_kind(step_outcome=step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
+            validated_bindings = self._validate_bindings_for_outcome(
+                step_context=step_context,
                 step_outcome=step_outcome,
                 bindings=bindings,
-                allowed_step_kinds=preparation.allowed_step_kinds,
+            )
+            return_value = await self._resolve_return_value(
+                step_context=step_context,
+                step_outcome=step_outcome,
+                bindings=validated_bindings,
+                return_annotation=return_annotation,
+                allow_awaitable_return=allow_awaitable_return,
             )
         except NighthawkError as exception:
             _record_internal_step_failure(step_span=step_span, exception=exception)
             raise
 
-        return_value: object | None = None
         try:
-            if step_outcome_kind == "raise":
-                assert isinstance(step_outcome, RaiseStepOutcome)
-                raise_exception = self._build_raise_exception(preparation.step_context, step_outcome)
-                _add_step_raised_event(step_span=step_span, step_outcome=step_outcome)
-                raise raise_exception
-
-            if step_outcome_kind == "return":
-                assert isinstance(step_outcome, ReturnStepOutcome)
-                try:
-                    compiled = compile(step_outcome.return_expression, "<nighthawk-return>", "eval", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-                    resolved = eval(compiled, preparation.step_context.step_globals, preparation.step_context.step_locals)
-                except Exception as e:
-                    raise ExecutionError(f"Failed to evaluate return_expression {step_outcome.return_expression!r}: {e}") from e
-                if inspect.isawaitable(resolved):
-                    if not allow_awaitable_return:
-                        raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
-                    resolved = await resolved
-                return_value = self._parse_and_coerce_return_value(resolved, return_annotation)
+            step_outcome, validated_bindings, return_value = await self._apply_step_oversight_if_needed(
+                preparation=preparation,
+                step_outcome=step_outcome,
+                bindings=validated_bindings,
+                return_value=return_value,
+                return_annotation=return_annotation,
+                allow_awaitable_return=allow_awaitable_return,
+            )
+        except OversightRejectedError:
+            raise
         except NighthawkError as exception:
             _record_internal_step_failure(step_span=step_span, exception=exception)
             raise
 
-        _add_step_completed_event(step_span=step_span, step_outcome_kind=step_outcome_kind)
+        try:
+            if isinstance(step_outcome, RaiseStepOutcome):
+                raise_exception = self._build_raise_exception(step_context, step_outcome)
+                _add_step_raised_event(step_span=step_span, step_outcome=step_outcome)
+                raise raise_exception
+        except NighthawkError as exception:
+            _record_internal_step_failure(step_span=step_span, exception=exception)
+            raise
+
+        step_context.step_locals.update(validated_bindings)
+        _add_step_completed_event(step_span=step_span, step_outcome_kind=step_outcome.kind)
         return StepEnvelope(
             step_outcome=step_outcome,
             input_bindings=dict(preparation.input_binding_name_to_value),
@@ -601,18 +665,6 @@ class Runner:
                     _record_internal_step_failure(step_span=step_span, exception=exception)
                     raise
 
-                try:
-                    step_outcome, bindings = self._apply_step_oversight_if_needed(
-                        preparation=preparation,
-                        step_outcome=step_outcome,
-                        bindings=bindings,
-                    )
-                except OversightRejectedError:
-                    raise
-                except NighthawkError as exception:
-                    _record_internal_step_failure(step_span=step_span, exception=exception)
-                    raise
-
                 return await self._finalize_step(
                     preparation=preparation,
                     step_outcome=step_outcome,
@@ -660,18 +712,6 @@ class Runner:
                             binding_names=output_binding_names,
                             allowed_step_kinds=preparation.allowed_step_kinds,
                         )
-                    except NighthawkError as exception:
-                        _record_internal_step_failure(step_span=step_span, exception=exception)
-                        raise
-
-                    try:
-                        step_outcome, bindings = self._apply_step_oversight_if_needed(
-                            preparation=preparation,
-                            step_outcome=step_outcome,
-                            bindings=bindings,
-                        )
-                    except OversightRejectedError:
-                        raise
                     except NighthawkError as exception:
                         _record_internal_step_failure(step_span=step_span, exception=exception)
                         raise

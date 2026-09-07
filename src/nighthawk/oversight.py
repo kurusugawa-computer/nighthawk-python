@@ -58,12 +58,19 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
-class StepCommitProposal:
+class StepCommit:
+    """Validated step result presented to ``Oversight.inspect_step_commit`` before it is committed.
+
+    ``binding_name_to_value`` holds the write bindings after Pydantic validation and coercion.
+    ``return_value`` holds the resolved and validated return value when ``step_outcome.kind == "return"``; otherwise ``None``.
+    """
+
     execution_ref: ExecutionRef
     processed_natural_program: str
     input_binding_name_to_value: Mapping[str, object]
-    proposed_step_outcome: StepOutcome
-    proposed_binding_name_to_value: Mapping[str, object]
+    step_outcome: StepOutcome
+    binding_name_to_value: Mapping[str, object]
+    return_value: object | None
     allowed_step_kinds: tuple[StepKind, ...]
     output_binding_name_set: frozenset[str]
     binding_name_to_type: Mapping[str, object]
@@ -76,13 +83,18 @@ class StepCommitProposal:
         )
         object.__setattr__(
             self,
-            "proposed_step_outcome",
-            _snapshot_value(self.proposed_step_outcome),
+            "step_outcome",
+            _snapshot_value(self.step_outcome),
         )
         object.__setattr__(
             self,
-            "proposed_binding_name_to_value",
-            _snapshot_mapping(self.proposed_binding_name_to_value),
+            "binding_name_to_value",
+            _snapshot_mapping(self.binding_name_to_value),
+        )
+        object.__setattr__(
+            self,
+            "return_value",
+            _snapshot_value(self.return_value),
         )
         object.__setattr__(
             self,
@@ -108,24 +120,36 @@ class Reject:
 
 @dataclass(frozen=True)
 class Rewrite:
-    rewritten_step_outcome: StepOutcome | None = None
-    rewritten_binding_name_to_value: Mapping[str, object] | None = None
+    """Replace parts of a step commit. Rewritten values are validated again before commit.
+
+    ``binding_name_to_value`` replaces the whole committed mapping. ``return_value`` is honored only when the effective
+    step outcome kind is ``return``; it bypasses ``return_expression`` evaluation and is validated against the return annotation.
+    """
+
+    step_outcome: StepOutcome | None = None
+    binding_name_to_value: Mapping[str, object] | None = None
+    return_value: object | None = None
     reason: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
-            "rewritten_step_outcome",
-            _snapshot_optional_step_outcome(self.rewritten_step_outcome),
+            "step_outcome",
+            _snapshot_optional_step_outcome(self.step_outcome),
         )
-        if self.rewritten_binding_name_to_value is not None:
+        if self.binding_name_to_value is not None:
             object.__setattr__(
                 self,
-                "rewritten_binding_name_to_value",
-                _snapshot_mapping(self.rewritten_binding_name_to_value),
+                "binding_name_to_value",
+                _snapshot_mapping(self.binding_name_to_value),
             )
-        if self.rewritten_step_outcome is None and self.rewritten_binding_name_to_value is None:
-            raise ValueError("Rewrite must change rewritten_step_outcome or rewritten_binding_name_to_value")
+        object.__setattr__(
+            self,
+            "return_value",
+            _snapshot_value(self.return_value),
+        )
+        if self.step_outcome is None and self.binding_name_to_value is None and self.return_value is None:
+            raise ValueError("Rewrite must change step_outcome, binding_name_to_value, or return_value")
 
 
 type ToolCallDecision = Accept | Reject
@@ -135,7 +159,7 @@ type StepCommitDecision = Accept | Reject | Rewrite
 @dataclass(frozen=True)
 class Oversight:
     inspect_tool_call: Callable[[ToolCall], ToolCallDecision] | None = None
-    inspect_step_commit: Callable[[StepCommitProposal], StepCommitDecision] | None = None
+    inspect_step_commit: Callable[[StepCommit], StepCommitDecision] | None = None
 
 
 def record_oversight_decision(
@@ -173,8 +197,8 @@ __all__ = [
     "OversightRejectedError",
     "Reject",
     "Rewrite",
+    "StepCommit",
     "StepCommitDecision",
-    "StepCommitProposal",
     "ToolCall",
     "ToolCallDecision",
 ]

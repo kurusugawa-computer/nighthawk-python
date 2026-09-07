@@ -351,44 +351,44 @@ Truncation:
 Nighthawk exposes two paths for the LLM to call Python functions:
 
 1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_eval`.
-2. **User-defined tools** (`@nighthawk.tool`): Registered callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
+2. **Scoped tools** (`nighthawk.scope(tools=...)`): Declared callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
 
 Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Natural blocks](natural-blocks.md#designing-binding-functions) for practical design patterns.
 
-Tools are Python callables exposed to the LLM via pydantic-ai tool calling.
+Tools are Python callables exposed to the LLM via pydantic-ai tool calling. There is no process-global tool registry: a tool is visible only inside a `nighthawk.scope(tools=...)` that declares it.
 
-User-defined tools:
+Declaration API:
 
-- The host defines tools using the `@nighthawk.tool` decorator.
-
-Registration API:
-
-- `@nighthawk.tool`: Decorator that registers a callable as a Nighthawk tool.
-    - `name`: Optional name override. Defaults to the function `__name__`.
-    - `overwrite`: If True, replaces any existing tool with the same name.
-    - `description`: Optional description override. Defaults to the function docstring.
-    - `metadata`: Arbitrary metadata dict attached to the tool definition.
+- `nighthawk.scope(tools: Sequence[ToolEntry] | None = None, mode=...)` where `ToolEntry = Callable[..., Any] | pydantic_ai.tools.Tool[StepContext]`.
+    - A plain callable is wrapped with `Tool(callable)`: the name is the function `__name__`, the description is the docstring, and a leading `RunContext[StepContext]` parameter is detected automatically.
+    - A `Tool` instance is used as-is, allowing name, description, and metadata overrides.
 - Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
-- Tool registration targets the innermost active scope (call scope > tool scope > global).
-- Name conflicts raise `ToolRegistrationError` unless `overwrite=True`.
+- `mode="inherit"`: declared tools are appended to the inherited tools. A name already visible (inherited or built-in) raises `ToolRegistrationError`.
+- `mode="replace"`: declared tools fully replace inherited tools. `tools=[]` leaves only built-in tools visible. `None` means no change.
+- Built-in tool names cannot be declared in any mode.
+- `nighthawk.get_tools()` returns the scoped tools (excluding built-in tools) for the current scope.
 
 Example:
 
 ```py
-@nighthawk.tool(name="get_step_id")
 def get_step_id(run_context: RunContext[StepContext]) -> str:
     """Return the current step Id."""
     return run_context.deps.step_id
+
+
+with nighthawk.run(step_executor), nighthawk.scope(tools=[get_step_id]):
+    ...
 ```
 
 The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument.
 
-Scoping:
+Role split with implicit references:
 
-- `nighthawk.run()` and `nighthawk.scope()` each open a nested tool scope.
-- Tools registered inside a scope are visible only within that scope.
+- `implicit_references` injects Python names into `step_globals`; they render as signature lines and are invoked through `nh_eval`.
+- `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_tool_call`, and are served to coding-agent backends over MCP.
+- A given callable SHOULD be exposed through one of the two, not both.
 
 Provided tools (built-in):
 
@@ -632,20 +632,25 @@ Nighthawk does not own workspace filesystem concerns (such as include resolution
 Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When empty (default `""`), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:
 
-- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None)`
+- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | None = None)`
     - Replaces the current context step executor with the provided step executor.
+    - Installs `usage_meter` as the run-level meter when given; otherwise creates a fresh `UsageMeter`.
+    - Resets scoped tools and capabilities to empty for the run.
     - Generates a new `ExecutionRef` for the duration of the `with`.
     - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
-- `nighthawk.scope(*, mode: Literal["inherit", "replace"] = "inherit", step_executor_configuration: StepExecutorConfiguration | None = None, step_executor: StepExecutor | None = None, oversight: Oversight | None = None, system_prompt_suffix_fragments: Sequence[str] | None = None, user_prompt_suffix_fragments: Sequence[str] | None = None, implicit_references: Mapping[str, object] | None = None) -> Iterator[StepExecutor]`
+- `nighthawk.scope(*, mode: Literal["inherit", "replace"] = "inherit", step_executor_configuration: StepExecutorConfiguration | None = None, step_executor: StepExecutor | None = None, usage_meter: UsageMeter | None = None, oversight: Oversight | None = None, system_prompt_suffix_fragments: Sequence[str] | None = None, user_prompt_suffix_fragments: Sequence[str] | None = None, implicit_references: Mapping[str, object] | None = None, tools: Sequence[ToolEntry] | None = None, capabilities: Sequence[AbstractCapability[StepContext]] | None = None) -> Iterator[StepExecutor]`
     - Enter a nested scope within the current run.
     - Requires an existing step executor.
     - Generates a new `scope_id` (keeps the current `run_id`).
     - `oversight` omitted means inherit the current hooks; explicit `None` clears them for the nested scope.
+    - `usage_meter` replaces the enclosing meter for the scope; `None` keeps it. Totals are not forwarded to the enclosing meter.
+    - `capabilities` are passed to Pydantic AI `Agent.run(capabilities=...)` for every step in the scope.
     - `mode="inherit"` (default):
-        - Appends prompt suffix fragment lists.
+        - Appends prompt suffix fragment lists, `tools`, and `capabilities`.
         - Merges `implicit_references` additively with conflict checks.
+        - Rejects `tools` whose names are already visible with `ToolRegistrationError`.
     - `mode="replace"`:
         - Replaces provided list/mapping values.
         - `None` means no change.
@@ -747,7 +752,7 @@ Exception hierarchy:
 - `ToolValidationError(NighthawkError)`: Type validation/coercion failed during `nh_assign`.
     - Raised when: the assigned value does not match the expected binding type.
 - `ToolRegistrationError(NighthawkError)`: Tool registration failed.
-    - Raised when: a tool name is invalid, or a name conflict occurs without `overwrite=True`.
+    - Raised when: a tool name is invalid, collides with a built-in tool, or is declared twice within the visible scope.
 
 All exceptions are surfaced as Python exceptions and can be caught with standard `try`/`except`.
 

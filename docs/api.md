@@ -9,7 +9,6 @@
     options:
       members:
         - natural_function
-        - tool
         - run
         - scope
         - AgentStepExecutor
@@ -19,12 +18,15 @@
         - JsonableValue
         - to_jsonable_value
         - ExecutionRef
+        - get_capabilities
         - get_current_step_context
         - get_current_usage_meter
         - get_execution_ref
         - get_implicit_references
+        - get_oversight
         - get_step_executor
         - get_system_prompt_suffix_fragments
+        - get_tools
         - get_user_prompt_suffix_fragments
         - resilience
         - UsageMeter

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `nh.run(usage_meter=...)` and `nh.scope(usage_meter=...)` let a host install its own `UsageMeter` for a run or meter a nested scope in isolation.
+- `nh.scope(tools=...)` declares native tools per scope, accepting plain callables or Pydantic AI `Tool` instances, with `mode="replace"` to hide inherited tools.
+- `nh.scope(capabilities=...)` passes Pydantic AI capabilities (for example `Hooks(before_model_request=...)` or `Instrumentation()`) to every step in the scope, for managed and externally supplied agents alike.
+- Public snapshot getters `nh.get_tools()`, `nh.get_capabilities()`, and `nh.get_oversight()`.
+- `nh.oversight.StepCommit.return_value` exposes the resolved, validated return value to `inspect_step_commit`; `nh.oversight.Rewrite(return_value=...)` replaces it directly.
+
+### Changed
+- `Oversight.inspect_step_commit` now runs after write-binding validation and return resolution. It receives `StepCommit` with validated, coerced values; only rewritten values are validated again. Executor output that fails validation raises `ExecutionError` before the hook is consulted.
+- `nh.oversight.StepCommitProposal` is renamed to `StepCommit`; its `proposed_step_outcome` and `proposed_binding_name_to_value` fields are now `step_outcome` and `binding_name_to_value`.
+- `nh.oversight.Rewrite` fields `rewritten_step_outcome` and `rewritten_binding_name_to_value` are renamed to `step_outcome` and `binding_name_to_value`.
+- `natural_function` now executes the transformed function against the module's real globals instead of a copy taken at decoration time: names defined in the module after the decorated function are visible to Natural blocks, no helper names are injected into the module namespace, and `__wrapped__` refers to the transformed function.
+
+### Removed
+- `@nighthawk.tool` and the process-global tool registry, including `overwrite` and call-scoped registration. Declare tools with `nh.scope(tools=[...])` instead.
+- `StepCommitProposal` (renamed, see Changed).
+
+### Compatibility
+- The supported public API is `nighthawk.__all__` plus the modules listed in `docs/api.md`. Underscore-prefixed names are private and may change without notice. Within the 0.x series, minor releases may contain breaking changes; each is listed in this file.
+
 ## [0.12.0]
 
 ### Changed

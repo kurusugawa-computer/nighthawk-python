@@ -77,7 +77,7 @@ List only topics that commonly drift across multiple files or are easy to mispla
 - Terminology: "task" = structural unit (contract), "judgment" = cognitive act. Use "one task per block".
 - Code examples: self-contained and understandable without surrounding prose.
 - Built-in tools (`nh_eval`, `nh_assign`): implementation details. Only `specification.md` may expose them.
-- `@nh.tool`: `specification.md` documents as spec, `natural-blocks.md` may mention it with a "prefer binding functions" note, all others must not reference it.
+- Native tools (`nh.scope(tools=...)`): `specification.md` documents as spec, `runtime-configuration.md` documents usage and the role split with `implicit_references`, `natural-blocks.md` may mention it with a "prefer binding functions" note, all others must not reference it.
 - Package name: always `nighthawk-python` in `pip install` commands.
 - When renaming a document or changing its role, update all inbound references, routing rules here, relevant `tests/docs`, and navigation metadata if applicable.
 - When a governance file under `docs/` is not meant for publication, its MkDocs handling must be explicit.

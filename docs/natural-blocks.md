@@ -361,7 +361,7 @@ When you pass a module-level callable as a function parameter with a generic typ
 
 The principle extends beyond callables. Any module-level name that is stable across invocations -- constants, classes, utility functions -- should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
 
-**Note:** Nighthawk also provides `@nh.tool`, which registers functions via the model's native tool-calling interface. This path is reserved for cases that require `RunContext[StepContext]` access. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [Specification Section 8.3](specification.md#83-tools-available-to-the-llm) for the `@nh.tool` specification.
+**Note:** Nighthawk also accepts native tools through `nh.scope(tools=[...])`, which exposes functions via the model's native tool-calling interface for the duration of the scope. This path is reserved for cases that need native tool calling, such as strict argument schemas or Pydantic AI tool features. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [Runtime configuration](runtime-configuration.md#scoped-tools) and [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
 
 ## Writing guidelines
 

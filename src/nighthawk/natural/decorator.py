@@ -12,8 +12,7 @@ from typing import Any, cast
 from ..runtime.runner import Runner, StepEnvelope
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope, python_name_scope
-from ..tools.registry import call_scope
-from .blocks import find_natural_blocks
+from .blocks import extract_program, find_natural_blocks
 from .transform import transform_module_ast
 
 type NaturalFunctionCallable = Callable[..., Any]
@@ -239,33 +238,37 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
 
     filename = inspect.getsourcefile(func) or "<nighthawk>"
 
+    # Runtime helpers referenced by the transformed body travel through the factory closure, not through
+    # module globals. The transformed function therefore shares ``func.__globals__`` with the original
+    # function: names defined in the module after decoration stay visible, and the module namespace is
+    # never polluted with helper names.
+    helper_name_to_value: dict[str, object] = {
+        "__nighthawk_runner__": _RunnerProxy(),
+        "__nh_extract_program__": extract_program,
+        "__nh_python_cell_scope__": python_cell_scope,
+    }
+    factory_name_to_value: dict[str, object] = {**name_to_value, **helper_name_to_value}
+
     factory_module = _build_transformed_factory_module(
         transformed_module=transformed_module,
         function_name=func.__name__,
-        name_to_value=name_to_value,
+        name_to_value=factory_name_to_value,
     )
     code = compile(factory_module, filename, "exec")
 
-    globals_namespace: dict[str, object] = dict(func.__globals__)
-    globals_namespace["__nighthawk_runner__"] = _RunnerProxy()
-    from .blocks import extract_program as _nh_extract_program
-
-    globals_namespace["__nh_extract_program__"] = _nh_extract_program
-    globals_namespace["__nh_python_cell_scope__"] = python_cell_scope
-
     module_namespace: dict[str, object] = {}
-    exec(code, globals_namespace, module_namespace)
+    exec(code, func.__globals__, module_namespace)
 
     factory = module_namespace.get("__nh_factory__")
     if not callable(factory):
         raise RuntimeError("Transformed factory not found after compilation")
 
-    transformed = factory(name_to_value)
+    transformed = factory(factory_name_to_value)
     if not callable(transformed):
         raise RuntimeError("Transformed function not found after factory execution")
 
     transformed_freevar_name_set = set(transformed.__code__.co_freevars)
-    captured_name_set = set(name_to_value.keys())
+    captured_name_set = set(factory_name_to_value.keys())
 
     unexpected_freevar_name_set = transformed_freevar_name_set - captured_name_set
     allowed_unexpected_freevar_name_set = {func.__name__}
@@ -274,7 +277,7 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
             f"Transformed function freevars do not match captured names. freevars={transformed.__code__.co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}"
         )
 
-    if transformed.__closure__ is None and name_to_value:
+    if transformed.__closure__ is None and transformed_freevar_name_set:
         raise RuntimeError("Transformed function closure is missing for captured names")
 
     if inspect.iscoroutinefunction(func):
@@ -282,20 +285,21 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            with call_scope():
-                if name_to_value:
-                    with python_name_scope(name_to_value):
-                        return await transformed_async(*args, **kwargs)
-                return await transformed_async(*args, **kwargs)
+            if name_to_value:
+                with python_name_scope(name_to_value):
+                    return await transformed_async(*args, **kwargs)
+            return await transformed_async(*args, **kwargs)
 
+        # ``__wrapped__`` points at the transformed function so ``inspect.unwrap`` reaches the code that runs.
+        async_wrapper.__wrapped__ = transformed  # type: ignore[attr-defined]
         return cast(NaturalFunctionCallable, async_wrapper)  # type: ignore[return-value]
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        with call_scope():
-            if name_to_value:
-                with python_name_scope(name_to_value):
-                    return transformed(*args, **kwargs)
-            return transformed(*args, **kwargs)
+        if name_to_value:
+            with python_name_scope(name_to_value):
+                return transformed(*args, **kwargs)
+        return transformed(*args, **kwargs)
 
+    wrapper.__wrapped__ = transformed  # type: ignore[attr-defined]
     return cast(NaturalFunctionCallable, wrapper)  # type: ignore[return-value]

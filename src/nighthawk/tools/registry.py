@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
 from contextvars import ContextVar
-from dataclasses import dataclass
-from typing import Any, overload
+from typing import Any, Literal
 
 from pydantic_ai.tools import Tool
 
@@ -13,25 +11,19 @@ from ..errors import ToolRegistrationError
 from ..runtime.step_context import StepContext
 from .provided import build_provided_tool_definitions
 
+type ToolEntry = Callable[..., Any] | Tool[StepContext]
+"""A tool declaration accepted by ``nighthawk.scope(tools=...)``.
 
-@dataclass(frozen=True)
-class ToolDefinition:
-    name: str
-    tool: Tool[StepContext]
+A plain callable is wrapped with ``pydantic_ai.tools.Tool``: the tool name is the function ``__name__``,
+the description is the docstring, and a leading ``RunContext[StepContext]`` parameter is detected automatically.
+Pass a ``Tool`` instance directly to override the name, description, or metadata.
+"""
 
-
-_builtin_tool_name_to_definition: dict[str, ToolDefinition] = {}
+_builtin_tool_name_to_tool: dict[str, Tool[StepContext]] = {}
 _builtin_tools_registered = False
 
-_global_tool_name_to_definition: dict[str, ToolDefinition] = {}
-
-_tool_scope_stack_var: ContextVar[tuple[dict[str, ToolDefinition], ...]] = ContextVar(
-    "nighthawk_tool_scope_stack",
-    default=(),
-)
-
-_call_scope_stack_var: ContextVar[tuple[dict[str, ToolDefinition], ...]] = ContextVar(
-    "nighthawk_call_tool_scope_stack",
+scoped_tools_var: ContextVar[tuple[Tool[StepContext], ...]] = ContextVar(
+    "nighthawk_scoped_tools",
     default=(),
 )
 
@@ -56,162 +48,54 @@ def ensure_builtin_tools_registered() -> None:
 
     for builtin_definition in build_provided_tool_definitions():
         _validate_tool_name(builtin_definition.name)
-        if builtin_definition.name in _builtin_tool_name_to_definition:
+        if builtin_definition.name in _builtin_tool_name_to_tool:
             raise ToolRegistrationError(f"Duplicate builtin tool name: {builtin_definition.name!r}")
-        _builtin_tool_name_to_definition[builtin_definition.name] = ToolDefinition(
-            name=builtin_definition.name,
-            tool=builtin_definition.tool,
-        )
+        _builtin_tool_name_to_tool[builtin_definition.name] = builtin_definition.tool
 
     _builtin_tools_registered = True
 
 
-def _visible_tool_definitions() -> dict[str, ToolDefinition]:
+def _normalize_tool_entry(entry: ToolEntry) -> Tool[StepContext]:
+    if isinstance(entry, Tool):
+        return entry
+    if callable(entry):
+        return Tool(entry)
+    raise ToolRegistrationError(f"Tool entry must be a callable or pydantic_ai.tools.Tool: {entry!r}")
+
+
+def resolve_scoped_tools(
+    current: tuple[Tool[StepContext], ...],
+    entries: Sequence[ToolEntry],
+    *,
+    mode: Literal["inherit", "replace"],
+) -> tuple[Tool[StepContext], ...]:
+    """Compute the scoped tool tuple for ``nighthawk.scope(tools=entries, mode=mode)``.
+
+    Raises ``ToolRegistrationError`` when a name is invalid, collides with a built-in tool, or appears twice.
+    """
     ensure_builtin_tools_registered()
 
-    merged: dict[str, ToolDefinition] = dict(_builtin_tool_name_to_definition)
-    merged.update(_global_tool_name_to_definition)
+    resolved: list[Tool[StepContext]] = list(current) if mode == "inherit" else []
+    seen_name_set = {tool.name for tool in resolved}
 
-    for scope in _tool_scope_stack_var.get():
-        merged.update(scope)
+    for entry in entries:
+        tool = _normalize_tool_entry(entry)
+        _validate_tool_name(tool.name)
+        if tool.name in _builtin_tool_name_to_tool:
+            raise ToolRegistrationError(f"Tool name conflicts with a built-in tool: {tool.name!r}")
+        if tool.name in seen_name_set:
+            raise ToolRegistrationError(f"Tool name conflict: {tool.name!r}")
+        seen_name_set.add(tool.name)
+        resolved.append(tool)
 
-    for scope in _call_scope_stack_var.get():
-        merged.update(scope)
-
-    return merged
-
-
-def _register_tool_definition(tool_definition: ToolDefinition, *, overwrite: bool) -> None:
-    ensure_builtin_tools_registered()
-
-    name = tool_definition.name
-    visible = _visible_tool_definitions()
-
-    if name in visible and not overwrite:
-        raise ToolRegistrationError(f"Tool name conflict: {name!r}. Pass overwrite=True to replace the visible definition.")
-
-    call_scope_stack = _call_scope_stack_var.get()
-    if call_scope_stack:
-        call_scope_stack[-1][name] = tool_definition
-        return
-
-    tool_scope_stack = _tool_scope_stack_var.get()
-    if tool_scope_stack:
-        tool_scope_stack[-1][name] = tool_definition
-        return
-
-    _global_tool_name_to_definition[name] = tool_definition
+    return tuple(resolved)
 
 
-@contextmanager
-def tool_scope() -> Iterator[None]:
-    current = _tool_scope_stack_var.get()
-    token = _tool_scope_stack_var.set((*current, {}))
-    try:
-        yield
-    finally:
-        _tool_scope_stack_var.reset(token)
-
-
-@contextmanager
-def call_scope() -> Iterator[None]:
-    current = _call_scope_stack_var.get()
-    token = _call_scope_stack_var.set((*current, {}))
-    try:
-        yield
-    finally:
-        _call_scope_stack_var.reset(token)
+def get_scoped_tools() -> tuple[Tool[StepContext], ...]:
+    return scoped_tools_var.get()
 
 
 def get_visible_tools() -> list[Tool[StepContext]]:
+    """Return built-in tools followed by the tools declared for the current scope."""
     ensure_builtin_tools_registered()
-    visible = dict(_visible_tool_definitions())
-    return [definition.tool for definition in visible.values()]
-
-
-type ToolFunction = Callable[..., Any]
-
-
-@overload
-def tool(func: ToolFunction, /) -> ToolFunction: ...
-
-
-@overload
-def tool(
-    func: None = None,
-    /,
-    *,
-    name: str | None = None,
-    overwrite: bool = False,
-    description: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> Callable[[ToolFunction], ToolFunction]: ...
-
-
-def tool(
-    func: ToolFunction | None = None,
-    /,
-    *,
-    name: str | None = None,
-    overwrite: bool = False,
-    description: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> ToolFunction | Callable[[ToolFunction], ToolFunction]:
-    """Register a Python function as a Nighthawk tool visible to Natural blocks.
-
-    Prefer binding functions for most use cases, they incur no per-definition
-    token overhead beyond a signature line in the prompt context. Use ``@tool``
-    only when ``RunContext[StepContext]`` access is required. See the Guide
-    (Functions and Discoverability) for details.
-
-    Args:
-        func: The function to register. Can be omitted for use as a bare decorator.
-        name: Tool name override. Defaults to the function name.
-        overwrite: If True, replace any existing tool with the same name.
-        description: Tool description override. Defaults to the function docstring.
-        metadata: Arbitrary metadata attached to the tool definition.
-
-    Raises:
-        ToolRegistrationError: If the name conflicts with an existing tool and
-            overwrite is False.
-
-    Example:
-        ```python
-        @nighthawk.tool
-        def lookup_user(user_id: str) -> dict:
-            return {"user_id": user_id, "name": "Alice"}
-        ```
-    """
-
-    def decorator(inner: ToolFunction) -> ToolFunction:
-        ensure_builtin_tools_registered()
-
-        tool_name = name or inner.__name__
-        _validate_tool_name(tool_name)
-
-        resolved_description = description
-        if resolved_description is None:
-            resolved_description = inner.__doc__
-
-        tool_object: Tool[StepContext] = Tool(
-            inner,
-            name=tool_name,
-            description=resolved_description,
-            metadata=metadata,
-        )
-
-        tool_definition = ToolDefinition(name=tool_name, tool=tool_object)
-        _register_tool_definition(tool_definition, overwrite=overwrite)
-        return inner
-
-    if func is not None:
-        return decorator(func)
-
-    return decorator
-
-
-def _reset_all_tools_for_tests() -> None:
-    global _builtin_tools_registered
-    _global_tool_name_to_definition.clear()
-    _builtin_tool_name_to_definition.clear()
-    _builtin_tools_registered = False
+    return [*_builtin_tool_name_to_tool.values(), *scoped_tools_var.get()]

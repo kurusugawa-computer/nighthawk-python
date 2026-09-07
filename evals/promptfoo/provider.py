@@ -32,11 +32,7 @@ from nighthawk.runtime.step_contract import StepKind
 from nighthawk.runtime.step_executor import AgentStepExecutor
 from nighthawk.tools.assignment import assign_tool, eval_expression
 from nighthawk.tools.contracts import ToolBoundaryError
-from nighthawk.tools.registry import (
-    ToolDefinition,
-    _builtin_tool_name_to_definition,
-    _reset_all_tools_for_tests,
-)
+from nighthawk.tools.registry import _builtin_tool_name_to_tool
 
 # ---------------------------------------------------------------------------
 # Token usage capture — monkey-patch _run_agent to store RunUsage
@@ -192,8 +188,8 @@ _ASSIGN_DESCRIPTIONS = {
 }
 
 
-def _build_tool_preset(preset_name: str) -> list[ToolDefinition]:
-    """Build tool definitions for a named preset."""
+def _build_tool_preset(preset_name: str) -> dict[str, Tool[StepContext]]:
+    """Build the built-in tool mapping (name to tool) for a named preset."""
 
     # Parse preset: {tool_name}_{description_style}
     parts = preset_name.split("_", 1)
@@ -217,18 +213,16 @@ def _build_tool_preset(preset_name: str) -> list[ToolDefinition]:
         description=_ASSIGN_DESCRIPTIONS[description_style],
     )
 
-    return [
-        ToolDefinition(name="nh_assign", tool=assign_tool_obj),
-        ToolDefinition(name=eval_name, tool=eval_tool),
-    ]
+    return {
+        "nh_assign": assign_tool_obj,
+        eval_name: eval_tool,
+    }
 
 
 def _install_tool_preset(preset_name: str) -> None:
-    """Reset global tool registry and install a specific tool preset."""
-    _reset_all_tools_for_tests()
-    tool_definitions = _build_tool_preset(preset_name)
-    for tool_definition in tool_definitions:
-        _builtin_tool_name_to_definition[tool_definition.name] = tool_definition
+    """Replace the built-in tool set with a specific tool preset."""
+    _builtin_tool_name_to_tool.clear()
+    _builtin_tool_name_to_tool.update(_build_tool_preset(preset_name))
     _registry_module._builtin_tools_registered = True  # noqa: SLF001
 
 
@@ -337,7 +331,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
     # -- Install tool preset --
     tool_preset = provider_configuration.get("tool_preset", "eval_examples")
     _install_tool_preset(tool_preset)
-    installed_tool_names = tuple(_builtin_tool_name_to_definition.keys())
+    installed_tool_names = tuple(_builtin_tool_name_to_tool.keys())
 
     # -- Install suffix variant --
     suffix_variant = provider_configuration.get("suffix_variant", "control")

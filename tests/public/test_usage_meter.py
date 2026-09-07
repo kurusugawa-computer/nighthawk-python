@@ -77,3 +77,59 @@ class TestUsageMeterContextVariable:
 
             assert get_current_usage_meter() is outer_meter
             assert outer_meter.total_tokens == 150
+
+
+# ---------------------------------------------------------------------------
+# Host-installed meters on run() and scope()
+# ---------------------------------------------------------------------------
+
+
+class _UsageAgent:
+    """Fake agent whose run_sync returns a pass outcome with fixed usage."""
+
+    def run_sync(self, *args: object, **kwargs: object) -> object:  # noqa: ARG002
+        class Result:
+            output = {"result": {"kind": "pass"}}
+            usage = RunUsage(input_tokens=10, output_tokens=5)
+
+        return Result()
+
+
+class TestHostInstalledUsageMeter:
+    def test_run_accepts_usage_meter(self) -> None:
+        meter = UsageMeter()
+        with nh.run(StubExecutor(), usage_meter=meter):
+            assert get_current_usage_meter() is meter
+        assert get_current_usage_meter() is None
+
+    def test_scope_replaces_meter_and_restores_parent(self) -> None:
+        scoped_meter = UsageMeter()
+        with nh.run(StubExecutor()):
+            run_meter = get_current_usage_meter()
+            with nh.scope(usage_meter=scoped_meter):
+                assert get_current_usage_meter() is scoped_meter
+            assert get_current_usage_meter() is run_meter
+
+    def test_scope_without_usage_meter_inherits(self) -> None:
+        with nh.run(StubExecutor()):
+            run_meter = get_current_usage_meter()
+            with nh.scope(mode="replace"):
+                assert get_current_usage_meter() is run_meter
+
+    def test_step_records_into_scoped_meter_only(self) -> None:
+        scoped_meter = UsageMeter()
+        step_executor = nh.AgentStepExecutor.from_agent(agent=_UsageAgent())
+
+        @nh.natural_function
+        def natural_pass_function() -> None:
+            """natural
+            Do nothing.
+            """
+
+        with nh.run(step_executor):
+            run_meter = get_current_usage_meter()
+            assert run_meter is not None
+            with nh.scope(usage_meter=scoped_meter):
+                natural_pass_function()
+            assert scoped_meter.total_tokens == 15
+            assert run_meter.total_tokens == 0

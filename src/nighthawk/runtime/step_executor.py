@@ -14,6 +14,7 @@ from ..tools.registry import get_visible_tools
 from .async_bridge import run_coroutine_synchronously
 from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
 from .scoping import (
+    _current_capabilities,
     _current_system_prompt_suffix_fragments,
     get_current_usage_meter,
     system_prompt_suffix_fragment_scope,
@@ -205,6 +206,7 @@ class AgentStepExecutor:
         normalized_user_prompt: str | tuple[UserContent, ...] = (
             user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
         )
+        capabilities = list(_current_capabilities())
 
         if isinstance(self.agent, AsyncExecutionAgent):
             return await self.agent.run(
@@ -212,6 +214,7 @@ class AgentStepExecutor:
                 deps=step_context,
                 toolsets=[toolset],
                 output_type=structured_output_type,
+                capabilities=capabilities,
             )
 
         if isinstance(self.agent, SyncExecutionAgent):
@@ -220,6 +223,7 @@ class AgentStepExecutor:
                 deps=step_context,
                 toolsets=[toolset],
                 output_type=structured_output_type,
+                capabilities=capabilities,
             )
 
         raise ExecutionError("AgentStepExecutor requires an agent with run(...) or run_sync(...)")

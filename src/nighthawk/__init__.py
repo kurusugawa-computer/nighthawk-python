@@ -19,18 +19,20 @@ from .natural.decorator import natural_function
 from .runtime.scoping import (
     ExecutionRef,
     UsageMeter,
+    get_capabilities,
     get_current_usage_meter,
     get_execution_ref,
     get_implicit_references,
+    get_oversight,
     get_step_executor,
     get_system_prompt_suffix_fragments,
+    get_tools,
     get_user_prompt_suffix_fragments,
     run,
     scope,
 )
 from .runtime.step_context import StepContext, get_current_step_context
 from .runtime.step_executor import AgentStepExecutor, StepExecutor
-from .tools.registry import tool
 
 __all__ = [
     "AgentStepExecutor",
@@ -48,11 +50,14 @@ __all__ = [
     "ToolRegistrationError",
     "ToolValidationError",
     "UsageMeter",
+    "get_capabilities",
     "get_current_step_context",
     "get_current_usage_meter",
     "get_execution_ref",
     "get_implicit_references",
+    "get_oversight",
     "get_step_executor",
+    "get_tools",
     "get_system_prompt_suffix_fragments",
     "get_user_prompt_suffix_fragments",
     "oversight",
@@ -61,5 +66,4 @@ __all__ = [
     "run",
     "scope",
     "to_jsonable_value",
-    "tool",
 ]
