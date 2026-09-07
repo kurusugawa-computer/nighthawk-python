@@ -381,20 +381,20 @@ class Runner:
             input_binding_name_to_value=input_binding_name_to_value,
         )
 
-    def _build_raise_exception(
+    def _resolve_raise_error_type(
         self,
         step_context: StepContext,
         step_outcome: Raise,
-    ) -> BaseException:
+    ) -> type[BaseException]:
         if step_outcome.error_type is not None:
             resolved_raise_error_type = resolve_name_in_step_context(step_context, step_outcome.error_type)
             if resolved_raise_error_type is _MISSING:
                 raise ExecutionError(f"Invalid raise_error_type: {step_outcome.error_type!r}: {step_outcome.message}")
             if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
                 raise ExecutionError(f"Invalid raise_error_type: {step_outcome.error_type!r}: {step_outcome.message}")
-            return resolved_raise_error_type(step_outcome.message)
+            return resolved_raise_error_type
 
-        return ExecutionError(f"Execution failed: {step_outcome.message}")
+        return ExecutionError
 
     def _require_allowed_step_kind(
         self,
@@ -575,7 +575,11 @@ class Runner:
             outcome = Raise(step_outcome.raise_message, step_outcome.raise_error_type)
         else:
             outcome = {"pass": Pass, "break": Break, "continue": Continue}[step_outcome.kind]()
+        initial_outcome = outcome
+        resolved_raise_error_type: type[BaseException] | None = None
         try:
+            if isinstance(outcome, Raise):
+                resolved_raise_error_type = self._resolve_raise_error_type(step_context, outcome)
             outcome, validated_bindings = self._apply_step_oversight_if_needed(
                 preparation=preparation,
                 outcome=outcome,
@@ -590,7 +594,12 @@ class Runner:
 
         try:
             if isinstance(outcome, Raise):
-                raise_exception = self._build_raise_exception(step_context, outcome)
+                if outcome is not initial_outcome:
+                    resolved_raise_error_type = self._resolve_raise_error_type(step_context, outcome)
+                assert resolved_raise_error_type is not None
+                # Construct only the final exception; inspection must not run its constructor.
+                message = outcome.message if outcome.error_type is not None else f"Execution failed: {outcome.message}"
+                raise_exception = resolved_raise_error_type(message)
                 _add_step_raised_event(step_span=step_span, step_outcome=outcome)
                 raise raise_exception
         except NighthawkError as exception:

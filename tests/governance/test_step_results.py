@@ -170,6 +170,79 @@ def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
         assert workflow() == 3
 
 
+@pytest.mark.parametrize("error_type", ["MissingException", "invalid_exception"])
+@pytest.mark.parametrize("decision", [nh.oversight.Accept(), nh.oversight.Rewrite(outcome=nh.oversight.Pass())])
+def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: nh.oversight.StepCommitDecision) -> None:
+    inspected: list[nh.oversight.StepCommit] = []
+    invalid_exception = int  # noqa: F841
+
+    class Executor:
+        def run_step(self, **arguments: Any) -> tuple[RaiseStepOutcome, dict[str, object]]:
+            return RaiseStepOutcome(kind="raise", raise_message="failed", raise_error_type=error_type), {}
+
+    def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
+        inspected.append(commit)
+        return decision
+
+    @nh.natural_function
+    def workflow() -> int:
+        """natural
+        <invalid_exception>
+        Raise an error.
+        """
+        return 7
+
+    with (
+        nh.run(Executor()),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=inspect)),
+        pytest.raises(nh.ExecutionError, match="Invalid raise_error_type"),
+    ):
+        workflow()
+    assert inspected == []
+
+
+def test_raise_rewrite_validates_replacement_without_constructing_original_exception() -> None:
+    constructed: list[str] = []
+
+    class OriginalError(Exception):
+        def __init__(self, message: str) -> None:
+            constructed.append(message)
+            super().__init__(message)
+
+    class Executor:
+        def run_step(self, **arguments: Any) -> tuple[RaiseStepOutcome, dict[str, object]]:
+            return RaiseStepOutcome(kind="raise", raise_message="original", raise_error_type="OriginalError"), {}
+
+    @nh.natural_function
+    def workflow() -> int:
+        """natural
+        <OriginalError>
+        Raise an error.
+        """
+        return 7
+
+    with nh.run(Executor()):
+        with (
+            nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Accept())),
+            pytest.raises(OriginalError, match="original"),
+        ):
+            workflow()
+        assert constructed == ["original"]
+        constructed.clear()
+        with nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.oversight.Pass()))):
+            assert workflow() == 7
+        with (
+            nh.scope(
+                oversight=nh.oversight.Oversight(
+                    inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.oversight.Raise("replacement", "MissingException"))
+                )
+            ),
+            pytest.raises(nh.ExecutionError, match="Invalid raise_error_type"),
+        ):
+            workflow()
+    assert constructed == []
+
+
 @pytest.mark.parametrize(
     "construct",
     [
