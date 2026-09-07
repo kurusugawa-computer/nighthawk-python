@@ -2,18 +2,15 @@ import os
 from pathlib import Path
 from typing import Literal
 
-import logfire
 import pytest
 from pydantic import BaseModel
 from pydantic_ai import RunContext
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.messages import BinaryContent
 
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
 from tests.integration.skip_helpers import requires_openai_integration
-
-logfire.configure(send_to_logfire="if-token-present")
-logfire.instrument_pydantic_ai()
 
 
 def _requires_openai_multimodal_integration():  # type: ignore[no-untyped-def]
@@ -22,7 +19,16 @@ def _requires_openai_multimodal_integration():  # type: ignore[no-untyped-def]
     return requires_openai_integration()
 
 
-def _build_single_pixel_png(*, red: int, green: int, blue: int) -> bytes:
+_SOLID_COLOR_PNG_SIZE = 16
+
+
+def _build_solid_color_png(*, red: int, green: int, blue: int, size: int = _SOLID_COLOR_PNG_SIZE) -> bytes:
+    """Build a ``size`` by ``size`` PNG filled with one RGB color.
+
+    A single pixel is too small for vision models to classify reliably (both
+    ``gpt-5.4-mini`` and ``gpt-5.4`` misjudged 1x1 images returned from a tool),
+    so the default is a 16x16 square.
+    """
     import struct
     import zlib
 
@@ -32,9 +38,9 @@ def _build_single_pixel_png(*, red: int, green: int, blue: int) -> bytes:
         chunk = chunk_type + payload
         return struct.pack(">I", len(payload)) + chunk + struct.pack(">I", binascii.crc32(chunk) & 0xFFFFFFFF)
 
-    pixel_bytes = bytes([0, red, green, blue])
-    compressed_pixel_bytes = zlib.compress(pixel_bytes)
-    ihdr_payload = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    row_bytes = bytes([0]) + bytes([red, green, blue]) * size
+    compressed_pixel_bytes = zlib.compress(row_bytes * size)
+    ihdr_payload = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
     return b"".join(
         [
             b"\x89PNG\r\n\x1a\n",
@@ -64,7 +70,7 @@ def classify_pixel_colors(
     )
     """natural
     Inspect <first_image>, <second_image>, and <third_image> as actual images.
-    These are three different single-color PNG images.
+    These are three different solid-color PNG images.
     Set <:result> so that `first`, `second`, and `third` are the lowercase color names of those images.
     Use only the words "red", "green", and "blue".
     """
@@ -80,7 +86,7 @@ async def test_async_function_call():
             model="openai-responses:gpt-5.4-nano", model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high")
         ),
     )
-    with nh.run(step_executor):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
         @nh.natural_function
         async def test_function():
@@ -106,7 +112,7 @@ def test_multiple_blocks_one_call_scope():
         ),
     )
 
-    with nh.run(step_executor):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
         @nh.natural_function
         def f() -> int:
@@ -133,7 +139,7 @@ def test_system_prompt_suffix_fragments():
         ),
     )
 
-    with nh.run(step_executor), nh.scope(system_prompt_suffix_fragments=["Hello suffix"]):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(system_prompt_suffix_fragments=["Hello suffix"]):
 
         @nh.natural_function
         def f() -> int:
@@ -156,7 +162,7 @@ def test_user_prompt_suffix_fragments():
         ),
     )
 
-    with nh.run(step_executor), nh.scope(user_prompt_suffix_fragments=["Hello suffix"]):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(user_prompt_suffix_fragments=["Hello suffix"]):
 
         @nh.natural_function
         def f() -> int:
@@ -183,7 +189,7 @@ def test_tool_visibility_scopes():
         _ = run_context
         return "hello"
 
-    with nh.run(step_executor), nh.scope(tools=[hello]), nh.scope(), nh.scope():
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(tools=[hello]), nh.scope(), nh.scope():
 
         @nh.natural_function
         def f() -> str:
@@ -208,7 +214,7 @@ def test_provided_tools_smoke():
         _ = run_context
         return 1
 
-    with nh.run(step_executor), nh.scope(tools=[my_tool]):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(tools=[my_tool]):
 
         @nh.natural_function
         def f() -> int:
@@ -235,7 +241,7 @@ def test_session_isolation(tmp_path):
         path.write_text("hello", encoding="utf-8")
         return str(path)
 
-    with nh.run(step_executor), nh.scope(tools=[tmp_write]):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(tools=[tmp_write]):
 
         @nh.natural_function
         def f() -> str:
@@ -263,7 +269,7 @@ def test_provided_tools_do_not_leak_into_outer_scope(tmp_path):
         path.write_text("hello", encoding="utf-8")
         return str(path)
 
-    with nh.run(step_executor), nh.scope(tools=[tmp_write]), nh.scope():
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(tools=[tmp_write]), nh.scope():
 
         @nh.natural_function
         def f() -> str:
@@ -288,22 +294,22 @@ def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content(
     )
 
     first_image = BinaryContent(
-        data=_build_single_pixel_png(red=255, green=0, blue=0),
+        data=_build_solid_color_png(red=255, green=0, blue=0),
         media_type="image/png",
         identifier="first_image",
     )
     second_image = BinaryContent(
-        data=_build_single_pixel_png(red=0, green=255, blue=0),
+        data=_build_solid_color_png(red=0, green=255, blue=0),
         media_type="image/png",
         identifier="second_image",
     )
     third_image = BinaryContent(
-        data=_build_single_pixel_png(red=0, green=0, blue=255),
+        data=_build_solid_color_png(red=0, green=0, blue=255),
         media_type="image/png",
         identifier="third_image",
     )
 
-    with nh.run(step_executor):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
         result = classify_pixel_colors(
             first_image=first_image,
             second_image=second_image,
@@ -332,19 +338,19 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
         return [
             "first",
             BinaryContent(
-                data=_build_single_pixel_png(red=255, green=0, blue=0),
+                data=_build_solid_color_png(red=255, green=0, blue=0),
                 media_type="image/png",
                 identifier="first_tool_image",
             ),
             "second",
             BinaryContent(
-                data=_build_single_pixel_png(red=0, green=255, blue=0),
+                data=_build_solid_color_png(red=0, green=255, blue=0),
                 media_type="image/png",
                 identifier="second_tool_image",
             ),
             "third",
             BinaryContent(
-                data=_build_single_pixel_png(red=0, green=0, blue=255),
+                data=_build_solid_color_png(red=0, green=0, blue=255),
                 media_type="image/png",
                 identifier="third_tool_image",
             ),
@@ -366,7 +372,7 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
         """
         return result
 
-    with nh.run(step_executor), nh.scope(tools=[load_pixel_color_gallery]):
+    with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(tools=[load_pixel_color_gallery]):
         result = classify_tool_returned_pixel_colors()
 
     assert result == PixelColorClassification(

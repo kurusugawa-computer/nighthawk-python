@@ -64,14 +64,17 @@ def test_claude_code_cli_skill() -> None:
                 ---
                 deny: [pass, raise]
                 ---
-                Execute the `hoge` skill.
-                Then, without changing the current working directory, return the result of the `pwd` command.
+                Invoke the `hoge` skill exactly as written. It creates `test.txt` in the current working directory.
+                Then run the shell command `pwd` with the agent's shell tool (Bash), without changing the current working directory.
+                Do not use `nh_eval` or Python to determine the directory; the answer must come from the shell command output.
+                Return the printed path as a string with leading and trailing whitespace removed.
                 """
 
             result = test_function()
 
-            assert result == str(working_directory)
-            assert (working_directory / "test.txt").is_file()
+            # The marker file is the strongest evidence that the skill ran in the configured directory.
+            assert (working_directory / "test.txt").is_file(), "the hoge skill did not create test.txt in the working directory"
+            assert Path(str(result).strip()).resolve() == working_directory.resolve()
     finally:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
