@@ -49,11 +49,8 @@ def build_step_context(
         step_locals=python_locals,
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        task_name_to_value={
-            implicit_type_alias_reference_name: python_globals[implicit_type_alias_reference_name]
-            for implicit_type_alias_reference_name in type_alias_reference_names
-            if implicit_type_alias_reference_name in python_globals
-        },
+        task_name_to_value={},
+        type_alias_reference_names=type_alias_reference_names,
     )
 
 

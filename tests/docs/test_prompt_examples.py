@@ -22,8 +22,8 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.configuration import StepExecutorConfiguration
+from nighthawk.runtime.prompt import build_user_prompt
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_executor import build_user_prompt
 from tests.execution.prompt_test_helpers import prompt_content_to_text
 
 _DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"

@@ -358,6 +358,25 @@ Truncation:
 - Truncation behavior is the same as the locals summary.
 
 
+#### 8.2.4. Replaceable context construction
+
+`scope(context_builder=builder)` replaces context construction for managed and externally supplied Pydantic AI agents in that scope.
+Omission or `UNSET` inherits, nested scopes restore the parent on exit, and a new run starts with `DefaultContextBuilder`.
+An invalid builder is rejected before any scope state changes.
+
+`ContextBuilder.build(request: ContextRequest) -> Sequence[UserContent]` is synchronous.
+`UserContent` is the native Pydantic AI type; asynchronous retrieval belongs in tools.
+The request supplies `execution_reference`, `processed_natural_program`, `step_context`, ordered `explicit_reference_names` and `explicit_reference_paths`, `output_binding_names`, `binding_name_to_type`, `return_annotation`, and `configuration`.
+`environment` exposes the same live environment used by operations, and `context_limits` exposes the configured budgets.
+Output contracts have shallow read-only mapping structure.
+
+A builder may prioritize, omit, or summarize presentation without changing runtime lookup, object identity, or final validation.
+It returns a sequence rather than a scalar string, bytes, or serialized record.
+Native multimodal items and cache points retain identity through this boundary.
+Configured and scoped user-prompt suffix fragments are appended by common code once after builder output; builders should not add them again.
+`DefaultContextBuilder.build(request)` can be composed inside a custom builder and uses the presentation described above.
+Builder exceptions and invalid content fail the step before model execution and receive the ordinary terminal lifecycle notification.
+
 ### 8.3. Tools available to the LLM
 
 Nighthawk exposes two paths for the LLM to call Python functions:
@@ -664,6 +683,7 @@ API:
     - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
     - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
+    - `context_builder` replaces prompt construction; omission or `UNSET` inherits. See Section 8.2.4.
     - Executor replacement precedes full configuration replacement. Configuration updates require an `AgentStepExecutor` and respect managed/external ownership.
     - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
     - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.

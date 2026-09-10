@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .assignment import AssignmentResult, assign_tool, assign_tool_async
+    from .context import ContextBuilder, ContextRequest, DefaultContextBuilder
     from .environment import StepEnvironment
     from .expression import eval_expression, eval_expression_async
     from .operation_contract import OperationError, OperationFinished, OperationRequest
@@ -12,6 +13,9 @@ if TYPE_CHECKING:
     from .step_result import Break, Continue, Pass, Raise, Return
 
 _name_to_module = {
+    "ContextBuilder": "context",
+    "ContextRequest": "context",
+    "DefaultContextBuilder": "context",
     "StepRequest": "step_request",
     "StepCandidate": "step_request",
     "AssignmentResult": "assignment",
@@ -31,6 +35,9 @@ _name_to_module = {
 }
 
 __all__ = [
+    "ContextBuilder",
+    "ContextRequest",
+    "DefaultContextBuilder",
     "StepCandidate",
     "StepRequest",
     "AssignmentResult",

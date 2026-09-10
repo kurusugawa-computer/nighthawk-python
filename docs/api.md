@@ -222,3 +222,10 @@
       members:
         - assign_tool
         - assign_tool_async
+
+::: nighthawk.runtime.context
+    options:
+      members:
+        - ContextRequest
+        - ContextBuilder
+        - DefaultContextBuilder

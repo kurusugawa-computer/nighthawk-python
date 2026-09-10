@@ -795,7 +795,7 @@ def build_system_prompt(*, configuration: StepExecutorConfiguration) -> str:
     return _resolve_step_system_prompt_text(configuration=configuration)
 
 
-def build_user_prompt(
+def _build_user_prompt_content(
     *,
     processed_natural_program: str,
     step_context: StepContext,
@@ -838,6 +838,10 @@ def build_user_prompt(
         tool_result_max_tokens=context_limits.tool_result_max_tokens,
     )
 
+    return prompt_content
+
+
+def append_user_prompt_suffixes(prompt_content: PromptContentTuple, *, configuration: StepExecutorConfiguration) -> PromptContentTuple:
     suffix_fragments = (
         *configuration.user_prompt_suffix_fragments,
         *_current_user_prompt_suffix_fragments(),
@@ -851,3 +855,18 @@ def build_user_prompt(
         return coalesce_user_content(content_part_list)
 
     return prompt_content
+
+
+def build_user_prompt(
+    *,
+    processed_natural_program: str,
+    step_context: StepContext,
+    configuration: StepExecutorConfiguration,
+) -> PromptContentTuple:
+    """Render the default presentation with configured and scoped suffixes."""
+    content = _build_user_prompt_content(
+        processed_natural_program=processed_natural_program,
+        step_context=step_context,
+        configuration=configuration,
+    )
+    return append_user_prompt_suffixes(content, configuration=configuration)

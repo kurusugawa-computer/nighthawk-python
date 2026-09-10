@@ -12,9 +12,11 @@ from ..errors import ExecutionError, NighthawkError
 from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
 from .async_bridge import run_coroutine_synchronously
+from .context import DefaultContextBuilder, build_context_content, build_context_request
 from .model_candidate import resolve_model_candidate
-from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
+from .prompt import build_system_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
 from .scoping import (
+    _context_builder_var,
     _current_capabilities,
     _current_system_prompt_suffix_fragments,
     get_usage_meter,
@@ -300,11 +302,11 @@ class AgentStepExecutor:
         if step_context.tool_result_rendering_policy is None:
             step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
 
-        user_prompt = build_user_prompt(
-            processed_natural_program=processed_natural_program,
-            step_context=step_context,
-            configuration=self.configuration,
-        )
+        context_request = build_context_request(request, self.configuration)
+        context_builder = _context_builder_var.get()
+        if context_builder is None:
+            context_builder = DefaultContextBuilder()
+        user_prompt = build_context_content(context_request, context_builder)
 
         visible_tool_list = get_visible_tools()
         toolset = ToolResultWrapperToolset(FunctionToolset(visible_tool_list))

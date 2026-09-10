@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
     from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
+    from .context import ContextBuilder
     from .step_context import StepContext
     from .step_executor import AgentStepExecutor, StepExecutor
 
@@ -119,6 +120,9 @@ _user_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
     "nighthawk_user_prompt_suffix_fragments",
     default=(),
 )
+
+_context_builder_var: ContextVar[ContextBuilder | None] = ContextVar("nighthawk_context_builder", default=None)
+
 
 _task_name_to_value_var: ContextVar[dict[str, object]] = ContextVar(
     "nighthawk_task_name_to_value",
@@ -384,6 +388,7 @@ def run(
     oversight_token = _oversight_var.set(None)
     system_fragments_token = _system_prompt_suffix_fragments_var.set(())
     user_fragments_token = _user_prompt_suffix_fragments_var.set(())
+    context_builder_token = _context_builder_var.set(None)
     task_name_to_value_token = _task_name_to_value_var.set({})
     tools_token = scoped_tools_var.set(())
     capabilities_token = _capabilities_var.set(())
@@ -401,6 +406,7 @@ def run(
         _capabilities_var.reset(capabilities_token)
         scoped_tools_var.reset(tools_token)
         _task_name_to_value_var.reset(task_name_to_value_token)
+        _context_builder_var.reset(context_builder_token)
         _user_prompt_suffix_fragments_var.reset(user_fragments_token)
         _system_prompt_suffix_fragments_var.reset(system_fragments_token)
         _lifecycle_var.reset(lifecycle_token)
@@ -430,6 +436,7 @@ def scope(
     system_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
     user_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
     task_references: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
+    context_builder: ContextBuilder | UnsetType = UNSET,
     tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET,
     capabilities: Sequence[AbstractCapability[StepContext]] | Extend[AbstractCapability[StepContext]] | UnsetType = UNSET,
 ) -> Iterator[StepExecutor]:
@@ -437,14 +444,18 @@ def scope(
 
     Omission or UNSET inherits. Ordinary values replace; empty collections clear.
     Extend appends ordered entries; Merge combines task references by identity.
+    Context builders replace presentation while preserving the live environment.
     Oversight and lifecycle accept None, which clears their hooks. Resolve all changes before
     installing context. Executor replacement precedes full configuration replacement.
     """
     from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
+    from .context import ContextBuilder
     from .step_executor import AsyncStepExecutor, SyncStepExecutor
 
     current_step_executor = get_step_executor()
+    if not isinstance(context_builder, (UnsetType, ContextBuilder)):
+        raise TypeError("context_builder must implement ContextBuilder or be UNSET")
     current_execution_reference = get_execution_reference()
     if not isinstance(step_executor, (UnsetType, AsyncStepExecutor, SyncStepExecutor)):
         raise TypeError("step_executor must implement the step executor protocol or be UNSET")
@@ -490,6 +501,7 @@ def scope(
     oversight_token = _oversight_var.set(next_oversight)
     system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
     user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
+    context_builder_token = _context_builder_var.set(_context_builder_var.get() if isinstance(context_builder, UnsetType) else context_builder)
     task_name_to_value_token = _task_name_to_value_var.set(next_task_name_to_value)
     tools_token = scoped_tools_var.set(next_tools)
     capabilities_token = _capabilities_var.set(next_capabilities)
@@ -506,6 +518,7 @@ def scope(
         _capabilities_var.reset(capabilities_token)
         scoped_tools_var.reset(tools_token)
         _task_name_to_value_var.reset(task_name_to_value_token)
+        _context_builder_var.reset(context_builder_token)
         _user_prompt_suffix_fragments_var.reset(user_fragments_token)
         _system_prompt_suffix_fragments_var.reset(system_fragments_token)
         _lifecycle_var.reset(lifecycle_token)

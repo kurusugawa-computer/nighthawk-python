@@ -346,6 +346,18 @@ with nh.run(fast_executor):
 
 See [Executors](executors.md#decision-tree) for when to choose a coding agent backend over a provider-backed executor.
 
+## Custom context construction
+
+Use `nh.scope(context_builder=builder)` when the application needs to choose or summarize the context presented to the model.
+Implement `build(request: ContextRequest)` and return a sequence of Pydantic AI `UserContent` items.
+Import `ContextRequest` and `DefaultContextBuilder` from `nighthawk.runtime`; the default builder can be called from your implementation when retaining part of its presentation.
+
+The request exposes the live environment, Natural program, explicit references, output contracts, and configured budgets.
+Changing presentation does not change which values runtime operations can access.
+Prompt suffix fragments are appended once after your builder returns.
+Nested scopes inherit the builder unless replaced, and a new run uses the default.
+The complete contract is in [context construction](specification.md#824-replaceable-context-construction).
+
 ## Context limits
 
 The LOCALS and GLOBALS sections are bounded by token and item limits configured via `StepContextLimits`. When a limit is reached, remaining entries are omitted and a `<snipped>` marker is appended. The underlying data remains in Python memory and is accessible through binding functions at runtime -- truncation affects prompt coherence, not data availability.
