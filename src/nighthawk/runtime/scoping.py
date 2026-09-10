@@ -211,7 +211,12 @@ def get_lifecycle() -> StepLifecycle | None:
 @contextmanager
 def step_execution_reference_scope(*, source_location: str) -> Iterator[ExecutionReference]:
     current_execution_reference = get_execution_reference()
-    step_execution_reference = replace(current_execution_reference, step_execution_id=generate_ulid(), source_location=source_location)
+    step_execution_reference = replace(
+        current_execution_reference,
+        step_execution_id=generate_ulid(),
+        source_location=source_location,
+        parent_step_execution_id=current_execution_reference.step_execution_id,
+    )
     step_execution_reference_token = _execution_reference_var.set(step_execution_reference)
     try:
         yield step_execution_reference

@@ -8,6 +8,7 @@ from types import CellType
 
 from ..errors import NighthawkError
 from ..json_renderer import JsonRendererStyle
+from .environment import StepEnvironment
 from .execution_reference import ExecutionReference
 
 _MISSING: object = object()
@@ -60,12 +61,23 @@ class StepContext:
     dirty_output_binding_names: set[str] = field(default_factory=set)
     step_locals_revision: int = 0
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
+    environment: StepEnvironment = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.environment = StepEnvironment(
+            python_name_to_value=self.step_locals,
+            python_globals=self.step_globals,
+            task_name_to_value=self.implicit_reference_name_to_value,
+            output_name_set=frozenset(self.binding_commit_targets),
+            binding_name_to_type=self.binding_name_to_type,
+        )
 
     def record_assignment(self, name: str, value: object) -> None:
         """Record an assignment to a step local variable.
 
         Updates step_locals, marks the name as assigned, and bumps the revision.
         """
+        self.environment.assign(name, value)
         self.step_locals[name] = value
         self.assigned_binding_names.add(name)
         self.step_locals_revision += 1
@@ -163,20 +175,9 @@ def resolve_name_in_step_context(step_context: StepContext, name: str) -> object
     Callers must compare the result with ``value is _MISSING`` to detect
     absent names (since the resolved value itself may be ``None``).
     """
-    if name in step_context.step_locals:
-        return step_context.step_locals[name]
-
-    if name in step_context.step_globals:
-        return step_context.step_globals[name]
-
-    python_builtins = step_context.step_globals.get("__builtins__", __builtins__)
-
-    if isinstance(python_builtins, dict):
-        if name in python_builtins:
-            return python_builtins[name]
+    try:
+        return step_context.environment.resolve(name)
+    except UnboundLocalError:
+        raise
+    except NameError:
         return _MISSING
-
-    if hasattr(python_builtins, name):
-        return getattr(python_builtins, name)
-
-    return _MISSING

@@ -17,8 +17,11 @@ from .contracts import ToolBoundaryError
 
 def _compile_expression(expression: str) -> types.CodeType:
     """Compile a Python expression with top-level await support."""
+    tree = ast.parse(expression, mode="eval")
+    if any(isinstance(node, ast.NamedExpr) for node in ast.walk(tree)):
+        raise ValueError("Named assignment expressions are not supported; use nh_assign(target_path, expression)")
     return compile(
-        expression,
+        tree,
         "<nighthawk-eval>",
         "eval",
         flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
@@ -35,7 +38,8 @@ async def eval_expression_async(step_context: StepContext, expression: str) -> o
     """
     try:
         compiled_expression = _compile_expression(expression)
-        value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
+        namespace = step_context.environment.expression_namespace()
+        value = eval(compiled_expression, namespace, namespace)
         if inspect.isawaitable(value):
             return await value
         return value
@@ -47,7 +51,8 @@ def eval_expression(step_context: StepContext, expression: str) -> object:
     """Evaluate a Python expression inside the step execution environment (sync wrapper)."""
     try:
         compiled_expression = _compile_expression(expression)
-        value = eval(compiled_expression, step_context.step_globals, step_context.step_locals)
+        namespace = step_context.environment.expression_namespace()
+        value = eval(compiled_expression, namespace, namespace)
         return run_awaitable_value_synchronously(value)
     except Exception as e:
         raise ToolEvaluationError(str(e)) from e
@@ -105,9 +110,8 @@ def _assign_value_to_target_path(
                 guidance=f"'{name}' is a read binding (<{name}>). To mutate it in-place, use nh_eval (e.g. {name}.update(...)). To rebind, declare it as a write binding (<:{name}>).",
             )
 
-        expected_type = step_context.binding_name_to_type.get(name)
-
-        if expected_type is not None:
+        if name in step_context.binding_name_to_type:
+            expected_type = step_context.binding_name_to_type[name]
             try:
                 adapted = TypeAdapter(expected_type)
                 value = adapted.validate_python(value)
@@ -221,6 +225,18 @@ def _validated_target_path(target_path: str) -> tuple[str, ...]:
     return parsed
 
 
+def _admit_assignment(step_context: StepContext, target_path: str) -> tuple[str, ...]:
+    parsed = _validated_target_path(target_path)
+    try:
+        if len(parsed) == 1:
+            step_context.environment.check_assignment(parsed[0])
+        else:
+            step_context.environment.resolve(parsed[0])
+    except (ValueError, NameError) as exception:
+        _raise_invalid_input(message=str(exception), guidance="Evaluation has not started. Fix the target before retrying.")
+    return parsed
+
+
 def assign_tool(
     step_context: StepContext,
     target_path: str,
@@ -237,7 +253,7 @@ def assign_tool(
     - On failure, raises ToolBoundaryError.
     - The operation is atomic: on any failure, no updates are performed.
     """
-    parsed_target_path = _validated_target_path(target_path)
+    parsed_target_path = _admit_assignment(step_context, target_path)
     value = _resolve_value_for_assignment(step_context, expression)
 
     return _assign_value_to_target_path(
@@ -254,7 +270,7 @@ async def assign_tool_async(
     expression: str,
 ) -> dict[str, Any]:
     """Async version of assign_tool."""
-    parsed_target_path = _validated_target_path(target_path)
+    parsed_target_path = _admit_assignment(step_context, target_path)
     value = await _resolve_value_for_assignment_async(step_context, expression)
 
     return _assign_value_to_target_path(

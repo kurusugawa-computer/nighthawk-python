@@ -23,7 +23,7 @@ class NaturalTransformer(ast.NodeTransformer):
         super().__init__()
         self._captured_name_tuple = captured_name_tuple
         self._return_annotation_stack: list[ast.expr | None] = []
-        self._binding_name_to_type_expression_stack: list[dict[str, ast.expr]] = []
+        self._binding_name_to_type_expression_stack: list[dict[str, list[ast.expr]]] = []
         self._is_async_function_stack: list[bool] = []
         self._loop_depth = 0
 
@@ -245,31 +245,53 @@ class NaturalTransformer(ast.NodeTransformer):
 
     def _current_return_annotation_expression(self) -> ast.expr:
         if not self._return_annotation_stack:
-            return ast.Name(id="object", ctx=ast.Load())
+            return ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
         annotation = self._return_annotation_stack[-1]
         if annotation is None:
-            return ast.Name(id="object", ctx=ast.Load())
-        return annotation
+            return ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
+        return self._source_annotation_expression([annotation])
+
+    @staticmethod
+    def _source_annotation_expression(annotations: list[ast.expr]) -> ast.expr:
+        return ast.Call(
+            func=ast.Name(id="__nh_source_annotation__", ctx=ast.Load()),
+            args=[ast.Tuple(elts=[ast.Constant(ast.unparse(annotation)) for annotation in annotations], ctx=ast.Load())],
+            keywords=[],
+        )
 
     def _collect_binding_name_to_type_expression(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> dict[str, ast.expr]:
-        binding_name_to_type_expression: dict[str, ast.expr] = {}
+    ) -> dict[str, list[ast.expr]]:
+        binding_name_to_type_expression: dict[str, list[ast.expr]] = {}
 
         for argument in [
             *node.args.posonlyargs,
             *node.args.args,
             *node.args.kwonlyargs,
+            *([node.args.vararg] if node.args.vararg else []),
+            *([node.args.kwarg] if node.args.kwarg else []),
         ]:
             if argument.annotation is not None:
-                binding_name_to_type_expression[argument.arg] = argument.annotation
+                binding_name_to_type_expression[argument.arg] = [argument.annotation]
 
+        class AnnotationVisitor(ast.NodeVisitor):
+            def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
+                if isinstance(node.target, ast.Name):
+                    binding_name_to_type_expression.setdefault(node.target.id, []).append(node.annotation)
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+                pass
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
+                pass
+
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+                pass
+
+        visitor = AnnotationVisitor()
         for statement in node.body:
-            if isinstance(statement, ast.AnnAssign):
-                target = statement.target
-                if isinstance(target, ast.Name):
-                    binding_name_to_type_expression[target.id] = statement.annotation
+            visitor.visit(statement)
 
         return binding_name_to_type_expression
 
@@ -277,7 +299,7 @@ class NaturalTransformer(ast.NodeTransformer):
         if not binding_names:
             return ast.Dict(keys=[], values=[])
 
-        binding_name_to_type_expression: dict[str, ast.expr] = {}
+        binding_name_to_type_expression: dict[str, list[ast.expr]] = {}
         if self._binding_name_to_type_expression_stack:
             binding_name_to_type_expression = self._binding_name_to_type_expression_stack[-1]
 
@@ -285,7 +307,12 @@ class NaturalTransformer(ast.NodeTransformer):
         values: list[ast.expr] = []
         for name in binding_names:
             keys.append(ast.Constant(name))
-            values.append(binding_name_to_type_expression.get(name, ast.Name(id="object", ctx=ast.Load())))
+            annotations = binding_name_to_type_expression.get(name)
+            values.append(
+                self._source_annotation_expression(annotations)
+                if annotations
+                else ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
+            )
 
         return ast.Dict(keys=keys, values=values)
 

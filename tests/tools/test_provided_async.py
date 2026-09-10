@@ -46,7 +46,7 @@ def test_nh_eval_awaits_async_expression() -> None:
         return a + b * 8
 
     step_context = _new_step_context()
-    step_context.step_locals["calculate"] = calculate
+    step_context.record_assignment("calculate", calculate)
     run_context = _new_run_context(step_context)
 
     nh_eval = _get_tool_function("nh_eval")
@@ -56,7 +56,7 @@ def test_nh_eval_awaits_async_expression() -> None:
 
 def test_nh_eval_handles_sync_expression() -> None:
     step_context = _new_step_context()
-    step_context.step_locals["x"] = 10
+    step_context.record_assignment("x", 10)
     run_context = _new_run_context(step_context)
 
     nh_eval = _get_tool_function("nh_eval")
@@ -69,7 +69,7 @@ def test_nh_eval_supports_top_level_await() -> None:
         return f"value-{key}"
 
     step_context = _new_step_context()
-    step_context.step_locals["fetch"] = fetch
+    step_context.record_assignment("fetch", fetch)
     run_context = _new_run_context(step_context)
 
     nh_eval = _get_tool_function("nh_eval")
@@ -85,7 +85,7 @@ def test_nh_assign_awaits_async_expression() -> None:
         return a + b * 8
 
     step_context = _new_step_context()
-    step_context.step_locals["calculate"] = calculate
+    step_context.record_assignment("calculate", calculate)
     run_context = _new_run_context(step_context)
 
     nh_assign = _get_tool_function("nh_assign")
@@ -97,7 +97,7 @@ def test_nh_assign_awaits_async_expression() -> None:
 
 def test_nh_assign_handles_sync_expression() -> None:
     step_context = _new_step_context()
-    step_context.step_locals["x"] = 10
+    step_context.record_assignment("x", 10)
     run_context = _new_run_context(step_context)
 
     nh_assign = _get_tool_function("nh_assign")

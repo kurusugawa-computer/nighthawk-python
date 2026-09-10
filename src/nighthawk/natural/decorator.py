@@ -11,6 +11,7 @@ from functools import wraps
 from types import FunctionType
 from typing import Any, cast
 
+from ..runtime.annotations import MISSING_ANNOTATION, SourceAnnotation
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope, python_name_scope
@@ -218,6 +219,8 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         "__nighthawk_runner__": _RunnerProxy(),
         "__nh_extract_program__": extract_program,
         "__nh_python_cell_scope__": python_cell_scope,
+        "__nh_source_annotation__": SourceAnnotation,
+        "__nh_missing_annotation__": MISSING_ANNOTATION,
     }
     factory_name_to_value: dict[str, object] = {**name_to_value, **helper_name_to_value}
 

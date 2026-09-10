@@ -34,7 +34,7 @@ def approve_validated_binding(request: ReturnExpression) -> Accept | Reject:
     [
         ("value", True),
         ("(value)", True),
-        ("previous", False),
+        ("previous", True),
         ("value.real", False),
         ("value + 0", False),
         ("calculate()", False),
@@ -58,7 +58,7 @@ def test_host_name_policy_requires_a_current_validated_write(expression: str, ac
     executor = ScriptedExecutor([StepResponse(bindings={"value": 4}, outcome=ReturnStepOutcome(kind="return", return_expression=expression))])
     with nh.run(executor), nh.scope(oversight=Oversight(inspect_return_expression=approve_validated_binding)):
         if accepted:
-            assert workflow() == 4
+            assert workflow() == (7 if expression == "previous" else 4)
         else:
             with pytest.raises(nh.ExecutionError) as caught:
                 workflow()

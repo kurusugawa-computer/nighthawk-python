@@ -275,7 +275,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
             async def calculate() -> int:
                 return 17
 
-            step_context.step_locals["calculate"] = calculate
+            step_context.record_assignment("calculate", calculate)
             return ReturnStepOutcome(kind="return", return_expression="calculate()"), {}
 
     with nh.run(AssertingExecutor()):
@@ -313,7 +313,7 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
-            step_context.step_locals["result"] = AwaitableInt()
+            step_context.record_assignment("result", AwaitableInt())
             return ReturnStepOutcome(kind="return", return_expression="result"), {}
 
     with nh.run(AssertingExecutor()):
@@ -975,7 +975,7 @@ def test_scope_implicit_references_are_merged_into_step_context() -> None:
         return ["hit"]
 
     def handler(call):  # type: ignore[no-untyped-def]
-        observed_implicit_reference_name_set.update(call.step_globals.keys())
+        observed_implicit_reference_name_set.update(call.task_name_to_value.keys())
         return pass_response()
 
     executor = CallbackExecutor(handler)

@@ -45,6 +45,8 @@ class StepCall:
     allowed_step_kinds: tuple[StepKind, ...]
     step_locals: dict[str, object]
     step_globals: dict[str, object]
+    task_name_to_value: dict[str, object]
+    parent_name_to_value: dict[str, object]
 
 
 @dataclass
@@ -79,6 +81,8 @@ def _build_step_call(
         allowed_step_kinds=allowed_step_kinds,
         step_locals=dict(step_context.step_locals),
         step_globals=filtered_globals,
+        task_name_to_value=dict(step_context.environment.task_name_to_value),
+        parent_name_to_value=dict(step_context.environment.parent_name_to_value),
     )
 
 

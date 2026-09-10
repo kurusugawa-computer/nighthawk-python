@@ -11,3 +11,4 @@ class ExecutionReference:
     scope_id: str
     step_execution_id: str | None = None
     source_location: str | None = None
+    parent_step_execution_id: str | None = None
