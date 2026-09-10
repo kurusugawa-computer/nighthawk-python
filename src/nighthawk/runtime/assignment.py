@@ -40,7 +40,9 @@ def _failure(message: str, *, phase: OperationPhase, evaluation_started: bool) -
 def admit_assignment(step_context: StepContext, target_path: str) -> tuple[str, ...]:
     parsed = parse_identifier_path(target_path)
     if parsed is None:
-        raise _failure("Invalid target_path; expected name(.field)* with ASCII identifiers and no __ segments", phase="admission", evaluation_started=False)
+        raise _failure(
+            "Invalid target_path; expected name(.field)* with ASCII identifiers and no __ segments", phase="admission", evaluation_started=False
+        )
     try:
         if len(parsed) == 1:
             step_context.environment.check_assignment(parsed[0])
@@ -76,10 +78,14 @@ def assign_value(
         for field_name in parsed[1:-1]:
             target = getattr(target, field_name)
     except (AttributeError, NameError) as exception:
-        raise _failure(f"Target {target_path!r} could not be resolved: {exception}", phase="target_resolution", evaluation_started=True) from exception
+        raise _failure(
+            f"Target {target_path!r} could not be resolved: {exception}", phase="target_resolution", evaluation_started=True
+        ) from exception
     field_name = parsed[-1]
     if not isinstance(target, BaseModel):
-        raise _failure(f"Unsupported assignment target {target_path!r}; use an ordinary Python helper", phase="target_resolution", evaluation_started=True)
+        raise _failure(
+            f"Unsupported assignment target {target_path!r}; use an ordinary Python helper", phase="target_resolution", evaluation_started=True
+        )
     target_type = type(target)
     if (
         target_type.__setattr__ is not BaseModel.__setattr__
@@ -97,7 +103,9 @@ def assign_value(
     try:
         setattr(target, field_name, value)
     except ValidationError as exception:
-        raise _failure(f"Target {target_path!r} failed model assignment validation: {exception}", phase="validation", evaluation_started=True) from exception
+        raise _failure(
+            f"Target {target_path!r} failed model assignment validation: {exception}", phase="validation", evaluation_started=True
+        ) from exception
     # The standard setter already validated and wrote once. Read stored state directly,
     # without invoking a final getter or validating the field in isolation.
     value = object.__getattribute__(target, "__dict__")[field_name]
@@ -110,7 +118,11 @@ def assign_value(
 
 async def assign_tool_async(step_context: StepContext, target_path: str, expression: str) -> AssignmentResult:
     request = new_operation_request(
-        step_context, kind="assignment", target_path=target_path, expression=expression, expected_type=step_context.binding_name_to_type.get(target_path)
+        step_context,
+        kind="assignment",
+        target_path=target_path,
+        expression=expression,
+        expected_type=step_context.binding_name_to_type.get(target_path),
     )
     parsed: tuple[str, ...] = ()
     compiled: CodeType | None = None

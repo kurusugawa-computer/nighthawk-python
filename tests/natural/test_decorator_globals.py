@@ -9,8 +9,7 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome, StepKind, StepOutcome
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
 
 _MODULE_SOURCE = '''
 import nighthawk as nh
@@ -39,17 +38,14 @@ class _GlobalsProbeExecutor:
     def __init__(self) -> None:
         self.step_globals_list: list[dict[str, object]] = []
 
-    def run_step(
-        self,
-        *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
+    def run_step(self, *, request: StepRequest) -> StepCandidate:
+        processed_natural_program = request.processed_natural_program
+        step_context = request.step_context
+        binding_names = list(request.output_binding_names)
+        allowed_step_kinds = request.allowed_step_kinds
         _ = (processed_natural_program, binding_names, allowed_step_kinds)
         self.step_globals_list.append(step_context.step_globals)
-        return PassStepOutcome(kind="pass"), {}
+        return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
 
 @pytest.fixture

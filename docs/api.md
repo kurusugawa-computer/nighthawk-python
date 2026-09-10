@@ -108,16 +108,6 @@
 
 ## Step Contracts
 
-Import these types from `nighthawk.runtime.step_contract` when implementing a custom
-`StepExecutor` or constructing a `nighthawk.testing.StepResponse`.
-`StepKind` describes the allowed outcome kinds, and `StepOutcome` is the union of
-the five outcome models, discriminated by their `kind` field.
-
-These models describe executor results before the runner resolves them for
-oversight. In particular, `ReturnStepOutcome.return_expression` holds a Python
-expression that the runner evaluates, whereas `nighthawk.oversight.Return.value`
-holds the evaluated value. Oversight hooks use `nighthawk.oversight.StepResult`.
-
 ::: nighthawk.runtime.step_contract
     options:
       members:
@@ -169,22 +159,13 @@ holds the evaluated value. Oversight hooks use `nighthawk.oversight.StepResult`.
 ::: nighthawk.oversight
     options:
       members:
-        - Pass
-        - Return
-        - Break
-        - Continue
-        - Raise
-        - StepResult
         - StepCommit
-        - ReturnExpression
         - Rewrite
         - Accept
         - Reject
-        - ToolCall
         - Oversight
         - OversightRejectedError
         - StepCommitDecision
-        - ToolCallDecision
 
 ## Lifecycle
 
@@ -192,6 +173,7 @@ holds the evaluated value. Oversight hooks use `nighthawk.oversight.StepResult`.
     options:
       members:
         - StepLifecycle
+        - StepStarted
         - StepFinished
         - StepCompleted
         - StepRaised
@@ -199,3 +181,45 @@ holds the evaluated value. Oversight hooks use `nighthawk.oversight.StepResult`.
         - StepInterrupted
         - FailureStage
         - StepDeliveryError
+
+## Runtime executor boundary
+
+::: nighthawk.runtime.step_executor
+    options:
+      members:
+        - SyncStepExecutor
+        - AsyncStepExecutor
+
+::: nighthawk.runtime.step_result
+    options:
+      members:
+        - Pass
+        - Return
+        - Break
+        - Continue
+        - Raise
+        - StepResult
+
+::: nighthawk.runtime.step_request
+    options:
+      members:
+        - StepRequest
+        - StepCandidate
+
+::: nighthawk.runtime.operation_contract
+    options:
+      members:
+        - OperationRequest
+        - OperationFinished
+
+::: nighthawk.runtime.expression
+    options:
+      members:
+        - eval_expression
+        - eval_expression_async
+
+::: nighthawk.runtime.assignment
+    options:
+      members:
+        - assign_tool
+        - assign_tool_async

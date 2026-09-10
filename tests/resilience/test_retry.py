@@ -260,7 +260,7 @@ class TestRetryingWithNaturalFunction:
             ]
         )
 
-        @retrying(attempts=2, wait=wait_none())
+        @retrying(attempts=2, on=Exception, wait=wait_none())
         @nh.natural_function
         def classify(text: str) -> str:
             _ = text

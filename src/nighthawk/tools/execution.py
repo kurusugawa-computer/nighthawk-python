@@ -13,21 +13,10 @@ from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_core import PydanticSerializationError
 
-from ..errors import NighthawkError
 from ..json_renderer import to_jsonable_value
-from ..oversight import (
-    Accept,
-    OversightRejectedError,
-    Reject,
-    ToolCall,
-    record_oversight_decision,
-)
 from ..runtime._user_content import is_top_level_sequence_payload
 from ..runtime.operation_contract import OperationError
 from ..runtime.operations import OperationExecution, execute_operation_async, new_operation_request
-from ..runtime.scoping import (
-    get_oversight,
-)
 from ..runtime.step_context import StepContext
 from .contracts import ErrorKind, ToolError, ToolOutcome
 
@@ -125,51 +114,6 @@ async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) ->
     return _normalize_tool_success(value)
 
 
-def _inspect_tool_call_if_needed(
-    *,
-    tool_name: str,
-    argument_name_to_value: dict[str, Any],
-    run_context: RunContext[StepContext],
-) -> None:
-    oversight = get_oversight()
-    if oversight is None or oversight.inspect_tool_call is None:
-        return
-    step_context = run_context.deps
-    if not isinstance(step_context, StepContext):
-        raise NighthawkError("Oversight tool inspection requires StepContext dependencies")
-    if not step_context.execution_reference.step_execution_id:
-        raise NighthawkError("Oversight tool inspection requires StepContext.execution_reference.step_execution_id")
-
-    execution_reference = step_context.execution_reference
-    tool_call = ToolCall(
-        execution_reference=execution_reference,
-        tool_name=tool_name,
-        argument_name_to_value=argument_name_to_value,
-        processed_natural_program=step_context.processed_natural_program,
-    )
-    decision = oversight.inspect_tool_call(tool_call)
-
-    if isinstance(decision, Reject):
-        record_oversight_decision(
-            subject="tool_call",
-            verdict="reject",
-            execution_reference=execution_reference,
-            tool_name=tool_name,
-            reason=decision.reason,
-        )
-        raise OversightRejectedError(decision.reason)
-    if not isinstance(decision, Accept):
-        raise NighthawkError("Oversight inspect_tool_call must return Accept or Reject")
-
-    record_oversight_decision(
-        subject="tool_call",
-        verdict="accept",
-        execution_reference=execution_reference,
-        tool_name=tool_name,
-        reason=decision.reason,
-    )
-
-
 class ToolResultWrapperToolset(WrapperToolset[StepContext]):
     def __getattr__(self, name: str) -> object:
         return getattr(self.wrapped, name)
@@ -181,8 +125,6 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
         run_context: RunContext[StepContext],
         tool: ToolsetTool[StepContext],
     ) -> ToolOutcome:
-        _inspect_tool_call_if_needed(tool_name=name, argument_name_to_value=tool_args, run_context=run_context)
-
         async def tool_call() -> object:
             if (tool.tool_def.metadata or {}).get("nighthawk.provided"):
                 return await self.wrapped.call_tool(name, tool_args, run_context, tool)

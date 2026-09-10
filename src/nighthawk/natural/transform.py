@@ -293,9 +293,7 @@ class NaturalTransformer(ast.NodeTransformer):
             keys.append(ast.Constant(name))
             annotations = binding_name_to_type_expression.get(name)
             values.append(
-                self._source_annotation_expression(annotations)
-                if annotations
-                else ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
+                self._source_annotation_expression(annotations) if annotations else ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
             )
 
         return ast.Dict(keys=keys, values=values)

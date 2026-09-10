@@ -12,6 +12,7 @@ from ..errors import ExecutionError, NighthawkError
 from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
 from .async_bridge import run_coroutine_synchronously
+from .model_candidate import resolve_model_candidate
 from .prompt import build_system_prompt, build_user_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
 from .scoping import (
     _current_capabilities,
@@ -34,6 +35,7 @@ from .step_contract import (
     build_step_json_schema,
     build_step_system_prompt_suffix_fragment,
 )
+from .step_request import StepCandidate, StepRequest
 
 
 @runtime_checkable
@@ -60,11 +62,8 @@ class SyncStepExecutor(Protocol):
     def run_step(
         self,
         *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]: ...
+        request: StepRequest,
+    ) -> StepCandidate: ...
 
 
 @runtime_checkable
@@ -74,11 +73,8 @@ class AsyncStepExecutor(Protocol):
     async def run_step_async(
         self,
         *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]: ...
+        request: StepRequest,
+    ) -> StepCandidate: ...
 
 
 type StepExecutor = SyncStepExecutor | AsyncStepExecutor
@@ -293,27 +289,14 @@ class AgentStepExecutor:
         except Exception as e:
             raise ExecutionError(f"Step produced invalid step outcome: {e}") from e
 
-    def _extract_bindings(
-        self,
-        *,
-        binding_names: list[str],
-        step_context: StepContext,
-    ) -> dict[str, object]:
-        """Extract committed bindings from the step context."""
-        bindings: dict[str, object] = {}
-        for name in binding_names:
-            if name in step_context.assigned_binding_names or name in step_context.dirty_output_binding_names:
-                bindings[name] = step_context.step_locals[name]
-        return bindings
-
     async def run_step_async(
         self,
         *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
+        request: StepRequest,
+    ) -> StepCandidate:
+        step_context = request.step_context
+        processed_natural_program = request.processed_natural_program
+        allowed_step_kinds = request.allowed_step_kinds
         if step_context.tool_result_rendering_policy is None:
             step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
 
@@ -348,25 +331,11 @@ class AgentStepExecutor:
             usage_meter.record(result.usage, kind="step")
 
         step_outcome = self._parse_agent_result(result)
-        bindings = self._extract_bindings(binding_names=binding_names, step_context=step_context)
-        return step_outcome, bindings
+        return await resolve_model_candidate(request, step_outcome, {})
 
     def run_step(
         self,
         *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
-        return cast(
-            tuple[StepOutcome, dict[str, object]],
-            run_coroutine_synchronously(
-                lambda: self.run_step_async(
-                    processed_natural_program=processed_natural_program,
-                    step_context=step_context,
-                    binding_names=binding_names,
-                    allowed_step_kinds=allowed_step_kinds,
-                )
-            ),
-        )
+        request: StepRequest,
+    ) -> StepCandidate:
+        return run_coroutine_synchronously(lambda: self.run_step_async(request=request))

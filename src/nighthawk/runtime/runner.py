@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import inspect
 import typing
-from collections.abc import AsyncIterator, Iterable, Iterator
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from contextlib import ExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from types import FrameType
@@ -12,7 +12,7 @@ from typing import TypeAliasType, TypedDict, cast
 from opentelemetry.trace import Span, Status, StatusCode
 from pydantic import TypeAdapter
 
-from ..composition import UNSET, UnsetType
+from ..composition import UnsetType
 from ..errors import ExecutionError, NaturalParseError, NighthawkError
 from ..lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised, StepStarted
 from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
@@ -20,16 +20,14 @@ from ..oversight import (
     Accept,
     OversightRejectedError,
     Reject,
-    ReturnExpression,
     Rewrite,
     StepCommit,
     record_oversight_decision,
 )
 from .annotations import MISSING_ANNOTATION, SourceAnnotation, resolve_annotation
 from .async_bridge import run_coroutine_synchronously
-from .environment import StepEnvironment
+from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
-from .expression import evaluate_expression_operation
 from .notifications import await_notification
 from .scoping import (
     RUN_ID,
@@ -44,21 +42,15 @@ from .scoping import (
     step_execution_reference_scope,
 )
 from .step_context import (
-    _MISSING,
     StepContext,
     ToolResultRenderingPolicy,
     get_python_cell_scope_stack,
     get_step_context_stack,
-    resolve_name_in_step_context,
     step_context_scope,
 )
-from .step_contract import (
-    RaiseStepOutcome,
-    ReturnStepOutcome,
-    StepKind,
-    StepOutcome,
-)
+from .step_contract import StepKind
 from .step_executor import AsyncStepExecutor, StepExecutor, SyncStepExecutor
+from .step_request import StepCandidate, StepRequest
 from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
@@ -172,7 +164,6 @@ def _build_step_globals(
     return step_globals
 
 
-
 class StepEnvelope(TypedDict):
     """Envelope returned by Runner.run_step / run_step_async."""
 
@@ -195,8 +186,7 @@ def _add_step_raised_event(*, step_span: Span, step_outcome: Raise) -> None:
         "nighthawk.step.outcome_kind": step_outcome.kind,
         "nighthawk.step.raise_message": step_outcome.message,
     }
-    if step_outcome.error_type is not None:
-        event_attributes["nighthawk.step.raise_error_type"] = step_outcome.error_type
+    event_attributes["nighthawk.step.raise_error_type"] = step_outcome.error_type.__qualname__
     step_span.add_event("nighthawk.step.raised", event_attributes)
 
 
@@ -220,6 +210,8 @@ class _StepPreparation:
     allowed_step_kinds: tuple[StepKind, ...]
     step_context: StepContext
     input_binding_name_to_value: dict[str, object]
+    output_binding_names: tuple[str, ...]
+    binding_name_to_type: Mapping[str, object]
 
 
 def _build_source_location(*, caller_frame: FrameType) -> str:
@@ -240,7 +232,7 @@ class Runner:
         self.input_binding_name_to_value: dict[str, object] | None = None
         self.validated_binding_name_to_value: dict[str, object] | None = None
         self.assigned_binding_name_to_value: dict[str, object] = {}
-        self.attempted_outcome: StepOutcome | StepResult | None = None
+        self.attempted_outcome: StepResult | None = None
         self.outcome: StepResult | None = None
         self.raise_exception: BaseException | None = None
         self.context_stack = ExitStack()
@@ -281,9 +273,7 @@ class Runner:
                 original_exception=original_exception,
                 attempted_outcome=self.attempted_outcome,
                 validated_binding_name_to_value=self.validated_binding_name_to_value,
-                inspection_subject=cast(typing.Literal["return_expression", "step_commit", "tool_call", "operation"], rejection.subject)
-                if rejection
-                else None,
+                inspection_subject=cast(typing.Literal["step_commit", "operation"], rejection.subject) if rejection else None,
                 rejection_reason=rejection.reason if rejection else None,
             )
             _record_internal_step_failure(step_span=step_span, exception=original_exception)
@@ -347,7 +337,6 @@ class Runner:
             raise ExecutionError(finished, description=self.failure_description) from finished.original_exception
         if original_exception is not None:
             raise original_exception
-
 
     @contextmanager
     def execution(self, *, caller_frame: FrameType) -> Iterator[Runner]:
@@ -519,27 +508,14 @@ class Runner:
             allowed_step_kinds=allowed_step_kinds,
             step_context=step_context,
             input_binding_name_to_value=input_binding_name_to_value,
+            output_binding_names=tuple(output_binding_names),
+            binding_name_to_type=step_context.binding_name_to_type,
         )
-
-    def _resolve_raise_error_type(
-        self,
-        step_context: StepContext,
-        step_outcome: Raise,
-    ) -> type[BaseException]:
-        if step_outcome.error_type is not None:
-            resolved_raise_error_type = resolve_name_in_step_context(step_context, step_outcome.error_type)
-            if resolved_raise_error_type is _MISSING:
-                raise ExecutionError(f"Invalid raise_error_type: {step_outcome.error_type!r}: {step_outcome.message}")
-            if not isinstance(resolved_raise_error_type, type) or not issubclass(resolved_raise_error_type, BaseException):
-                raise ExecutionError(f"Invalid raise_error_type: {step_outcome.error_type!r}: {step_outcome.message}")
-            return resolved_raise_error_type
-
-        return ExecutionError
 
     def _require_allowed_step_kind(
         self,
         *,
-        step_outcome: StepOutcome | StepResult,
+        step_outcome: StepResult,
         allowed_step_kinds: tuple[StepKind, ...],
     ) -> None:
         if step_outcome.kind not in allowed_step_kinds:
@@ -548,20 +524,20 @@ class Runner:
     def _validate_and_coerce_output_bindings(
         self,
         *,
-        step_context: StepContext,
+        preparation: _StepPreparation,
         bindings: dict[str, object],
     ) -> dict[str, object]:
-        undeclared = bindings.keys() - step_context.binding_commit_targets
+        undeclared = bindings.keys() - set(preparation.output_binding_names)
         if undeclared:
             raise ExecutionError(f"Undeclared output binding names: {sorted(undeclared)}")
         validated_binding_name_to_value = dict(bindings)
-        for binding_name in step_context.binding_commit_targets:
+        for binding_name in preparation.output_binding_names:
             if binding_name not in validated_binding_name_to_value:
                 continue
 
-            if binding_name not in step_context.binding_name_to_type:
+            if binding_name not in preparation.binding_name_to_type:
                 continue
-            expected_type = step_context.binding_name_to_type[binding_name]
+            expected_type = preparation.binding_name_to_type[binding_name]
 
             self.failure_description = f"Output binding '{binding_name}' failed validation"
             validated_binding_name_to_value[binding_name] = TypeAdapter(expected_type).validate_python(validated_binding_name_to_value[binding_name])
@@ -572,69 +548,27 @@ class Runner:
     def _validate_bindings_for_outcome(
         self,
         *,
-        step_context: StepContext,
-        step_outcome: StepOutcome,
+        preparation: _StepPreparation,
+        step_outcome: StepResult,
         bindings: dict[str, object],
     ) -> dict[str, object]:
-        undeclared = bindings.keys() - step_context.binding_commit_targets
+        undeclared = bindings.keys() - set(preparation.output_binding_names)
         if undeclared:
             raise ExecutionError(f"Undeclared output binding names: {sorted(undeclared)}")
         if step_outcome.kind == "raise":
             return {}
-        selected_binding_name_to_value = {
-            name: step_context.step_locals[name]
-            for name in sorted(step_context.binding_commit_targets)
-            if name in step_context.step_locals
-        }
+        environment = preparation.step_context.environment
+        selected_binding_name_to_value: dict[str, object] = {}
+        for name in preparation.output_binding_names:
+            if name in environment.step_name_to_value:
+                selected_binding_name_to_value[name] = environment.step_name_to_value[name]
+                continue
+            try:
+                selected_binding_name_to_value[name] = environment.python_name_to_value[name]
+            except (KeyError, UnboundEnvironmentNameError):
+                continue
         selected_binding_name_to_value.update(bindings)
-        return self._validate_and_coerce_output_bindings(step_context=step_context, bindings=selected_binding_name_to_value)
-
-    async def _resolve_return_value(
-        self,
-        *,
-        step_context: StepContext,
-        step_outcome: StepOutcome,
-        bindings: dict[str, object],
-        return_annotation: object,
-        allow_awaitable_return: bool,
-    ) -> object | None:
-        if not isinstance(step_outcome, ReturnStepOutcome):
-            return None
-
-        self.failure_stage = "return_inspection"
-        oversight = get_oversight()
-        if oversight is not None and oversight.inspect_return_expression is not None:
-            request = ReturnExpression(
-                execution_reference=get_execution_reference(),
-                expression=step_outcome.return_expression,
-                expected_type=return_annotation,
-                processed_natural_program=step_context.processed_natural_program,
-                validated_binding_name_to_value=bindings,
-            )
-            decision = oversight.inspect_return_expression(request)
-            if not isinstance(decision, (Accept, Reject)):
-                raise NighthawkError("Oversight inspect_return_expression must return Accept or Reject")
-            record_oversight_decision(
-                subject="return_expression",
-                verdict="reject" if isinstance(decision, Reject) else "accept",
-                execution_reference=request.execution_reference,
-                reason=decision.reason,
-            )
-            if isinstance(decision, Reject):
-                raise OversightRejectedError(decision.reason, subject="return_expression")
-        self.failure_stage = "return_evaluation"
-        self.failure_description = f"Failed to evaluate return_expression {step_outcome.return_expression!r}"
-        resolved = await evaluate_expression_operation(
-            step_context,
-            step_outcome.return_expression,
-            purpose="return",
-            allow_awaitable_result=allow_awaitable_return,
-            expected_type=return_annotation,
-            override_name_to_value=bindings,
-        )
-        self.failure_description = None
-        self.failure_stage = "return_validation"
-        return self._parse_and_coerce_return_value(resolved, return_annotation)
+        return self._validate_and_coerce_output_bindings(preparation=preparation, bindings=selected_binding_name_to_value)
 
     async def _apply_step_oversight_if_needed(
         self,
@@ -655,8 +589,8 @@ class Runner:
             outcome=outcome,
             binding_name_to_value=bindings,
             allowed_step_kinds=preparation.allowed_step_kinds,
-            output_binding_name_set=frozenset(preparation.step_context.binding_commit_targets),
-            binding_name_to_type=preparation.step_context.binding_name_to_type,
+            output_binding_name_set=frozenset(preparation.output_binding_names),
+            binding_name_to_type=preparation.binding_name_to_type,
         )
         decision = oversight.inspect_step_commit(step_commit)
         if inspect.isawaitable(decision):
@@ -693,65 +627,51 @@ class Runner:
         self.failure_stage = "rewrite_validation"
         next_outcome = outcome if isinstance(decision.outcome, UnsetType) else decision.outcome
         self._require_allowed_step_kind(step_outcome=next_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
-        if decision.return_value is not UNSET:
-            if not isinstance(outcome, Return):
-                raise NighthawkError("Rewrite return_value requires an existing Return outcome")
-            next_outcome = Return(self._parse_and_coerce_return_value(decision.return_value, return_annotation))
-        elif not isinstance(decision.outcome, UnsetType) and isinstance(next_outcome, Return):
+        if not isinstance(decision.outcome, UnsetType) and isinstance(next_outcome, Return):
             next_outcome = Return(self._parse_and_coerce_return_value(next_outcome.value, return_annotation))
 
         next_bindings = bindings
         if isinstance(next_outcome, Raise):
+            self._validate_raise(next_outcome)
             if not isinstance(decision.binding_name_to_value, UnsetType) and decision.binding_name_to_value:
                 raise NighthawkError("Rewrite Raise cannot include output bindings")
             next_bindings = {}
         elif not isinstance(decision.binding_name_to_value, UnsetType):
-            next_bindings = self._validate_and_coerce_output_bindings(
-                step_context=preparation.step_context, bindings=dict(decision.binding_name_to_value)
-            )
+            next_bindings = self._validate_and_coerce_output_bindings(preparation=preparation, bindings=dict(decision.binding_name_to_value))
         return next_outcome, next_bindings
 
     async def _finalize_step(
         self,
         *,
         preparation: _StepPreparation,
-        step_outcome: StepOutcome,
-        bindings: dict[str, object],
+        candidate: StepCandidate,
         return_annotation: object,
-        allow_awaitable_return: bool,
     ) -> StepEnvelope:
         step_context = preparation.step_context
         if step_context.operation_failure is not None:
             raise step_context.operation_failure
-        self.attempted_outcome = step_outcome
         self.failure_stage = "outcome_validation"
+        if not isinstance(candidate, StepCandidate):
+            raise ExecutionError("Step executor must return StepCandidate")
+        step_outcome = candidate.outcome
+        bindings = dict(candidate.binding_name_to_value)
+        self.attempted_outcome = step_outcome
         self._require_allowed_step_kind(step_outcome=step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
         self.failure_stage = "binding_validation"
         validated_bindings = self._validate_bindings_for_outcome(
-            step_context=step_context,
+            preparation=preparation,
             step_outcome=step_outcome,
             bindings=bindings,
         )
         self.validated_binding_name_to_value = validated_bindings
-        return_value = await self._resolve_return_value(
-            step_context=step_context,
-            step_outcome=step_outcome,
-            bindings=validated_bindings,
-            return_annotation=return_annotation,
-            allow_awaitable_return=allow_awaitable_return,
-        )
-        if isinstance(step_outcome, ReturnStepOutcome):
-            outcome: StepResult = Return(return_value)
-        elif isinstance(step_outcome, RaiseStepOutcome):
-            outcome = Raise(step_outcome.raise_message, step_outcome.raise_error_type)
-        else:
-            outcome = {"pass": Pass, "break": Break, "continue": Continue}[step_outcome.kind]()
-        self.attempted_outcome = outcome
-        initial_outcome = outcome
-        resolved_exception_type: type[BaseException] | None = None
+        outcome = step_outcome
+        if isinstance(outcome, Return):
+            self.failure_stage = "return_validation"
+            outcome = Return(self._parse_and_coerce_return_value(outcome.value, return_annotation))
         if isinstance(outcome, Raise):
-            self.failure_stage = "raise_resolution"
-            resolved_exception_type = self._resolve_raise_error_type(step_context, outcome)
+            self.failure_stage = "outcome_validation"
+            self._validate_raise(outcome)
+        self.attempted_outcome = outcome
         self.failure_stage = "commit_inspection"
         outcome, validated_bindings = await self._apply_step_oversight_if_needed(
             preparation=preparation,
@@ -763,12 +683,9 @@ class Runner:
         self.attempted_outcome = outcome
         self.validated_binding_name_to_value = validated_bindings
         if isinstance(outcome, Raise):
-            self.failure_stage = "raise_resolution"
-            exception_type = resolved_exception_type if outcome is initial_outcome else self._resolve_raise_error_type(step_context, outcome)
-            assert exception_type is not None
+            self._validate_raise(outcome)
             self.failure_stage = "raise_construction"
-            message = outcome.message if outcome.error_type is not None else f"Execution failed: {outcome.message}"
-            self.raise_exception = exception_type(message)
+            self.raise_exception = outcome.error_type(outcome.message)
         self.failure_stage = "binding_assignment"
         return StepEnvelope(outcome=outcome, input_bindings=dict(preparation.input_binding_name_to_value), bindings=validated_bindings)
 
@@ -802,28 +719,36 @@ class Runner:
         *,
         allow_awaitable_return: bool,
     ) -> StepEnvelope:
+        request = self._build_request(preparation, output_binding_names, return_annotation, allow_awaitable_return)
         executor = self.step_executor
         if isinstance(executor, AsyncStepExecutor):
-            outcome, bindings = await executor.run_step_async(
-                processed_natural_program=preparation.processed_program,
-                step_context=preparation.step_context,
-                binding_names=output_binding_names,
-                allowed_step_kinds=preparation.allowed_step_kinds,
-            )
+            candidate = await executor.run_step_async(request=request)
         elif isinstance(executor, SyncStepExecutor):
-            outcome, bindings = executor.run_step(
-                processed_natural_program=preparation.processed_program,
-                step_context=preparation.step_context,
-                binding_names=output_binding_names,
-                allowed_step_kinds=preparation.allowed_step_kinds,
-            )
+            candidate = executor.run_step(request=request)
         else:
             raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
-        return await self._finalize_step(
-            preparation=preparation,
-            step_outcome=outcome,
-            bindings=bindings,
+        return await self._finalize_step(preparation=preparation, candidate=candidate, return_annotation=return_annotation)
+
+    @staticmethod
+    def _validate_raise(outcome: Raise) -> None:
+        if not isinstance(outcome.error_type, type) or not issubclass(outcome.error_type, BaseException):
+            raise ExecutionError("Raise error_type must be a resolved exception class")
+
+    @staticmethod
+    def _build_request(
+        preparation: _StepPreparation,
+        output_binding_names: list[str],
+        return_annotation: object,
+        allow_awaitable_return: bool,
+    ) -> StepRequest:
+        return StepRequest(
+            execution_reference=preparation.step_context.execution_reference,
+            processed_natural_program=preparation.processed_program,
+            step_context=preparation.step_context,
+            output_binding_names=tuple(output_binding_names),
+            binding_name_to_type=preparation.binding_name_to_type,
             return_annotation=return_annotation,
+            allowed_step_kinds=preparation.allowed_step_kinds,
             allow_awaitable_return=allow_awaitable_return,
         )
 
@@ -847,20 +772,10 @@ class Runner:
         self.failure_stage = "executor"
         # Keep synchronous executors on the caller thread, even inside a running event loop.
         if isinstance(self.step_executor, SyncStepExecutor):
-            outcome, bindings = self.step_executor.run_step(
-                processed_natural_program=preparation.processed_program,
-                step_context=preparation.step_context,
-                binding_names=output_binding_names,
-                allowed_step_kinds=preparation.allowed_step_kinds,
-            )
+            request = self._build_request(preparation, output_binding_names, return_annotation, False)
+            candidate = self.step_executor.run_step(request=request)
             return run_coroutine_synchronously(
-                lambda: self._finalize_step(
-                    preparation=preparation,
-                    step_outcome=outcome,
-                    bindings=bindings,
-                    return_annotation=return_annotation,
-                    allow_awaitable_return=False,
-                )
+                lambda: self._finalize_step(preparation=preparation, candidate=candidate, return_annotation=return_annotation)
             )
         return run_coroutine_synchronously(
             lambda: self._execute_async(

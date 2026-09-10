@@ -11,10 +11,12 @@ from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime.async_bridge import run_coroutine_synchronously
+from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.prompt import build_system_prompt, resolve_step_system_prompt_template_text
 from nighthawk.runtime.scoping import get_usage_meter
-from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepFinalResult, StepKind
+from nighthawk.runtime.step_contract import PassStepOutcome, ReturnStepOutcome, StepFinalResult
 from tests.execution.stub_executor import StubExecutor
 
 GLOBAL_NUMBER = 7
@@ -68,20 +70,17 @@ def test_sync_step_execution_sets_execution_reference_step_execution_id() -> Non
 
     @dataclass
     class StepIdAssertingExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[PassStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_step_kinds
             observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
             assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
-            return PassStepOutcome(kind="pass"), {"result": 11}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 11})
 
     with nh.run(StepIdAssertingExecutor()):
 
@@ -107,20 +106,17 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 
     @dataclass
     class AssertingExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[PassStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_step_kinds
 
             assert step_context.step_locals["x"] == 10
-            return PassStepOutcome(kind="pass"), {"result": 11}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 11})
 
     with nh.run(AssertingExecutor()):
 
@@ -208,20 +204,17 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
 
     @dataclass
     class AsyncStepIdAssertingExecutor:
-        async def run_step_async(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[PassStepOutcome, dict[str, object]]:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_step_kinds
             observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
             assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
-            return PassStepOutcome(kind="pass"), {"result": 13}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 13})
 
     with nh.run(AsyncStepIdAssertingExecutor()):
 
@@ -245,28 +238,22 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
 
     @dataclass
     class AssertingExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[ReturnStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
             raise AssertionError("run_step should not be used for this async test")
 
-        async def run_step_async(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[ReturnStepOutcome, dict[str, object]]:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_step_kinds
@@ -276,7 +263,7 @@ def test_async_natural_function_awaits_awaitable_return_value_from_step_executor
                 return 17
 
             step_context.record_assignment("calculate", calculate)
-            return ReturnStepOutcome(kind="return", return_expression="calculate()"), {}
+            return await resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="calculate()"), {})
 
     with nh.run(AssertingExecutor()):
 
@@ -301,20 +288,19 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
 
     @dataclass
     class AssertingExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[ReturnStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
             step_context.record_assignment("result", AwaitableInt())
-            return ReturnStepOutcome(kind="return", return_expression="result"), {}
+            return run_coroutine_synchronously(
+                lambda: resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="result"), {})
+            )
 
     with nh.run(AssertingExecutor()):
 
@@ -622,19 +608,16 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
     class RecordingExecutor:
         seen_programs: list[str] = field(default_factory=list)
 
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: object,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[PassStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
             self.seen_programs.append(processed_natural_program)
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     recording_executor = RecordingExecutor()
 

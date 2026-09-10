@@ -11,8 +11,8 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import NighthawkError
+from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime import scoping as runtime_scoping
-from nighthawk.runtime.step_contract import StepKind
 from nighthawk.runtime.step_executor import AgentStepExecutor
 from tests.execution.stub_executor import StubExecutor
 
@@ -510,14 +510,11 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
             return "custom string message"
 
     class FailingExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ):
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = (processed_natural_program, step_context, binding_names, allowed_step_kinds)
             raise CustomExecutionError("ignored")
 

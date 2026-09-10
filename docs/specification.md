@@ -400,7 +400,7 @@ The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` inj
 Role split with implicit references:
 
 - `implicit_references` injects Python names into `step_globals`; they render as signature lines and are invoked through `nh_eval`.
-- `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_tool_call`, and are served to coding-agent backends over MCP.
+- `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_operation`, and are served to coding-agent backends over MCP.
 - A given callable SHOULD be exposed through one of the two, not both.
 
 Provided tools (built-in):
@@ -523,7 +523,8 @@ Atomicity requirement:
 
 ### 8.4. Execution contract (final JSON)
 
-At the end of each execution, the LLM returns a final JSON object that represents exactly one outcome variant.
+The managed model adapter parses a final JSON object representing one outcome variant.
+This transport schema belongs to the model adapter; custom executors return resolved `StepCandidate` values as described in Section 14.
 
 Purpose:
 
@@ -541,7 +542,7 @@ Outcome kinds:
 - `return`:
     - Return from the surrounding Python function immediately.
     - Payload keys: `kind`, and required `return_expression`.
-    - `return_expression` is a Python expression evaluated against `step_globals` and `step_locals` (consistent with `nh_eval` and `nh_assign` expression evaluation).
+    - `return_expression` is evaluated through the common operation pipeline against the step environment before the adapter returns a candidate.
     - If the surrounding function is async and the evaluated value is awaitable, the host awaits it before validation.
     - The host then validates/coerces the evaluated Python value to the function's return type annotation.
     - If the surrounding function is sync and the evaluated value is awaitable, execution fails.
@@ -554,7 +555,8 @@ Outcome kinds:
     - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.
     - `raise_error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
     - The host enforces this using the structured output JSON Schema: when `raise_error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
-    - When `raise_error_type` is provided, the host raises that exception type with the provided `raise_message`.
+    - The adapter resolves the exception class through the common operation pipeline. Without a supplied class, it uses `Exception`.
+    - The runner constructs the final exception with `raise_message` after commit inspection.
 
 The implementation chooses strict parsing. Any non-JSON final response is an error.
 
@@ -710,35 +712,65 @@ Semantics:
 
 ### 10.2. Host commit boundary
 
-The executor/model contract remains the expression-based `StepOutcome`. Before inspection, the runner checks allowed kinds, validates writes, and evaluates and validates a return expression once, including awaiting it once for async functions. Invalid initial results fail before inspection. An initial raise has an empty output mapping, never unvalidated writes. Its exception type is resolved and validated before inspection; a missing name or a value that is not an exception class fails with `ExecutionError` before the hook runs.
+Every executor returns a resolved `StepCandidate` containing an outcome and a shallow read-only `binding_name_to_value` mapping.
+The runner requires this contract for custom executors and managed agents alike.
+It checks allowed kinds, rejects undeclared output proposals, validates all initialized declared outputs with explicit proposals taking precedence, and independently validates a resolved return value.
+Selected output contracts are fixed at step entry.
+A custom executor cannot change finalization contracts by replacing context metadata.
 
-`StepCommit.outcome` is a resolved `StepResult`: frozen `Pass()`, `Return(value)`, `Break()`, `Continue()`, or `Raise(message, error_type=None)` records exported through `nh.oversight`. Each has a fixed non-init `kind`. Only `Return` has a value; `Return(None)` is distinct from `Pass()`. Raise's optional error type is a Python binding name resolved by existing exception rules. The internal runner envelope and generated return/break/continue dispatch use the same resolved variants.
+`StepCommit.outcome` uses the frozen Pydantic models exported from `nighthawk.runtime`: `Pass()`, `Return(value)`, `Break()`, `Continue()`, and `Raise(message, error_type=Exception)`.
+`Return(None)` is distinct from `Pass()`.
+`Raise.error_type` is a resolved exception class, validated before inspection.
+An initial Raise discards pending outputs without validating their values, while still rejecting undeclared output names.
+Its commit mapping is empty.
 
-The hook runs once. `Accept` retains validated values without repeating validators. `Reject` produces a `StepFailed` at `oversight_rejection` before final bindings are assigned; its original exception is `OversightRejectedError`. `Rewrite` fields `outcome`, `binding_name_to_value`, and `return_value` default to `UNSET`. A supplied mapping replaces all committed writes, including an empty mapping. Empty rewrites, invalid outcome/mapping shapes, or both outcome and return_value are errors. `Rewrite(return_value=None)` explicitly supplies a return subject to annotation validation; `UNSET` cannot represent an application return through this patch field.
+`Oversight.inspect_step_commit` receives one validated commit and may return its decision directly or asynchronously.
+`Accept` preserves validated values without repeating validators.
+`Reject` produces a failed terminal record before generated Python assignments.
+`Rewrite` accepts `outcome` and `binding_name_to_value`, each defaulting to `UNSET`; an empty rewrite is invalid.
+A supplied mapping completely replaces the committed writes, including when it is empty.
+`Rewrite(outcome=Return(None))` explicitly supplies `None`, subject to the return annotation and allowed-kind checks.
 
-A return_value patch requires an existing Return. Changing another allowed kind to return uses `Rewrite(outcome=Return(value=...))`. Rewrites recheck allowed kinds and validate supplied replacements before any final assignment, without a second inspection. Bindings-only rewrites retain the resolved return and never replay its expression. Undeclared output names are rejected. A final Raise commits no writes; a nonempty replacement mapping paired with Raise is invalid. Rewriting away from an initial raise inherits an empty mapping unless replacements are supplied, so unvalidated output cannot reappear.
+Rewrites validate only supplied replacements and do not inspect again.
+A bindings-only rewrite retains the resolved return value and never replays an expression.
+A final Raise commits no outputs; pairing it with an explicitly supplied nonempty mapping is invalid.
+Rewriting away from an initial Raise inherits its empty mapping unless replacements are supplied.
+Construct the final exception only after inspection; rejection or a rewrite away from Raise never executes its constructor.
 
-An unchanged Raise reuses its resolved exception type; a replacement Raise resolves and validates its own type. The exception instance is constructed only for the final Raise, after inspection. Rejecting a candidate or rewriting it to another kind does not execute the original exception constructor.
+`StepCandidate`, `StepCommit`, and `OperationRequest` preserve live Python values in shallow read-only mappings.
+Frozen record structure does not isolate the contained object graph.
+Trusted hooks use Rewrite to change a commit; durable history requires explicit copying or serialization.
+Finalization cannot undo earlier application calls, object mutation, or validator effects.
 
-`StepCommit` and `ToolCall` capture top-level mapping membership in shallow read-only views. Contained lists, models, and arbitrary objects retain type and identity; frozen records do not deeply isolate application objects. Trusted hooks must use Rewrite rather than mutate these references. Views support synchronous inspection; durable history requires host copying or serialization. Logical commit guarantees cannot roll back tool, validator, or return-expression side effects.
+### 10.3. Operation inspection
 
-### 10.3. Return expression approval
+`Oversight.inspect_operation(OperationRequest)` returns `Accept` or `Reject`, directly or asynchronously.
+Evaluation, assignment, model return-expression resolution, native tools, and inspection operations share this boundary.
+The request includes the execution reference, operation Id, kind, and applicable expression, assignment target, tool arguments, and expected type.
+Admission runs before inspection; inspection runs before any operation body or await of its result.
+Requests execute serially within each step.
 
-`Oversight.inspect_return_expression(ReturnExpression) -> Accept | Reject` runs after outcome admission and initial write validation, before compilation, evaluation, or await. The request carries `execution_reference`, expression text, `expected_type`, `processed_natural_program`, and `validated_binding_name_to_value` in a shallow read-only view. It cannot rewrite the expression or provide an evaluator. Invalid decisions fail at `return_inspection`; explicit rejection records `oversight_rejection`, `inspection_subject="return_expression"`, and the reason.
+Operation rejection and inspection failures are terminal for that step.
+Later queued operations cannot execute their bodies, and an executor cannot suppress the failure and finalize a successful candidate.
+Ordinary exceptions from application helpers and native tools propagate to Python.
+Runtime syntax, name-resolution, and value-validation errors provide recoverable operation feedback; Pydantic AI control signals retain their native meaning.
+Each completed operation delivers an `OperationFinished` fact with its phase, whether evaluation started, and its live result or original exception.
+A notification failure does not change that fact or replay the operation.
 
-Core owns expression evaluation, await in async functions, and return validation exactly once for the original candidate. The later resolved commit inspector still supports replacement values, which receive their own validation. An absent expression inspector preserves permitted return support; `deny: [return]` prevents both inspection and evaluation. This approves trusted execution and is not a sandbox. Hosts whose value policy permits only write bindings and capability requests must continue denying return expressions.
-
-A host restricting return expressions to write bindings must parse the expression as Python syntax and accept a single `ast.Name` only when its name is present in `ReturnExpression.validated_binding_name_to_value`. Declaring a write binding alone is insufficient: an executor may omit it from this candidate, leaving name resolution to an existing local or global value. Calls, attributes, indexing, and other expressions do not satisfy this name-only policy. Arbitrary `ast.Constant` values are a separate model-selected value path, not validated write bindings; any permitted constants need their own explicit host policy, such as a finite set of trusted sentinel values.
-
-Name-only approval limits the expression's syntax, not the later work or final value. An awaitable binding is still awaited by an async Natural function, and core still validates the return against the function annotation. Validators may transform values or have effects even if the binding and return annotations are identical. A host requiring only a lookup must also reject awaitable values and account for return validation in its value policy. Validation occurs once per original binding/return candidate at each core boundary, not once globally across tools, host code, and both boundaries combined. An absent hook does not weaken core validation.
-
-Final commit inspection remains necessary for hosts imposing a relationship between return values and committed writes. A binding-only Rewrite retains the previously resolved return, even if the approved expression was that binding's name. Replacements must preserve the host's intended relationship explicitly; core does not replay the expression or promise return-value identity with final assignments. A host policy limited to write bindings and capability requests must keep return denied until its own specification explicitly admits this route, including permitted constants, await behavior, validation, and rewrites.
+Model adapters resolve return expressions through this pipeline once before returning a candidate.
+Async Natural returns may await the expression result once; sync Natural returns reject awaitable expression results.
+Custom executors may directly construct `Return(value)` without evaluating an expression or creating an operation event.
+The runner independently validates the resolved value and all selected outputs before commit inspection.
+Expression-syntax policies belong in operation inspection; policies relating return values to committed outputs belong in commit inspection.
+A bindings-only rewrite can intentionally diverge from an earlier return value.
 
 ### 10.4. Terminal delivery and host ledgers
 
-`nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=callback))` installs a synchronous callback accepting `StepFinished` and returning `None`. Omission or `UNSET` inherits; `None` clears. A new run resets lifecycle. Each execution captures the configuration on entry, before preparation. If that configuration has a handler, core attempts notification once while Python can unwind normally; a cleared or absent handler receives no notification. Definition-time parsing, decorator compilation, and failure to enter a required run are outside this boundary. Identity, step context when established, and the step span remain active during delivery and restore afterward, including when delivery fails.
+`nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=callback))` installs a callback accepting `StepFinished` and returning `None` or an awaitable completion.
+`on_step_started` runs before preparation, and `on_operation_finished` delivers operation facts.
+All three callbacks support direct and asynchronous completion. Omission or `UNSET` inherits; `None` clears. A new run resets lifecycle. Each execution captures the configuration on entry, before preparation. If that configuration has a handler, core attempts notification once while Python can unwind normally; a cleared or absent handler receives no notification. Definition-time parsing, decorator compilation, and failure to enter a required run are outside this boundary. Identity, step context when established, and the step span remain active during delivery and restore afterward, including when delivery fails.
 
-The public `nh.get_lifecycle()` returns the currently scoped configuration object, or `None`, and requires an active run. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. The getter observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core still wraps ordinary execution failures if there is no handler to translate them.
+The public `nh.get_lifecycle()` returns the currently scoped configuration object, or `None`, and requires an active run. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. The getter observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; application exceptions recorded by the operation pipeline propagate unchanged.
 
 Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
 
@@ -824,13 +856,16 @@ Exceptions propagated to the host can be caught with standard `try`/`except`. Re
 Nighthawk defines two step executor protocols. Both are `@runtime_checkable`.
 
 - `SyncStepExecutor`
-    - `run_step(*, processed_natural_program: str, step_context: StepContext, binding_names: list[str], allowed_step_kinds: tuple[str, ...]) -> tuple[StepOutcome, dict[str, object]]`
+    - `run_step(*, request: StepRequest) -> StepCandidate`
 - `AsyncStepExecutor`
-    - `run_step_async(*, processed_natural_program: str, step_context: StepContext, binding_names: list[str], allowed_step_kinds: tuple[str, ...]) -> tuple[StepOutcome, dict[str, object]]`
+    - `run_step_async(*, request: StepRequest) -> StepCandidate`
 
 The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the union accepted by `nighthawk.run()`.
 
-Both methods return a tuple of the step outcome and a mapping from binding names to their final values.
+`StepRequest` holds `execution_reference`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `binding_name_to_type`, `return_annotation`, `allowed_step_kinds`, and `allow_awaitable_return`.
+Its context owns the environment; no second namespace is assembled for the executor.
+Both methods return `StepCandidate(outcome=..., binding_name_to_value=...)` containing live values.
+Finalization remains mandatory, as specified in Section 10.2.
 
 ### 14.2. AgentStepExecutor
 
@@ -856,30 +891,17 @@ Instance attributes:
 Any object implementing `SyncStepExecutor` or `AsyncStepExecutor` can serve as a backend. The protocol surface for `AsyncStepExecutor`:
 
 ```py
-from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_executor import AsyncStepExecutor, StepOutcome
+from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.step_executor import AsyncStepExecutor
 
 
 class MyExecutor(AsyncStepExecutor):
-    async def run_step_async(
-        self,
-        *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[str, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
-        # processed_natural_program: the Natural program text after
-        #   sentinel removal, dedent, f-string evaluation, and
-        #   frontmatter stripping.
-        # step_context: mutable per-step context containing step_locals,
-        #   step_globals, and execution_reference.
-        # binding_names: names declared as <:name> write bindings.
-        # allowed_step_kinds: outcome kinds permitted for this block
-        #   (e.g., ("pass", "return", "raise")).
-        #
-        # Return (outcome, binding_values) where binding_values maps
-        # each committed binding name to its final value.
+    async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+        # Read the program and selected contracts from request.
+        # Use request.step_context.environment for live name resolution.
+        # Runtime eval_expression_async and assign_tool_async use the common
+        # operation pipeline, including inspection and lifecycle delivery.
+        # Return resolved live values; the runner validates the final candidate.
         ...
 ```
 

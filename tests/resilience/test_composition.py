@@ -203,7 +203,7 @@ class TestCompositionWithNaturalFunction:
             return result
 
         composed = fallback(
-            retrying(attempts=2, wait=wait_none())(primary),
+            retrying(attempts=2, on=Exception, wait=wait_none())(primary),
             backup,
             default="unknown",
         )

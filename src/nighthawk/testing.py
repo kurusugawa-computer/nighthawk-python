@@ -9,7 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from .runtime.async_bridge import run_coroutine_synchronously
 from .runtime.execution_reference import ExecutionReference
+from .runtime.model_candidate import resolve_model_candidate
 from .runtime.step_context import StepContext
 from .runtime.step_contract import (
     BreakStepOutcome,
@@ -20,6 +22,7 @@ from .runtime.step_contract import (
     StepKind,
     StepOutcome,
 )
+from .runtime.step_request import StepCandidate, StepRequest
 
 
 @dataclass
@@ -54,8 +57,7 @@ class StepResponse:
     """Scripted response for a single Natural block execution.
 
     Attributes:
-        bindings: Mapping from write binding names to their values. Names not in the step's ``binding_names`` are silently ignored.
-            in the step's ``binding_names`` are silently ignored.
+        bindings: Proposed output values. Undeclared names fail finalization.
         outcome: The step outcome. Defaults to ``PassStepOutcome``.
     """
 
@@ -86,13 +88,8 @@ def _build_step_call(
     )
 
 
-def _apply_response(
-    response: StepResponse,
-    binding_names: list[str],
-) -> tuple[StepOutcome, dict[str, object]]:
-    binding_name_set = set(binding_names)
-    filtered_bindings = {name: value for name, value in response.bindings.items() if name in binding_name_set}
-    return response.outcome, filtered_bindings
+def _apply_response(response: StepResponse, request: StepRequest) -> StepCandidate:
+    return run_coroutine_synchronously(lambda: resolve_model_candidate(request, response.outcome, response.bindings))
 
 
 class ScriptedExecutor:
@@ -128,16 +125,28 @@ class ScriptedExecutor:
     def run_step(
         self,
         *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
-        call = _build_step_call(processed_natural_program, step_context, binding_names, allowed_step_kinds)
+        request: StepRequest,
+    ) -> StepCandidate:
+        call = _build_step_call(
+            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
+        )
         self.calls.append(call)
         index = len(self.calls) - 1
         response = self.responses[index] if index < len(self.responses) else self.default_response
-        return _apply_response(response, binding_names)
+        return _apply_response(response, request)
+
+    async def run_step_async(
+        self,
+        *,
+        request: StepRequest,
+    ) -> StepCandidate:
+        call = _build_step_call(
+            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
+        )
+        self.calls.append(call)
+        index = len(self.calls) - 1
+        response = self.responses[index] if index < len(self.responses) else self.default_response
+        return await resolve_model_candidate(request, response.outcome, response.bindings)
 
 
 class CallbackExecutor:
@@ -167,15 +176,26 @@ class CallbackExecutor:
     def run_step(
         self,
         *,
-        processed_natural_program: str,
-        step_context: StepContext,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
-        call = _build_step_call(processed_natural_program, step_context, binding_names, allowed_step_kinds)
+        request: StepRequest,
+    ) -> StepCandidate:
+        call = _build_step_call(
+            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
+        )
         self.calls.append(call)
         response = self.handler(call)
-        return _apply_response(response, binding_names)
+        return _apply_response(response, request)
+
+    async def run_step_async(
+        self,
+        *,
+        request: StepRequest,
+    ) -> StepCandidate:
+        call = _build_step_call(
+            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
+        )
+        self.calls.append(call)
+        response = self.handler(call)
+        return await resolve_model_candidate(request, response.outcome, response.bindings)
 
 
 # ── Convenience response factories ──

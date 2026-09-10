@@ -131,7 +131,7 @@ class TestScriptedExecutorPassOutcome:
 
 
 class TestScriptedExecutorRaiseOutcome:
-    def test_raises_execution_error(self) -> None:
+    def test_raises_exception_by_default(self) -> None:
         executor = ScriptedExecutor(
             responses=[
                 raise_response("something went wrong"),
@@ -146,8 +146,9 @@ class TestScriptedExecutorRaiseOutcome:
             """
             return result
 
-        with nh.run(executor), pytest.raises(nh.ExecutionError, match="something went wrong"):
+        with nh.run(executor), pytest.raises(Exception, match="something went wrong") as caught:
             f()
+        assert type(caught.value) is Exception
 
     def test_raises_custom_error_type(self) -> None:
         executor = ScriptedExecutor(
@@ -276,10 +277,10 @@ class TestScriptedExecutorAllowedStepKinds:
 
 
 class TestScriptedExecutorBindingFiltering:
-    def test_ignores_extra_bindings_not_in_binding_names(self) -> None:
+    def test_rejects_extra_bindings_not_in_declared_outputs(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(result="hello", extra="ignored"),
+                pass_response(result="hello", extra="invalid"),
             ]
         )
 
@@ -291,10 +292,8 @@ class TestScriptedExecutorBindingFiltering:
             """
             return result
 
-        with nh.run(executor):
-            output = f()
-
-        assert output == "hello"
+        with nh.run(executor), pytest.raises(nh.ExecutionError, match="Undeclared output.*extra"):
+            f()
 
 
 # ── CallbackExecutor tests ──

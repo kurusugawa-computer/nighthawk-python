@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 import pytest
 from pydantic_ai import Agent
@@ -12,9 +11,17 @@ from pydantic_ai.toolsets.function import FunctionToolset
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle, StepRaised
 from nighthawk.oversight import Accept, Oversight, OversightRejectedError, Reject
-from nighthawk.runtime import OperationError, OperationFinished, OperationRequest, assign_tool_async, eval_expression_async
+from nighthawk.runtime import (
+    OperationError,
+    OperationFinished,
+    OperationRequest,
+    Pass,
+    StepCandidate,
+    StepRequest,
+    assign_tool_async,
+    eval_expression_async,
+)
 from nighthawk.runtime.operation_contract import OperationDeliveryError
-from nighthawk.runtime.step_contract import PassStepOutcome
 from nighthawk.tools.execution import ToolResultWrapperToolset
 from tests.execution.stub_executor import StubExecutor
 
@@ -80,6 +87,7 @@ def test_awaited_inspection_serializes_operations_in_admission_order() -> None:
             release.set()
             assignment, value = await asyncio.gather(first, second)
             assert assignment.value == value == 5
+
     with nh.run(StubExecutor()):
         asyncio.run(execute())
     assert events == ["inspect:assignment", "inspect:evaluation"]
@@ -112,6 +120,7 @@ def test_rejection_stops_queued_operations_and_preserves_completed_effects() -> 
             release.set()
             outcomes = await asyncio.gather(first, second, return_exceptions=True)
             assert all(isinstance(outcome, OversightRejectedError) for outcome in outcomes)
+
     with nh.run(StubExecutor()):
         asyncio.run(execute())
     assert effects == ["approved"]
@@ -138,6 +147,7 @@ def test_operation_notification_failure_keeps_successful_fact_and_stops_step() -
         with pytest.raises(OperationDeliveryError):
             await assign_tool_async(context, "next_value", "8")
         assert "next_value" not in context.environment.step_name_to_value
+
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished)):
         asyncio.run(execute())
     assert len(recorded) == 1 and recorded[0].status == "succeeded"
@@ -179,6 +189,7 @@ def test_cancelled_approval_never_starts_pending_body() -> None:
             operation.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await operation
+
     with nh.run(StubExecutor()):
         asyncio.run(execute())
     assert effects == []
@@ -215,7 +226,8 @@ def test_child_raise_propagates_and_records_distinct_parent_and_child_steps() ->
     assert isinstance(terminal[0], StepRaised) and isinstance(terminal[1], StepFailed)
     assert terminal[0].exception is terminal[1].original_exception is caught.value
     assert terminal[0].execution_reference.parent_step_execution_id == terminal[1].execution_reference.step_execution_id
-    assert operations[0].original_exception is caught.value
+    assert operations[-1].original_exception is caught.value
+    assert operations[0].value is ValueError
 
 
 def test_return_expression_and_async_commit_inspection_do_not_replay_effects() -> None:
@@ -236,7 +248,10 @@ def test_return_expression_and_async_commit_inspection_do_not_replay_effects() -
         await asyncio.sleep(0)
         return nh.oversight.Rewrite(outcome=nh.oversight.Return(9))
 
-    with nh.run(StubExecutor()), nh.scope(oversight=Oversight(inspect_step_commit=inspect), lifecycle=StepLifecycle(on_operation_finished=operations.append)):
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=Oversight(inspect_step_commit=inspect), lifecycle=StepLifecycle(on_operation_finished=operations.append)),
+    ):
         assert asyncio.run(workflow()) == 9
     assert effects == ["executed"] and len(commits) == len(operations) == 1
     assert operations[0].request.kind == "return" and operations[0].value == 7
@@ -256,7 +271,11 @@ def test_native_tool_uses_the_same_operation_inspection_and_live_argument_record
     async def execute() -> None:
         agent = Agent(TestModel(call_tools="all", custom_output_text="done"), deps_type=nh.StepContext)
         await agent.run("Run native", deps=new_context(), toolsets=[ToolResultWrapperToolset(FunctionToolset([native]))])
-    with nh.run(StubExecutor()), nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=operations.append)):
+
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=operations.append)),
+    ):
         asyncio.run(execute())
     assert len(requests) == len(operations) == 1
     assert requests[0].kind == "native_tool" and requests[0].tool_name == "native"
@@ -280,6 +299,7 @@ def test_explicit_pydantic_retry_does_not_poison_step() -> None:
         with pytest.raises(ModelRetry):
             await eval_expression_async(context, "retry_once()")
         assert await eval_expression_async(context, "retry_once()") == 7
+
     asyncio.run(execute())
 
 
@@ -287,10 +307,10 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
     terminal: list[StepFinished] = []
 
     class Executor:
-        async def run_step_async(self, **arguments: Any) -> tuple[PassStepOutcome, dict[str, object]]:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             with pytest.raises(OversightRejectedError):
-                await eval_expression_async(arguments["step_context"], "7")
-            return PassStepOutcome(kind="pass"), {"value": 9}
+                await eval_expression_async(request.step_context, "7")
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"value": 9})
 
     @nh.natural_function
     async def workflow() -> int:

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from types import CellType
-from typing import Any
 
 import pytest
 
 import nighthawk as nh
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.environment import StepEnvironment
-from nighthawk.runtime.step_contract import PassStepOutcome
 from nighthawk.tools.assignment import assign_tool_async, eval_expression_async
 
 
@@ -52,9 +51,7 @@ def test_unbound_local_and_cell_stop_fallback() -> None:
 def test_module_and_closure_rebinding_remain_live() -> None:
     python_globals: dict[str, object] = {"global_value": 1}
     cell = CellType(2)
-    environment = StepEnvironment(
-        python_name_to_value={"cell": 2}, python_globals=python_globals, python_name_to_cell={"cell": cell}
-    )
+    environment = StepEnvironment(python_name_to_value={"cell": 2}, python_globals=python_globals, python_name_to_cell={"cell": cell})
     python_globals["global_value"] = 3
     cell.cell_contents = 4
     assert environment.resolve("global_value") == 3
@@ -94,7 +91,9 @@ def test_views_are_shallow_read_only() -> None:
             view["value"] = 2  # type: ignore[index]
 
 
-@pytest.mark.parametrize("expression, expected", [("(lambda: value)()", 7), ("list(value + i for i in range(2))", [7, 8]), ("(lambda value: value)(9)", 9)])
+@pytest.mark.parametrize(
+    "expression, expected", [("(lambda: value)()", 7), ("list(value + i for i in range(2))", [7, 8]), ("(lambda value: value)(9)", 9)]
+)
 def test_nested_expression_scopes_use_effective_lookup(expression: str, expected: object) -> None:
     environment = StepEnvironment(python_name_to_value={"value": 7}, python_globals={})
     namespace = environment.expression_namespace()
@@ -111,6 +110,7 @@ def test_existing_python_names_require_output_declaration() -> None:
 def test_nested_natural_counter_proof() -> None:
     child_parent_execution_id_list: list[str] = []
     parent_execution_id_list: list[str] = []
+
     @nh.natural_function
     async def block_two() -> str:
         message = ""
@@ -129,18 +129,21 @@ def test_nested_natural_counter_proof() -> None:
         return messages
 
     class Executor:
-        async def run_step_async(self, **arguments: Any) -> tuple[PassStepOutcome, dict[str, object]]:
-            context = arguments["step_context"]
-            if "message" in arguments["binding_names"]:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            context = request.step_context
+            if "message" in list(request.output_binding_names):
+                assert context.execution_reference.parent_step_execution_id is not None
                 child_parent_execution_id_list.append(context.execution_reference.parent_step_execution_id)
                 iteration = context.environment.resolve("i")
-                return PassStepOutcome(kind="pass"), {"message": {5: "fifth", 8: "eighth"}.get(iteration, "ordinary")}
+                assert isinstance(iteration, int)
+                return StepCandidate(outcome=Pass(), binding_name_to_value={"message": {5: "fifth", 8: "eighth"}.get(iteration, "ordinary")})
             messages: list[object] = []
+            assert context.execution_reference.step_execution_id is not None
             parent_execution_id_list.append(context.execution_reference.step_execution_id)
             for i in range(1, 11):
                 await assign_tool_async(context, "i", str(i))
                 messages.append(await eval_expression_async(context, "block_two()"))
-            return PassStepOutcome(kind="pass"), {"messages": messages}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"messages": messages})
 
     with nh.run(Executor()):
         assert asyncio.run(block_one()) == ["ordinary"] * 4 + ["fifth", "ordinary", "ordinary", "eighth", "ordinary", "ordinary"]

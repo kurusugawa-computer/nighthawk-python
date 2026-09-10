@@ -210,7 +210,7 @@ def test_step_commit_receives_validated_bindings_and_return_value() -> None:
         def natural_value_function() -> int:
             """natural
             <:result>
-            {"step_outcome": {"kind": "return", "return_expression": "result + 1"}, "bindings": {"result": "41"}}
+            {"step_outcome": {"kind": "return", "return_expression": "int(result) + 1"}, "bindings": {"result": "41"}}
             """
             result: int = 0
             return result
@@ -275,7 +275,7 @@ def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         assert isinstance(step_commit.outcome, nh.oversight.Return)
         assert step_commit.outcome.value == 5
-        return nh.oversight.Rewrite(return_value="7")
+        return nh.oversight.Rewrite(outcome=nh.runtime.Return("7"))
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
@@ -293,7 +293,7 @@ def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
 def test_rewrite_return_value_type_mismatch_raises_execution_error() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = step_commit
-        return nh.oversight.Rewrite(return_value="not an int")
+        return nh.oversight.Rewrite(outcome=nh.runtime.Return("not an int"))
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 

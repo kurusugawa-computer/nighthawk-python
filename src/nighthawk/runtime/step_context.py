@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from types import CellType
+from types import CellType, MappingProxyType
 from typing import TYPE_CHECKING
 
 from ..errors import NighthawkError
@@ -61,7 +61,7 @@ class StepContext:
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 
     processed_natural_program: str = ""
-    binding_name_to_type: dict[str, object] = field(default_factory=dict)
+    binding_name_to_type: Mapping[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)
     dirty_output_binding_names: set[str] = field(default_factory=set)
     step_locals_revision: int = 0
@@ -72,6 +72,7 @@ class StepContext:
     operation_failure_stage: FailureStage | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
+        self.binding_name_to_type = MappingProxyType(dict(self.binding_name_to_type))
         self.environment = StepEnvironment(
             python_name_to_value=self.step_locals,
             python_globals=self.step_globals,

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import PassStepOutcome, StepKind
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime.step_contract import PassStepOutcome
 
 NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 
@@ -16,19 +16,16 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
 
     @dataclass
     class NoopExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[PassStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     with nh.run(NoopExecutor()):
 
@@ -53,19 +50,16 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
 
     @dataclass
     class NoopExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[PassStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = processed_natural_program
             _ = step_context
             _ = binding_names
             _ = allowed_step_kinds
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     with nh.run(NoopExecutor()):
 
@@ -91,7 +85,7 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
+            from nighthawk.runtime.step_contract import StepFinalResult
             from nighthawk.tools.assignment import assign_tool
 
             assert deps is not None
@@ -125,7 +119,7 @@ def test_agent_backend_commits_only_on_assignment() -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
+            from nighthawk.runtime.step_contract import StepFinalResult
 
             assert deps is not None
             _ = user_prompt

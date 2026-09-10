@@ -15,7 +15,7 @@ from typing import Literal
 from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
 from .runtime.operation_contract import OperationFinished
-from .runtime.step_contract import StepKind, StepOutcome
+from .runtime.step_contract import StepKind
 from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 type FailureStage = Literal[
@@ -27,14 +27,11 @@ type FailureStage = Literal[
     "executor",
     "outcome_validation",
     "binding_validation",
-    "return_inspection",
-    "return_evaluation",
     "return_await",
     "return_validation",
     "commit_inspection",
     "rewrite_validation",
     "oversight_rejection",
-    "raise_resolution",
     "raise_construction",
     "binding_assignment",
 ]
@@ -82,9 +79,9 @@ class StepFailed(_StepFinished):
 
     failure_stage: FailureStage
     original_exception: Exception
-    attempted_outcome: StepOutcome | StepResult | None = None
+    attempted_outcome: StepResult | None = None
     validated_binding_name_to_value: Mapping[str, object] | None = None
-    inspection_subject: Literal["return_expression", "step_commit", "tool_call", "operation"] | None = None
+    inspection_subject: Literal["step_commit", "operation"] | None = None
     rejection_reason: str | None = None
     kind: Literal["failed"] = field(default="failed", init=False)
 

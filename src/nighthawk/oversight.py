@@ -21,25 +21,10 @@ def _reference_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, obje
 class OversightRejectedError(NighthawkError):
     """Raised when oversight explicitly rejects an execution boundary."""
 
-    def __init__(self, reason: str, *, subject: str = "tool_call") -> None:
+    def __init__(self, reason: str, *, subject: str = "operation") -> None:
         self.reason = reason
         self.subject = subject
         super().__init__(reason)
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    execution_reference: ExecutionReference
-    tool_name: str
-    argument_name_to_value: Mapping[str, object]
-    processed_natural_program: str
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "argument_name_to_value",
-            _reference_mapping(self.argument_name_to_value),
-        )
 
 
 @dataclass(frozen=True)
@@ -85,25 +70,6 @@ class StepCommit:
 
 
 @dataclass(frozen=True)
-class ReturnExpression:
-    """Trusted expression approval before core evaluation, await, and validation.
-
-    The mapping contains writes supplied and validated for this candidate, not
-    every declared write binding. A bare name can still refer to an awaitable;
-    return validation and later rewrites can change the relationship to writes.
-    """
-
-    execution_reference: ExecutionReference
-    expression: str
-    expected_type: object
-    processed_natural_program: str
-    validated_binding_name_to_value: Mapping[str, object]
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "validated_binding_name_to_value", _reference_mapping(self.validated_binding_name_to_value))
-
-
-@dataclass(frozen=True)
 class Accept:
     reason: str | None = None
 
@@ -117,38 +83,32 @@ class Reject:
 class Rewrite:
     """Replace supplied commit fields; UNSET inherits and explicit None is a return.
 
-    A mapping replaces all writes. A return_value patch requires an existing Return.
-    Use outcome=Return(value=...) to change another allowed outcome into a return.
+    A mapping replaces all writes. Use outcome=Return(value=...) to supply
+    a new return value or change another allowed outcome into a return.
     Replacements are validated before commit without replaying return expressions.
     """
 
     outcome: StepResult | UnsetType = UNSET
     binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
-    return_value: object = UNSET
     reason: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.outcome, (UnsetType, Pass, Return, Break, Continue, Raise)):
             raise TypeError("Rewrite outcome must be a resolved StepResult or UNSET")
-        if self.outcome is not UNSET and self.return_value is not UNSET:
-            raise ValueError("Rewrite cannot supply both outcome and return_value")
         if not isinstance(self.binding_name_to_value, UnsetType):
             if not isinstance(self.binding_name_to_value, Mapping):
                 raise TypeError("Rewrite binding_name_to_value must be a mapping or UNSET")
             object.__setattr__(self, "binding_name_to_value", _reference_mapping(self.binding_name_to_value))
-        if self.outcome is UNSET and self.binding_name_to_value is UNSET and self.return_value is UNSET:
-            raise ValueError("Rewrite must change outcome, binding_name_to_value, or return_value")
+        if self.outcome is UNSET and self.binding_name_to_value is UNSET:
+            raise ValueError("Rewrite must change outcome or binding_name_to_value")
 
 
-type ToolCallDecision = Accept | Reject
 type StepCommitDecision = Accept | Reject | Rewrite
 
 
 @dataclass(frozen=True)
 class Oversight:
     inspect_operation: Callable[[OperationRequest], Accept | Reject | Awaitable[Accept | Reject]] | None = None
-    inspect_return_expression: Callable[[ReturnExpression], Accept | Reject] | None = None
-    inspect_tool_call: Callable[[ToolCall], ToolCallDecision] | None = None
     inspect_step_commit: Callable[[StepCommit], StepCommitDecision | Awaitable[StepCommitDecision]] | None = None
 
 
@@ -195,8 +155,5 @@ __all__ = [
     "Reject",
     "Rewrite",
     "StepCommit",
-    "ReturnExpression",
     "StepCommitDecision",
-    "ToolCall",
-    "ToolCallDecision",
 ]

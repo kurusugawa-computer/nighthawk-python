@@ -125,8 +125,8 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         """
         return 0
 
-    def inspect_tool(call: nh.oversight.ToolCall) -> nh.oversight.Accept:
-        tool_calls.append(call.tool_name)
+    def inspect_tool(call: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+        tool_calls.append(call.tool_name or call.kind)
         return nh.oversight.Accept()
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
@@ -140,13 +140,13 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
             capabilities=[Hooks(before_model_request=before_request)],
             system_prompt_suffix_fragments=["scoped-system"],
             user_prompt_suffix_fragments=["scoped-user"],
-            oversight=nh.oversight.Oversight(inspect_step_commit=inspect, inspect_tool_call=inspect_tool),
+            oversight=nh.oversight.Oversight(inspect_step_commit=inspect, inspect_operation=inspect_tool),
         ),
     ):
         assert (asyncio.run(workflow_async()) if asynchronous else workflow()) == 42
         assert nh.get_usage_meter().total_tokens > 0
     assert invoked == ["eval", "custom", "eval", "custom"]
-    assert tool_calls == ["nh_eval", "custom_tool", "nh_assign"] * 2
+    assert tool_calls == ["evaluation", "custom_tool", "assignment"] * 2 + ["return"]
     assert len(commits) == 2
     assert len(hook_calls) == len(observed) == 8
     assert '"break"' in observed[0][1] and '"return"' not in observed[0][1]

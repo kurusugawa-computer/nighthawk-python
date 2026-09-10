@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepStarted
-from nighthawk.runtime.step_contract import PassStepOutcome
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -32,9 +31,9 @@ def test_async_notifications_are_awaited_in_order(asynchronous: bool) -> None:
         events.append("finished")
 
     class Executor:
-        def run_step(self, **arguments: Any) -> tuple[PassStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             events.append("executed")
-            return PassStepOutcome(kind="pass"), {"value": 7}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"value": 7})
 
     @nh.natural_function
     def synchronous() -> int:
@@ -121,10 +120,10 @@ def test_interruption_bounds_async_terminal_cleanup_and_preserves_original(repea
         cleanup_entered = asyncio.Event()
 
         class Executor:
-            async def run_step_async(self, **arguments: Any) -> tuple[PassStepOutcome, dict[str, object]]:
+            async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
                 entered.set()
                 await asyncio.Event().wait()
-                return PassStepOutcome(kind="pass"), {}
+                return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
         async def finished(event: StepFinished) -> None:
             events.append(event)
@@ -149,6 +148,7 @@ def test_interruption_bounds_async_terminal_cleanup_and_preserves_original(repea
             assert len(events) == 1 and isinstance(events[0], StepInterrupted)
             assert caught.value is events[0].original_exception
             assert str(caught.value) == "original cancellation"
+
     asyncio.run(execute())
 
 
@@ -169,6 +169,7 @@ def test_async_source_hooks_share_the_callers_event_loop() -> None:
         with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
             await workflow()
         assert future.done()
+
     asyncio.run(execute())
 
 
@@ -194,4 +195,5 @@ def test_sync_bridge_reports_a_foreign_event_loop_resource() -> None:
                 workflow()
         finally:
             future.cancel()
+
     asyncio.run(execute())

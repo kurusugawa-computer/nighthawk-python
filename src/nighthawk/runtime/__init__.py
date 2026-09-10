@@ -8,9 +8,12 @@ if TYPE_CHECKING:
     from .environment import StepEnvironment
     from .expression import eval_expression, eval_expression_async
     from .operation_contract import OperationError, OperationFinished, OperationRequest
+    from .step_request import StepCandidate, StepRequest
     from .step_result import Break, Continue, Pass, Raise, Return
 
 _name_to_module = {
+    "StepRequest": "step_request",
+    "StepCandidate": "step_request",
     "AssignmentResult": "assignment",
     "assign_tool": "assignment",
     "assign_tool_async": "assignment",
@@ -28,8 +31,22 @@ _name_to_module = {
 }
 
 __all__ = [
-    "AssignmentResult", "assign_tool", "assign_tool_async", "eval_expression", "eval_expression_async",
-    "StepEnvironment", "OperationError", "OperationFinished", "OperationRequest", "Pass", "Return", "Break", "Continue", "Raise",
+    "StepCandidate",
+    "StepRequest",
+    "AssignmentResult",
+    "assign_tool",
+    "assign_tool_async",
+    "eval_expression",
+    "eval_expression_async",
+    "StepEnvironment",
+    "OperationError",
+    "OperationFinished",
+    "OperationRequest",
+    "Pass",
+    "Return",
+    "Break",
+    "Continue",
+    "Raise",
 ]
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from . import lifecycle, oversight, resilience
+from . import lifecycle, oversight, resilience, runtime
 from .composition import UNSET, Extend, Merge, UnsetType
 from .configuration import (
     StepContextLimits,
@@ -39,6 +39,7 @@ from .runtime.step_context import StepContext, get_step_context
 from .runtime.step_executor import AgentStepExecutor, StepExecutor
 
 __all__ = [
+    "runtime",
     "UNSET",
     "Extend",
     "Merge",

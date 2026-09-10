@@ -7,6 +7,9 @@ from pydantic import AfterValidator, Field
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
+from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.async_bridge import run_coroutine_synchronously
+from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.step_contract import PassStepOutcome, RaiseStepOutcome
 from tests.execution.stub_executor import StubExecutor
 
@@ -228,9 +231,9 @@ def test_explicit_none_output_is_a_contract() -> None:
 @pytest.mark.parametrize("raising", [False, True])
 def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None:
     class Executor:
-        def run_step(self, **arguments: Any) -> tuple[PassStepOutcome | RaiseStepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             outcome = RaiseStepOutcome(kind="raise", raise_message="failed") if raising else PassStepOutcome(kind="pass")
-            return outcome, {"undeclared": 1}
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, {"undeclared": 1}))
 
     @nh.natural_function
     def workflow() -> None:

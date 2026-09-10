@@ -261,13 +261,13 @@ def test_wrapper_call_tool_outcome_propagates_oversight_rejection() -> None:
         tool_call_count += 1
         return 1
 
-    def reject_tool_call(tool_call: nh.oversight.ToolCall) -> nh.oversight.Reject:
+    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.Reject:
         assert tool_call.tool_name == "test_denied_tool"
         return nh.oversight.Reject("human rejected tool")
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_operation=reject_tool_call)),
         pytest.raises(nh.oversight.OversightRejectedError, match="human rejected tool"),
     ):
         _call_wrapped_tool_outcome(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
@@ -279,13 +279,13 @@ def test_wrapper_call_tool_propagates_oversight_rejection() -> None:
         _ = run_context
         return 1
 
-    def reject_tool_call(tool_call: nh.oversight.ToolCall) -> nh.oversight.Reject:
+    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.Reject:
         assert tool_call.tool_name == "test_denied_tool"
         return nh.oversight.Reject("human rejected tool")
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_operation=reject_tool_call)),
         pytest.raises(nh.oversight.OversightRejectedError, match="human rejected tool"),
     ):
         _call_wrapped_tool(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
@@ -937,7 +937,7 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
     def test_once_tool() -> int:  # type: ignore[no-untyped-def]
         return 3
 
-    def accept_tool_call(_tool_call: nh.oversight.ToolCall) -> nh.oversight.Accept:
+    def accept_tool_call(_tool_call: nh.runtime.OperationRequest) -> nh.oversight.Accept:
         nonlocal inspection_count
         inspection_count += 1
         return nh.oversight.Accept()
@@ -977,7 +977,7 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
     async def call_handler() -> ToolHandlerResult:
         with (
             nh.run(StubExecutor()),
-            nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=accept_tool_call)),
+            nh.scope(oversight=nh.oversight.Oversight(inspect_operation=accept_tool_call)),
             set_current_run_context(run_context),
         ):
             return await handler({})
@@ -992,7 +992,7 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
     assert len(tool_spans) == 1
     oversight_event = next(event for event in tool_spans[0].events if event.name == "nighthawk.oversight.decision")
     oversight_attributes = dict(oversight_event.attributes or {})
-    assert oversight_attributes["nighthawk.oversight.subject"] == "tool_call"
+    assert oversight_attributes["nighthawk.oversight.subject"] == "operation"
     assert oversight_attributes["nighthawk.oversight.verdict"] == "accept"
     assert oversight_attributes["tool.name"] == "test_once_tool"
     assert oversight_attributes["run.id"]
@@ -1024,7 +1024,7 @@ def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decis
     def test_invalid_tool_decision() -> int:  # type: ignore[no-untyped-def]
         return 5
 
-    def invalid_tool_decision(_tool_call: nh.oversight.ToolCall) -> nh.oversight.ToolCallDecision:
+    def invalid_tool_decision(_tool_call: nh.runtime.OperationRequest) -> nh.oversight.Accept | nh.oversight.Reject:
         return cast(Any, "bad")
 
     step_context = _new_step_context()
@@ -1059,7 +1059,7 @@ def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decis
     async def call_handler() -> ToolHandlerResult:
         with (
             nh.run(StubExecutor()),
-            nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=invalid_tool_decision)),
+            nh.scope(oversight=nh.oversight.Oversight(inspect_operation=invalid_tool_decision)),
             set_current_run_context(run_context),
         ):
             return await handler({})
@@ -1079,7 +1079,7 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
         tool_call_count += 1
         return 7
 
-    def reject_tool_call(tool_call: nh.oversight.ToolCall) -> nh.oversight.Reject:
+    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.Reject:
         assert tool_call.argument_name_to_value == {}
         return nh.oversight.Reject("needs oversight")
 
@@ -1118,7 +1118,7 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
     async def call_handler() -> ToolHandlerResult:
         with (
             nh.run(StubExecutor()),
-            nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)),
+            nh.scope(oversight=nh.oversight.Oversight(inspect_operation=reject_tool_call)),
             set_current_run_context(run_context),
         ):
             return await handler({})
@@ -1131,7 +1131,7 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
     assert len(tool_spans) == 1
     oversight_event = next(event for event in tool_spans[0].events if event.name == "nighthawk.oversight.decision")
     oversight_attributes = dict(oversight_event.attributes or {})
-    assert oversight_attributes["nighthawk.oversight.subject"] == "tool_call"
+    assert oversight_attributes["nighthawk.oversight.subject"] == "operation"
     assert oversight_attributes["nighthawk.oversight.verdict"] == "reject"
     assert oversight_attributes["tool.name"] == "test_governed_tool"
     assert oversight_attributes["nighthawk.oversight.reason"] == "needs oversight"

@@ -59,7 +59,9 @@ def _build_transformed_factory_module(
     # Defaults already ran when Python created the original function.
     # Compile placeholders and restore their original live values on the new body.
     transformed_function_def.args.defaults = [ast.Constant(None) for _ in transformed_function_def.args.defaults]
-    transformed_function_def.args.kw_defaults = [None if default is None else ast.Constant(None) for default in transformed_function_def.args.kw_defaults]
+    transformed_function_def.args.kw_defaults = [
+        None if default is None else ast.Constant(None) for default in transformed_function_def.args.kw_defaults
+    ]
 
     captured_value_name = "__nh_captured_values__"
     factory_name = "__nh_factory__"

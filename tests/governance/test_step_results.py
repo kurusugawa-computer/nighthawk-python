@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import Annotated
 
 import pytest
 from pydantic import AfterValidator, BaseModel
 
 import nighthawk as nh
-from nighthawk.runtime.step_contract import PassStepOutcome, RaiseStepOutcome
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime.async_bridge import run_coroutine_synchronously
+from nighthawk.runtime.model_candidate import resolve_model_candidate
+from nighthawk.runtime.step_contract import RaiseStepOutcome
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -36,12 +39,12 @@ def test_explicit_none_return_and_resolved_kind_change() -> None:
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(return_value=None))),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Return(None)))),
     ):
         assert optional() is None
         with pytest.raises(nh.ExecutionError, match="Return value validation failed"):
             required()
-        with pytest.raises(nh.NighthawkError, match="existing Return"):
+        with pytest.raises(nh.ExecutionError, match="Return value validation failed"):
             passing()
     with (
         nh.run(StubExecutor()),
@@ -107,7 +110,10 @@ def test_accept_does_not_repeat_validators_and_replacement_does() -> None:
         assert workflow() == 5
     assert calls == [4]
     calls.clear()
-    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(return_value=8))):
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Return(8)))),
+    ):
         assert workflow() == 9
     assert calls == [4, 8]
 
@@ -122,8 +128,8 @@ def test_reference_views_preserve_validated_values_and_freeze_only_mapping() -> 
     captured: list[nh.oversight.StepCommit] = []
 
     class Executor:
-        def run_step(self, **arguments: Any) -> tuple[PassStepOutcome, dict[str, object]]:
-            return PassStepOutcome(kind="pass"), {"values": values, "record": record, "unique": unique}
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"values": values, "record": record, "unique": unique})
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
         captured.append(commit)
@@ -146,14 +152,22 @@ def test_reference_views_preserve_validated_values_and_freeze_only_mapping() -> 
         result = workflow()
     assert result[0] is values and result[1] is record and result[2] is unique
     assert len(captured) == 1
-    tool_call = nh.oversight.ToolCall(nh.ExecutionReference("run", "scope", "step"), "lookup", {"values": values}, "program")
+    tool_call = nh.runtime.OperationRequest(
+        execution_reference=nh.ExecutionReference("run", "scope", "step"),
+        operation_id="operation",
+        kind="native_tool",
+        tool_name="lookup",
+        argument_name_to_value={"values": values},
+    )
     assert tool_call.argument_name_to_value["values"] is values
 
 
 def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
     class Executor:
-        def run_step(self, **arguments: Any) -> tuple[RaiseStepOutcome, dict[str, object]]:
-            return RaiseStepOutcome(kind="raise", raise_message="failed"), {"result": "invalid"}
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            return run_coroutine_synchronously(
+                lambda: resolve_model_candidate(request, RaiseStepOutcome(kind="raise", raise_message="failed"), {"result": "invalid"})
+            )
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         assert commit.binding_name_to_value == {}
@@ -180,8 +194,10 @@ def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: n
     invalid_exception = int  # noqa: F841
 
     class Executor:
-        def run_step(self, **arguments: Any) -> tuple[RaiseStepOutcome, dict[str, object]]:
-            return RaiseStepOutcome(kind="raise", raise_message="failed", raise_error_type=error_type), {}
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            return run_coroutine_synchronously(
+                lambda: resolve_model_candidate(request, RaiseStepOutcome(kind="raise", raise_message="failed", raise_error_type=error_type), {})
+            )
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
         inspected.append(commit)
@@ -214,8 +230,12 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
             super().__init__(message)
 
     class Executor:
-        def run_step(self, **arguments: Any) -> tuple[RaiseStepOutcome, dict[str, object]]:
-            return RaiseStepOutcome(kind="raise", raise_message="original", raise_error_type="OriginalError"), {}
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            return run_coroutine_synchronously(
+                lambda: resolve_model_candidate(
+                    request, RaiseStepOutcome(kind="raise", raise_message="original", raise_error_type="OriginalError"), {}
+                )
+            )
 
     @nh.natural_function
     def workflow() -> int:
@@ -239,10 +259,10 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
         with (
             nh.scope(
                 oversight=nh.oversight.Oversight(
-                    inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.oversight.Raise("replacement", "MissingException"))
+                    inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.oversight.Raise("replacement", int))  # type: ignore[arg-type]
                 )
             ),
-            pytest.raises(nh.ExecutionError, match="Invalid raise_error_type"),
+            pytest.raises(nh.ExecutionError, match="resolved exception class"),
         ):
             workflow()
     assert constructed == []
@@ -254,7 +274,7 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
         lambda: nh.oversight.Rewrite(),
         lambda: nh.oversight.Rewrite(outcome=None),  # type: ignore[arg-type]
         lambda: nh.oversight.Rewrite(binding_name_to_value=None),  # type: ignore[arg-type]
-        lambda: nh.oversight.Rewrite(outcome=nh.oversight.Return(None), return_value=None),
+        lambda: nh.oversight.Rewrite(outcome=nh.oversight.Return(None), return_value=None),  # type: ignore[call-arg]
     ],
 )
 def test_invalid_rewrite_shapes(construct: Callable[[], object]) -> None:

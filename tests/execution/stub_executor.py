@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter
 
 from nighthawk.errors import ExecutionError
-from nighthawk.runtime.step_contract import StepKind, StepOutcome
+from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.async_bridge import run_coroutine_synchronously
+from nighthawk.runtime.model_candidate import resolve_model_candidate
+from nighthawk.runtime.step_contract import StepOutcome
 
 
 @dataclass(frozen=True)
@@ -24,14 +27,11 @@ class StubExecutor:
     - Return bindings filtered to only names in the provided binding list.
     """
 
-    def run_step(
-        self,
-        *,
-        processed_natural_program: str,
-        step_context: object,
-        binding_names: list[str],
-        allowed_step_kinds: tuple[StepKind, ...],
-    ) -> tuple[StepOutcome, dict[str, object]]:
+    def _parse_response(self, request: StepRequest) -> tuple[StepOutcome, dict[str, object]]:
+        processed_natural_program = request.processed_natural_program
+        step_context = request.step_context
+        binding_names = list(request.output_binding_names)
+        allowed_step_kinds = request.allowed_step_kinds
         _ = step_context
         _ = allowed_step_kinds
 
@@ -67,3 +67,11 @@ class StubExecutor:
                 bindings[name] = bindings_object[name]
 
         return step_outcome, bindings
+
+    def run_step(self, *, request: StepRequest) -> StepCandidate:
+        outcome, bindings = self._parse_response(request)
+        return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, bindings))
+
+    async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+        outcome, bindings = self._parse_response(request)
+        return await resolve_model_candidate(request, outcome, bindings)

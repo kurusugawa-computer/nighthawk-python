@@ -1,49 +1,57 @@
 """Resolved Python outcomes at the host commit boundary."""
 
-from dataclasses import dataclass, field
-from typing import Literal
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-@dataclass(frozen=True)
-class Pass:
+class _Outcome(BaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid", validate_default=True)
+
+
+class Pass(_Outcome):
     """Continue normal execution after this step."""
 
-    kind: Literal["pass"] = field(default="pass", init=False)
+    kind: Literal["pass"] = "pass"
 
 
-@dataclass(frozen=True)
-class Return:
+class Return(_Outcome):
     """Return the resolved Python value, including None."""
 
     value: object
-    kind: Literal["return"] = field(default="return", init=False)
+    kind: Literal["return"] = "return"
+
+    def __init__(self, value: object, **data: Any) -> None:
+        data["value"] = value
+        super().__init__(**data)
 
 
-@dataclass(frozen=True)
-class Break:
+class Break(_Outcome):
     """Exit the enclosing loop."""
 
-    kind: Literal["break"] = field(default="break", init=False)
+    kind: Literal["break"] = "break"
 
 
-@dataclass(frozen=True)
-class Continue:
+class Continue(_Outcome):
     """Start the next enclosing loop iteration."""
 
-    kind: Literal["continue"] = field(default="continue", init=False)
+    kind: Literal["continue"] = "continue"
 
 
-@dataclass(frozen=True)
-class Raise:
-    """Raise an exception, optionally selected by a Python binding name."""
+class Raise(_Outcome):
+    """Raise an exception of the resolved class after commit inspection."""
 
     message: str
-    error_type: str | None = None
-    kind: Literal["raise"] = field(default="raise", init=False)
+    error_type: type[BaseException] = Exception
+    kind: Literal["raise"] = "raise"
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.message, str) or (self.error_type is not None and not isinstance(self.error_type, str)):
-            raise TypeError("Raise requires a string message and an optional error type binding name")
+    def __init__(self, message: str, error_type: type[BaseException] = Exception, **data: Any) -> None:
+        if not isinstance(message, str):
+            raise TypeError("Raise requires a string message")
+        if not isinstance(error_type, type) or not issubclass(error_type, BaseException):
+            raise TypeError("Raise error_type must be a resolved exception class")
+        data.update(message=message, error_type=error_type)
+        super().__init__(**data)
 
 
-type StepResult = Pass | Return | Break | Continue | Raise
+type StepResult = Annotated[Pass | Return | Break | Continue | Raise, Field(discriminator="kind")]

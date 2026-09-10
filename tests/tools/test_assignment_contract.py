@@ -122,7 +122,14 @@ def test_unsupported_attribute_routes_require_python_helpers(route: str) -> None
     class Ordinary(BaseModel, validate_assignment=True):
         other: int = 0
 
-    route_to_instance = {"dataclass": Data(), "plain": Plain(), "disabled": Disabled(), "override": Override(), "property": WithProperty(), "undeclared": Ordinary()}
+    route_to_instance = {
+        "dataclass": Data(),
+        "plain": Plain(),
+        "disabled": Disabled(),
+        "override": Override(),
+        "property": WithProperty(),
+        "undeclared": Ordinary(),
+    }
     effects: list[str] = []
     context = context_for(target=route_to_instance[route], effects=effects)
     with pytest.raises(OperationError) as caught:

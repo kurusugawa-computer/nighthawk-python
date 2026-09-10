@@ -12,8 +12,8 @@ from pydantic import AfterValidator
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
 from nighthawk.natural.transform import build_runtime_call_and_assignments
+from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.runner import Runner
-from nighthawk.runtime.step_contract import PassStepOutcome, StepKind, StepOutcome
 from nighthawk.testing import ScriptedExecutor, StepResponse, return_response
 from tests.execution.stub_executor import StubExecutor
 
@@ -95,27 +95,26 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
         """
         return 0
 
-    def reject(request: nh.oversight.ReturnExpression) -> nh.oversight.Reject:
+    def reject(request: nh.runtime.OperationRequest) -> nh.oversight.Reject:
         assert request.expression == "calculate()"
         assert request.expected_type is int
-        assert request.validated_binding_name_to_value == {"value": "7"}
+        assert request.kind == "return"
         assert request.execution_reference == nh.get_execution_reference()
         return nh.oversight.Reject("return forbidden")
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(lifecycle=StepLifecycle(events.append), oversight=nh.oversight.Oversight(inspect_return_expression=reject)),
-        pytest.raises(nh.ExecutionError) as caught,
+        nh.scope(lifecycle=StepLifecycle(events.append), oversight=nh.oversight.Oversight(inspect_operation=reject)),
+        pytest.raises(nh.oversight.OversightRejectedError) as caught,
     ):
         workflow()
     assert evaluated == []
     assert len(events) == 1
     event = events[0]
     assert isinstance(event, StepFailed)
-    assert event.failure_stage == "oversight_rejection" and event.inspection_subject == "return_expression"
+    assert event.failure_stage == "oversight_rejection" and event.inspection_subject == "operation"
     assert event.rejection_reason == "return forbidden"
-    assert caught.value.step_failed is event
-    assert caught.value.__cause__ is event.original_exception
+    assert caught.value is event.original_exception
     assert not event.assigned_binding_name_to_value
 
 
@@ -145,7 +144,7 @@ def test_return_expression_acceptance_evaluates_and_awaits_once() -> None:
         """
         return 0
 
-    def inspect_expression(request: nh.oversight.ReturnExpression) -> nh.oversight.Accept:
+    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
         calls.append("approved")
         return nh.oversight.Accept()
 
@@ -160,7 +159,7 @@ def test_return_expression_acceptance_evaluates_and_awaits_once() -> None:
         nh.scope(
             lifecycle=StepLifecycle(finished),
             oversight=nh.oversight.Oversight(
-                inspect_return_expression=inspect_expression,
+                inspect_operation=inspect_expression,
                 inspect_step_commit=lambda commit: nh.oversight.Rewrite(binding_name_to_value={"value": 9}),
             ),
         ),
@@ -174,13 +173,12 @@ def test_execution_identity_distinguishes_repeated_and_concurrent_calls() -> Non
     identities: list[nh.ExecutionReference] = []
 
     class Executor:
-        async def run_step_async(
-            self, *, processed_natural_program: str, step_context: nh.StepContext, binding_names: list[str], allowed_step_kinds: tuple[StepKind, ...]
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            step_context = request.step_context
             identities.append(step_context.execution_reference)
             await asyncio.sleep(0)
             assert nh.get_execution_reference() == step_context.execution_reference
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     @nh.natural_function
     async def workflow() -> None:
@@ -361,9 +359,7 @@ def test_process_control_is_interruption(exception: BaseException) -> None:
     events: list[StepFinished] = []
 
     class Executor:
-        def run_step(
-            self, *, processed_natural_program: str, step_context: nh.StepContext, binding_names: list[str], allowed_step_kinds: tuple[StepKind, ...]
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             raise exception
 
     @nh.natural_function
@@ -381,7 +377,7 @@ def test_process_control_is_interruption(exception: BaseException) -> None:
 def test_denied_return_never_calls_inspector_or_evaluator() -> None:
     calls: list[str] = []
 
-    def inspect_expression(request: nh.oversight.ReturnExpression) -> nh.oversight.Accept:
+    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
         calls.append("inspected")
         return nh.oversight.Accept()
 
@@ -399,7 +395,7 @@ def test_denied_return_never_calls_inspector_or_evaluator() -> None:
 
     with (
         nh.run(ScriptedExecutor([return_response("calls.append('evaluated')")])),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_return_expression=inspect_expression)),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_operation=inspect_expression)),
         pytest.raises(nh.ExecutionError),
     ):
         workflow()
@@ -448,13 +444,12 @@ def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:
     references: list[nh.ExecutionReference] = []
 
     class Executor:
-        async def run_step_async(
-            self, *, processed_natural_program: str, step_context: nh.StepContext, binding_names: list[str], allowed_step_kinds: tuple[StepKind, ...]
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            step_context = request.step_context
             assert threading.get_ident() != caller_thread
             references.append(nh.get_execution_reference())
             assert references[-1] == step_context.execution_reference
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     def finished(event: StepFinished) -> None:
         assert threading.get_ident() == caller_thread
@@ -486,15 +481,15 @@ def test_invalid_inspection_decision_keeps_inspection_stage(subject: str) -> Non
         return 0
 
     oversight = nh.oversight.Oversight(
-        inspect_return_expression=(lambda request: None) if subject == "return_expression" else None,  # type: ignore[arg-type]
+        inspect_operation=(lambda request: None) if subject == "return_expression" else None,  # type: ignore[arg-type]
         inspect_step_commit=(lambda commit: None) if subject == "step_commit" else None,  # type: ignore[arg-type]
     )
-    with nh.run(StubExecutor()), nh.scope(oversight=oversight, lifecycle=StepLifecycle(events.append)), pytest.raises(nh.ExecutionError):
+    with nh.run(StubExecutor()), nh.scope(oversight=oversight, lifecycle=StepLifecycle(events.append)), pytest.raises(nh.NighthawkError):
         workflow()
     assert len(events) == 1
     event = events[0]
     assert isinstance(event, StepFailed)
-    assert event.failure_stage == ("return_inspection" if subject == "return_expression" else "commit_inspection")
+    assert event.failure_stage == ("operation_inspection" if subject == "return_expression" else "commit_inspection")
     assert event.inspection_subject is None
 
 
@@ -523,12 +518,9 @@ def test_lifecycle_is_captured_before_executor_work(monkeypatch: pytest.MonkeyPa
     redirected: list[StepFinished] = []
 
     class Executor:
-        def run_step(
-            self, *, processed_natural_program: str, step_context: nh.StepContext, binding_names: list[str], allowed_step_kinds: tuple[StepKind, ...]
-        ) -> tuple[StepOutcome, dict[str, object]]:
-            # Simulate a later configuration change without changing invocation identity.
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             monkeypatch.setattr(runner, "get_lifecycle", lambda: StepLifecycle(redirected.append))
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     @nh.natural_function
     def workflow() -> None:
@@ -548,14 +540,7 @@ def test_handler_rethrowing_interruption_preserves_its_cause(interruption: BaseE
     notifications: list[StepFinished] = []
 
     class Executor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: nh.StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             raise interruption
 
     def finished(event: StepFinished) -> None:
@@ -605,19 +590,13 @@ def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() 
     configuration = StepLifecycle(events.append)
 
     class Executor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: nh.StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            step_context = request.step_context
             if nh.get_lifecycle() is not configuration:
                 # The host boundary must record bypass itself: delivery has been cleared.
                 bypass_references.append(step_context.execution_reference)
                 raise RuntimeError("mediation bypass")
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     @nh.natural_function
     def workflow() -> None:

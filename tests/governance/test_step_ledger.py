@@ -15,8 +15,7 @@ from pydantic import AfterValidator, BaseModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import FailureStage, StepCompleted, StepDeliveryError, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
-from nighthawk.runtime import scoping
-from nighthawk.runtime.step_contract import PassStepOutcome, StepKind, StepOutcome
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, scoping
 from nighthawk.testing import ScriptedExecutor, StepResponse
 from tests.execution.stub_executor import StubExecutor
 
@@ -58,29 +57,24 @@ class Ledger:
         ("rewrite", "rewrite_validation"),
         ("reject", "oversight_rejection"),
         ("inspector", "commit_inspection"),
-        ("return_inspector", "return_inspection"),
+        ("return_inspector", "operation_inspection"),
         ("outcome", "outcome_validation"),
         ("undeclared", "binding_validation"),
-        ("raise_type", "raise_resolution"),
+        ("raise_type", "executor"),
     ],
 )
 def test_host_exception_references_single_ledger_event(scenario: str, expected_stage: FailureStage) -> None:
     ledger = Ledger()
 
     class Executor:
-        def run_step(
-            self, *, processed_natural_program: str, step_context: nh.StepContext, binding_names: list[str], allowed_step_kinds: tuple[StepKind, ...]
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             if scenario == "executor":
                 raise ValueError("executor failed")
+            if scenario == "outcome":
+                return StepCandidate(outcome=nh.runtime.Break())
             if scenario == "undeclared":
-                return PassStepOutcome(kind="pass"), {"unknown": 5}
-            return StubExecutor().run_step(
-                processed_natural_program=processed_natural_program,
-                step_context=step_context,
-                binding_names=binding_names,
-                allowed_step_kinds=allowed_step_kinds,
-            )
+                return StepCandidate(outcome=Pass(), binding_name_to_value={"unknown": 5})
+            return StubExecutor().run_step(request=request)
 
     def inspect_commit(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
         if scenario == "rewrite":
@@ -91,7 +85,7 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
             raise ValueError("inspection failed")
         return nh.oversight.Accept()
 
-    def inspect_expression(request: nh.oversight.ReturnExpression) -> nh.oversight.Accept:
+    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
         if scenario == "return_inspector":
             raise ValueError("return inspection failed")
         return nh.oversight.Accept()
@@ -133,7 +127,7 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
             lifecycle=StepLifecycle(ledger.finished),
             oversight=nh.oversight.Oversight(
                 inspect_step_commit=inspect_commit,
-                inspect_return_expression=inspect_expression,
+                inspect_operation=inspect_expression,
             ),
         ),
         pytest.raises(NaturalExecutionError) as caught,
@@ -355,18 +349,11 @@ def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStag
         raise exception from original_cause
 
     class Executor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: nh.StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[StepOutcome, dict[str, object]]:
-            assert step_context.execution_reference == nh.get_execution_reference()
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            assert request.step_context.execution_reference == nh.get_execution_reference()
             if boundary == "executor":
                 record_early_failure()
-            return PassStepOutcome(kind="pass"), {}
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     def inspect_commit(commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
         record_early_failure()
@@ -443,14 +430,7 @@ def test_returning_handler_does_not_preserve_host_exception_type() -> None:
     notifications: list[StepFinished] = []
 
     class Executor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: nh.StepContext,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ) -> tuple[StepOutcome, dict[str, object]]:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             raise original
 
     @nh.natural_function

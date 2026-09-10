@@ -14,6 +14,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel, CodexModelSettings, _parse_codex_jsonl_lines
+from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.declarations import get_visible_tools
 
@@ -327,8 +328,8 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     nh.StepExecutorConfiguration(model="codex:default")
 
     class StubExecutor:
-        def run_step(self, **kwargs):  # type: ignore[no-untyped-def]
-            _ = kwargs
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            _ = request
             raise AssertionError("StepExecutor should not be used by this test")
 
     step_executor = StubExecutor()

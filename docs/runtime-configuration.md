@@ -34,10 +34,10 @@ with nh.run(step_executor):
     with nh.scope(implicit_references={"search_repository": search_repository}):
         typed_labeling_step(ticket_text)
 
-    # Add synchronous oversight for this scope
+    # Add operation and commit oversight for this scope
     with nh.scope(
         oversight=nh.oversight.Oversight(
-            inspect_tool_call=inspect_tool_call,
+            inspect_operation=inspect_operation,
             inspect_step_commit=inspect_step_commit,
         )
     ):
@@ -134,7 +134,7 @@ Each element is either a plain callable or a Pydantic AI `Tool`. A plain callabl
 
 A plain sequence replaces tools; `tools=[]` clears scoped declarations. `nh.Extend([lookup])` appends tools. Repeating an identical callable or exact `Tool` object is idempotent and retains the first normalized tool and order. Different wrappers conflict, even when they wrap the same callable. `ToolNameConflictError` is both a `ToolDeclarationError` and a `NameConflictError`. Built-in names remain reserved.
 
-`implicit_references` and `tools` have distinct roles. `implicit_references` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_tool_call`, and is served to coding-agent backends over MCP. Prefer `implicit_references` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
+`implicit_references` and `tools` have distinct roles. `implicit_references` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_operation`, and is served to coding-agent backends over MCP. Prefer `implicit_references` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
 
 ## Pydantic AI capabilities in scopes
 
@@ -226,7 +226,7 @@ All getters listed above, including `nh.get_oversight()`, require an active run 
 
 ## Record completed executions
 
-Install `nh.lifecycle.StepLifecycle` to record actual execution endings, including preparation, validation, and return-await failures. The callback runs after generated assignments and can raise a host exception referring to its stored record. Return-expression approval is available separately through `Oversight.inspect_return_expression`; core retains evaluation and validation.
+Install `nh.lifecycle.StepLifecycle` to record actual execution endings, including preparation, validation, and return-await failures. The callback runs after generated assignments and can raise a host exception referring to its stored record. Use `Oversight.inspect_operation` to inspect expression execution and `inspect_step_commit` to inspect validated results. All hooks support direct or asynchronous completion.
 
 ```python
 import nighthawk as nh
@@ -253,44 +253,49 @@ If an earlier host boundary already stored a failure and raised its public excep
 
 At a host-controlled admission boundary, `nh.get_lifecycle() is expected_lifecycle` can verify that the required callback is configured. If it has been cleared, record the bypass through that still-active boundary: the missing lifecycle cannot record its own absence. Delivery is one in-process attempt with a configured handler, not guaranteed persistence. A callback exception after successful assignment propagates without undoing writes; host delivery-failure and anomaly records are separate from the completed core record. The full rules are in [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers).
 
-## Synchronous oversight in scopes
+## Oversight in scopes
 
-Use `nh.scope(oversight=...)` when the host needs synchronous inspection around tool calls or a final rewrite/reject checkpoint before Nighthawk commits a step result.
+Use `nh.scope(oversight=...)` to inspect operations before execution and validated results before Python assignment.
+Each callback may return its decision directly or asynchronously.
 
 ```py
-def inspect_tool_call(tool_call: nh.oversight.ToolCall) -> nh.oversight.ToolCallDecision:
-    if tool_call.tool_name == "delete_file":
-        return nh.oversight.Reject("Deletion must be approved by a human.")
+import nighthawk as nh
+from nighthawk.runtime import OperationRequest, Return
+
+
+def inspect_operation(operation: OperationRequest) -> nh.oversight.Accept | nh.oversight.Reject:
+    if operation.kind == "native_tool" and operation.tool_name == "delete_file":
+        return nh.oversight.Reject("Deletion requires host approval.")
     return nh.oversight.Accept()
 
 
-def inspect_step_commit(step_commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
-    if "result" in step_commit.binding_name_to_value:
-        return nh.oversight.Rewrite(binding_name_to_value={"result": "reviewed"})
+def inspect_step_commit(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
+    if isinstance(commit.outcome, Return) and commit.outcome.value is None:
+        return nh.oversight.Reject("A result is required.")
     return nh.oversight.Accept()
 
 
-with nh.run(step_executor):
-    with nh.scope(
-        oversight=nh.oversight.Oversight(
-            inspect_tool_call=inspect_tool_call,
-            inspect_step_commit=inspect_step_commit,
-        )
-    ):
-        inspected_step(ticket_text)
+oversight = nh.oversight.Oversight(
+    inspect_operation=inspect_operation,
+    inspect_step_commit=inspect_step_commit,
+)
 ```
 
-`inspect_step_commit` receives one validated candidate. Its `binding_name_to_value` contains validated writes; `outcome` is `Pass`, `Return(value=...)`, `Break`, `Continue`, or `Raise(message=..., error_type=...)`. `Return(value=None)` is distinct from `Pass()`. Invalid initial results fail before inspection.
+Install the configuration with `nh.scope(oversight=oversight)` inside an active run.
+Operation inspection precedes execution and cannot undo earlier side effects.
+Rejection terminates the step; it is not a model retry.
+Commit inspection receives resolved `Pass`, `Return`, `Break`, `Continue`, or `Raise` outcomes and validated output values.
+`Raise.error_type` is an exception class; its constructor runs only after inspection.
 
-`Rewrite` accepts `outcome`, `binding_name_to_value` (a complete replacement mapping), or `return_value`. Omitted fields use `nh.UNSET`. `Rewrite(return_value=None)` explicitly returns `None` when the function annotation permits it and the candidate already returns. Use `Rewrite(outcome=nh.oversight.Return(value=7))` to change an allowed pass to return. Supplying both return forms is invalid.
+Use `Rewrite(outcome=Return(value))` to replace a return, including an explicit `None` when the annotation permits it.
+Use `Rewrite(binding_name_to_value={...})` to replace the complete output mapping.
+Omitted fields inherit the original validated values through `nh.UNSET`.
+Acceptance does not repeat validators, and rewriting does not repeat inspection or expression evaluation.
+A bindings-only rewrite retains the previously resolved return value.
 
-Acceptance preserves validated values without repeating validators. Replacements are validated before any final assignment, and inspection is not repeated. Bindings-only rewrites retain the already resolved return; its expression is evaluated and, when appropriate, awaited only once.
-
-Inspection mappings are shallow read-only reference views: their entries retain Python types and identity. Trusted hooks must not mutate referenced objects; use `Rewrite`. Copy or serialize explicitly for durable history. Rejection cannot roll back effects of tools, validators, or return expressions. See [Specification](specification.md#102-host-commit-boundary) for the complete contract.
-
-Tool rejections are returned to the model as a recoverable observation. On preview-based paths this appears with `error.kind == "oversight"` in the projected preview; provider-backed paths that use Pydantic AI's standard retry loop may instead surface the same structured details as a retry prompt whose final line is compact JSON. Step rejections produce a failed terminal record and raise `nh.ExecutionError` chained from `nh.oversight.OversightRejectedError`, unless the lifecycle callback supplies a host exception. For the normative boundary rule on which tool-call failures are projected back to the model versus propagated as host exceptions, see [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
-
-For return approval, a host may parse `ReturnExpression.expression` and permit only a bare name present in `validated_binding_name_to_value`. Declaration alone does not prove that this candidate supplied a validated value. This policy does not skip return validation, prevent awaiting an awaitable binding, or keep the return synchronized with later binding rewrites. Arbitrary constants also bypass write bindings. Keep `deny: [return]` if the host's value policy has not admitted these behaviors; see [return approval semantics](specification.md#103-return-expression-approval).
+Inspection mappings retain Python types and identity in shallow read-only views.
+Use `Rewrite` for changes and explicit copying or serialization for durable history.
+The complete contracts are in [commit semantics](specification.md#102-host-commit-boundary) and [operation inspection](specification.md#103-operation-inspection).
 
 ## Caller-authenticated models
 

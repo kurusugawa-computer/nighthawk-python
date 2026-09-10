@@ -6,7 +6,7 @@ import textwrap
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime.step_contract import StepKind
+from nighthawk.runtime import StepCandidate, StepRequest
 from tests.execution.prompt_test_helpers import FakeAgent
 
 
@@ -112,14 +112,11 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
 
 def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
     class _FailingExecutor:
-        def run_step(
-            self,
-            *,
-            processed_natural_program: str,
-            step_context: object,
-            binding_names: list[str],
-            allowed_step_kinds: tuple[StepKind, ...],
-        ):
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            processed_natural_program = request.processed_natural_program
+            step_context = request.step_context
+            binding_names = list(request.output_binding_names)
+            allowed_step_kinds = request.allowed_step_kinds
             _ = (
                 processed_natural_program,
                 step_context,
