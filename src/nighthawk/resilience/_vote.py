@@ -66,7 +66,7 @@ def vote(
             raises the last exception.
 
     Returns:
-        A decorator that wraps a function with voting logic.
+        decorator (Callable): A decorator that wraps a function with voting logic.
 
     Example::
 

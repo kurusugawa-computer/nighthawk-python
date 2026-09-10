@@ -8,6 +8,7 @@ evals/promptfoo/outputs/
 evals/promptfoo/*.json
 evals/promptfoo/*.html
 evals/promptfoo/*.csv
+evals/model_tools/outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

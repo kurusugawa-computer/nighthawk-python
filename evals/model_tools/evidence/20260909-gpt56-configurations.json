@@ -1,0 +1,92 @@
+{
+  "main": {
+    "models": [
+      "openai:gpt-5.6-luna",
+      "openai:gpt-5.6-sol"
+    ],
+    "surfaces": [
+      "original",
+      "refined",
+      "merged"
+    ],
+    "guidance": [
+      "examples"
+    ],
+    "cases": null,
+    "repetitions": 2,
+    "phrasings": 2,
+    "concurrency": 8,
+    "timeout": 300.0,
+    "model_timeout": 120.0,
+    "max_output_tokens": 8192,
+    "total_token_limit": 100000,
+    "reasoning_effort": "medium",
+    "seed": 20260909,
+    "output": "evals/model_tools/outputs/gpt56-main-20260909",
+    "started": "2026-09-09T18:04:17.631128+00:00",
+    "trials": 384,
+    "pydantic_ai_version": "2.37.0",
+    "model_settings": {
+      "max_tokens": 8192,
+      "timeout": 120.0,
+      "openai_reasoning_effort": "medium"
+    },
+    "source_sha256": {
+      "run.py": "a01c264fcb807bd49ad4181d2bcf5ddd151661789d10d7c034fbba22cbe6b41c",
+      "__init__.py": "65575949f9d65221bfe1b342800e44a13c656d90fa5dbb1ecfae05d7e3cb0b92",
+      "cases.py": "52db764f145c5d5885eb71e060ad885cd465a734a9d3ad05891197c5d1ebc892",
+      "prototype.py": "1799bde71170beb415492a11dc0822d43558d9ff2ff0300714273b9282b5c4d7",
+      "report.py": "cb9bdc37ceeba0fc5f6ae1f6ed81da4ff2bd435b5b4ce083b8dca4dada3d942c"
+    }
+  },
+  "guidance": {
+    "models": [
+      "openai:gpt-5.6-luna",
+      "openai:gpt-5.6-sol"
+    ],
+    "surfaces": [
+      "original",
+      "refined",
+      "merged"
+    ],
+    "guidance": [
+      "short",
+      "examples"
+    ],
+    "cases": [
+      "assignment",
+      "mutation",
+      "collision",
+      "nested",
+      "return",
+      "continue",
+      "discovery",
+      "opaque"
+    ],
+    "repetitions": 2,
+    "phrasings": 1,
+    "concurrency": 4,
+    "timeout": 300.0,
+    "model_timeout": 120.0,
+    "max_output_tokens": 8192,
+    "total_token_limit": 100000,
+    "reasoning_effort": "medium",
+    "seed": 20260909,
+    "output": "evals/model_tools/outputs/gpt56-guidance-20260909",
+    "started": "2026-09-09T18:04:22.354866+00:00",
+    "trials": 192,
+    "pydantic_ai_version": "2.37.0",
+    "model_settings": {
+      "max_tokens": 8192,
+      "timeout": 120.0,
+      "openai_reasoning_effort": "medium"
+    },
+    "source_sha256": {
+      "run.py": "a01c264fcb807bd49ad4181d2bcf5ddd151661789d10d7c034fbba22cbe6b41c",
+      "__init__.py": "65575949f9d65221bfe1b342800e44a13c656d90fa5dbb1ecfae05d7e3cb0b92",
+      "cases.py": "52db764f145c5d5885eb71e060ad885cd465a734a9d3ad05891197c5d1ebc892",
+      "prototype.py": "1799bde71170beb415492a11dc0822d43558d9ff2ff0300714273b9282b5c4d7",
+      "report.py": "cb9bdc37ceeba0fc5f6ae1f6ed81da4ff2bd435b5b4ce083b8dca4dada3d942c"
+    }
+  }
+}

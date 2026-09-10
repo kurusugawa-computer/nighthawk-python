@@ -1,0 +1,1418 @@
+[
+  {
+    "diagnostic": "helper_collision_failure",
+    "study": "main",
+    "record": {
+      "case": "helper_collision",
+      "model": "openai:gpt-5.6-sol",
+      "surface": "merged",
+      "guidance": "examples",
+      "phrasing": 1,
+      "repetition": 1,
+      "passed": false,
+      "state_passed": false,
+      "failures": [
+        "Expected value 'task:question', got 'ANSWER'",
+        "Called the shadowing Python function instead of the task function",
+        "Required exactly one call to task_search"
+      ],
+      "outcome": "pass",
+      "completion": {
+        "result": {
+          "kind": "pass"
+        }
+      },
+      "returned_value": null,
+      "outputs": {
+        "result": "ANSWER"
+      },
+      "operations": [
+        {
+          "kind": "assign",
+          "expression": "search_documents(question)",
+          "target": "result",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "\"ANSWER\"",
+            "target": "result",
+            "retained_as": "output"
+          }
+        }
+      ],
+      "effects": [],
+      "function_name_to_count": {
+        "search_documents": 1
+      },
+      "tool_calls": 1,
+      "tool_errors": 0,
+      "unexpected_tool_errors": 0,
+      "duplicate_domain_calls": 0,
+      "seconds": 5.235,
+      "requests": 2,
+      "input_tokens": 1518,
+      "output_tokens": 59,
+      "usage_details": {
+        "reasoning_tokens": 10
+      },
+      "response_metadata": [
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        }
+      ],
+      "prompt": "{\"program\": \"Call the injected task search_documents on <question>. Store its text in <:result> without rebinding the existing nh_environment.\", \"python\": [{\"name\": \"search_documents\", \"type\": \"function\", \"preview\": \"<function>\", \"signature\": \"(question: 'str') -> 'str'\", \"description\": \"Return an answer to the question.\", \"async\": false}, {\"name\": \"question\", \"type\": \"str\", \"preview\": \"\\\"question\\\"\"}, {\"name\": \"nh_environment\", \"type\": \"str\", \"preview\": \"\\\"existing Python value\\\"\"}], \"parent\": {}, \"task_names\": [\"search_documents\"], \"task_omitted\": 0, \"outputs\": {\"result\": \"<class 'str'>\"}, \"unbound_python_names\": []}",
+      "instructions": "Execute one Natural block using the available Python values and tools.\n<name> refers to a readable value. <:name> declares an output written back to Python.\nTemporary names are retained for this step and inherited by nested calls.\nPython names win over parent state, which wins over task injection. Unbound Python locals do not fall back.\nOnly declared Python outputs can be rebound; existing lists and other objects can be mutated in place.\nTool results are bounded previews, not canonical state. Retain large or opaque values instead of reconstructing them from previews.\nExpressions can call and await functions. Top-level awaitable results are awaited automatically; use await for async calls composed inside another expression.\nA successful None result is not an error.\nPerform dependent operations sequentially. Finish with pass after completing the work unless asked to return, raise, break, or continue.\nReturn expressions are evaluated once at completion. Do not repeat an effectful call merely to return its result.\nOutput {\"result\": {\"kind\": \"<kind>\", ...}}.\nkind: pass | return | raise. Default: pass.\nChoose pass after completing the work. Most blocks end with pass.\nreturn needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").\nraise needs raise_message.\n",
+      "tools": [
+        {
+          "name": "nh_eval",
+          "description": "Evaluate a Python expression: read a value, call a function, or mutate an object in place. Examples: len(items), items.sort(), host.execute(action). Supply target_path to retain the value; omit it for evaluation only. Compute and retain a value in a declared output or a new temporary name; dotted targets mutate attributes. Example: target_path='result', expression='search_documents(question)' calls once and stores directly.",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "target_path": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_inspect",
+          "description": "Discover missing names, fields, signatures, or shadowed values. Not required before every operation. Example: name='search_documents', environment='task' finds the injected callable. Use returned reference expressions directly. Continue a partial listing using next_cursor as cursor alone.",
+          "schema": {
+            "$defs": {
+              "EnvironmentSource": {
+                "enum": [
+                  "effective",
+                  "python",
+                  "parent",
+                  "task",
+                  "step"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "environment": {
+                "$ref": "#/$defs/EnvironmentSource",
+                "default": "effective"
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "exception_type": null
+    }
+  },
+  {
+    "diagnostic": "unbound_read_skipped",
+    "study": "main",
+    "record": {
+      "case": "unbound",
+      "model": "openai:gpt-5.6-sol",
+      "surface": "merged",
+      "guidance": "examples",
+      "phrasing": 0,
+      "repetition": 1,
+      "passed": false,
+      "state_passed": false,
+      "failures": [
+        "Did not actually attempt the unbound read"
+      ],
+      "outcome": "pass",
+      "completion": {
+        "result": {
+          "kind": "pass"
+        }
+      },
+      "returned_value": null,
+      "outputs": {
+        "result": "unbound"
+      },
+      "operations": [
+        {
+          "kind": "assign",
+          "expression": "'unbound'",
+          "target": "result",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "\"unbound\"",
+            "target": "result",
+            "retained_as": "output"
+          }
+        }
+      ],
+      "effects": [],
+      "function_name_to_count": {},
+      "tool_calls": 1,
+      "tool_errors": 0,
+      "unexpected_tool_errors": 0,
+      "duplicate_domain_calls": 0,
+      "seconds": 4.687,
+      "requests": 2,
+      "input_tokens": 1411,
+      "output_tokens": 113,
+      "usage_details": {
+        "reasoning_tokens": 63
+      },
+      "response_metadata": [
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        }
+      ],
+      "prompt": "{\"program\": \"Attempt to evaluate Python-local i. If it is unbound, put 'unbound' in <:result>; do not substitute the parent's i.\", \"python\": [], \"parent\": {\"i\": \"5\"}, \"task_names\": [], \"task_omitted\": 0, \"outputs\": {\"result\": \"<class 'str'>\"}, \"unbound_python_names\": [\"i\"]}",
+      "instructions": "Execute one Natural block using the available Python values and tools.\n<name> refers to a readable value. <:name> declares an output written back to Python.\nTemporary names are retained for this step and inherited by nested calls.\nPython names win over parent state, which wins over task injection. Unbound Python locals do not fall back.\nOnly declared Python outputs can be rebound; existing lists and other objects can be mutated in place.\nTool results are bounded previews, not canonical state. Retain large or opaque values instead of reconstructing them from previews.\nExpressions can call and await functions. Top-level awaitable results are awaited automatically; use await for async calls composed inside another expression.\nA successful None result is not an error.\nPerform dependent operations sequentially. Finish with pass after completing the work unless asked to return, raise, break, or continue.\nReturn expressions are evaluated once at completion. Do not repeat an effectful call merely to return its result.\nOutput {\"result\": {\"kind\": \"<kind>\", ...}}.\nkind: pass | return | raise. Default: pass.\nChoose pass after completing the work. Most blocks end with pass.\nreturn needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").\nraise needs raise_message.\n",
+      "tools": [
+        {
+          "name": "nh_eval",
+          "description": "Evaluate a Python expression: read a value, call a function, or mutate an object in place. Examples: len(items), items.sort(), host.execute(action). Supply target_path to retain the value; omit it for evaluation only. Compute and retain a value in a declared output or a new temporary name; dotted targets mutate attributes. Example: target_path='result', expression='search_documents(question)' calls once and stores directly.",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "target_path": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_inspect",
+          "description": "Discover missing names, fields, signatures, or shadowed values. Not required before every operation. Example: name='search_documents', environment='task' finds the injected callable. Use returned reference expressions directly. Continue a partial listing using next_cursor as cursor alone.",
+          "schema": {
+            "$defs": {
+              "EnvironmentSource": {
+                "enum": [
+                  "effective",
+                  "python",
+                  "parent",
+                  "task",
+                  "step"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "environment": {
+                "$ref": "#/$defs/EnvironmentSource",
+                "default": "effective"
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "exception_type": null
+    }
+  },
+  {
+    "diagnostic": "successful_materialized_counter",
+    "study": "main",
+    "record": {
+      "case": "nested",
+      "model": "openai:gpt-5.6-sol",
+      "surface": "refined",
+      "guidance": "examples",
+      "phrasing": 1,
+      "repetition": 0,
+      "passed": true,
+      "state_passed": true,
+      "failures": [],
+      "outcome": "pass",
+      "completion": {
+        "result": {
+          "kind": "pass"
+        }
+      },
+      "returned_value": null,
+      "outputs": {
+        "result": [
+          "ordinary",
+          "ordinary",
+          "ordinary",
+          "ordinary",
+          "fifth",
+          "ordinary",
+          "ordinary",
+          "eighth",
+          "ordinary",
+          "ordinary"
+        ]
+      },
+      "operations": [
+        {
+          "kind": "assign",
+          "expression": "[]",
+          "target": "result",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "[]",
+            "target": "result",
+            "retained_as": "output"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "1",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "1",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "2",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "2",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "3",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "3",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "4",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "4",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "5",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "5",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "6",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "6",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "7",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "7",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "8",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "8",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "9",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "9",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "10",
+          "target": "i",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "10",
+            "target": "i",
+            "retained_as": "temporary"
+          }
+        },
+        {
+          "kind": "evaluate",
+          "expression": "result.append(await block_two())",
+          "target": null,
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "null"
+          }
+        }
+      ],
+      "effects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "function_name_to_count": {
+        "block_two": 10
+      },
+      "tool_calls": 21,
+      "tool_errors": 0,
+      "unexpected_tool_errors": 0,
+      "duplicate_domain_calls": 0,
+      "seconds": 64.799,
+      "requests": 22,
+      "input_tokens": 31534,
+      "output_tokens": 840,
+      "usage_details": {
+        "reasoning_tokens": 292
+      },
+      "response_metadata": [
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        }
+      ],
+      "prompt": "{\"program\": \"For iterations 1 through 10, retain the counter as temporary i and then call <block_two>. Store the ten returned labels in <:result> in order.\", \"python\": [{\"name\": \"block_two\", \"type\": \"function\", \"preview\": \"<function>\", \"signature\": \"() -> 'str'\", \"description\": \"Read the parent's retained i; return fifth, eighth, or ordinary.\", \"async\": true}], \"parent\": {}, \"task_names\": [], \"task_omitted\": 0, \"outputs\": {\"result\": \"list[str]\"}, \"unbound_python_names\": []}",
+      "instructions": "Execute one Natural block using the available Python values and tools.\n<name> refers to a readable value. <:name> declares an output written back to Python.\nTemporary names are retained for this step and inherited by nested calls.\nPython names win over parent state, which wins over task injection. Unbound Python locals do not fall back.\nOnly declared Python outputs can be rebound; existing lists and other objects can be mutated in place.\nTool results are bounded previews, not canonical state. Retain large or opaque values instead of reconstructing them from previews.\nExpressions can call and await functions. Top-level awaitable results are awaited automatically; use await for async calls composed inside another expression.\nA successful None result is not an error.\nPerform dependent operations sequentially. Finish with pass after completing the work unless asked to return, raise, break, or continue.\nReturn expressions are evaluated once at completion. Do not repeat an effectful call merely to return its result.\nOutput {\"result\": {\"kind\": \"<kind>\", ...}}.\nkind: pass | return | raise. Default: pass.\nChoose pass after completing the work. Most blocks end with pass.\nreturn needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").\nraise needs raise_message.\n",
+      "tools": [
+        {
+          "name": "nh_eval",
+          "description": "Evaluate a Python expression: read a value, call a function, or mutate an object in place. Examples: len(items), items.sort(), host.execute(action).",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_assign",
+          "description": "Compute and retain a value in a declared output or a new temporary name; dotted targets mutate attributes. Example: target_path='result', expression='search_documents(question)' calls once and stores directly.",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "target_path": {
+                "type": "string"
+              },
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "target_path",
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_inspect",
+          "description": "Discover missing names, fields, signatures, or shadowed values. Not required before every operation. Example: name='search_documents', environment='task' finds the injected callable. Use returned reference expressions directly. Continue a partial listing using next_cursor as cursor alone.",
+          "schema": {
+            "$defs": {
+              "EnvironmentSource": {
+                "enum": [
+                  "effective",
+                  "python",
+                  "parent",
+                  "task",
+                  "step"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "environment": {
+                "$ref": "#/$defs/EnvironmentSource",
+                "default": "effective"
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "exception_type": null
+    }
+  },
+  {
+    "diagnostic": "successful_collision_discovery",
+    "study": "main",
+    "record": {
+      "case": "collision",
+      "model": "openai:gpt-5.6-sol",
+      "surface": "refined",
+      "guidance": "examples",
+      "phrasing": 1,
+      "repetition": 1,
+      "passed": true,
+      "state_passed": true,
+      "failures": [],
+      "outcome": "pass",
+      "completion": {
+        "result": {
+          "kind": "pass"
+        }
+      },
+      "returned_value": null,
+      "outputs": {
+        "result": "task:question"
+      },
+      "operations": [
+        {
+          "kind": "inspect",
+          "expression": "",
+          "target": null,
+          "environment": "task",
+          "name": "search_documents",
+          "cursor": null,
+          "status": "success",
+          "response": {
+            "status": "success",
+            "entries": [
+              {
+                "name": "search_documents",
+                "type": "function",
+                "preview": "<function>",
+                "signature": "(question: 'str') -> 'str'",
+                "description": "Return the task answer for a question.",
+                "async": false,
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['search_documents']"
+              }
+            ],
+            "omitted": 0,
+            "next_cursor": null
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "nh_environment['task']['search_documents'](question)",
+          "target": "result",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "\"task:question\"",
+            "target": "result",
+            "retained_as": "output"
+          }
+        }
+      ],
+      "effects": [],
+      "function_name_to_count": {
+        "task_search": 1
+      },
+      "tool_calls": 2,
+      "tool_errors": 0,
+      "unexpected_tool_errors": 0,
+      "duplicate_domain_calls": 0,
+      "seconds": 6.584,
+      "requests": 3,
+      "input_tokens": 2465,
+      "output_tokens": 107,
+      "usage_details": {
+        "reasoning_tokens": 26
+      },
+      "response_metadata": [
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        }
+      ],
+      "prompt": "{\"program\": \"Find search_documents in the task environment and call it with <question> from Python locals. Save its answer in <:result>.\", \"python\": [{\"name\": \"search_documents\", \"type\": \"function\", \"preview\": \"<function>\", \"signature\": \"(question: 'str') -> 'str'\", \"description\": \"Return an answer to the question.\", \"async\": false}, {\"name\": \"question\", \"type\": \"str\", \"preview\": \"\\\"question\\\"\"}], \"parent\": {}, \"task_names\": [\"search_documents\"], \"task_omitted\": 0, \"outputs\": {\"result\": \"<class 'str'>\"}, \"unbound_python_names\": []}",
+      "instructions": "Execute one Natural block using the available Python values and tools.\n<name> refers to a readable value. <:name> declares an output written back to Python.\nTemporary names are retained for this step and inherited by nested calls.\nPython names win over parent state, which wins over task injection. Unbound Python locals do not fall back.\nOnly declared Python outputs can be rebound; existing lists and other objects can be mutated in place.\nTool results are bounded previews, not canonical state. Retain large or opaque values instead of reconstructing them from previews.\nExpressions can call and await functions. Top-level awaitable results are awaited automatically; use await for async calls composed inside another expression.\nA successful None result is not an error.\nPerform dependent operations sequentially. Finish with pass after completing the work unless asked to return, raise, break, or continue.\nReturn expressions are evaluated once at completion. Do not repeat an effectful call merely to return its result.\nOutput {\"result\": {\"kind\": \"<kind>\", ...}}.\nkind: pass | return | raise. Default: pass.\nChoose pass after completing the work. Most blocks end with pass.\nreturn needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").\nraise needs raise_message.\n",
+      "tools": [
+        {
+          "name": "nh_eval",
+          "description": "Evaluate a Python expression: read a value, call a function, or mutate an object in place. Examples: len(items), items.sort(), host.execute(action).",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_assign",
+          "description": "Compute and retain a value in a declared output or a new temporary name; dotted targets mutate attributes. Example: target_path='result', expression='search_documents(question)' calls once and stores directly.",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "target_path": {
+                "type": "string"
+              },
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "target_path",
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_inspect",
+          "description": "Discover missing names, fields, signatures, or shadowed values. Not required before every operation. Example: name='search_documents', environment='task' finds the injected callable. Use returned reference expressions directly. Continue a partial listing using next_cursor as cursor alone.",
+          "schema": {
+            "$defs": {
+              "EnvironmentSource": {
+                "enum": [
+                  "effective",
+                  "python",
+                  "parent",
+                  "task",
+                  "step"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "environment": {
+                "$ref": "#/$defs/EnvironmentSource",
+                "default": "effective"
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "exception_type": null
+    }
+  },
+  {
+    "diagnostic": "successful_single_return_effect",
+    "study": "main",
+    "record": {
+      "case": "return",
+      "model": "openai:gpt-5.6-luna",
+      "surface": "merged",
+      "guidance": "examples",
+      "phrasing": 1,
+      "repetition": 1,
+      "passed": true,
+      "state_passed": true,
+      "failures": [],
+      "outcome": "return",
+      "completion": {
+        "result": {
+          "kind": "return",
+          "return_expression": "receipt"
+        }
+      },
+      "returned_value": "receipt-1",
+      "outputs": {},
+      "operations": [
+        {
+          "kind": "assign",
+          "expression": "issue_receipt()",
+          "target": "receipt",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "\"receipt-1\"",
+            "target": "receipt",
+            "retained_as": "temporary"
+          }
+        }
+      ],
+      "effects": [],
+      "function_name_to_count": {
+        "issue_receipt": 1
+      },
+      "tool_calls": 1,
+      "tool_errors": 0,
+      "unexpected_tool_errors": 0,
+      "duplicate_domain_calls": 0,
+      "seconds": 5.183,
+      "requests": 2,
+      "input_tokens": 1446,
+      "output_tokens": 84,
+      "usage_details": {
+        "reasoning_tokens": 30
+      },
+      "response_metadata": [
+        {
+          "model_name": "gpt-5.6-luna",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-luna",
+          "finish_reason": "stop"
+        }
+      ],
+      "prompt": "{\"program\": \"Call <issue_receipt> once and return that receipt string from the function.\", \"python\": [{\"name\": \"issue_receipt\", \"type\": \"function\", \"preview\": \"<function>\", \"signature\": \"() -> 'str'\", \"description\": \"Issue a new receipt. Calling twice issues two separate receipts.\", \"async\": false}], \"parent\": {}, \"task_names\": [], \"task_omitted\": 0, \"outputs\": {\"result\": \"<class 'str'>\"}, \"unbound_python_names\": []}",
+      "instructions": "Execute one Natural block using the available Python values and tools.\n<name> refers to a readable value. <:name> declares an output written back to Python.\nTemporary names are retained for this step and inherited by nested calls.\nPython names win over parent state, which wins over task injection. Unbound Python locals do not fall back.\nOnly declared Python outputs can be rebound; existing lists and other objects can be mutated in place.\nTool results are bounded previews, not canonical state. Retain large or opaque values instead of reconstructing them from previews.\nExpressions can call and await functions. Top-level awaitable results are awaited automatically; use await for async calls composed inside another expression.\nA successful None result is not an error.\nPerform dependent operations sequentially. Finish with pass after completing the work unless asked to return, raise, break, or continue.\nReturn expressions are evaluated once at completion. Do not repeat an effectful call merely to return its result.\nOutput {\"result\": {\"kind\": \"<kind>\", ...}}.\nkind: pass | return | raise. Default: pass.\nChoose pass after completing the work. Most blocks end with pass.\nreturn needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").\nraise needs raise_message.\n",
+      "tools": [
+        {
+          "name": "nh_eval",
+          "description": "Evaluate a Python expression: read a value, call a function, or mutate an object in place. Examples: len(items), items.sort(), host.execute(action). Supply target_path to retain the value; omit it for evaluation only. Compute and retain a value in a declared output or a new temporary name; dotted targets mutate attributes. Example: target_path='result', expression='search_documents(question)' calls once and stores directly.",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "target_path": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_inspect",
+          "description": "Discover missing names, fields, signatures, or shadowed values. Not required before every operation. Example: name='search_documents', environment='task' finds the injected callable. Use returned reference expressions directly. Continue a partial listing using next_cursor as cursor alone.",
+          "schema": {
+            "$defs": {
+              "EnvironmentSource": {
+                "enum": [
+                  "effective",
+                  "python",
+                  "parent",
+                  "task",
+                  "step"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "environment": {
+                "$ref": "#/$defs/EnvironmentSource",
+                "default": "effective"
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "exception_type": null
+    }
+  },
+  {
+    "diagnostic": "successful_pagination",
+    "study": "main",
+    "record": {
+      "case": "discovery",
+      "model": "openai:gpt-5.6-sol",
+      "surface": "refined",
+      "guidance": "examples",
+      "phrasing": 0,
+      "repetition": 1,
+      "passed": true,
+      "state_passed": true,
+      "failures": [],
+      "outcome": "pass",
+      "completion": {
+        "result": {
+          "kind": "pass"
+        }
+      },
+      "returned_value": null,
+      "outputs": {
+        "result": "verified"
+      },
+      "operations": [
+        {
+          "kind": "inspect",
+          "expression": "",
+          "target": null,
+          "environment": "task",
+          "name": null,
+          "cursor": null,
+          "status": "success",
+          "response": {
+            "status": "success",
+            "entries": [
+              {
+                "name": "item_0",
+                "type": "int",
+                "preview": "0",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_0']"
+              },
+              {
+                "name": "item_1",
+                "type": "int",
+                "preview": "1",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_1']"
+              },
+              {
+                "name": "item_2",
+                "type": "int",
+                "preview": "2",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_2']"
+              },
+              {
+                "name": "item_3",
+                "type": "int",
+                "preview": "3",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_3']"
+              }
+            ],
+            "omitted": 6,
+            "next_cursor": "page-1"
+          }
+        },
+        {
+          "kind": "inspect",
+          "expression": "",
+          "target": null,
+          "environment": "effective",
+          "name": null,
+          "cursor": "page-1",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "entries": [
+              {
+                "name": "item_4",
+                "type": "int",
+                "preview": "4",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_4']"
+              },
+              {
+                "name": "item_5",
+                "type": "int",
+                "preview": "5",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_5']"
+              },
+              {
+                "name": "item_6",
+                "type": "int",
+                "preview": "6",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_6']"
+              },
+              {
+                "name": "item_7",
+                "type": "int",
+                "preview": "7",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_7']"
+              }
+            ],
+            "omitted": 2,
+            "next_cursor": "page-2"
+          }
+        },
+        {
+          "kind": "inspect",
+          "expression": "",
+          "target": null,
+          "environment": "effective",
+          "name": null,
+          "cursor": "page-2",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "entries": [
+              {
+                "name": "item_8",
+                "type": "int",
+                "preview": "8",
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['item_8']"
+              },
+              {
+                "name": "z_verify",
+                "type": "function",
+                "preview": "<function>",
+                "signature": "() -> 'str'",
+                "description": "Provide the verification code.",
+                "async": false,
+                "origin": "task",
+                "write": "no rebinding",
+                "reference": "nh_environment['task']['z_verify']"
+              }
+            ],
+            "omitted": 0,
+            "next_cursor": null
+          }
+        },
+        {
+          "kind": "assign",
+          "expression": "nh_environment['task']['z_verify']()",
+          "target": "result",
+          "environment": "effective",
+          "status": "success",
+          "response": {
+            "status": "success",
+            "value": "\"verified\"",
+            "target": "result",
+            "retained_as": "output"
+          }
+        }
+      ],
+      "effects": [],
+      "function_name_to_count": {
+        "verification_code": 1
+      },
+      "tool_calls": 4,
+      "tool_errors": 0,
+      "unexpected_tool_errors": 0,
+      "duplicate_domain_calls": 0,
+      "seconds": 8.961,
+      "requests": 5,
+      "input_tokens": 5088,
+      "output_tokens": 153,
+      "usage_details": {
+        "reasoning_tokens": 31
+      },
+      "response_metadata": [
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        },
+        {
+          "model_name": "gpt-5.6-sol",
+          "finish_reason": "stop"
+        }
+      ],
+      "prompt": "{\"program\": \"Find the task-injected callable whose description says it provides the verification code. Call it and save the code in <:result>.\", \"python\": [], \"parent\": {}, \"task_names\": [\"item_0\", \"item_1\", \"item_2\", \"item_3\"], \"task_omitted\": 6, \"outputs\": {\"result\": \"<class 'str'>\"}, \"unbound_python_names\": []}",
+      "instructions": "Execute one Natural block using the available Python values and tools.\n<name> refers to a readable value. <:name> declares an output written back to Python.\nTemporary names are retained for this step and inherited by nested calls.\nPython names win over parent state, which wins over task injection. Unbound Python locals do not fall back.\nOnly declared Python outputs can be rebound; existing lists and other objects can be mutated in place.\nTool results are bounded previews, not canonical state. Retain large or opaque values instead of reconstructing them from previews.\nExpressions can call and await functions. Top-level awaitable results are awaited automatically; use await for async calls composed inside another expression.\nA successful None result is not an error.\nPerform dependent operations sequentially. Finish with pass after completing the work unless asked to return, raise, break, or continue.\nReturn expressions are evaluated once at completion. Do not repeat an effectful call merely to return its result.\nOutput {\"result\": {\"kind\": \"<kind>\", ...}}.\nkind: pass | return | raise. Default: pass.\nChoose pass after completing the work. Most blocks end with pass.\nreturn needs return_expression (a Python expression evaluated against step locals/globals, e.g. \"result\", \"'hello'\", \"len(items)\").\nraise needs raise_message.\n",
+      "tools": [
+        {
+          "name": "nh_eval",
+          "description": "Evaluate a Python expression: read a value, call a function, or mutate an object in place. Examples: len(items), items.sort(), host.execute(action).",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_assign",
+          "description": "Compute and retain a value in a declared output or a new temporary name; dotted targets mutate attributes. Example: target_path='result', expression='search_documents(question)' calls once and stores directly.",
+          "schema": {
+            "additionalProperties": false,
+            "properties": {
+              "target_path": {
+                "type": "string"
+              },
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "target_path",
+              "expression"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "nh_inspect",
+          "description": "Discover missing names, fields, signatures, or shadowed values. Not required before every operation. Example: name='search_documents', environment='task' finds the injected callable. Use returned reference expressions directly. Continue a partial listing using next_cursor as cursor alone.",
+          "schema": {
+            "$defs": {
+              "EnvironmentSource": {
+                "enum": [
+                  "effective",
+                  "python",
+                  "parent",
+                  "task",
+                  "step"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "environment": {
+                "$ref": "#/$defs/EnvironmentSource",
+                "default": "effective"
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "exception_type": null
+    }
+  }
+]

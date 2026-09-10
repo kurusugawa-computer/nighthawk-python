@@ -179,10 +179,9 @@ def circuit_breaker(
     ``.reset()`` attributes for inspection and manual control.
 
     This is a **stateful** transformer (like :func:`functools.lru_cache`).
-    Applying the same ``circuit_breaker(...)`` call to multiple functions
-    gives each its own independent state. Applying one
-    ``breaker = circuit_breaker(...)`` decorator instance to multiple
-    functions shares state across them.
+    Calling ``circuit_breaker(...)`` separately for each function gives each
+    its own independent state. Reusing the returned decorator instance for
+    multiple functions shares state across them.
 
     Args:
         fail_threshold: Number of consecutive failures before opening.
@@ -191,7 +190,7 @@ def circuit_breaker(
             :class:`Exception`.
 
     Returns:
-        A decorator that wraps a function with circuit breaker logic.
+        decorator (Callable): A decorator that wraps a function with circuit breaker logic.
 
     Example::
 

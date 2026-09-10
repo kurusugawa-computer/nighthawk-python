@@ -1,0 +1,73 @@
+{
+  "main": {
+    "models": [
+      "openai:gpt-4.1-mini",
+      "openai:gpt-4.1"
+    ],
+    "surfaces": [
+      "original",
+      "refined",
+      "merged"
+    ],
+    "guidance": [
+      "examples"
+    ],
+    "cases": null,
+    "repetitions": 2,
+    "phrasings": 2,
+    "concurrency": 6,
+    "timeout": 120,
+    "seed": 20260909,
+    "output": "evals/model_tools/outputs/main-v2-20260909",
+    "started": "2026-09-09T17:26:11.874034+00:00",
+    "trials": 384,
+    "pydantic_ai_version": "2.37.0",
+    "source_sha256": {
+      "run.py": "92f1cd1122665cdd0659f9f2dce64f7236892e4865efedea6b4521b73edc778f",
+      "__init__.py": "65575949f9d65221bfe1b342800e44a13c656d90fa5dbb1ecfae05d7e3cb0b92",
+      "cases.py": "52db764f145c5d5885eb71e060ad885cd465a734a9d3ad05891197c5d1ebc892",
+      "prototype.py": "ed03599cbf31ab6a84d576468a7828125294b202339a5001a241ee2f38368de4"
+    }
+  },
+  "guidance": {
+    "models": [
+      "openai:gpt-4.1-mini",
+      "openai:gpt-4.1"
+    ],
+    "surfaces": [
+      "original",
+      "refined",
+      "merged"
+    ],
+    "guidance": [
+      "short",
+      "examples"
+    ],
+    "cases": [
+      "assignment",
+      "mutation",
+      "collision",
+      "nested",
+      "return",
+      "continue",
+      "discovery",
+      "opaque"
+    ],
+    "repetitions": 2,
+    "phrasings": 1,
+    "concurrency": 6,
+    "timeout": 120,
+    "seed": 20260909,
+    "output": "evals/model_tools/outputs/guidance-20260909",
+    "started": "2026-09-09T17:36:20.861994+00:00",
+    "trials": 192,
+    "pydantic_ai_version": "2.37.0",
+    "source_sha256": {
+      "run.py": "5eda5889a1f1365c85dd1e9abd21118faa06a0d1af820b8687bd0f7d0d466d5f",
+      "__init__.py": "65575949f9d65221bfe1b342800e44a13c656d90fa5dbb1ecfae05d7e3cb0b92",
+      "cases.py": "52db764f145c5d5885eb71e060ad885cd465a734a9d3ad05891197c5d1ebc892",
+      "prototype.py": "1799bde71170beb415492a11dc0822d43558d9ff2ff0300714273b9282b5c4d7",
+      "report.py": "cb9bdc37ceeba0fc5f6ae1f6ed81da4ff2bd435b5b4ce083b8dca4dada3d942c"
+    }
+  }
+}
