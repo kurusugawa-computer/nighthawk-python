@@ -273,6 +273,10 @@ When `step_2(carry)` executes, the LLM sees the carry's current contents in LOCA
 
 <!-- prompt-example:carry-pattern -->
 ```py
+Runtime inspection: __nighthawk_runtime_0.inspect(value).
+Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
+Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+
 <<<NH:PROGRAM>>>
 Read <carry> for prior context.
 The carry says the previous result was 10.
@@ -281,7 +285,9 @@ Append a one-line summary of what you did to <carry>.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
+Origin: python; name: carry
 carry: list = ["Set result to 10."]
+Origin: python; name: result; output contract: int
 result: int = 0
 <<<NH:END_LOCALS>>>
 

@@ -249,27 +249,34 @@ The default user prompt template renders three delimited sections:
 - `<<<NH:GLOBALS>>>` / `<<<NH:END_GLOBALS>>>`: the globals summary (see 8.2.3).
 
 The template uses `$program`, `$locals`, and `$globals` placeholders, substituted at prompt construction time.
+A bounded runtime-access preamble precedes the template.
+It identifies the collision-free inspection and environment references, and relevant known source collisions.
 
 #### 8.2.2. Locals summary
 
-The locals summary renders selected names from `step_locals`. It is a transparent projection of Python-visible local state at the Natural block boundary. Nighthawk MUST NOT automatically suppress otherwise eligible LOCALS entries based on reference frequency, VLM cost, or multimodal payload type; users control prompt cost by reducing the Python locals that exist at the block boundary.
+The locals summary presents current Python working locals, inherited working state, and step assignments.
+Each entry identifies its origin and available declaration annotation or selected output contract.
+These descriptions do not change the live environment or its validation contracts.
 
 Selection:
 
-- All names in `step_locals` are eligible, except names starting with `__` (dunder).
+- Python working locals, parent working names, step assignments, and declared outputs are eligible, except names starting with `__`.
+  Other available names remain retrievable through environment discovery.
 
 Ordering:
 
-- Entries are rendered in lexicographic order by name.
+- Explicit references and outputs precede other Python working locals, which precede inherited state.
+  Ordering within a priority class is lexicographic.
 
 Rendering format:
 
-- `TypeAliasType` values (PEP 695): `name: type = underlying_type`.
-- Callable values: `name: (signature)`, where `(signature)` is the result of `inspect.signature`. Type annotations are included when available (e.g., `(base: int, bonus: int) -> int`).
+- `TypeAliasType` values (PEP 695) retain their name and explicitly omit expansion that would require evaluation.
+- Callable values use static, best-effort signature metadata shared with value inspection.
+  Available annotations are included, such as `(base: int, bonus: int) -> int`; unresolved annotation spelling is preserved without evaluation.
     - If the callable has a meaningful docstring, the first line is appended as `# first_line`.
     - If the callable is async, `async` is appended in metadata comments.
     - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name`.
-    - If the signature cannot be resolved (e.g., `__signature__` raises), the entry renders as `name: <callable; signature-unavailable>`.
+    - If signature acquisition requires executing an application descriptor, the entry renders as `name: <callable; signature-unavailable>` without reading that descriptor.
 - Object capability values (non-callable, non-scalar, non-container values):
     - Header line: `name: object = TypeName`.
     - Public method lines: `name.method: (signature)` using callable rules above.
@@ -299,7 +306,7 @@ Callable disambiguation considers both top-level callable entries and object met
 
 Ordering:
 
-- Top-level entries are rendered in lexicographic order by top-level name.
+- Top-level entries follow the priority classes above and use lexicographic order within each class.
 - Object methods and fields are rendered in lexicographic order by member name.
 - Methods are rendered before fields for each object entry.
 - If a section-level budget prevents rendering all top-level entries, `<snipped>` is appended at the end of the section.
@@ -307,7 +314,8 @@ Ordering:
 Safety:
 
 - Prompt rendering does not call user methods.
-- Prompt rendering does not evaluate properties or descriptors requiring attribute execution.
+- Prompt rendering does not evaluate application properties, annotation expressions, serializers, or `repr` methods.
+  Known functions, ordinary instance dictionaries, standard slot storage, and supported native content supply static metadata; other values remain explicitly opaque.
 - Slot and field access failures are ignored for rendering purposes.
 
 Token budgeting:
@@ -326,11 +334,12 @@ Truncation:
 
 - Rendering is bounded by `context_limits.locals_max_tokens` and `context_limits.locals_max_items`.
 - When the limit is reached before all entries are rendered, a `<snipped>` marker is appended and a diagnostic log message is emitted on the `nighthawk` logger.
-- Because section rendering remains lexicographic, tight item or token budgets can affect which bindings remain visible, including explicitly referenced dotted multimodal leaves.
+- Tight item or token budgets can omit even explicit references.
+  Omission notices identify omitted names and retain a usable environment-discovery reference.
 
 #### 8.2.3. Globals summary
 
-The globals summary renders module-level names that are referenced in the Natural program text but are not present in `step_locals`.
+The globals summary presents referenced Python global or builtin names and injected task capabilities that are not already represented in the working-state summary.
 
 Reference extraction:
 
@@ -340,13 +349,13 @@ Reference extraction:
 
 Selection:
 
-- A referenced name is included in the globals summary only if it is NOT present in `step_locals`.
-- The name is resolved from `step_globals` (which contains module globals available to the function).
+- A referenced name is included here when it is not already represented in the working-state summary.
+- The name is resolved through `StepEnvironment`; task injection never replaces Python name resolution.
 - If resolution fails, the name is silently omitted.
 
 Ordering:
 
-- Entries are rendered in lexicographic order by name.
+- Explicit references precede other task-capability names, with lexicographic ordering within a priority class.
 
 Rendering format:
 
@@ -376,6 +385,34 @@ Native multimodal items and cache points retain identity through this boundary.
 Configured and scoped user-prompt suffix fragments are appended by common code once after builder output; builders should not add them again.
 `DefaultContextBuilder.build(request)` can be composed inside a custom builder and uses the presentation described above.
 Builder exceptions and invalid content fail the step before model execution and receive the ordinary terminal lifecycle notification.
+
+#### 8.2.5. Value inspection and name discovery
+
+`nighthawk.runtime.inspect_value(value, cursor=None, max_items=8)` describes a known live value.
+It does not infer a binding name, source, write eligibility, or declared contract from object identity.
+Callable annotations belong to the value; named declaration annotations and output contracts belong to `StepEnvironment.describe(name, source="effective")`.
+Presentation-only annotation spelling is not evaluated and does not weaken preparation-time output validation.
+
+The default context advertises `environment.runtime_reference`, a generated collision-free Python root.
+Its `.inspect(value)` method uses the same value-description implementation, and `.environment` exposes the current environment.
+Application bindings named `inspect`, including unbound Python locals, retain their meaning.
+The generated root cannot be used as a temporary assignment target and is excluded from inherited working state.
+
+`StepEnvironment.reference(name, source="effective")` returns an expression that resolves the binding when evaluated.
+`describe` provides origin, shadowed sources, unbound state, write eligibility, annotation spelling, output-contract text, and source-qualified references.
+`discover(source="effective", cursor=None, max_items=8)` retrieves names with these descriptions, even when the values themselves are opaque.
+Sources are `effective`, `python`, `parent`, `task`, and `step`.
+
+Supported name and member listings return a `next_cursor` and an actionable continuation when truncated by their item limit.
+Pages progress for stable name membership; changed membership or an invalid cursor returns a concrete instruction to restart discovery.
+When a discovery page exceeds the tool-response budget, rendering reduces the page and preserves complete reference and continuation expressions.
+Metadata may be omitted explicitly to retain those expressions.
+If even one reference and its continuation cannot fit, the response explains the limit and recommends Python slices on environment views or a larger response budget; it does not return a truncated cursor.
+Descriptors and unavailable metadata are identified as omissions, without promising that another page can execute them.
+Large collections can be examined with ordinary Python slices.
+
+An inspection or environment-helper call inside an evaluation expression belongs to that one operation.
+Direct Python calls to these helpers do not create an additional Natural operation, approval, or completion notification.
 
 ### 8.3. Tools available to the LLM
 
@@ -506,7 +543,8 @@ Tool result transport contract:
     - When they do, they preserve the original top-level content item order from the tool payload, including text/media adjacency for qualifying mixed `list` / `tuple` payloads.
     - The MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Native MCP video carriage is intentionally not part of this contract because video-modal requirements are still unstable. Native MCP document carriage may be added only behind an explicit transport capability; until then, document items also remain text-projected. Multimodal-capable providers that bypass MCP still send supported items natively via `ToolReturnPart.files`.
 - Provider-backed backends that use Pydantic AI's standard tool loop SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts.
-    - The dedicated retry-prompt path is reserved for tool argument validation failures before tool execution (for example via `RetryPromptPart.model_response()`).
+    - Argument validation failures and explicit `ModelRetry` use the dedicated retry-prompt path (for example via `RetryPromptPart.model_response()`).
+      Ordinary application exceptions propagate to Python.
     - When a provider-backed backend surfaces a tool failure without native multimodal content, it SHOULD use the same structured preview envelope shape described above.
 - User-prompt transport is backend-dependent.
     - Provider-backed executors that accept Pydantic AI `UserContent` MAY send user-prompt multimodal content natively.

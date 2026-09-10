@@ -11,7 +11,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TypeGuard, cast
 
-from pydantic_ai.messages import TextContent, UserContent, is_multi_modal_content
+from pydantic_ai.messages import (
+    AudioUrl,
+    BinaryContent,
+    DocumentUrl,
+    ImageUrl,
+    TextContent,
+    UploadedFile,
+    UserContent,
+    VideoUrl,
+    is_multi_modal_content,
+)
 
 
 def coalesce_user_content(content_list: Sequence[UserContent]) -> tuple[UserContent, ...]:
@@ -96,6 +106,13 @@ def try_project_user_prompt_value(value: object) -> tuple[UserContent, ...] | No
     tool-return path they are delegated to Pydantic AI so its
     ``"See file {id}."`` framing is preserved.
     """
-    if is_multi_modal_content(value):
+    if any(type(value) is candidate for candidate in (BinaryContent, ImageUrl, AudioUrl, DocumentUrl, VideoUrl, UploadedFile)):
         return (cast(UserContent, value),)
+    if type(value) is not list and type(value) is not tuple:
+        return None
+    if any(
+        not any(type(item) is candidate for candidate in (str, TextContent, BinaryContent, ImageUrl, AudioUrl, DocumentUrl, VideoUrl, UploadedFile))
+        for item in value
+    ):
+        return None
     return try_project_ordered_user_content_sequence(value)

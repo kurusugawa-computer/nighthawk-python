@@ -15,6 +15,7 @@ from pydantic_core import PydanticSerializationError
 
 from ..json_renderer import to_jsonable_value
 from ..runtime._user_content import is_top_level_sequence_payload
+from ..runtime.discovery import DiscoveryResult
 from ..runtime.operation_contract import OperationError
 from ..runtime.operations import OperationExecution, execute_operation_async, new_operation_request
 from ..runtime.step_context import StepContext
@@ -38,6 +39,8 @@ def _normalize_tool_return_item(item: object) -> object:
     :func:`to_jsonable_value`. Unexpected exceptions propagate so that
     programming mistakes are not silently swallowed.
     """
+    if type(item) is DiscoveryResult:
+        return item
     if is_multi_modal_content(item):
         return item
     if isinstance(item, TextContent):
@@ -156,4 +159,13 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
         Must not be removed while Nighthawk uses Pydantic AI's ``WrapperToolset``.
         """
         tool_outcome = await self.call_tool_outcome(name, tool_args, ctx, tool)
+        if type(tool_outcome["payload"]) is DiscoveryResult:
+            import tiktoken
+
+            from ..runtime.step_context import resolve_tool_result_rendering_policy
+
+            policy = resolve_tool_result_rendering_policy(ctx.deps.tool_result_rendering_policy)
+            payload = tool_outcome["payload"]
+            assert isinstance(payload, DiscoveryResult)
+            return payload.for_budget(policy.tool_result_max_tokens, tiktoken.get_encoding(policy.tokenizer_encoding_name))
         return _build_standard_tool_return_value(tool_outcome=tool_outcome)

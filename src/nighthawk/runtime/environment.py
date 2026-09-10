@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from types import CellType, MappingProxyType
 from typing import Literal
+
+from .annotations import MISSING_ANNOTATION
+from .description import annotation_text
+from .discovery import DiscoveryResult, page_names
 
 type EnvironmentSource = Literal["effective", "python", "parent", "task", "step"]
 
@@ -53,7 +58,7 @@ class _ExpressionNamespace(dict[str, object]):
     """Use one live namespace for top-level and nested Python expression scopes."""
 
     def __init__(self, environment: StepEnvironment, overrides: Mapping[str, object]) -> None:
-        super().__init__({"__builtins__": environment._python_builtin_name_to_value})
+        super().__init__({"__builtins__": environment._python_builtin_name_to_value, environment.runtime_reference: _RuntimeAccess(environment)})
         self._environment = environment
         self._override_name_to_value = overrides
 
@@ -61,6 +66,17 @@ class _ExpressionNamespace(dict[str, object]):
         if name in self._override_name_to_value:
             return self._override_name_to_value[name]
         return self._environment.resolve(name)
+
+
+@dataclass(frozen=True)
+class _RuntimeAccess:
+    environment: StepEnvironment
+
+    @staticmethod
+    def inspect(value: object, *, cursor: str | None = None, max_items: int = 8) -> dict[str, object]:
+        from .inspection import inspect_value
+
+        return inspect_value(value, cursor=cursor, max_items=max_items)
 
 
 class StepEnvironment:
@@ -97,6 +113,19 @@ class StepEnvironment:
         self.parent_name_to_value = MappingProxyType(dict(parent_name_to_value or {}))
         self.task_name_to_value = MappingProxyType(dict(task_name_to_value or {}))
         self.step_name_to_value = MappingProxyType(self._step_name_to_value)
+        known_names = (
+            python_name_to_value.keys()
+            | python_globals.keys()
+            | self._python_builtin_name_to_value.keys()
+            | self._local_name_set
+            | self._python_name_to_cell.keys()
+            | self.parent_name_to_value.keys()
+            | self.task_name_to_value.keys()
+        )
+        suffix = 0
+        while f"__nighthawk_runtime_{suffix}" in known_names:
+            suffix += 1
+        self.runtime_reference = f"__nighthawk_runtime_{suffix}"
 
     def has_python_name(self, name: str) -> bool:
         return not _is_runtime_name(name) and (
@@ -165,7 +194,43 @@ class StepEnvironment:
     def expression_namespace(self, overrides: Mapping[str, object] | None = None) -> dict[str, object]:
         return _ExpressionNamespace(self, overrides or {})
 
-    def describe(self, name: str) -> dict[str, object]:
+    def reference(self, name: str, *, source: EnvironmentSource = "effective") -> str:
+        """Return a Python expression resolving this binding when evaluated."""
+        return f"{self.runtime_reference}.environment.resolve({name!r}, source={source!r})"
+
+    def discover(self, *, source: EnvironmentSource = "effective", cursor: str | None = None, max_items: int = 8) -> dict[str, object]:
+        """List names with provenance, usable references, and progressing pages."""
+        source_to_view = {
+            "python": self.python_name_to_value,
+            "parent": self.parent_name_to_value,
+            "task": self.task_name_to_value,
+            "step": self.step_name_to_value,
+        }
+        if source != "effective" and source not in source_to_view:
+            return {"error": "Unknown source", "recovery": "Choose effective, python, parent, task, or step."}
+        names = (
+            tuple(sorted(set().union(*[set(view) for view in source_to_view.values()])))
+            if source == "effective"
+            else tuple(sorted(source_to_view[source]))
+        )
+        page = page_names(names, source=source, cursor=cursor, max_items=max_items)
+        if page.error is not None:
+            return {"error": page.error, "recovery": f"Call {self.runtime_reference}.environment.discover(source={source!r}) without a cursor."}
+        description: dict[str, object] = {
+            "source": source,
+            "names": [self.describe(name, source=source) for name in page.names],
+            "next_cursor": page.next_cursor,
+        }
+        if page.next_cursor is not None:
+            description["continuation"] = (
+                f"{self.runtime_reference}.environment.discover(source={source!r}, cursor={page.next_cursor!r}, max_items={max_items})"
+            )
+        return DiscoveryResult(
+            description, item_count=len(page.names), repage=lambda count: self.discover(source=source, cursor=cursor, max_items=count)
+        )
+
+    def describe(self, name: str, *, source: EnvironmentSource = "effective") -> dict[str, object]:
+        """Describe a named binding; annotations are presentation, not validation."""
         sources = [
             source
             for source, view in (
@@ -176,18 +241,25 @@ class StepEnvironment:
             )
             if name in view
         ]
+        origin = sources[0] if sources and source == "effective" else source if source in sources else None
         unbound = False
-        if sources and sources[0] == "python":
+        if origin == "python":
             try:
                 self._resolve_python(name)
             except UnboundLocalError:
                 unbound = True
+        is_python_binding = origin == "python" or source in ("effective", "python", "step") and name in self._output_name_set
+        annotation = self._binding_name_to_annotation.get(name, MISSING_ANNOTATION) if is_python_binding else MISSING_ANNOTATION
+        contract = self._binding_name_to_type.get(name, MISSING_ANNOTATION) if is_python_binding else MISSING_ANNOTATION
         return {
             "name": name,
-            "origin": sources[0] if sources else None,
+            "origin": origin,
             "shadowed_sources": sources[1:],
             "unbound": unbound,
-            "write_eligible": name in self._output_name_set or (not self.has_python_name(name) and not _is_runtime_name(name)),
-            "annotation": self._binding_name_to_annotation.get(name),
-            "output_contract": self._binding_name_to_type.get(name),
+            "write_eligible": source in ("effective", "step")
+            and (name in self._output_name_set or (not self.has_python_name(name) and not _is_runtime_name(name))),
+            "annotation": None if annotation is MISSING_ANNOTATION else annotation_text(annotation),
+            "output_contract": None if contract is MISSING_ANNOTATION else annotation_text(contract),
+            "reference": self.reference(name, source=source),
+            "source_references": [self.reference(name, source=selected_source) for selected_source in sources],  # type: ignore[arg-type]
         }

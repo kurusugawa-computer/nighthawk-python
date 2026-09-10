@@ -44,12 +44,18 @@ And call `classify_priority("Server is on fire!")`, Nighthawk assembles this use
 
 <!-- prompt-example:basic-binding -->
 ```py
+Runtime inspection: __nighthawk_runtime_0.inspect(value).
+Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
+Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+
 <<<NH:PROGRAM>>>
 Read <text> and update <:priority> with one of: low, normal, high.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
+Origin: python; name: priority; output contract: str
 priority: str = "normal"
+Origin: python; name: text
 text: str = "Server is on fire!"
 <<<NH:END_LOCALS>>>
 
@@ -212,6 +218,10 @@ Calling `choose_policy("Breaking: earthquake hits downtown")` produces:
 
 <!-- prompt-example:fstring-injection -->
 ```py
+Runtime inspection: __nighthawk_runtime_0.inspect(value).
+Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
+Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+
 <<<NH:PROGRAM>>>
 Read <post>.
 Available policies: ['safety-first', 'concise-output', 'cite-assumptions']
@@ -219,7 +229,9 @@ Select the single best policy and set <:selected_policy>.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
+Origin: python; name: post
 post: str = "Breaking: earthquake hits downtown"
+Origin: python; name: selected_policy; output contract: str
 selected_policy: str = ""
 <<<NH:END_LOCALS>>>
 
@@ -291,14 +303,20 @@ The LLM sees:
 
 <!-- prompt-example:local-function-signature -->
 ```py
+Runtime inspection: __nighthawk_runtime_0.inspect(value).
+Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
+Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+
 <<<NH:PROGRAM>>>
 Compute <:result> by choosing the most suitable local helper based on its docstring.
 Use base=38 and bonus=4.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-add_points: (base: int, bonus: int) -> int  # Return a deterministic sum for score calculation.
+Origin: python; name: result; output contract: int
 result: int = 0
+Origin: python; name: add_points
+add_points: (base: int, bonus: int) -> int  # Return a deterministic sum for score calculation.
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
@@ -329,17 +347,24 @@ Calling `calculate_average([1, "2", "three", "cuatro"])` produces:
 
 <!-- prompt-example:global-function-reference -->
 ```py
+Runtime inspection: __nighthawk_runtime_0.inspect(value).
+Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
+Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+
 <<<NH:PROGRAM>>>
 Map each element of <numbers> to the number it represents,
 then compute <:result> by calling <python_average> with the mapped list.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
+Origin: python; name: numbers
 numbers: list = [1,"2","three","cuatro"]
+Origin: python; name: result; output contract: int
 result: int = 0
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
+Origin: python; name: python_average
 python_average: (numbers)
 <<<NH:END_GLOBALS>>>
 ```

@@ -152,8 +152,7 @@ def test_globals_ordering_is_lexicographic_by_top_level_name(tmp_path) -> None:
         )
 
     globals_text = globals_section(prompt)
-    assert globals_text.splitlines()[0].startswith("a_module:")
-    assert globals_text.splitlines()[1].startswith("b_module:")
+    assert globals_text.index("a_module:") < globals_text.index("b_module:")
 
 
 def test_locals_ordering_is_lexicographic_by_name(tmp_path) -> None:
@@ -176,8 +175,7 @@ def test_locals_ordering_is_lexicographic_by_name(tmp_path) -> None:
         )
 
     locals_text = locals_section(prompt)
-    assert locals_text.splitlines()[0].startswith("a:")
-    assert locals_text.splitlines()[1].startswith("b:")
+    assert locals_text.index("a:") < locals_text.index("b:")
 
 
 def test_user_prompt_template_can_inject_tool_result_max_tokens() -> None:
@@ -309,7 +307,7 @@ def test_custom_user_prompt_template_preserves_multimodal_placeholder_order() ->
     )
 
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
-    assert prompt_content[photo_index - 1] == "before\nphoto: BinaryContent = "
+    assert str(prompt_content[photo_index - 1]).endswith("before\nOrigin: python; name: photo\nphoto: BinaryContent = ")
     content_after_photo = prompt_content[photo_index + 1]
     assert isinstance(content_after_photo, str)
     assert content_after_photo.startswith("\nbetween\nInspect <photo>.\nafter\n")

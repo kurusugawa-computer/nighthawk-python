@@ -280,16 +280,13 @@ class NaturalTransformer(ast.NodeTransformer):
         return binding_name_to_type_expression
 
     def _current_binding_types_dict_expression(self, binding_names: tuple[str, ...]) -> ast.expr:
-        if not binding_names:
-            return ast.Dict(keys=[], values=[])
-
         binding_name_to_type_expression: dict[str, list[ast.expr]] = {}
         if self._binding_name_to_type_expression_stack:
             binding_name_to_type_expression = self._binding_name_to_type_expression_stack[-1]
 
         keys: list[ast.expr | None] = []
         values: list[ast.expr] = []
-        for name in binding_names:
+        for name in dict.fromkeys((*binding_names, *binding_name_to_type_expression)):
             keys.append(ast.Constant(name))
             annotations = binding_name_to_type_expression.get(name)
             values.append(

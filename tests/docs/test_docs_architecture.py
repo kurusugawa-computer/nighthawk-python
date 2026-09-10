@@ -182,10 +182,10 @@ class TestBoundaryRules:
         specification_text = (_DOCS_DIR / "specification.md").read_text(encoding="utf-8")
         assert "Dotted-path resolution is attribute-oriented only." in specification_text
         assert "does not treat `Mapping` keys as attribute segments" in specification_text
-        assert "MUST NOT automatically suppress otherwise eligible LOCALS entries" in specification_text
+        assert "Explicit references and outputs precede other Python working locals" in specification_text
         assert "Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`, `oversight`." in specification_text
         assert "SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts" in specification_text
-        assert "dedicated retry-prompt path is reserved for tool argument validation failures before tool execution" in specification_text
+        assert "Argument validation failures and explicit `ModelRetry` use the dedicated retry-prompt path" in specification_text
         assert "Nested multimodal values inside dict/model/object structure are not recursively hoisted" in specification_text
         assert "Native MCP video carriage is intentionally not part of this contract" in specification_text
 

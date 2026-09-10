@@ -125,7 +125,9 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
 
         _ = a
 
-    assert prompt_content_to_text(agent.seen_prompts[0]) == textwrap.dedent(
+    first_prompt = prompt_content_to_text(agent.seen_prompts[0])
+    assert "Runtime inspection:" in first_prompt
+    assert first_prompt[first_prompt.index("<<<NH:PROGRAM>>>") :] == textwrap.dedent(
         """\
         <<<NH:PROGRAM>>>
         Say hi.
@@ -133,7 +135,9 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         <<<NH:END_PROGRAM>>>
 
         <<<NH:LOCALS>>>
+        Origin: python; name: a
         a: float = 1.0
+        Origin: python; name: x
         x: int = 10
         <<<NH:END_LOCALS>>>
 
@@ -142,7 +146,8 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         <<<NH:END_GLOBALS>>>
         """
     )
-    assert prompt_content_to_text(agent.seen_prompts[1]) == textwrap.dedent(
+    second_prompt = prompt_content_to_text(agent.seen_prompts[1])
+    assert second_prompt[second_prompt.index("<<<NH:PROGRAM>>>") :] == textwrap.dedent(
         """\
         <<<NH:PROGRAM>>>
         <a><G>
@@ -150,12 +155,16 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         <<<NH:END_PROGRAM>>>
 
         <<<NH:LOCALS>>>
+        Origin: python; name: a
         a: float = 1.0
+        Origin: python; name: x
         x: int = 10
+        Origin: python; name: y
         y: str = "hello"
         <<<NH:END_LOCALS>>>
 
         <<<NH:GLOBALS>>>
+        Origin: python; name: G
         G: int = 1
         <<<NH:END_GLOBALS>>>
         """
@@ -477,7 +486,7 @@ def test_locals_section_renders_pep695_type_alias_in_function_signature() -> Non
     )
 
     locals_text = locals_section(prompt)
-    assert "T: type = typing.Literal['A', 'B', 'C']" in locals_text
+    assert "T: type = T; alias expansion omitted (requires evaluation)" in locals_text
     assert "f: (t: T) -> None" in locals_text
     assert "g: (literal_value: Literal['A', 'B', 'C']) -> None" in locals_text
     assert "# " not in locals_text
@@ -501,7 +510,7 @@ def test_globals_section_includes_type_alias_from_local_callable_return_annotati
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
 
     locals_text = locals_section(prompt)
     assert "check: (text: str) -> Labels" in locals_text
@@ -525,7 +534,7 @@ def test_globals_section_includes_type_alias_from_local_callable_parameter_annot
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
 
 
 def test_globals_section_includes_type_alias_from_generic_annotation() -> None:
@@ -546,7 +555,7 @@ def test_globals_section_includes_type_alias_from_generic_annotation() -> None:
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
 
 
 def test_globals_section_includes_type_alias_from_nested_generic_annotation() -> None:
@@ -566,7 +575,7 @@ def test_globals_section_includes_type_alias_from_nested_generic_annotation() ->
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
 
 
 def test_globals_section_includes_type_alias_from_global_callable_signature() -> None:
@@ -587,7 +596,7 @@ def test_globals_section_includes_type_alias_from_global_callable_signature() ->
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = typing.Literal['good', 'bad']" in globals_text
+    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
     assert "classify: (text: str) -> Labels" in globals_text
 
 
@@ -630,7 +639,7 @@ def test_type_alias_in_locals_is_not_duplicated_in_globals_section() -> None:
     assert "Labels" not in globals_text
 
     locals_text = locals_section(prompt)
-    assert "Labels: type = typing.Literal['good', 'bad']" in locals_text
+    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in locals_text
 
 
 def test_globals_section_deduplicates_type_alias_from_multiple_callables() -> None:
@@ -760,7 +769,7 @@ def test_build_user_prompt_returns_tuple_for_text_only_prompt() -> None:
 
     assert isinstance(prompt_content, tuple)
     assert all(isinstance(content, str) for content in prompt_content)
-    assert prompt_content_to_text(prompt_content).startswith("<<<NH:PROGRAM>>>")
+    assert prompt_content_to_text(prompt_content).startswith("Runtime inspection:")
 
 
 def test_locals_section_inlines_binary_content_for_provider_prompt() -> None:
@@ -1053,7 +1062,7 @@ def test_top_level_mixed_non_user_content_sequence_remains_preview_only() -> Non
     prompt_text = prompt_content_to_text(prompt_content)
     assert "gallery: list = [" in prompt_text
     assert '"label":"cat"' in prompt_text
-    assert "<nonserializable>" in prompt_text
+    assert "<bytes; 8 bytes>" in prompt_text
 
 
 def test_namedtuple_multimodal_reference_remains_record_preview_only() -> None:

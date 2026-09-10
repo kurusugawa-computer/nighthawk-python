@@ -229,3 +229,13 @@
         - ContextRequest
         - ContextBuilder
         - DefaultContextBuilder
+
+::: nighthawk.runtime.environment
+    options:
+      members:
+        - StepEnvironment
+
+::: nighthawk.runtime.inspection
+    options:
+      members:
+        - inspect_value

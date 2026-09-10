@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import dataclasses
-import functools
-import inspect
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from string import Template
-from typing import Any, NamedTuple, TypeAliasType
+from typing import Any, NamedTuple, TypeAliasType, cast
 
 import tiktoken
-from pydantic import BaseModel
 from pydantic_ai.messages import TextContent, UserContent
 
 from ..configuration import StepContextLimits, StepExecutorConfiguration
@@ -20,6 +16,8 @@ from ._user_content import (
     coalesce_user_content,
     try_project_user_prompt_value,
 )
+from .description import annotation_text, class_bases, describe_callable, describe_public_members, exact_type, safe_preview, type_name
+from .environment import MissingEnvironmentNameError, UnboundEnvironmentNameError
 from .scoping import (
     RUN_ID,
     SCOPE_ID,
@@ -34,6 +32,7 @@ type PromptContentTuple = tuple[UserContent, ...]
 
 # Fixed internal budgeting heuristic per spec §8.2.2; not a provider-side estimate.
 _MULTIMODAL_BINDING_TOKEN_COST = 64
+_UNBOUND = object()
 
 
 @dataclass(frozen=True)
@@ -59,23 +58,8 @@ class ExtractedReferenceData(NamedTuple):
     program_text: str
 
 
-def _resolve_partial_effective_signature(partial_callable: functools.partial[Any]) -> str | None:
-    try:
-        resolved_signature = inspect.signature(partial_callable)
-    except (TypeError, ValueError):
-        return None
-    return str(resolved_signature)
-
-
 def _resolve_callable_signature_text(value: object) -> str | None:
-    if isinstance(value, functools.partial):
-        return _resolve_partial_effective_signature(value)
-
-    try:
-        resolved_signature = inspect.signature(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
-    return str(resolved_signature)
+    return describe_callable(value).signature_text
 
 
 def _normalize_usage_intent_text(text: str, *, max_length: int = 72) -> str:
@@ -96,41 +80,18 @@ def _is_meaningful_usage_intent_hint(usage_intent_hint: str) -> bool:
 
 
 def _resolve_callable_usage_intent_hint(*, value: object) -> str | None:
-    documentation_text: str | None = None
-
-    if isinstance(value, functools.partial):
-        documentation_text = inspect.getdoc(value.func)
-    elif not inspect.isroutine(value):
-        call_attribute = getattr(value, "__call__", None)  # noqa: B004
-        if call_attribute is not None:
-            documentation_text = inspect.getdoc(call_attribute)
-
-    if not documentation_text:
-        documentation_text = inspect.getdoc(value)
-
+    documentation_text = describe_callable(value).documentation
     if documentation_text:
         first_line = documentation_text.splitlines()[0].strip()
         if first_line:
-            normalized_usage_intent_hint = _normalize_usage_intent_text(first_line)
-            if _is_meaningful_usage_intent_hint(normalized_usage_intent_hint):
-                return normalized_usage_intent_hint
-
+            hint = _normalize_usage_intent_text(first_line)
+            if _is_meaningful_usage_intent_hint(hint):
+                return hint
     return None
 
 
 def _is_async_callable_value(value: object) -> bool:
-    if isinstance(value, functools.partial):
-        return _is_async_callable_value(value.func)
-
-    if inspect.iscoroutinefunction(value):
-        return True
-
-    if not inspect.isroutine(value):
-        call_attribute = getattr(value, "__call__", None)  # noqa: B004
-        if call_attribute is not None and inspect.iscoroutinefunction(call_attribute):
-            return True
-
-    return False
+    return describe_callable(value).asynchronous
 
 
 def _find_ambiguous_callable_signatures(
@@ -186,127 +147,21 @@ def _render_callable_line(
 def _is_object_capability_candidate(value: object) -> bool:
     if callable(value):
         return False
-    if isinstance(value, TypeAliasType):
+    if exact_type(value, TypeAliasType):
         return False
     if value is None:
         return False
-    if isinstance(value, (bool, int, float, str, bytes, bytearray)):
+    if any(type(value) is candidate for candidate in (bool, int, float, str, bytes, bytearray)):
         return False
-    return not isinstance(value, (Mapping, Sequence, set, frozenset))
+    return not any(base is candidate for base in class_bases(type(value)) for candidate in (dict, list, tuple, set, frozenset))
 
 
 def _resolve_public_method_name_to_value(*, value: object) -> dict[str, object]:
-    method_name_to_value: dict[str, object] = {}
-    for value_type in type(value).__mro__:
-        if isinstance(value, BaseModel) and value_type is BaseModel:
-            break
-        for method_name, class_attribute in value_type.__dict__.items():
-            if method_name.startswith("_"):
-                continue
-            if method_name in method_name_to_value:
-                continue
-            if isinstance(class_attribute, property):
-                continue
-
-            method_value: object | None = None
-            if isinstance(class_attribute, staticmethod):
-                method_value = class_attribute.__func__
-            elif isinstance(class_attribute, classmethod) or inspect.isfunction(class_attribute):
-                method_value = class_attribute.__get__(value, type(value))
-            elif callable(class_attribute):
-                method_value = class_attribute
-
-            if method_value is None:
-                continue
-
-            method_name_to_value[method_name] = method_value
-
-    return {method_name: method_name_to_value[method_name] for method_name in sorted(method_name_to_value)}
-
-
-def _resolve_public_slot_name_set(*, value: object) -> set[str]:
-    public_slot_name_set: set[str] = set()
-    for value_type in type(value).__mro__:
-        slot_definition = value_type.__dict__.get("__slots__")
-        if slot_definition is None:
-            continue
-
-        if isinstance(slot_definition, str):
-            slot_name_list = [slot_definition]
-        else:
-            slot_name_list = [slot_name for slot_name in slot_definition if isinstance(slot_name, str)]
-
-        for slot_name in slot_name_list:
-            if slot_name.startswith("_"):
-                continue
-            if slot_name in {"__dict__", "__weakref__"}:
-                continue
-            public_slot_name_set.add(slot_name)
-
-    return public_slot_name_set
+    return dict(describe_public_members(value).method_name_to_value)
 
 
 def _resolve_public_field_name_to_value(*, value: object) -> dict[str, object]:
-    field_name_to_value: dict[str, object] = {}
-
-    def add_field(field_name: str, field_value: object) -> None:
-        if field_name.startswith("_"):
-            return
-        if field_name in field_name_to_value:
-            return
-        field_name_to_value[field_name] = field_value
-
-    if isinstance(value, BaseModel):
-        for field_name in type(value).model_fields:
-            try:
-                field_value = object.__getattribute__(value, field_name)
-            except Exception:
-                continue
-            add_field(field_name, field_value)
-        return {field_name: field_name_to_value[field_name] for field_name in sorted(field_name_to_value)}
-
-    try:
-        instance_dict = object.__getattribute__(value, "__dict__")
-    except Exception:
-        instance_dict = None
-
-    if isinstance(instance_dict, dict):
-        for field_name, field_value in instance_dict.items():
-            add_field(field_name, field_value)
-
-    if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        for data_field in dataclasses.fields(value):
-            field_name = data_field.name
-            if field_name in field_name_to_value:
-                continue
-            try:
-                field_value = object.__getattribute__(value, field_name)
-            except Exception:
-                continue
-            add_field(field_name, field_value)
-
-    for slot_name in sorted(_resolve_public_slot_name_set(value=value)):
-        if slot_name in field_name_to_value:
-            continue
-        try:
-            slot_value = object.__getattribute__(value, slot_name)
-        except Exception:
-            continue
-        add_field(slot_name, slot_value)
-
-    for value_type in type(value).__mro__:
-        for field_name, class_attribute in value_type.__dict__.items():
-            if field_name in field_name_to_value:
-                continue
-            if field_name.startswith("_"):
-                continue
-            if isinstance(class_attribute, (property, staticmethod, classmethod)):
-                continue
-            if callable(class_attribute):
-                continue
-            add_field(field_name, class_attribute)
-
-    return {field_name: field_name_to_value[field_name] for field_name in sorted(field_name_to_value)}
+    return dict(describe_public_members(value).field_name_to_value)
 
 
 def _render_value_preview_line(
@@ -317,11 +172,11 @@ def _render_value_preview_line(
     token_encoding: tiktoken.Encoding,
     json_renderer_style: JsonRendererStyle,
 ) -> str:
-    reference_type_name = type(value).__name__
+    reference_type_name = type_name(value)
     rendered_name_and_type = f"{reference}: {reference_type_name} = "
 
     rendered_value, _ = render_json_text(
-        value,
+        safe_preview(value),
         max_tokens=value_max_tokens,
         encoding=token_encoding,
         style=json_renderer_style,
@@ -382,7 +237,7 @@ def _render_object_capability_lines(
     render_context: _PromptRenderContext,
     callable_signature_text_to_reference_list: dict[str, list[str]],
 ) -> list[tuple[UserContent, ...]]:
-    lines: list[tuple[UserContent, ...]] = [(f"{reference}: object = {type(value).__name__}",)]
+    lines: list[tuple[UserContent, ...]] = [(f"{reference}: object = {type_name(value)}",)]
 
     method_name_to_value = _resolve_public_method_name_to_value(value=value)
     field_name_to_value = _resolve_public_field_name_to_value(value=value)
@@ -417,8 +272,8 @@ def _render_object_capability_lines(
             # own top-level line outside this object block (spec §8.2.2). Skip inline
             # rendering here to avoid duplication, but still consume one object_max_fields
             # slot so truncation math stays stable regardless of hoisting.
-            # Spec §8.2.2: lex-order truncation deliberately covers explicit
-            # dotted multimodal leaves; do not reorder or force them past budgets.
+            # Explicit dotted leaves have presentation priority, but still
+            # consume the configured member and section budgets.
             shown_field_count += 1
             continue
         lines.append(
@@ -448,8 +303,10 @@ def _render_reference_and_value_lines(
     render_context: _PromptRenderContext,
     callable_signature_text_to_reference_list: dict[str, list[str]],
 ) -> list[tuple[UserContent, ...]]:
-    if isinstance(value, TypeAliasType):
-        return [(f"{reference}: type = {value.__value__}",)]
+    if value is _UNBOUND:
+        return [(f"{reference}: <unbound Python binding>",)]
+    if exact_type(value, TypeAliasType):
+        return [(f"{reference}: type = {annotation_text(value)}; alias expansion omitted (requires evaluation)",)]
 
     if callable(value):
         return [
@@ -514,6 +371,13 @@ def _render_reference_and_value_list_section(
             render_context=render_context,
             callable_signature_text_to_reference_list=callable_signature_text_to_reference_list,
         )
+        named_description = step_context.environment.describe(reference.split(".", 1)[0])
+        metadata = f"Origin: {named_description['origin']}; name: {reference}"
+        if named_description["annotation"] is not None:
+            metadata += f"; annotation: {named_description['annotation']}"
+        if named_description["output_contract"] is not None:
+            metadata += f"; output contract: {named_description['output_contract']}"
+        rendered_line_list.insert(0, (metadata,))
 
         rendered_tokens = sum(
             _count_prompt_line_tokens(
@@ -535,6 +399,13 @@ def _render_reference_and_value_list_section(
     truncated = shown_items < len(reference_and_value_list)
     if truncated:
         _append_prompt_line(content_part_list=content_part_list, prompt_line=("<snipped>",))
+        omitted_names = [name for name, _ in reference_and_value_list[shown_items:]]
+        _append_prompt_line(
+            content_part_list=content_part_list,
+            prompt_line=(
+                f"Omitted: {', '.join(omitted_names[:8])}{', ...' if len(omitted_names) > 8 else ''}. Retrieve names with {step_context.environment.runtime_reference}.environment.discover().",
+            ),
+        )
         if token_limit_reached:
             dropped_multimodal = any(try_project_user_prompt_value(value) is not None for _, value in reference_and_value_list[shown_items:])
             log_attributes: dict[str, Any] = {
@@ -596,7 +467,13 @@ def _collect_explicit_multimodal_reference_and_value_list(
         root_reference = reference_path.split(".", 1)[0]
         if root_reference.startswith("__"):
             continue
-        if (root_reference in step_context.step_locals) != include_locals:
+        local_names = (
+            step_context.step_locals.keys()
+            | step_context.environment.parent_name_to_value.keys()
+            | step_context.environment.step_name_to_value.keys()
+            | step_context.binding_commit_targets
+        )
+        if (root_reference in local_names) != include_locals:
             continue
 
         resolved_value = _resolve_reference_path_in_step_context(
@@ -624,7 +501,11 @@ def _render_locals_section(
     for reference in sorted(references):
         if reference.startswith("__"):
             continue
-        eligible_reference_and_value_list.append((reference, step_context.step_locals[reference]))
+        try:
+            value = step_context.environment.resolve(reference)
+        except (MissingEnvironmentNameError, UnboundEnvironmentNameError):
+            value = _UNBOUND
+        eligible_reference_and_value_list.append((reference, value))
 
     eligible_reference_and_value_list.extend(
         _collect_explicit_multimodal_reference_and_value_list(
@@ -633,7 +514,15 @@ def _render_locals_section(
             include_locals=True,
         )
     )
-    eligible_reference_and_value_list.sort(key=lambda item: item[0])
+    explicit_names = (
+        step_context.read_binding_names | step_context.binding_commit_targets | {path.split(".", 1)[0] for path in explicit_reference_paths}
+    )
+    eligible_reference_and_value_list.sort(
+        key=lambda item: (
+            0 if item[0].split(".", 1)[0] in explicit_names else 1 if item[0].split(".", 1)[0] in step_context.step_locals else 2,
+            item[0],
+        )
+    )
 
     return _render_reference_and_value_list_section(
         section_name="locals",
@@ -681,7 +570,12 @@ def _render_globals_section(
     for reference in sorted(references):
         if reference.startswith("__"):
             continue
-        if reference in step_context.step_locals:
+        if (
+            reference in step_context.step_locals
+            or reference in step_context.environment.parent_name_to_value
+            or reference in step_context.environment.step_name_to_value
+            or reference in step_context.binding_commit_targets
+        ):
             continue
         value = resolve_name_in_step_context(step_context, reference)
         if value is _MISSING:
@@ -695,7 +589,10 @@ def _render_globals_section(
             include_locals=False,
         )
     )
-    eligible_reference_and_value_list.sort(key=lambda item: item[0])
+    explicit_names = (
+        step_context.read_binding_names | step_context.binding_commit_targets | {path.split(".", 1)[0] for path in explicit_reference_paths}
+    )
+    eligible_reference_and_value_list.sort(key=lambda item: (item[0].split(".", 1)[0] not in explicit_names, item[0]))
 
     return _render_reference_and_value_list_section(
         section_name="globals",
@@ -817,7 +714,10 @@ def _build_user_prompt_content(
 
     locals_content = _render_locals_section(
         step_context=step_context,
-        references=step_context.step_locals.keys(),
+        references=step_context.step_locals.keys()
+        | step_context.environment.parent_name_to_value.keys()
+        | step_context.environment.step_name_to_value.keys()
+        | step_context.binding_commit_targets,
         explicit_reference_paths=explicit_reference_paths,
         render_context=render_context,
     )
@@ -838,7 +738,36 @@ def _build_user_prompt_content(
         tool_result_max_tokens=context_limits.tool_result_max_tokens,
     )
 
-    return prompt_content
+    environment = step_context.environment
+    runtime_reference = environment.runtime_reference
+    access_lines = [
+        f"Runtime inspection: {runtime_reference}.inspect(value).",
+        f"Name discovery: {runtime_reference}.environment.discover(); named contracts: {runtime_reference}.environment.describe('name').",
+        "Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.",
+    ]
+    relevant_names = (
+        set(references)
+        | step_context.binding_commit_targets
+        | set(step_context.step_locals)
+        | set(environment.parent_name_to_value)
+        | set(environment.task_name_to_value)
+        | {"inspect"}
+    )
+    collision_names = [
+        name
+        for name in sorted(relevant_names)
+        if len(cast(list[str], environment.describe(name)["source_references"])) > 1
+        or name == "inspect"
+        and environment.describe(name)["origin"] is not None
+    ]
+    for name in collision_names[:8]:
+        description = environment.describe(name)
+        access_lines.append(
+            f"Name collision: {name}; effective origin: {description['origin']}. Sources: {', '.join(cast(list[str], description['source_references']))}."
+        )
+    if len(collision_names) > 8:
+        access_lines.append(f"More collisions omitted; retrieve them with {runtime_reference}.environment.discover().")
+    return coalesce_user_content(("\n".join(access_lines) + "\n\n", *prompt_content))
 
 
 def append_user_prompt_suffixes(prompt_content: PromptContentTuple, *, configuration: StepExecutorConfiguration) -> PromptContentTuple:

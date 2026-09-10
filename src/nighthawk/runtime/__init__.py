@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from .context import ContextBuilder, ContextRequest, DefaultContextBuilder
     from .environment import StepEnvironment
     from .expression import eval_expression, eval_expression_async
+    from .inspection import inspect_value
     from .operation_contract import OperationError, OperationFinished, OperationRequest
     from .step_request import StepCandidate, StepRequest
     from .step_result import Break, Continue, Pass, Raise, Return
@@ -24,6 +25,7 @@ _name_to_module = {
     "eval_expression": "expression",
     "eval_expression_async": "expression",
     "StepEnvironment": "environment",
+    "inspect_value": "inspection",
     "OperationError": "operation_contract",
     "OperationFinished": "operation_contract",
     "OperationRequest": "operation_contract",
@@ -46,6 +48,7 @@ __all__ = [
     "eval_expression",
     "eval_expression_async",
     "StepEnvironment",
+    "inspect_value",
     "OperationError",
     "OperationFinished",
     "OperationRequest",

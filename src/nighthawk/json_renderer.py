@@ -9,6 +9,8 @@ import headson
 import tiktoken
 from pydantic import BaseModel
 
+from .runtime.discovery import DiscoveryResult
+
 type JsonRendererStyle = Literal["strict", "default", "detailed"]
 
 type JsonableValue = dict[str, "JsonableValue"] | list["JsonableValue"] | str | int | float | bool | None
@@ -52,6 +54,8 @@ def render_json_text(
     if max_tokens < _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT:
         raise ValueError(f"max_tokens must be >= {_MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT}")
 
+    if type(value) is DiscoveryResult:
+        value = value.for_budget(max_tokens, encoding)
     jsonable = to_jsonable_value(value)
     compact_json_input = _render_compact_json(jsonable)
     compact_json_input_token_count = count_tokens(compact_json_input, encoding=encoding)

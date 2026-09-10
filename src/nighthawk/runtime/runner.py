@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import inspect
 import typing
 from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
@@ -26,6 +25,7 @@ from ..oversight import (
 )
 from .annotations import MISSING_ANNOTATION, SourceAnnotation, resolve_annotation
 from .async_bridge import run_coroutine_synchronously
+from .description import annotation_arguments, describe_callable, exact_type
 from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
 from .notifications import await_notification
@@ -102,16 +102,24 @@ def _discover_type_alias_reference_names(
     seen: set[int] = set()
 
     def _collect(annotation: object) -> None:
-        if isinstance(annotation, TypeAliasType):
+        if exact_type(annotation, TypeAliasType):
             name = annotation.__name__
             if name in step_globals and name not in step_locals:
                 discovered_names.add(name)
             return
 
-        if isinstance(annotation, str):
-            resolved = step_globals.get(annotation)
-            if isinstance(resolved, TypeAliasType) and annotation not in step_locals:
-                discovered_names.add(annotation)
+        if exact_type(annotation, str):
+            import ast
+
+            if len(annotation) > 4_096:
+                return
+            try:
+                expression = ast.parse(annotation, mode="eval")
+            except SyntaxError:
+                return
+            for node in ast.walk(expression):
+                if isinstance(node, ast.Name) and exact_type(step_globals.get(node.id), TypeAliasType) and node.id not in step_locals:
+                    discovered_names.add(node.id)
             return
 
         annotation_id = id(annotation)
@@ -119,26 +127,11 @@ def _discover_type_alias_reference_names(
             return
         seen.add(annotation_id)
 
-        for arg in typing.get_args(annotation):
+        for arg in annotation_arguments(annotation):
             _collect(arg)
 
     def _scan_callable(value: object) -> None:
-        target = value.func if isinstance(value, functools.partial) else value
-        try:
-            hints = typing.get_type_hints(target, localns=step_globals)
-        except Exception:
-            try:
-                signature = inspect.signature(value)  # type: ignore[arg-type]
-            except (TypeError, ValueError):
-                return
-            hints = {}
-            for parameter in signature.parameters.values():
-                if parameter.annotation is not inspect.Parameter.empty:
-                    hints[parameter.name] = parameter.annotation
-            if signature.return_annotation is not inspect.Signature.empty:
-                hints["return"] = signature.return_annotation
-
-        for annotation in hints.values():
+        for annotation in describe_callable(value).annotations:
             _collect(annotation)
 
     for value in step_locals.values():
@@ -442,6 +435,11 @@ class Runner:
         local_name_set = set(caller_frame.f_code.co_varnames) | set(caller_frame.f_code.co_cellvars)
         cell_name_set = set(caller_frame.f_code.co_freevars)
         module_name_to_annotation = python_globals.get("__annotations__", {})
+        binding_name_to_annotation = dict(module_name_to_annotation) if isinstance(module_name_to_annotation, dict) else {}
+        binding_name_to_annotation.update(
+            {name: annotation for name, annotation in binding_name_to_type.items() if annotation is not MISSING_ANNOTATION}
+        )
+        binding_name_to_type = {name: binding_name_to_type.get(name, MISSING_ANNOTATION) for name in output_binding_names}
         for name in output_binding_names:
             annotation = binding_name_to_type.get(name, MISSING_ANNOTATION)
             if name not in local_name_set | cell_name_set:
@@ -464,6 +462,7 @@ class Runner:
             parent_name_to_value=parent_name_to_value,
             task_name_to_value=scoped_task_name_to_value,
             output_name_set=frozenset(output_binding_names),
+            binding_name_to_annotation=binding_name_to_annotation,
             binding_name_to_type=binding_name_to_type,
         )
         self.input_binding_name_to_value = {name: environment.resolve(name) for name in input_binding_names}
