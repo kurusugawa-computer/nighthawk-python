@@ -67,7 +67,8 @@ def test_local_classification_blocks_injected_fallback_without_explicit_read() -
 
     with nh.run(StubExecutor()), nh.scope(implicit_references={"value": 8}), pytest.raises(nh.ExecutionError) as caught:
         workflow()
-    assert isinstance(caught.value.__cause__, UnboundLocalError)
+    assert caught.value.__cause__ is not None
+    assert isinstance(caught.value.__cause__.__cause__, UnboundLocalError)
 
 
 def test_child_without_cells_does_not_borrow_parent_python_cells() -> None:

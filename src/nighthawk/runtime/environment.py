@@ -9,6 +9,14 @@ from typing import Literal
 type EnvironmentSource = Literal["effective", "python", "parent", "task", "step"]
 
 
+class MissingEnvironmentNameError(NameError):
+    """A lookup failed in the Natural environment, outside application code."""
+
+
+class UnboundEnvironmentNameError(UnboundLocalError):
+    """A Python local or cell blocks Natural fallback."""
+
+
 def _is_runtime_name(name: str) -> bool:
     return name.startswith(("__nh_", "__nighthawk_"))
 
@@ -106,11 +114,11 @@ class StepEnvironment:
             try:
                 return self._python_name_to_cell[name].cell_contents
             except ValueError:
-                raise UnboundLocalError(f"Python cell {name!r} is unbound") from None
+                raise UnboundEnvironmentNameError(f"Python cell {name!r} is unbound") from None
         if name in self._python_name_to_value:
             return self._python_name_to_value[name]
         if name in self._local_name_set:
-            raise UnboundLocalError(f"Python local {name!r} is unbound")
+            raise UnboundEnvironmentNameError(f"Python local {name!r} is unbound")
         if name in self._python_global_name_to_value:
             return self._python_global_name_to_value[name]
         if name in self._python_builtin_name_to_value:
@@ -132,7 +140,7 @@ class StepEnvironment:
                 return source_to_name_to_value[selected_source][name]
             except KeyError:
                 continue
-        raise NameError(f"Name {name!r} is absent from the {source} environment", name=name)
+        raise MissingEnvironmentNameError(f"Name {name!r} is absent from the {source} environment", name=name)
 
     def check_assignment(self, name: str) -> None:
         if _is_runtime_name(name) or (self.has_python_name(name) and name not in self._output_name_set):

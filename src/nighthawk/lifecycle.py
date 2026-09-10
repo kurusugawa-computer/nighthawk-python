@@ -1,22 +1,29 @@
-"""Terminal delivery for host-owned execution ledgers.
+"""Correlated lifecycle delivery for host-owned execution ledgers.
 
 Records snapshot collection structure, retaining the exact live Python values.
 Hosts own serialization, persistence, and deduplication by step_execution_id.
-Delivery is synchronous and attempted once, after caller binding assignments.
+Hooks may complete directly or asynchronously.
+Terminal delivery is attempted once, after caller binding assignments.
 """
 
-from collections.abc import Callable, Mapping
+import math
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal
 
 from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
+from .runtime.operation_contract import OperationFinished
 from .runtime.step_contract import StepKind, StepOutcome
 from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 type FailureStage = Literal[
     "preparation",
+    "started_delivery",
+    "operation_inspection",
+    "operation_execution",
+    "operation_delivery",
     "executor",
     "outcome_validation",
     "binding_validation",
@@ -77,7 +84,7 @@ class StepFailed(_StepFinished):
     original_exception: Exception
     attempted_outcome: StepOutcome | StepResult | None = None
     validated_binding_name_to_value: Mapping[str, object] | None = None
-    inspection_subject: Literal["return_expression", "step_commit", "tool_call"] | None = None
+    inspection_subject: Literal["return_expression", "step_commit", "tool_call", "operation"] | None = None
     rejection_reason: str | None = None
     kind: Literal["failed"] = field(default="failed", init=False)
 
@@ -95,8 +102,13 @@ type StepFinished = StepCompleted | StepRaised | StepFailed | StepInterrupted
 
 
 @dataclass(frozen=True)
+class StepStarted:
+    execution_reference: ExecutionReference
+
+
+@dataclass(frozen=True)
 class StepLifecycle:
-    """Scoped synchronous notification, inherited with UNSET and cleared by None.
+    """Scoped notifications, inherited with UNSET and cleared by None.
 
     A callback may persist a record and raise a host exception referencing it.
     Callback errors never trigger another execution notification or rollback.
@@ -104,7 +116,14 @@ class StepLifecycle:
     Host deduplication must match both execution identity and the stored event.
     """
 
-    on_step_finished: Callable[[StepFinished], None] | None = None
+    on_step_finished: Callable[[StepFinished], None | Awaitable[None]] | None = None
+    on_operation_finished: Callable[[OperationFinished], None | Awaitable[None]] | None = None
+    on_step_started: Callable[[StepStarted], None | Awaitable[None]] | None = None
+    interruption_delivery_timeout: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.interruption_delivery_timeout) or self.interruption_delivery_timeout <= 0:
+            raise ValueError("interruption_delivery_timeout must be finite and positive")
 
 
 class StepDeliveryError(NighthawkError):
@@ -126,4 +145,5 @@ __all__ = [
     "StepInterrupted",
     "StepLifecycle",
     "StepRaised",
+    "StepStarted",
 ]

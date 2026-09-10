@@ -25,7 +25,7 @@ class RuntimeChildModel(BaseModel):
     value: int
 
 
-class RuntimeResultModel(BaseModel):
+class RuntimeResultModel(BaseModel, validate_assignment=True):
     child: RuntimeChildModel | None = None
     value: int = 0
 
@@ -325,7 +325,7 @@ def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor
             """
             return 0
 
-        with pytest.raises(ExecutionError, match="awaitable"):
+        with pytest.raises(NighthawkError, match="awaitable"):
             f()
 
 

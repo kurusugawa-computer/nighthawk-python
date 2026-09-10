@@ -16,7 +16,7 @@ from pydantic_ai import RunContext
 # that need to bridge RunContext across non-Pydantic-AI transports. Monitor
 # pydantic_ai releases and keep private access centralized in this module.
 from pydantic_ai._run_context import set_current_run_context
-from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import RetryPromptPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.toolsets.function import FunctionToolset
@@ -31,9 +31,7 @@ from ..runtime.step_context import (
 from ..runtime.tool_calls import generate_tool_call_id, run_tool_instrumented
 from ..tools.contracts import (
     RetryPromptObservation,
-    ToolError,
     ToolHandlerResult,
-    ToolOutcome,
     build_tool_handler_result_trace_text,
     build_tool_result_observation,
 )
@@ -148,31 +146,7 @@ async def execute_tool_call(
             ).model_response()
             return _build_retry_prompt_observation(retry_text=retry_text)
 
-        try:
-            tool_outcome = await toolset.call_tool_outcome(tool_name, validated_arguments, run_context, tool)
-        except (ModelRetry, CallDeferred, ApprovalRequired):
-            raise
-        except NighthawkError:
-            raise
-        # Errors below originate from the Pydantic AI toolset plumbing layer
-        # (outside ToolResultWrapperToolset._run_tool_and_normalize, which
-        # normalizes tool-body exceptions into ToolOutcome error payloads).
-        # These catch blocks convert plumbing failures into ToolOutcome so the
-        # model receives an actionable error observation rather than a crash.
-        except (UserError, UnexpectedModelBehavior) as exception:
-            tool_error: ToolError = {
-                "kind": "internal",
-                "message": str(exception),
-                "guidance": "The tool backend failed. Retry or report this error.",
-            }
-            tool_outcome = cast(ToolOutcome, {"payload": None, "error": tool_error})
-        except Exception as exception:
-            tool_error = {
-                "kind": "internal",
-                "message": str(exception) or "Tool execution failed",
-                "guidance": "The tool execution raised an unexpected error. Retry or report this error.",
-            }
-            tool_outcome = cast(ToolOutcome, {"payload": None, "error": tool_error})
+        tool_outcome = await toolset.call_tool_outcome(tool_name, validated_arguments, run_context, tool)
 
     return build_tool_result_observation(tool_outcome=tool_outcome)
 

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from types import CellType
+from typing import TYPE_CHECKING
 
 from ..errors import NighthawkError
 from ..json_renderer import JsonRendererStyle
 from .environment import StepEnvironment
 from .execution_reference import ExecutionReference
+
+if TYPE_CHECKING:
+    from ..lifecycle import FailureStage
 
 _MISSING: object = object()
 """Sentinel indicating a name could not be resolved. Distinct from None."""
@@ -62,6 +67,9 @@ class StepContext:
     step_locals_revision: int = 0
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
     environment: StepEnvironment = field(init=False)
+    operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    operation_failure: BaseException | None = field(default=None, init=False, repr=False)
+    operation_failure_stage: FailureStage | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self.environment = StepEnvironment(

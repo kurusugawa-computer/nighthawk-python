@@ -233,7 +233,7 @@ def test_cancellation_preserves_interruption_and_delivers_once(delivery_fails: b
         assert len(events) == 1
         event = events[0]
         assert isinstance(event, StepInterrupted)
-        assert event.failure_stage == "return_await"
+        assert event.failure_stage == "operation_execution"
         assert event.original_exception is caught.value
         if delivery_fails:
             assert caught.value.__cause__ is delivery_exception
@@ -432,12 +432,12 @@ def test_pre_await_failure_preserves_original_exception(asynchronous: bool) -> N
         """
         return 0
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(nh.ExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(ValueError) as caught:
         asyncio.run(asynchronous_function()) if asynchronous else synchronous()
     assert len(events) == 1
     event = events[0]
-    assert isinstance(event, StepFailed) and event.failure_stage == "return_evaluation"
-    assert event.original_exception is failure is caught.value.__cause__
+    assert isinstance(event, StepFailed) and event.failure_stage == "operation_execution"
+    assert event.original_exception is failure is caught.value
 
 
 def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:

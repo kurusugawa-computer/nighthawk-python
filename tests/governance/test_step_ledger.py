@@ -52,7 +52,7 @@ class Ledger:
     "scenario,expected_stage",
     [
         ("binding", "binding_validation"),
-        ("evaluation", "return_evaluation"),
+        ("evaluation", "operation_execution"),
         ("validation", "return_validation"),
         ("executor", "executor"),
         ("rewrite", "rewrite_validation"),
@@ -198,7 +198,7 @@ def test_return_await_failure_is_recorded_and_translated(tracing: bool, monkeypa
         asyncio.run(workflow())
     event = caught.value.event
     assert list(ledger.execution_id_to_event.values()) == [event]
-    assert isinstance(event, StepFailed) and event.failure_stage == "return_await"
+    assert isinstance(event, StepFailed) and event.failure_stage == "operation_execution"
     assert event.original_exception is failure is caught.value.__cause__
     if tracing:
         step_span = next(span for span in exporter.get_finished_spans() if span.name == "nighthawk.step")

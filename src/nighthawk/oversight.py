@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
@@ -9,6 +9,7 @@ from opentelemetry.trace import get_current_span
 from .composition import UNSET, UnsetType
 from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
+from .runtime.operation_contract import OperationRequest
 from .runtime.step_contract import StepKind
 from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
@@ -145,9 +146,10 @@ type StepCommitDecision = Accept | Reject | Rewrite
 
 @dataclass(frozen=True)
 class Oversight:
+    inspect_operation: Callable[[OperationRequest], Accept | Reject | Awaitable[Accept | Reject]] | None = None
     inspect_return_expression: Callable[[ReturnExpression], Accept | Reject] | None = None
     inspect_tool_call: Callable[[ToolCall], ToolCallDecision] | None = None
-    inspect_step_commit: Callable[[StepCommit], StepCommitDecision] | None = None
+    inspect_step_commit: Callable[[StepCommit], StepCommitDecision | Awaitable[StepCommitDecision]] | None = None
 
 
 def record_oversight_decision(

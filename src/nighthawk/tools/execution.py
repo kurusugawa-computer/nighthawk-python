@@ -23,22 +23,18 @@ from ..oversight import (
     record_oversight_decision,
 )
 from ..runtime._user_content import is_top_level_sequence_payload
+from ..runtime.operation_contract import OperationError
+from ..runtime.operations import OperationExecution, execute_operation_async, new_operation_request
 from ..runtime.scoping import (
     get_oversight,
 )
 from ..runtime.step_context import StepContext
-from .contracts import ErrorKind, ToolBoundaryError, ToolError, ToolOutcome
+from .contracts import ErrorKind, ToolError, ToolOutcome
 
 # Intentional Pydantic AI dependency: ToolReturnContent is a scalar
 # normalization helper. Multimodal pass-through is guarded explicitly below by
 # Nighthawk's UserContent checks so media objects do not get JSON-serialized.
 _TOOL_RETURN_CONTENT_ADAPTER: TypeAdapter[object] = TypeAdapter(ToolReturnContent)
-
-
-def _classify_unexpected_exception(exception: BaseException) -> ErrorKind:
-    if isinstance(exception, TimeoutError):
-        return "transient"
-    return "internal"
 
 
 def _normalize_tool_return_item(item: object) -> object:
@@ -115,25 +111,16 @@ async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) ->
         value = await tool_call()
     except (ModelRetry, CallDeferred, ApprovalRequired):
         raise
-    except ToolBoundaryError as exception:
-        return _normalize_tool_failure(
+    except OperationError as exception:
+        outcome = _normalize_tool_failure(
             kind=exception.kind,
             message=str(exception),
             guidance=exception.guidance,
         )
-    except TimeoutError as exception:
-        return _normalize_tool_failure(
-            kind="transient",
-            message=str(exception) or "Tool execution timed out",
-            guidance="The tool execution timed out. Retry or choose a different approach.",
-        )
-    except Exception as exception:
-        kind = _classify_unexpected_exception(exception)
-        return _normalize_tool_failure(
-            kind=kind,
-            message=str(exception) or "Tool execution failed",
-            guidance="The tool execution raised an unexpected error. Retry or report this error.",
-        )
+        assert outcome["error"] is not None
+        outcome["error"]["phase"] = exception.phase
+        outcome["error"]["evaluation_started"] = exception.evaluation_started
+        return outcome
 
     return _normalize_tool_success(value)
 
@@ -194,21 +181,17 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
         run_context: RunContext[StepContext],
         tool: ToolsetTool[StepContext],
     ) -> ToolOutcome:
-        try:
-            _inspect_tool_call_if_needed(
-                tool_name=name,
-                argument_name_to_value=tool_args,
-                run_context=run_context,
-            )
-        except OversightRejectedError as exception:
-            return _normalize_tool_failure(
-                kind="oversight",
-                message=str(exception) or f"Tool call {name!r} was rejected by oversight.",
-                guidance="The host rejected this tool call. Choose a different approach or continue without this tool.",
-            )
+        _inspect_tool_call_if_needed(tool_name=name, argument_name_to_value=tool_args, run_context=run_context)
 
         async def tool_call() -> object:
-            return await self.wrapped.call_tool(name, tool_args, run_context, tool)
+            if (tool.tool_def.metadata or {}).get("nighthawk.provided"):
+                return await self.wrapped.call_tool(name, tool_args, run_context, tool)
+            request = new_operation_request(run_context.deps, kind="native_tool", tool_name=name, argument_name_to_value=tool_args)
+
+            async def execute(execution: OperationExecution) -> object:
+                return await self.wrapped.call_tool(name, tool_args, run_context, tool)
+
+            return await execute_operation_async(run_context.deps, request, admit=lambda: None, execute=execute)
 
         tool_result = await _run_tool_and_normalize(tool_call)
         return tool_result

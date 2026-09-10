@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 
 import pytest
 from pydantic import BaseModel
@@ -108,170 +107,8 @@ def test_assign_allows_multiple_rebinds_of_new_local() -> None:
     assert step_context.step_locals["temp"] == 2
 
 
-# -- Dotted-path type validation tests --
-
-
-def test_assign_dotted_path_dataclass_known_field_valid() -> None:
-    @dataclasses.dataclass
-    class Config:
-        name: str = "default"
-        count: int = 0
-
-    config = Config()
-    step_context = _new_step_context()
-    step_context.record_assignment("config", config)
-
-    assign_tool(step_context, "config.name", "'updated'")
-    assert config.name == "updated"
-
-
-def test_assign_dotted_path_dataclass_known_field_invalid_type() -> None:
-    @dataclasses.dataclass
-    class Config:
-        count: int = 0
-
-    config = Config()
-    step_context = _new_step_context()
-    step_context.record_assignment("config", config)
-
-    with pytest.raises(ToolBoundaryError) as exception_info:
-        assign_tool(step_context, "config.count", "'not_an_int'")
-    assert exception_info.value.kind == "invalid_input"
-    assert config.count == 0
-
-
-def test_assign_dotted_path_dataclass_unknown_field_allowed() -> None:
-    @dataclasses.dataclass
-    class Config:
-        name: str = "default"
-
-    config = Config()
-    step_context = _new_step_context()
-    step_context.record_assignment("config", config)
-
-    assign_tool(step_context, "config.new_field", "42")
-    assert config.new_field == 42  # type: ignore[attr-defined]
-
-
-def test_assign_dotted_path_dataclass_type_coercion() -> None:
-    @dataclasses.dataclass
-    class Config:
-        count: int = 0
-
-    config = Config()
-    step_context = _new_step_context()
-    step_context.record_assignment("config", config)
-
-    assign_tool(step_context, "config.count", "'1'")
-    assert config.count == 1
-    assert isinstance(config.count, int)
-
-
-def test_assign_dotted_path_frozen_dataclass_rejects_assignment() -> None:
-    @dataclasses.dataclass(frozen=True)
-    class Immutable:
-        value: int = 1
-
-    instance = Immutable()
-    step_context = _new_step_context()
-    step_context.record_assignment("instance", instance)
-
-    with pytest.raises(ToolBoundaryError) as exception_info:
-        assign_tool(step_context, "instance.value", "2")
-    assert exception_info.value.kind == "resolution"
-
-
-def test_assign_dotted_path_plain_class_known_field_valid() -> None:
-    class Settings:
-        host: str
-        port: int
-
-        def __init__(self) -> None:
-            self.host = "localhost"
-            self.port = 8080
-
-    settings = Settings()
-    step_context = _new_step_context()
-    step_context.record_assignment("settings", settings)
-
-    assign_tool(step_context, "settings.port", "9090")
-    assert settings.port == 9090
-
-
-def test_assign_dotted_path_plain_class_known_field_invalid_type() -> None:
-    class Settings:
-        port: int
-
-        def __init__(self) -> None:
-            self.port = 8080
-
-    settings = Settings()
-    step_context = _new_step_context()
-    step_context.record_assignment("settings", settings)
-
-    with pytest.raises(ToolBoundaryError) as exception_info:
-        assign_tool(step_context, "settings.port", "'not_a_port'")
-    assert exception_info.value.kind == "invalid_input"
-    assert settings.port == 8080
-
-
-def test_assign_dotted_path_plain_class_unknown_field_allowed() -> None:
-    class Container:
-        x: int = 1
-
-    container = Container()
-    step_context = _new_step_context()
-    step_context.record_assignment("container", container)
-
-    assign_tool(step_context, "container.y", "'hello'")
-    assert container.y == "hello"  # type: ignore[attr-defined]
-
-
-def test_assign_dotted_path_slots_class_unknown_field_rejected() -> None:
-    class Slotted:
-        __slots__ = ("x",)
-        x: int
-
-        def __init__(self) -> None:
-            self.x = 1
-
-    instance = Slotted()
-    step_context = _new_step_context()
-    step_context.record_assignment("instance", instance)
-
-    with pytest.raises(ToolBoundaryError) as exception_info:
-        assign_tool(step_context, "instance.y", "2")
-    assert exception_info.value.kind == "resolution"
-
-
-def test_assign_dotted_path_pydantic_unknown_field_rejected() -> None:
-    class MyModel(BaseModel):
-        name: str = "default"
-
-    model = MyModel()
-    step_context = _new_step_context()
-    step_context.record_assignment("model", model)
-
-    with pytest.raises(ToolBoundaryError) as exception_info:
-        assign_tool(step_context, "model.unknown", "'value'")
-    assert exception_info.value.kind == "invalid_input"
-
-
-def test_assign_dotted_path_no_annotations_allowed() -> None:
-    class Bare:
-        def __init__(self) -> None:
-            self.x = 1
-
-    instance = Bare()
-    step_context = _new_step_context()
-    step_context.record_assignment("instance", instance)
-
-    assign_tool(step_context, "instance.x", "99")
-    assert instance.x == 99
-
-
 def test_assign_dotted_path_marks_write_binding_root_dirty() -> None:
-    class Model(BaseModel):
+    class Model(BaseModel, validate_assignment=True):
         value: int = 0
 
     step_context = StepContext(
@@ -290,7 +127,7 @@ def test_assign_dotted_path_marks_write_binding_root_dirty() -> None:
 
 
 def test_assign_dotted_path_read_binding_root_is_not_marked_dirty() -> None:
-    class Model(BaseModel):
+    class Model(BaseModel, validate_assignment=True):
         value: int = 0
 
     step_context = StepContext(

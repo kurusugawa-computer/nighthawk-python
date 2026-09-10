@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 import tiktoken
 
@@ -21,6 +21,8 @@ class ToolError(TypedDict):
     kind: ErrorKind
     message: str
     guidance: str | None
+    phase: NotRequired[str]
+    evaluation_started: NotRequired[bool]
 
 
 class ToolOutcome(TypedDict):

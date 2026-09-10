@@ -188,15 +188,12 @@ def test_wrapper_returns_success_payload_with_placeholder_for_raw_bytes(payload:
     assert result == expected
 
 
-def test_wrapper_call_tool_outcome_converts_tool_exception_to_tool_error() -> None:
+def test_wrapper_call_tool_outcome_propagates_application_exception() -> None:
     def test_raises() -> object:
         raise RuntimeError("boom")
 
-    tool_outcome = _call_wrapped_tool_outcome(name="test_raises", function=test_raises)
-    assert tool_outcome["payload"] is None
-    assert tool_outcome["error"] is not None
-    assert tool_outcome["error"]["kind"] == "internal"
-    assert tool_outcome["error"]["message"] == "boom"
+    with pytest.raises(RuntimeError, match="boom"):
+        _call_wrapped_tool_outcome(name="test_raises", function=test_raises)
 
 
 def test_wrapper_call_tool_outcome_normalizes_bare_text_content_to_string() -> None:
@@ -247,22 +244,15 @@ def test_wrapper_call_tool_outcome_does_not_treat_namedtuple_as_top_level_multim
     assert all(not isinstance(item, BinaryContent) for item in payload)
 
 
-def test_wrapper_call_tool_returns_error_envelope_for_tool_exception() -> None:
+def test_wrapper_call_tool_propagates_application_exception() -> None:
     def test_raises() -> object:
         raise RuntimeError("boom")
 
-    result = _call_wrapped_tool(name="test_raises", function=test_raises)
-    assert result == {
-        "value": None,
-        "error": {
-            "kind": "internal",
-            "message": "boom",
-            "guidance": "The tool execution raised an unexpected error. Retry or report this error.",
-        },
-    }
+    with pytest.raises(RuntimeError, match="boom"):
+        _call_wrapped_tool(name="test_raises", function=test_raises)
 
 
-def test_wrapper_call_tool_outcome_converts_oversight_rejection_to_tool_error() -> None:
+def test_wrapper_call_tool_outcome_propagates_oversight_rejection() -> None:
     tool_call_count = 0
 
     def test_denied_tool(run_context) -> int:  # type: ignore[no-untyped-def]
@@ -275,16 +265,16 @@ def test_wrapper_call_tool_outcome_converts_oversight_rejection_to_tool_error() 
         assert tool_call.tool_name == "test_denied_tool"
         return nh.oversight.Reject("human rejected tool")
 
-    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)):
-        tool_outcome = _call_wrapped_tool_outcome(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
-    assert tool_outcome["payload"] is None
-    assert tool_outcome["error"] is not None
-    assert tool_outcome["error"]["kind"] == "oversight"
-    assert tool_outcome["error"]["message"] == "human rejected tool"
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)),
+        pytest.raises(nh.oversight.OversightRejectedError, match="human rejected tool"),
+    ):
+        _call_wrapped_tool_outcome(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
     assert tool_call_count == 0
 
 
-def test_wrapper_call_tool_returns_error_envelope_for_oversight_rejection() -> None:
+def test_wrapper_call_tool_propagates_oversight_rejection() -> None:
     def test_denied_tool(run_context) -> int:  # type: ignore[no-untyped-def]
         _ = run_context
         return 1
@@ -293,17 +283,12 @@ def test_wrapper_call_tool_returns_error_envelope_for_oversight_rejection() -> N
         assert tool_call.tool_name == "test_denied_tool"
         return nh.oversight.Reject("human rejected tool")
 
-    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)):
-        result = _call_wrapped_tool(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
-
-    assert result == {
-        "value": None,
-        "error": {
-            "kind": "oversight",
-            "message": "human rejected tool",
-            "guidance": "The host rejected this tool call. Choose a different approach or continue without this tool.",
-        },
-    }
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_tool_call=reject_tool_call)),
+        pytest.raises(nh.oversight.OversightRejectedError, match="human rejected tool"),
+    ):
+        _call_wrapped_tool(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
 
 
 def test_wrapper_preserves_top_level_binary_content_as_file() -> None:
@@ -821,7 +806,7 @@ def test_user_content_union_members_are_covered_by_text_projection_predicate() -
         assert is_multi_modal_content(content)
 
 
-def test_backend_handler_wraps_recoverable_tool_boundary_error() -> None:
+def test_backend_handler_propagates_application_boundary_error() -> None:
     def test_boundary_error() -> int:  # type: ignore[no-untyped-def]
         raise ToolBoundaryError(
             kind="execution",
@@ -863,16 +848,8 @@ def test_backend_handler_wraps_recoverable_tool_boundary_error() -> None:
         with set_current_run_context(run_context):
             return await handler({})
 
-    with nh.run(StubExecutor()):
-        tool_handler_result = anyio.run(call_handler)
-    parsed = json.loads(_render_preview_text_for_test(tool_handler_result))
-    assert parsed["value"] is None
-    assert parsed["error"]["kind"] == "execution"
-    assert parsed["error"]["message"] == "tool crashed"
-    assert parsed["error"]["guidance"] == "Retry with different arguments."
-    assert tool_handler_result["kind"] == "tool_result"
-    assert tool_handler_result["tool_outcome"]["error"] is not None
-    assert tool_handler_result["tool_outcome"]["error"]["kind"] == "execution"
+    with nh.run(StubExecutor()), pytest.raises(ToolBoundaryError, match="tool crashed"):
+        anyio.run(call_handler)
 
 
 def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
@@ -920,7 +897,7 @@ def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
     assert "Fix the errors and try again." in _render_preview_text_for_test(tool_handler_result)
 
 
-def test_provider_tool_loop_surfaces_tool_failure_as_standard_tool_result() -> None:
+def test_provider_tool_loop_propagates_application_failure() -> None:
     tool_call_count = 0
 
     def test_failing_tool() -> int:  # type: ignore[no-untyped-def]
@@ -946,26 +923,9 @@ def test_provider_tool_loop_surfaces_tool_failure_as_standard_tool_result() -> N
         model_request_list = [message for message in result.all_messages() if isinstance(message, ModelRequest)]
         return result.output, model_request_list
 
-    with nh.run(StubExecutor()):
-        output, model_request_list = anyio.run(run_agent)
-    assert output == "done"
+    with nh.run(StubExecutor()), pytest.raises(ToolBoundaryError, match="tool crashed"):
+        anyio.run(run_agent)
     assert tool_call_count == 1
-
-    tool_return_part_list = [
-        part
-        for model_request in model_request_list
-        for part in model_request.parts
-        if isinstance(part, ToolReturnPart) and part.tool_name == "test_failing_tool"
-    ]
-    assert len(tool_return_part_list) == 1
-    assert tool_return_part_list[0].content == {
-        "value": None,
-        "error": {
-            "kind": "execution",
-            "message": "tool crashed",
-            "guidance": "Retry with different arguments.",
-        },
-    }
 
 
 def test_backend_handler_calls_oversight_once_for_accept_decision(
@@ -1163,11 +1123,8 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
         ):
             return await handler({})
 
-    tool_handler_result = anyio.run(call_handler)
-    parsed = json.loads(_render_preview_text_for_test(tool_handler_result))
-    assert parsed["value"] is None
-    assert parsed["error"]["kind"] == "oversight"
-    assert parsed["error"]["message"] == "needs oversight"
+    with pytest.raises(nh.oversight.OversightRejectedError, match="needs oversight"):
+        anyio.run(call_handler)
     assert tool_call_count == 0
 
     tool_spans = _get_finished_tool_spans(span_exporter)

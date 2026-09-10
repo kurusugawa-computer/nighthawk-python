@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import ast
 import functools
 import inspect
 import typing
-from collections.abc import Iterable, Iterator
-from contextlib import ExitStack, contextmanager
+from collections.abc import AsyncIterator, Iterable, Iterator
+from contextlib import ExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from types import FrameType
 from typing import TypeAliasType, TypedDict, cast
@@ -15,7 +14,7 @@ from pydantic import TypeAdapter
 
 from ..composition import UNSET, UnsetType
 from ..errors import ExecutionError, NaturalParseError, NighthawkError
-from ..lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepRaised
+from ..lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised, StepStarted
 from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
 from ..oversight import (
     Accept,
@@ -29,6 +28,9 @@ from ..oversight import (
 from .annotations import MISSING_ANNOTATION, SourceAnnotation, resolve_annotation
 from .async_bridge import run_coroutine_synchronously
 from .environment import StepEnvironment
+from .execution_reference import ExecutionReference
+from .expression import evaluate_expression_operation
+from .notifications import await_notification
 from .scoping import (
     RUN_ID,
     SCOPE_ID,
@@ -244,8 +246,7 @@ class Runner:
         self.context_stack = ExitStack()
 
     @contextmanager
-    def execution(self, *, caller_frame: FrameType) -> Iterator[Runner]:
-        """Keep identity and diagnostics active through assignments and delivery."""
+    def _execution_scope(self, caller_frame: FrameType) -> Iterator[tuple[ExecutionReference, Span, StepLifecycle | None]]:
         with step_execution_reference_scope(source_location=_build_source_location(caller_frame=caller_frame)) as execution_reference:
             lifecycle = get_lifecycle()
             with (
@@ -260,85 +261,141 @@ class Runner:
                 ) as step_span,
                 self.context_stack,
             ):
-                original_exception: BaseException | None = None
-                try:
-                    yield self
-                except BaseException as exception:
-                    original_exception = exception
-                finished: StepFinished
-                if isinstance(original_exception, Exception):
-                    rejection = original_exception if isinstance(original_exception, OversightRejectedError) else None
-                    finished = StepFailed(
-                        execution_reference=execution_reference,
-                        processed_natural_program=self.processed_natural_program,
-                        input_binding_name_to_value=self.input_binding_name_to_value,
-                        allowed_step_kinds=self.allowed_step_kinds,
-                        assigned_binding_name_to_value=self.assigned_binding_name_to_value,
-                        failure_stage="oversight_rejection" if rejection else self.failure_stage,
-                        original_exception=original_exception,
-                        attempted_outcome=self.attempted_outcome,
-                        validated_binding_name_to_value=self.validated_binding_name_to_value,
-                        inspection_subject=cast(typing.Literal["return_expression", "step_commit", "tool_call"], rejection.subject)
-                        if rejection
-                        else None,
-                        rejection_reason=rejection.reason if rejection else None,
+                yield execution_reference, step_span, lifecycle
+
+    def _classify_finished(
+        self, original_exception: BaseException | None, execution_reference: ExecutionReference, step_span: Span
+    ) -> tuple[StepFinished, BaseException | None]:
+        if self.preparation is not None and self.preparation.step_context.operation_failure_stage is not None:
+            self.failure_stage = self.preparation.step_context.operation_failure_stage
+        finished: StepFinished
+        if isinstance(original_exception, Exception):
+            rejection = original_exception if isinstance(original_exception, OversightRejectedError) else None
+            finished = StepFailed(
+                execution_reference=execution_reference,
+                processed_natural_program=self.processed_natural_program,
+                input_binding_name_to_value=self.input_binding_name_to_value,
+                allowed_step_kinds=self.allowed_step_kinds,
+                assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                failure_stage="oversight_rejection" if rejection else self.failure_stage,
+                original_exception=original_exception,
+                attempted_outcome=self.attempted_outcome,
+                validated_binding_name_to_value=self.validated_binding_name_to_value,
+                inspection_subject=cast(typing.Literal["return_expression", "step_commit", "tool_call", "operation"], rejection.subject)
+                if rejection
+                else None,
+                rejection_reason=rejection.reason if rejection else None,
+            )
+            _record_internal_step_failure(step_span=step_span, exception=original_exception)
+        elif original_exception is not None:
+            finished = StepInterrupted(
+                execution_reference=execution_reference,
+                processed_natural_program=self.processed_natural_program,
+                input_binding_name_to_value=self.input_binding_name_to_value,
+                allowed_step_kinds=self.allowed_step_kinds,
+                assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                failure_stage=self.failure_stage,
+                original_exception=original_exception,
+            )
+            step_span.add_event("nighthawk.step.interrupted", {"nighthawk.step.stage": self.failure_stage})
+            step_span.record_exception(original_exception)
+        elif isinstance(self.outcome, Raise):
+            assert self.raise_exception is not None
+            finished = StepRaised(
+                execution_reference=execution_reference,
+                processed_natural_program=self.processed_natural_program,
+                input_binding_name_to_value=self.input_binding_name_to_value,
+                allowed_step_kinds=self.allowed_step_kinds,
+                assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                outcome=self.outcome,
+                exception=self.raise_exception,
+            )
+            original_exception = self.raise_exception
+            _add_step_raised_event(step_span=step_span, step_outcome=self.outcome)
+        else:
+            assert isinstance(self.outcome, (Pass, Return, Break, Continue))
+            finished = StepCompleted(
+                execution_reference=execution_reference,
+                processed_natural_program=self.processed_natural_program,
+                input_binding_name_to_value=self.input_binding_name_to_value,
+                allowed_step_kinds=self.allowed_step_kinds,
+                assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                outcome=self.outcome,
+            )
+            _add_step_completed_event(step_span=step_span, step_outcome_kind=self.outcome.kind)
+        return finished, original_exception
+
+    @contextmanager
+    def _terminal_boundary(self, finished: StepFinished, original_exception: BaseException | None, step_span: Span) -> Iterator[None]:
+        # Notification errors cannot enter classification or cause a second event.
+        try:
+            yield
+        except BaseException as delivery_exception:
+            step_span.add_event("nighthawk.step.delivery_failed", {"exception.type": type(delivery_exception).__name__})
+            if delivery_exception is original_exception:
+                # A host may rethrow its already-recorded exception. Keep its
+                # existing cause instead of creating an exception self-cycle.
+                raise
+            if isinstance(finished, StepInterrupted):
+                raise finished.original_exception from delivery_exception
+            if original_exception is not None:
+                raise delivery_exception from original_exception
+            raise
+        if isinstance(finished, StepFailed):
+            if self.preparation is not None and self.preparation.step_context.operation_failure is finished.original_exception:
+                raise finished.original_exception
+            raise ExecutionError(finished, description=self.failure_description) from finished.original_exception
+        if original_exception is not None:
+            raise original_exception
+
+
+    @contextmanager
+    def execution(self, *, caller_frame: FrameType) -> Iterator[Runner]:
+        with self._execution_scope(caller_frame) as (execution_reference, step_span, lifecycle):
+            original_exception: BaseException | None = None
+            try:
+                self.failure_stage = "started_delivery"
+                if lifecycle is not None and lifecycle.on_step_started is not None:
+                    started_result = lifecycle.on_step_started(StepStarted(execution_reference))
+                    if inspect.isawaitable(started_result):
+                        run_coroutine_synchronously(lambda: await_notification(started_result))
+                self.failure_stage = "preparation"
+                yield self
+            except BaseException as exception:
+                original_exception = exception
+            finished, original_exception = self._classify_finished(original_exception, execution_reference, step_span)
+            with self._terminal_boundary(finished, original_exception, step_span):
+                if lifecycle is not None and lifecycle.on_step_finished is not None:
+                    terminal_result = lifecycle.on_step_finished(finished)
+                    if inspect.isawaitable(terminal_result):
+                        run_coroutine_synchronously(
+                            lambda: await_notification(
+                                terminal_result,
+                                interrupted=isinstance(finished, StepInterrupted),
+                                timeout=lifecycle.interruption_delivery_timeout,
+                            )
+                        )
+
+    @asynccontextmanager
+    async def execution_async(self, *, caller_frame: FrameType) -> AsyncIterator[Runner]:
+        with self._execution_scope(caller_frame) as (execution_reference, step_span, lifecycle):
+            original_exception: BaseException | None = None
+            try:
+                self.failure_stage = "started_delivery"
+                if lifecycle is not None and lifecycle.on_step_started is not None:
+                    await await_notification(lifecycle.on_step_started(StepStarted(execution_reference)))
+                self.failure_stage = "preparation"
+                yield self
+            except BaseException as exception:
+                original_exception = exception
+            finished, original_exception = self._classify_finished(original_exception, execution_reference, step_span)
+            with self._terminal_boundary(finished, original_exception, step_span):
+                if lifecycle is not None and lifecycle.on_step_finished is not None:
+                    await await_notification(
+                        lifecycle.on_step_finished(finished),
+                        interrupted=isinstance(finished, StepInterrupted),
+                        timeout=lifecycle.interruption_delivery_timeout,
                     )
-                    _record_internal_step_failure(step_span=step_span, exception=original_exception)
-                elif original_exception is not None:
-                    finished = StepInterrupted(
-                        execution_reference=execution_reference,
-                        processed_natural_program=self.processed_natural_program,
-                        input_binding_name_to_value=self.input_binding_name_to_value,
-                        allowed_step_kinds=self.allowed_step_kinds,
-                        assigned_binding_name_to_value=self.assigned_binding_name_to_value,
-                        failure_stage=self.failure_stage,
-                        original_exception=original_exception,
-                    )
-                    step_span.add_event("nighthawk.step.interrupted", {"nighthawk.step.stage": self.failure_stage})
-                    step_span.record_exception(original_exception)
-                elif isinstance(self.outcome, Raise):
-                    assert self.raise_exception is not None
-                    finished = StepRaised(
-                        execution_reference=execution_reference,
-                        processed_natural_program=self.processed_natural_program,
-                        input_binding_name_to_value=self.input_binding_name_to_value,
-                        allowed_step_kinds=self.allowed_step_kinds,
-                        assigned_binding_name_to_value=self.assigned_binding_name_to_value,
-                        outcome=self.outcome,
-                        exception=self.raise_exception,
-                    )
-                    original_exception = self.raise_exception
-                    _add_step_raised_event(step_span=step_span, step_outcome=self.outcome)
-                else:
-                    assert isinstance(self.outcome, (Pass, Return, Break, Continue))
-                    finished = StepCompleted(
-                        execution_reference=execution_reference,
-                        processed_natural_program=self.processed_natural_program,
-                        input_binding_name_to_value=self.input_binding_name_to_value,
-                        allowed_step_kinds=self.allowed_step_kinds,
-                        assigned_binding_name_to_value=self.assigned_binding_name_to_value,
-                        outcome=self.outcome,
-                    )
-                    _add_step_completed_event(step_span=step_span, step_outcome_kind=self.outcome.kind)
-                # Delivery is outside classification: no callback failure can reenter it.
-                try:
-                    if lifecycle is not None and lifecycle.on_step_finished is not None:
-                        lifecycle.on_step_finished(finished)
-                except BaseException as delivery_exception:
-                    step_span.add_event("nighthawk.step.delivery_failed", {"exception.type": type(delivery_exception).__name__})
-                    if delivery_exception is original_exception:
-                        # A host may rethrow its already-recorded exception. Keep its
-                        # existing cause instead of creating an exception self-cycle.
-                        raise
-                    if isinstance(finished, StepInterrupted):
-                        raise finished.original_exception from delivery_exception
-                    if original_exception is not None:
-                        raise delivery_exception from original_exception
-                    raise
-                if isinstance(finished, StepFailed):
-                    raise ExecutionError(finished, description=self.failure_description) from finished.original_exception
-                if original_exception is not None:
-                    raise original_exception
 
     def record_assignment(self, name: str, value: object) -> None:
         """Record only a successfully completed generated Python assignment."""
@@ -566,22 +623,20 @@ class Runner:
             if isinstance(decision, Reject):
                 raise OversightRejectedError(decision.reason, subject="return_expression")
         self.failure_stage = "return_evaluation"
-        evaluation_namespace = step_context.environment.expression_namespace(bindings)
         self.failure_description = f"Failed to evaluate return_expression {step_outcome.return_expression!r}"
-        compiled = compile(step_outcome.return_expression, "<nighthawk-return>", "eval", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-        resolved = eval(compiled, evaluation_namespace, evaluation_namespace)
+        resolved = await evaluate_expression_operation(
+            step_context,
+            step_outcome.return_expression,
+            purpose="return",
+            allow_awaitable_result=allow_awaitable_return,
+            expected_type=return_annotation,
+            override_name_to_value=bindings,
+        )
         self.failure_description = None
-        if inspect.isawaitable(resolved):
-            self.failure_stage = "return_await"
-            if not allow_awaitable_return:
-                if inspect.iscoroutine(resolved):
-                    resolved.close()
-                raise ExecutionError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
-            resolved = await resolved
         self.failure_stage = "return_validation"
         return self._parse_and_coerce_return_value(resolved, return_annotation)
 
-    def _apply_step_oversight_if_needed(
+    async def _apply_step_oversight_if_needed(
         self,
         *,
         preparation: _StepPreparation,
@@ -604,6 +659,8 @@ class Runner:
             binding_name_to_type=preparation.step_context.binding_name_to_type,
         )
         decision = oversight.inspect_step_commit(step_commit)
+        if inspect.isawaitable(decision):
+            decision = await decision
 
         if isinstance(decision, Reject):
             record_oversight_decision(
@@ -664,6 +721,8 @@ class Runner:
         allow_awaitable_return: bool,
     ) -> StepEnvelope:
         step_context = preparation.step_context
+        if step_context.operation_failure is not None:
+            raise step_context.operation_failure
         self.attempted_outcome = step_outcome
         self.failure_stage = "outcome_validation"
         self._require_allowed_step_kind(step_outcome=step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
@@ -694,7 +753,7 @@ class Runner:
             self.failure_stage = "raise_resolution"
             resolved_exception_type = self._resolve_raise_error_type(step_context, outcome)
         self.failure_stage = "commit_inspection"
-        outcome, validated_bindings = self._apply_step_oversight_if_needed(
+        outcome, validated_bindings = await self._apply_step_oversight_if_needed(
             preparation=preparation,
             outcome=outcome,
             bindings=validated_bindings,

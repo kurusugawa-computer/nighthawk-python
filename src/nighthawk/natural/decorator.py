@@ -6,7 +6,7 @@ import logging
 import sys
 import textwrap
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import wraps
 from types import CellType, FunctionType
 from typing import Any, cast
@@ -28,6 +28,12 @@ class _RunnerProxy:
         caller_frame = sys._getframe(1)
         runner = Runner(get_step_executor())
         return runner.execution(caller_frame=caller_frame)
+
+    @staticmethod
+    def execution_async() -> AbstractAsyncContextManager[Runner]:
+        caller_frame = sys._getframe(1)
+        runner = Runner(get_step_executor())
+        return runner.execution_async(caller_frame=caller_frame)
 
 
 def _function_name_to_cell(function: FunctionType) -> dict[str, CellType]:

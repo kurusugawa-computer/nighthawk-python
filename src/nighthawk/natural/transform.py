@@ -346,8 +346,13 @@ def build_runtime_call_and_assignments(
             ).body
         )
 
-    guarded = ast.parse("with __nighthawk_runner__.execution() as __nh_execution__:\n    pass\n").body[0]
-    assert isinstance(guarded, ast.With)
+    guard_source = (
+        "async with __nighthawk_runner__.execution_async() as __nh_execution__:\n    pass\n"
+        if is_async_function
+        else "with __nighthawk_runner__.execution() as __nh_execution__:\n    pass\n"
+    )
+    guarded = ast.parse(guard_source).body[0]
+    assert isinstance(guarded, (ast.With, ast.AsyncWith))
     guarded.body = statements
     statements = [guarded]
 

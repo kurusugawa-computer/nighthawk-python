@@ -8,7 +8,6 @@ from pydantic_ai.tools import Tool
 
 from ..runtime.step_context import StepContext
 from .assignment import assign_tool_async, eval_expression_async
-from .contracts import ToolBoundaryError
 
 
 @dataclass(frozen=True)
@@ -18,10 +17,7 @@ class ProvidedToolDefinition:
 
 
 async def _eval_expression_or_raise_async(run_context: RunContext[StepContext], expression: str) -> object:
-    try:
-        return await eval_expression_async(run_context.deps, expression)
-    except Exception as exception:
-        raise ToolBoundaryError(kind="execution", message=str(exception), guidance="Fix the expression and retry.") from exception
+    return await eval_expression_async(run_context.deps, expression)
 
 
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
@@ -48,7 +44,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
                 nh_assign,
                 name="nh_assign",
                 metadata=metadata,
-                description="Set a write binding to a new value. target_path: a name or dotted path (e.g., 'result', 'obj.field'). expression: evaluated as Python.",
+                description="Assign a Python expression to a declared output, a new temporary name, or a Pydantic field with assignment validation enabled. target_path: name(.field)*.",
             ),
         ),
         ProvidedToolDefinition(
