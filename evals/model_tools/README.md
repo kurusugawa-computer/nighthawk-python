@@ -7,10 +7,42 @@ it does not depend on the legacy promptfoo provider's private runtime patches.
 The implemented surfaces below are the 2026-09-09 experiment contracts. The
 2026-09-10 decisions approve a new comparison of dedicated discovery against
 `inspect(value)` and environment APIs through `nh_eval`. That comparison is not
-implemented or evaluated here yet. Its controlled comparison and current target
-are specified in the [Ideal State](../../docs/ideal-state.md#13-model-facing-interface-and-evaluation).
+implemented or evaluated here yet. The controlled comparison is specified below;
+the [Ideal State](../../docs/ideal-state.md#13-model-facing-interface-and-evaluation)
+owns the target semantics and remaining interface choices.
 In particular, the existing `merged` surface merges evaluation and assignment;
 it provides no evidence about removing the dedicated inspection tool.
+
+## Approved inspection-helper comparison
+
+This is an approved experiment plan, not a completed result.
+
+P-REVIEW-005 approves showing known collisions and qualified references upfront.
+Evaluate its isolated effect while holding the existing tool surface fixed.
+Then apply the same collision presentation to both sides of the P-INSPECT-002
+comparison:
+
+1. Dedicated discovery through `nh_inspect`, alongside evaluation and assignment.
+2. Value inspection and environment APIs through `nh_eval`, alongside assignment.
+
+Hold discovery behavior, fixtures, lookup, approval rules, budgets, and response
+content constant. Keep the assignment interface unchanged; the historical
+`merged` variant combined evaluation and assignment and does not test this new
+comparison. Record unavoidable differences in usage guidance and report them
+rather than attributing every difference to tool count. Vary guidance separately.
+
+Measure semantic success, helper discovery and source-selection failures, invalid
+requests, unnecessary calls, duplicate effects, recovery, model-visible tokens,
+and end-to-end latency. Include helper-name collisions, omitted names/members,
+large and opaque values, nested parent state, validation, completion, and approval
+with partial effects. Distinguish runtime lookup failures from omitted explicitly
+required reads. Success oracles must allow different valid call sequences while
+checking required effects and calls.
+
+Use independent repetitions, varied task formulations, and representative models
+and backends; report sample sizes and uncertainty. A deterministic child fixture
+tests parent-state mechanics and model tool use. Actual Natural parent/child
+composition requires separate integration coverage.
 
 ## Surfaces
 

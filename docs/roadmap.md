@@ -6,6 +6,11 @@ This roadmap is intentionally future-facing.
 - It avoids implementation details.
 - It should not restate what is already implemented today.
 
+The [Ideal State](ideal-state.md) owns the ratified target contracts. The ideas
+below are exploratory unless included in that target. In particular, expression
+sandboxing and durable workspace reconstruction are no longer core goals;
+external isolation and durable application records remain host/backend concerns.
+
 ## Prompt and context
 
 ### Prompt context: locals digest
@@ -39,11 +44,13 @@ Introduce tiered prompt strategies that adapt to model capability. Weaker models
 - Make it easier for hosts to limit what templates can access.
 - Provide safer conventions for include helpers (path allowlists, traversal protection).
 
-### Sandboxing and isolation
+### External isolation
 
-- Sandboxing for expression evaluation.
-- Restricting template preprocessing evaluation.
-- Path allowlists and traversal protection for include helpers.
+Explore host/backend integration guidance for process isolation and permissions.
+Natural sources and template preprocessing remain trusted program assets.
+Expression sandboxing and resistance to hostile generated Python are withdrawn
+as core targets; the preprocessing conveniences above do not change that trust
+boundary or establish a sandbox guarantee.
 
 ## Resilience and observability
 
@@ -63,6 +70,11 @@ Considerations:
 
 ### Resilience defaults via scope
 
+Exploratory, outside the ratified target. Python function transformers remain the
+target's retry mechanism, with host-selected retry boundaries. Any scope-default
+proposal must preserve that ownership and must not introduce automatic replay
+after partial effects or lifecycle-delivery failure.
+
 Allow hosts to set default resilience policies (retry attempts, timeout, fallback chain) at the `nighthawk.scope()` level, so that all Natural block executions within a scope inherit a baseline policy without per-call wrapping.
 
 Motivation:
@@ -76,15 +88,21 @@ Considerations:
 
 ## Runtime
 
-### Persistence
+### Host-owned persistence
 
-- Persisting memory across processes (file-based snapshotting, etc.).
-- Persisting or reconstructing workspace objects (likely partial only).
+Explore examples of hosts persisting task history, application snapshots, and
+execution records. Durable reconstruction of Natural workspaces, suspended Python
+execution, and process-restart continuation are withdrawn as core targets. Host
+storage must not imply automatic replay of operations with possible side effects.
 
 ### Execution context propagation
 
 - Propagate execution context and step-executor context across tool execution boundaries when tools run in different threads or processes.
 - Define an explicit serialization/propagation mechanism for multi-process execution.
+
+Multi-process propagation is exploratory and concerns explicitly serialized host
+data and correlation metadata, not implicit transfer of live workspace objects
+or reconstruction of a suspended step.
 
 ### Async bridge ContextVar propagation
 
