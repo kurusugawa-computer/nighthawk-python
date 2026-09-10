@@ -528,8 +528,15 @@ Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, 
 
 Boundary rule for tool-call failures:
 
-- If the model can recover by changing tool arguments, choosing another tool, or continuing without the tool, the failure MUST be projected back to the model as a structured error observation.
-- Host invariant violations (for example, broken runtime contract or invalid host-side oversight hook contract) MAY propagate as Python exceptions to the host instead of being projected.
+- Runtime input and name-resolution failures provide recoverable observations, as specified in [operation inspection](#103-operation-inspection).
+- Ordinary application exceptions and host oversight failures propagate toward the Python caller; a transport MUST NOT replace them with generic retry advice.
+- Native tool dispatch uses Pydantic AI's argument validators, capability hooks, and approval requirements.
+  Actual argument validation failures and explicit `ModelRetry` remain recoverable; a validator's propagated application exception or an exception raised by the tool body retains its original meaning.
+
+Coding-agent tool callbacks execute on the event loop that owns the backend request, including when the MCP HTTP server runs in another thread.
+Callbacks preserve the captured Natural scope and serialize in transport admission order.
+A failed callback stops the backend request even if its client converts the callback exception into a protocol error response.
+Request cancellation cancels pending callbacks and cleans up the coding-agent process.
 
 The projected `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
 
@@ -770,7 +777,9 @@ Finalization cannot undo earlier application calls, object mutation, or validato
 Evaluation, assignment, model return-expression resolution, native tools, and inspection operations share this boundary.
 The request includes the execution reference, operation Id, kind, and applicable expression, assignment target, tool arguments, and expected type.
 Admission runs before inspection; inspection runs before any operation body or await of its result.
-Requests execute serially within each step.
+Requests execute serially within each step: in emission order for an ordered model batch, and in admission order otherwise.
+Pydantic AI capability hooks cannot reorder an ordered batch across this boundary.
+Explicit Python concurrency inside a helper and separate child steps retain their own execution semantics.
 
 Operation rejection and inspection failures are terminal for that step.
 Later queued operations cannot execute their bodies, and an executor cannot suppress the failure and finalize a successful candidate.

@@ -17,7 +17,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic_ai import Agent, RunContext
 from pydantic_ai._run_context import set_current_run_context
-from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
+from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import (
     AudioUrl,
     BinaryContent,
@@ -1830,25 +1830,23 @@ def test_mcp_server_if_needed_rejects_non_step_context_dependencies() -> None:
         anyio.run(open_server)
 
 
-def test_mcp_boundary_converts_boundary_exception_to_json_failure_text_without_run_context() -> None:
+@pytest.mark.parametrize("boundary", [call_tool_for_claude_code_sdk, call_tool_for_low_level_mcp_server])
+@pytest.mark.parametrize("failure", [RuntimeError("boom"), ModelRetry("retry"), ApprovalRequired(), CallDeferred()])
+def test_mcp_boundary_preserves_application_exceptions_and_explicit_control_signals(boundary: Any, failure: Exception) -> None:
     async def tool_handler(arguments: dict[str, object]) -> ToolHandlerResult:
         _ = arguments
-        raise RuntimeError("boom")
+        raise failure
 
     async def call_boundary() -> dict[str, object]:
-        return await call_tool_for_claude_code_sdk(
+        return await boundary(
             tool_name="stub_tool",
             arguments={},
             tool_handler=tool_handler,
             parent_otel_context=otel_context.get_current(),
         )
 
-    response = anyio.run(call_boundary)
-    content = response["content"]
-    assert isinstance(content, list)
-    assert len(content) == 1
-    text = content[0]["text"]
-
-    parsed = json.loads(text)
-    assert parsed["value"] is None
-    assert parsed["error"]["kind"] == "internal"
+    original_context = otel_context.get_current()
+    with pytest.raises(type(failure)) as caught:
+        anyio.run(call_boundary)
+    assert caught.value is failure
+    assert otel_context.get_current() is original_context

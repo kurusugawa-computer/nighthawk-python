@@ -19,6 +19,7 @@ from ..tools.declarations import get_visible_tools
 from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
 from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_server import mcp_server_if_needed
+from .process_management import stop_process
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
 
 
@@ -149,7 +150,7 @@ class ClaudeCodeCliModel(BackendModelBase):
     def system(self) -> str:
         return "anthropic"
 
-    async def request(
+    async def _request(
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
@@ -159,6 +160,7 @@ class ClaudeCodeCliModel(BackendModelBase):
         mcp_configuration_file: IO[str] | None = None
         projected_request: TextProjectedRequest | None = None
 
+        process: asyncio.subprocess.Process | None = None
         try:
             model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
             claude_code_cli_model_settings = ClaudeCodeCliModelSettings.from_model_settings(model_settings)
@@ -304,6 +306,7 @@ class ClaudeCodeCliModel(BackendModelBase):
         except Exception as exception:
             raise UnexpectedModelBehavior("Claude Code CLI backend failed") from exception
         finally:
+            await stop_process(process)
             if system_prompt_file is not None:
                 with contextlib.suppress(Exception):
                     system_prompt_file.close()

@@ -10,15 +10,19 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import tiktoken
+from pydantic import ValidationError
 from pydantic_ai import RunContext
 
 # NOTE: pydantic_ai private API -- no public alternative for custom backends
 # that need to bridge RunContext across non-Pydantic-AI transports. Monitor
 # pydantic_ai releases and keep private access centralized in this module.
 from pydantic_ai._run_context import set_current_run_context
-from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import RetryPromptPart
+from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
+from pydantic_ai.messages import RetryPromptPart, ToolCallPart
 from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.tool_manager import ToolManager
+from pydantic_ai.tools import ToolDenied
+from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..errors import NighthawkError
@@ -32,12 +36,33 @@ from ..runtime.tool_calls import generate_tool_call_id, run_tool_instrumented
 from ..tools.contracts import (
     RetryPromptObservation,
     ToolHandlerResult,
+    ToolOutcome,
     build_tool_handler_result_trace_text,
     build_tool_result_observation,
 )
-from ..tools.execution import ToolResultWrapperToolset
+from ..tools.execution import ToolResultWrapperToolset, _build_standard_tool_return_value, _normalize_tool_success
+from .tool_transport import wrap_transported_tool
 
 type ToolHandler = Callable[[dict[str, Any]], Awaitable[ToolHandlerResult]]
+
+
+class _ObservedToolset(ToolResultWrapperToolset):
+    """Retain one call's observation while hooks receive the normal tool value."""
+
+    outcome: ToolOutcome | None = None
+    return_value: object = None
+
+    async def call_tool(
+        self,
+        name: str,
+        tool_args: dict[str, Any],
+        ctx: RunContext[StepContext],
+        tool: ToolsetTool[StepContext],
+    ) -> object:
+        # The inherited Pydantic AI method requires the parameter name ctx.
+        self.outcome = await self.call_tool_outcome(name, tool_args, ctx, tool)
+        self.return_value = _build_standard_tool_return_value(tool_outcome=self.outcome)
+        return self.return_value
 
 
 def _build_retry_prompt_observation(*, retry_text: str) -> RetryPromptObservation:
@@ -122,31 +147,36 @@ async def execute_tool_call(
 ) -> ToolHandlerResult:
     """Execute a single tool call and build model/trace observations."""
     with set_current_run_context(run_context):
+        if run_context.deps.operation_failure is not None:
+            raise run_context.deps.operation_failure
+        parent_manager = run_context.tool_manager
+        observed_toolset = _ObservedToolset(toolset.wrapped)
+        manager = ToolManager(
+            toolset=observed_toolset,
+            ctx=run_context,
+            tools={tool_name: tool},
+            root_capability=parent_manager.root_capability if parent_manager is not None else None,
+        )
         try:
-            validated_arguments = tool.args_validator.validate_python(arguments)
-        except Exception as exception:
-            errors_method = getattr(exception, "errors", None)
-            if callable(errors_method):
-                try:
-                    error_details = errors_method(include_url=False, include_context=False)
-                    if isinstance(error_details, list):
-                        retry_text = RetryPromptPart(
-                            tool_name=tool_name,
-                            content=error_details,
-                            tool_call_id=tool_call_id,
-                        ).model_response()
-                        return _build_retry_prompt_observation(retry_text=retry_text)
-                except Exception:
-                    pass
-
+            value = await manager.handle_call(ToolCallPart(tool_name, arguments, tool_call_id), wrap_validation_errors=False)
+        except ValidationError as exception:
+            if run_context.deps.operation_failure is exception:
+                raise
             retry_text = RetryPromptPart(
                 tool_name=tool_name,
-                content=str(exception) or "Invalid tool arguments",
+                content=exception.errors(include_url=False, include_context=False),
                 tool_call_id=tool_call_id,
             ).model_response()
             return _build_retry_prompt_observation(retry_text=retry_text)
+        except ModelRetry as exception:
+            return _build_retry_prompt_observation(retry_text=exception.message)
 
-        tool_outcome = await toolset.call_tool_outcome(tool_name, validated_arguments, run_context, tool)
+        if isinstance(value, ToolDenied):
+            tool_outcome: ToolOutcome = {"payload": None, "error": {"kind": "oversight", "message": value.message, "guidance": None}}
+        elif observed_toolset.outcome is not None and value is observed_toolset.return_value:
+            tool_outcome = observed_toolset.outcome
+        else:
+            tool_outcome = _normalize_tool_success(value)
 
     return build_tool_result_observation(tool_outcome=tool_outcome)
 
@@ -216,7 +246,7 @@ async def build_tool_name_to_handler(
                 tool_call_id=tool_call_id,
             )
 
-        tool_name_to_handler[tool_name] = handler
+        tool_name_to_handler[tool_name] = wrap_transported_tool(handler)
 
     return tool_name_to_handler
 

@@ -123,7 +123,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
     def system(self) -> str:
         return "anthropic"
 
-    async def request(
+    async def _request(
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,

@@ -12,6 +12,7 @@ from pydantic_ai.messages import (
     InstructionPart,
     ModelMessage,
     ModelRequest,
+    ModelResponse,
     RetryPromptPart,
     SystemPromptPart,
     TextContent,
@@ -27,6 +28,7 @@ from pydantic_ai.settings import ModelSettings
 from ..configuration import TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT
 from ..runtime.prompt import resolve_step_system_prompt_template_text
 from .tool_bridge import ToolHandler, prepare_allowed_tools, resolve_current_tool_result_rendering_policy
+from .tool_transport import ToolTransport
 
 if TYPE_CHECKING:
     from .text_projection import TextProjectedRequest
@@ -171,6 +173,22 @@ class BackendModelBase(Model):
     def __init__(self, *, backend_label: str, profile: Any) -> None:
         super().__init__(profile=profile)
         self.backend_label = backend_label
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        return await ToolTransport().run(lambda: self._request(messages, model_settings, model_request_parameters))
+
+    async def _request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        raise NotImplementedError
 
     def _prepare_common_request_parts(
         self,

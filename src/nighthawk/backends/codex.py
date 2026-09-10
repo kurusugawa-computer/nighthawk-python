@@ -19,6 +19,7 @@ from pydantic_ai.usage import RequestUsage
 from ..tools.declarations import get_visible_tools
 from .base import BackendModelBase, BackendModelSettings, append_text_projected_tool_result_preview_prompt
 from .mcp_server import mcp_server_if_needed
+from .process_management import stop_process
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
 
 type SandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
@@ -178,7 +179,7 @@ class CodexModel(BackendModelBase):
     def system(self) -> str:
         return "openai"
 
-    async def request(
+    async def _request(
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
@@ -193,6 +194,8 @@ class CodexModel(BackendModelBase):
 
         output_schema_file: IO[str] | None = None
         projected_request: TextProjectedRequest | None = None
+        process: asyncio.subprocess.Process | None = None
+        stderr_task: asyncio.Task[bytes] | None = None
 
         try:
             codex_model_settings = CodexModelSettings.from_model_settings(model_settings)
@@ -334,6 +337,10 @@ class CodexModel(BackendModelBase):
         except Exception as exception:
             raise UnexpectedModelBehavior("Codex backend failed") from exception
         finally:
+            if stderr_task is not None and not stderr_task.done():
+                stderr_task.cancel()
+                await asyncio.gather(stderr_task, return_exceptions=True)
+            await stop_process(process)
             if output_schema_file is not None:
                 with contextlib.suppress(Exception):
                     output_schema_file.close()

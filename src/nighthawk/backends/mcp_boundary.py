@@ -18,12 +18,8 @@ from ..runtime.step_context import (
 )
 from ..tools._tool_return_content import resolve_tool_return_segments
 from ..tools.contracts import (
-    BoundaryFailureObservation,
-    ToolError,
     ToolHandlerResult,
     ToolOutcome,
-    ToolResultObservation,
-    build_tool_result_observation,
     render_tool_handler_result_preview_text,
 )
 from ._text_fallback import (
@@ -51,14 +47,6 @@ def _resolve_effective_tool_result_rendering_policy(
     if rendering_policy is not None:
         return rendering_policy
     return _resolve_tool_result_rendering_policy()
-
-
-def _tool_boundary_failure_result(*, message: str, guidance: str) -> ToolResultObservation:
-    tool_outcome: ToolOutcome = {
-        "payload": None,
-        "error": {"kind": "internal", "message": message, "guidance": guidance},
-    }
-    return build_tool_result_observation(tool_outcome=tool_outcome)
 
 
 def _tool_outcome_to_mcp_content_list(
@@ -221,36 +209,18 @@ def _tool_handler_result_to_claude_code_sdk_content(
     return {"content": dumped_content_block_list}
 
 
-async def _get_safe_tool_handler_result(
+async def _get_tool_handler_result(
     *,
     tool_name: str,
     arguments: dict[str, object],
     tool_handler: ToolHandler,
     parent_otel_context: OtelContext,
 ) -> ToolHandlerResult:
+    context_token = otel_context.attach(parent_otel_context)
     try:
-        context_token = otel_context.attach(parent_otel_context)
-        try:
-            try:
-                return await tool_handler(arguments)
-            except Exception as exception:
-                error_message = str(exception) or "Tool boundary wrapper failed"
-                return _tool_boundary_failure_result(
-                    message=error_message,
-                    guidance="The tool boundary wrapper failed. Retry or report this error.",
-                )
-        finally:
-            otel_context.detach(context_token)
-    except Exception as exception:
-        tool_error: ToolError = {
-            "kind": "internal",
-            "message": str(exception) or "Tool boundary wrapper failed",
-            "guidance": "The tool boundary wrapper failed. Retry or report this error.",
-        }
-        return BoundaryFailureObservation(
-            kind="boundary_failure",
-            tool_error=tool_error,
-        )
+        return await tool_handler(arguments)
+    finally:
+        otel_context.detach(context_token)
 
 
 async def call_tool_for_claude_code_sdk(
@@ -261,7 +231,7 @@ async def call_tool_for_claude_code_sdk(
     parent_otel_context: OtelContext,
     rendering_policy: ToolResultRenderingPolicy | None = None,
 ) -> dict[str, object]:
-    tool_handler_result = await _get_safe_tool_handler_result(
+    tool_handler_result = await _get_tool_handler_result(
         tool_name=tool_name,
         arguments=arguments,
         tool_handler=tool_handler,
@@ -282,7 +252,7 @@ async def call_tool_for_low_level_mcp_server(
     parent_otel_context: OtelContext,
     rendering_policy: ToolResultRenderingPolicy | None = None,
 ) -> list[object]:
-    tool_handler_result = await _get_safe_tool_handler_result(
+    tool_handler_result = await _get_tool_handler_result(
         tool_name=tool_name,
         arguments=arguments,
         tool_handler=tool_handler,
