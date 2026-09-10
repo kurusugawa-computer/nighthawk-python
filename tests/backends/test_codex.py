@@ -343,7 +343,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             step_locals={},
             binding_commit_targets=set(),
             read_binding_names=frozenset(),
-            implicit_reference_name_to_value={},
+            task_name_to_value={},
         )
 
         from typing import cast
@@ -395,7 +395,7 @@ def test_codex_model_projects_multimodal_prompt_files_into_working_directory(tmp
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     model_settings = cast(
@@ -446,7 +446,7 @@ def test_codex_model_projects_multimodal_prompt_files_into_current_working_direc
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     model_settings = cast(

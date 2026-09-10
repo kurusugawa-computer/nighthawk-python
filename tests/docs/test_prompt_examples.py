@@ -69,7 +69,7 @@ def _build_prompt(
         step_locals=python_locals,
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
     return prompt_content_to_text(
         build_user_prompt(

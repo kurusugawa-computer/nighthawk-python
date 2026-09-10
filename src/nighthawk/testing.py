@@ -72,7 +72,7 @@ def _build_step_call(
     allowed_step_kinds: tuple[StepKind, ...],
 ) -> StepCall:
     referenced_global_names = (
-        step_context.read_binding_names | set(step_context.implicit_reference_name_to_value.keys())
+        step_context.read_binding_names | (set(step_context.environment.task_name_to_value) | step_context.type_alias_reference_names)
     ) - step_context.step_locals.keys()
     filtered_globals = {name: step_context.step_globals[name] for name in referenced_global_names if name in step_context.step_globals}
     return StepCall(

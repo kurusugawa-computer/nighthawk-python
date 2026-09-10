@@ -8,6 +8,7 @@ import pytest
 from pydantic_ai.tools import Tool
 
 import nighthawk as nh
+from nighthawk.runtime.scoping import _current_task_references
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -51,7 +52,7 @@ def test_extend_rejects_non_sequences(value: object) -> None:
     "field",
     [
         "tools",
-        "implicit_references",
+        "task_references",
         "capabilities",
         "system_prompt_suffix_fragments",
         "user_prompt_suffix_fragments",
@@ -66,7 +67,7 @@ def test_invalid_scope_arguments_leave_parent_intact(field: str) -> None:
         identity = nh.get_execution_reference()
         meter = nh.get_usage_meter()
         for value in (None, nh.Merge({}), nh.Extend([])):
-            if (field == "implicit_references" and isinstance(value, nh.Merge)) or (
+            if (field == "task_references" and isinstance(value, nh.Merge)) or (
                 field in {"tools", "capabilities", "system_prompt_suffix_fragments", "user_prompt_suffix_fragments"} and isinstance(value, nh.Extend)
             ):
                 continue
@@ -82,12 +83,12 @@ def test_mixed_composition_and_declaration_identity() -> None:
     hooks = nh.oversight.Oversight()
     with (
         nh.run(StubExecutor()),
-        nh.scope(tools=[lookup], implicit_references={"value": value}, oversight=hooks, system_prompt_suffix_fragments=["parent"]),
+        nh.scope(tools=[lookup], task_references={"value": value}, oversight=hooks, system_prompt_suffix_fragments=["parent"]),
     ):
         original_tool = nh.get_tools()[0]
         with nh.scope(
             tools=nh.Extend([lookup, original_tool, search]),
-            implicit_references=nh.Merge({"value": value}),
+            task_references=nh.Merge({"value": value}),
             system_prompt_suffix_fragments=nh.Extend(["child"]),
             user_prompt_suffix_fragments=[],
             oversight=None,
@@ -95,23 +96,23 @@ def test_mixed_composition_and_declaration_identity() -> None:
             assert nh.get_tools()[0] is original_tool
             assert [tool.name for tool in nh.get_tools()] == ["lookup", "search"]
             assert nh.get_system_prompt_suffix_fragments() == ("parent", "child")
-            assert nh.get_implicit_references()["value"] is value
+            assert _current_task_references()["value"] is value
             assert nh.get_oversight() is None
         assert nh.get_oversight() is hooks
         with pytest.raises(nh.ToolNameConflictError), nh.scope(tools=nh.Extend([Tool(lookup)])):
             pass
-        with pytest.raises(nh.NameConflictError), nh.scope(implicit_references=nh.Merge({"value": IdentityOnly()})):
+        with pytest.raises(nh.NameConflictError), nh.scope(task_references=nh.Merge({"value": IdentityOnly()})):
             pass
-        with nh.scope(tools=[], implicit_references={}, system_prompt_suffix_fragments=[]):
+        with nh.scope(tools=[], task_references={}, system_prompt_suffix_fragments=[]):
             assert nh.get_tools() == ()
-            assert nh.get_implicit_references() == {}
+            assert _current_task_references() == {}
             assert nh.get_system_prompt_suffix_fragments() == ()
         assert nh.get_tools()[0] is original_tool
 
 
 def test_explicit_tool_duplicates_and_namespace_independence() -> None:
     tool = Tool(lookup)
-    with nh.run(StubExecutor()), nh.scope(tools=[tool, tool], implicit_references={"lookup": object()}):
+    with nh.run(StubExecutor()), nh.scope(tools=[tool, tool], task_references={"lookup": object()}):
         assert nh.get_tools() == (tool,)
         with pytest.raises(nh.ToolDeclarationError), nh.scope(tools=nh.Extend([lookup])):
             pass
@@ -148,3 +149,32 @@ def test_required_getter_lifetimes_and_meter_none() -> None:
         with pytest.raises(nh.NighthawkError):
             nh.get_step_context()
         assert nh.get_oversight() is None
+
+
+def test_task_references_are_available_through_the_active_environment() -> None:
+    injected = object()
+    seen: list[object] = []
+    python_globals = dict(globals())
+
+    class Executor:
+        def run_step(self, *, request: nh.runtime.StepRequest) -> nh.runtime.StepCandidate:
+            environment = request.step_context.environment
+            assert environment.resolve("len") is len
+            assert environment.resolve("len", source="task") is injected
+            assert environment.task_name_to_value == {"len": injected}
+            seen.append(environment.task_name_to_value["len"])
+            with pytest.raises(TypeError):
+                environment.task_name_to_value["len"] = None  # type: ignore[index]
+            return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Inspect the visible environment.
+        """
+
+    with nh.run(Executor()), nh.scope(task_references={"len": injected}):
+        workflow()
+    assert seen == [injected]
+    assert globals().keys() == python_globals.keys()
+    assert all(globals()[name] is value for name, value in python_globals.items())

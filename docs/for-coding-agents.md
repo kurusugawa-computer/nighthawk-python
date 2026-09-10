@@ -142,15 +142,15 @@ with nh.run(fast_executor):
     label = classify_ticket(ticket_text)
     with nh.scope(
         step_executor=deep_executor,
-        implicit_references={"search_repository": search_repository},
+        task_references={"search_repository": search_repository},
     ):
         report = write_analysis_report(ticket_text, product_summary)
 ```
 
-- `implicit_references` inject helper functions as block capabilities.
+- `task_references` inject helper functions as block capabilities.
 - `nh.scope()` must run inside `nh.run()`; it keeps `run_id` and creates a new `scope_id`.
 - Omission or `nh.UNSET` inherits; ordinary values replace and `[]`/`{}` clear collections.
-- Use `nh.Extend([...])` to append suffix fragments and `nh.Merge({...})` to merge implicit references by identity.
+- Use `nh.Extend([...])` to append suffix fragments and `nh.Merge({...})` to merge task references by identity.
 - `oversight` and `lifecycle` accept `None` to clear their hooks; other scope fields reject it.
 - Executor replacement precedes full configuration replacement. Managed Model instances retain identity; external agents own their model selection.
 

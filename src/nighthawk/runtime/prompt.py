@@ -822,7 +822,7 @@ def build_user_prompt(
         render_context=render_context,
     )
 
-    augmented_global_references = set(references) | set(step_context.implicit_reference_name_to_value.keys())
+    augmented_global_references = set(references) | (set(step_context.environment.task_name_to_value) | step_context.type_alias_reference_names)
     globals_content = _render_globals_section(
         step_context=step_context,
         references=augmented_global_references,

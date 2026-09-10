@@ -72,7 +72,7 @@ def _new_step_context() -> StepContext:
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
 

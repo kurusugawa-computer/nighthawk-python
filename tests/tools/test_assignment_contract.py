@@ -17,7 +17,7 @@ def context_for(**name_to_value: object) -> nh.StepContext:
         step_locals=name_to_value,
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
 
@@ -184,7 +184,7 @@ def test_assignment_validation_failure_preserves_pending_value_and_right_side_ef
         step_locals={"value": 0, "effects": effects},
         binding_commit_targets={"value"},
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
         binding_name_to_type={"value": Annotated[int, Field(ge=0)]},
     )
     assign_tool(context, "value", "'7'")

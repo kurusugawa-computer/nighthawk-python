@@ -379,7 +379,7 @@ Declaration API:
 - Tool names must be ASCII and match `^[A-Za-z_][A-Za-z0-9_]*$`.
 - Ordinary sequences replace inherited tools; `tools=[]` leaves only built-ins. Omission or `UNSET` inherits; `None` is invalid. `Extend` appends.
 - A repeated identical plain callable or exact explicit `Tool` object is idempotent, preserving the first normalized tool and its order. That normalized object can itself be supplied again. Different wrappers, or a plain callable versus a distinct explicit wrapper, conflict even if their function is identical.
-- Names colliding with built-ins or distinct declarations raise `ToolNameConflictError`, which is both `ToolDeclarationError` and `NameConflictError`. Invalid entries or names raise `ToolDeclarationError`. Declaration checks never call user-defined equality. Tool and implicit-reference names are separate namespaces.
+- Names colliding with built-ins or distinct declarations raise `ToolNameConflictError`, which is both `ToolDeclarationError` and `NameConflictError`. Invalid entries or names raise `ToolDeclarationError`. Declaration checks never call user-defined equality. Tool names and task-reference names are separate namespaces.
 - Built-in tool names cannot be declared in any mode.
 - `nighthawk.get_tools()` returns the scoped tools (excluding built-in tools) for the current scope.
 
@@ -397,9 +397,11 @@ with nighthawk.run(step_executor), nighthawk.scope(tools=[get_step_execution_id]
 
 The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` injected automatically by the framework. It is not exposed to the LLM as a tool argument.
 
-Role split with implicit references:
+Role split with task references:
 
-- `implicit_references` injects Python names into `step_globals`; they render as signature lines and are invoked through `nh_eval`.
+- `task_references` supplies a distinct `StepEnvironment.task_name_to_value` mapping without modifying Python globals.
+  Effective lookup prefers step writes, then Python names, inherited working state, and task references.
+  Explicit source selection can retrieve a shadowed task value.
 - `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_operation`, and are served to coding-agent backends over MCP.
 - A given callable SHOULD be exposed through one of the two, not both.
 
@@ -659,7 +661,7 @@ API:
     - Every configurable parameter defaults to `UNSET`; omission and explicit `UNSET` inherit.
     - Ordinary values replace; empty sequences or mappings clear inherited collections.
     - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
-    - `Merge(mapping)` merges implicit references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
+    - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
     - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
     - Executor replacement precedes full configuration replacement. Configuration updates require an `AgentStepExecutor` and respect managed/external ownership.

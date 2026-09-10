@@ -34,7 +34,7 @@ def test_natural_text_does_not_capture_outer_values() -> None:
         with pytest.raises(nh.ExecutionError) as caught:
             workflow()
         assert isinstance(caught.value.__cause__, NameError)
-        with nh.scope(implicit_references={"value": 8}):
+        with nh.scope(task_references={"value": 8}):
             assert workflow() == 8
 
 
@@ -51,7 +51,7 @@ def test_explicit_cell_observes_rebinding_and_empty_cells() -> None:
         return 0
 
     value = 7
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"value": 8}):
+    with nh.run(StubExecutor()), nh.scope(task_references={"value": 8}):
         assert workflow() == 7
         del value
         with pytest.raises(nh.ExecutionError) as caught:
@@ -68,7 +68,7 @@ def test_local_classification_blocks_injected_fallback_without_explicit_read() -
         value = 99
         return value
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"value": 8}), pytest.raises(nh.ExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(task_references={"value": 8}), pytest.raises(nh.ExecutionError) as caught:
         workflow()
     assert caught.value.__cause__ is not None
     assert isinstance(caught.value.__cause__.__cause__, UnboundLocalError)

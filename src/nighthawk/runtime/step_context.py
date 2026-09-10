@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, dataclass, field, replace
 from types import CellType, MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -56,10 +56,11 @@ class StepContext:
 
     binding_commit_targets: set[str]
     read_binding_names: frozenset[str]
-    implicit_reference_name_to_value: dict[str, object]
+    task_name_to_value: InitVar[Mapping[str, object]]
 
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 
+    type_alias_reference_names: frozenset[str] = frozenset()
     processed_natural_program: str = ""
     binding_name_to_type: Mapping[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)
@@ -71,12 +72,12 @@ class StepContext:
     operation_failure: BaseException | None = field(default=None, init=False, repr=False)
     operation_failure_stage: FailureStage | None = field(default=None, init=False)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, task_name_to_value: Mapping[str, object]) -> None:
         self.binding_name_to_type = MappingProxyType(dict(self.binding_name_to_type))
         self.environment = StepEnvironment(
             python_name_to_value=self.step_locals,
             python_globals=self.step_globals,
-            task_name_to_value=self.implicit_reference_name_to_value,
+            task_name_to_value=task_name_to_value,
             output_name_set=frozenset(self.binding_commit_targets),
             binding_name_to_type=self.binding_name_to_type,
         )

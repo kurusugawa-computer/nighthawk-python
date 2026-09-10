@@ -22,7 +22,7 @@ with nh.run(step_executor):
     # Replace explicitly provided values. [] / {} clear collections.
     with nh.scope(
         system_prompt_suffix_fragments=["Always respond in formal English."],
-        implicit_references={},
+        task_references={},
     ):
         formal_summary(text)
 
@@ -30,8 +30,8 @@ with nh.run(step_executor):
     with nh.scope(step_executor=another_executor):
         specialized_step(data)
 
-    # Add implicit global references for this scope
-    with nh.scope(implicit_references={"search_repository": search_repository}):
+    # Inject task helpers for this scope
+    with nh.scope(task_references={"search_repository": search_repository}):
         typed_labeling_step(ticket_text)
 
     # Add operation and commit oversight for this scope
@@ -53,7 +53,7 @@ Parameters:
 - `lifecycle`: synchronous terminal delivery after caller assignments.
 - `system_prompt_suffix_fragments`: scope-level system suffix fragments.
 - `user_prompt_suffix_fragments`: scope-level user suffix fragments.
-- `implicit_references`: scope-level implicit global references.
+- `task_references`: values in the scoped task environment.
 - `tools`: scope-level native tools. See [Scoped tools](#scoped-tools).
 - `capabilities`: scope-level Pydantic AI capabilities. See [Pydantic AI capabilities in scopes](#pydantic-ai-capabilities-in-scopes).
 
@@ -62,7 +62,7 @@ Composition is selected by each supplied value:
 - Omission or `nh.UNSET` inherits the parent value.
 - Ordinary values replace; `[]` and `{}` clear their collections.
 - `nh.Extend(sequence)` appends prompt fragments, tools, or capabilities.
-- `nh.Merge(mapping)` merges implicit references, rejecting a same-name value unless it is the identical Python object.
+- `nh.Merge(mapping)` merges task references, rejecting a same-name value unless it is the identical Python object.
 
 `oversight` and `lifecycle` accept `None`, which clears their hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Resolution errors leave the parent context intact.
 
@@ -74,38 +74,41 @@ System prompt suffix fragments are rendered with the same `$tool_result_max_toke
 
 Text-projected backends that expose Nighthawk tools automatically add a short tool-result preview warning to the system prompt. You do not need to add a separate preview warning fragment for coding-agent or other text-projected tool transports.
 
-## Scoped implicit references
+## Scoped task references
 
-`implicit_references` can inject global helper functions as step capabilities:
+`task_references` supplies helpers and values through a separate task environment.
+It does not modify Python globals; ordinary Python names take precedence.
+Use `environment.resolve(name, source="task")` when deliberately selecting a shadowed injected value.
+For example:
 
 ```py
 def search_repository(query: str) -> list[str]: ...
 
 
 with nh.run(step_executor):
-    with nh.scope(implicit_references={"search_repository": search_repository}):
+    with nh.scope(task_references={"search_repository": search_repository}):
         triage_issue(ticket_text)
 ```
 
 Mappings replace inherited references. Use `nh.Merge({"child": search_repository})` to add references with identity-based conflict checks.
 
 ```py
-with nh.run(step_executor), nh.scope(implicit_references={"parent": search_repository}):
-    with nh.scope(implicit_references={}):
+with nh.run(step_executor), nh.scope(task_references={"parent": search_repository}):
+    with nh.scope(task_references={}):
         triage_issue(ticket_text)
 ```
 
-The inner scope above clears inherited implicit references.
+The inner scope above clears inherited task references.
 
 ```py
-with nh.scope(implicit_references={"child": search_repository}):
+with nh.scope(task_references={"child": search_repository}):
     triage_issue(ticket_text)
 ```
 
 This fully replaces inherited references with the provided mapping.
 
 ```py
-with nh.scope(implicit_references=nh.UNSET):
+with nh.scope(task_references=nh.UNSET):
     triage_issue(ticket_text)
 ```
 
@@ -134,7 +137,7 @@ Each element is either a plain callable or a Pydantic AI `Tool`. A plain callabl
 
 A plain sequence replaces tools; `tools=[]` clears scoped declarations. `nh.Extend([lookup])` appends tools. Repeating an identical callable or exact `Tool` object is idempotent and retains the first normalized tool and order. Different wrappers conflict, even when they wrap the same callable. `ToolNameConflictError` is both a `ToolDeclarationError` and a `NameConflictError`. Built-in names remain reserved.
 
-`implicit_references` and `tools` have distinct roles. `implicit_references` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_operation`, and is served to coding-agent backends over MCP. Prefer `implicit_references` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
+`task_references` and `tools` have distinct roles. `task_references` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_operation`, and is served to coding-agent backends over MCP. Prefer `task_references` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
 
 ## Pydantic AI capabilities in scopes
 
@@ -201,7 +204,6 @@ The same `replace` semantics apply to `user_prompt_suffix_fragments`.
 
 Within an active `nh.run()` context, snapshot getters expose the current scope's accumulated state:
 
-- `nh.get_implicit_references()` returns a `Mapping[str, object]` snapshot of implicit references.
 - `nh.get_system_prompt_suffix_fragments()` returns the system prompt suffix fragments as a `tuple[str, ...]`.
 - `nh.get_user_prompt_suffix_fragments()` returns the user prompt suffix fragments as a `tuple[str, ...]`.
 - `nh.get_tools()` returns the scoped native tools as a `tuple[Tool[StepContext], ...]`, excluding built-in tools.
@@ -211,14 +213,15 @@ Within an active `nh.run()` context, snapshot getters expose the current scope's
 
 The prompt suffix getters return only fragments accumulated via `nh.scope(...)`; configuration-level baseline fragments from `StepExecutorConfiguration` are not included.
 
-Use these when composing nested scopes from a host helper: read the parent state, derive a subset, then re-enter via `nh.scope(...)`. Both narrowing (keeping a subset) and masking (removing specific keys) are expressed by deriving a new mapping and passing it as an ordinary mapping.
+During a Natural step, task references are available through `nh.get_step_context().environment.task_name_to_value`.
+When configuring nested scopes outside a step, keep the original task mapping and pass the desired subset as an ordinary mapping.
 
 ```py
+task_references = {"a": helper_a, "b": helper_b}
 with nh.run(step_executor):
-    with nh.scope(implicit_references={"a": helper_a, "b": helper_b}):
-        current = nh.get_implicit_references()
-        narrowed = {name: value for name, value in current.items() if name != "b"}
-        with nh.scope(implicit_references=narrowed):
+    with nh.scope(task_references=task_references):
+        narrowed = {name: value for name, value in task_references.items() if name != "b"}
+        with nh.scope(task_references=narrowed):
             triage_issue(ticket_text)
 ```
 

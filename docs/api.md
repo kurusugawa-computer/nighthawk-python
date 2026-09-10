@@ -28,7 +28,6 @@
         - get_step_context
         - get_usage_meter
         - get_execution_reference
-        - get_implicit_references
         - get_oversight
         - get_lifecycle
         - get_step_executor

@@ -120,8 +120,8 @@ _user_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
     default=(),
 )
 
-_implicit_reference_name_to_value_var: ContextVar[dict[str, object]] = ContextVar(
-    "nighthawk_implicit_reference_name_to_value",
+_task_name_to_value_var: ContextVar[dict[str, object]] = ContextVar(
+    "nighthawk_task_name_to_value",
     default={},  # noqa: B039
 )
 
@@ -130,29 +130,27 @@ _capabilities_var: ContextVar[tuple[AbstractCapability[StepContext], ...]] = Con
     default=(),
 )
 
-type ImplicitReferenceNameToValue = Mapping[str, object]
 
-
-def _merge_implicit_reference_name_to_value_with_conflict_check(
-    current_implicit_reference_name_to_value: dict[str, object],
-    scope_implicit_reference_name_to_value: ImplicitReferenceNameToValue,
+def _merge_task_name_to_value_with_conflict_check(
+    current_task_name_to_value: dict[str, object],
+    scope_task_name_to_value: Mapping[str, object],
 ) -> dict[str, object]:
-    merged_implicit_reference_name_to_value = dict(current_implicit_reference_name_to_value)
-    for implicit_reference_name, scope_implicit_reference_value in scope_implicit_reference_name_to_value.items():
-        if implicit_reference_name in merged_implicit_reference_name_to_value:
-            current_implicit_reference_value = merged_implicit_reference_name_to_value[implicit_reference_name]
-            if current_implicit_reference_value is not scope_implicit_reference_value:
-                current_implicit_reference_type_name = type(current_implicit_reference_value).__name__
-                scope_implicit_reference_type_name = type(scope_implicit_reference_value).__name__
+    merged_task_name_to_value = dict(current_task_name_to_value)
+    for task_reference_name, scope_task_reference_value in scope_task_name_to_value.items():
+        if task_reference_name in merged_task_name_to_value:
+            current_task_reference_value = merged_task_name_to_value[task_reference_name]
+            if current_task_reference_value is not scope_task_reference_value:
+                current_task_reference_type_name = type(current_task_reference_value).__name__
+                scope_task_reference_type_name = type(scope_task_reference_value).__name__
                 raise NameConflictError(
-                    f"Conflict for implicit reference {implicit_reference_name!r}: "
-                    f"current scope has {current_implicit_reference_type_name}, "
-                    f"new scope has {scope_implicit_reference_type_name}"
+                    f"Conflict for task reference {task_reference_name!r}: "
+                    f"current scope has {current_task_reference_type_name}, "
+                    f"new scope has {scope_task_reference_type_name}"
                 )
 
-        merged_implicit_reference_name_to_value[implicit_reference_name] = scope_implicit_reference_value
+        merged_task_name_to_value[task_reference_name] = scope_task_reference_value
 
-    return merged_implicit_reference_name_to_value
+    return merged_task_name_to_value
 
 
 def _require_active_run(function_name: str) -> None:
@@ -232,8 +230,8 @@ def _current_user_prompt_suffix_fragments() -> tuple[str, ...]:
     return _user_prompt_suffix_fragments_var.get()
 
 
-def _current_implicit_references() -> Mapping[str, object]:
-    return dict(_implicit_reference_name_to_value_var.get())
+def _current_task_references() -> Mapping[str, object]:
+    return dict(_task_name_to_value_var.get())
 
 
 def _current_capabilities() -> tuple[AbstractCapability[StepContext], ...]:
@@ -264,19 +262,6 @@ def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
     """
     _require_active_run("get_user_prompt_suffix_fragments")
     return _current_user_prompt_suffix_fragments()
-
-
-def get_implicit_references() -> Mapping[str, object]:
-    """Return the implicit references active in the current scope.
-
-    The returned mapping is an independent snapshot; mutating it does not
-    affect the active scope.
-
-    Raises:
-        NighthawkError: If called outside a run context.
-    """
-    _require_active_run("get_implicit_references")
-    return _current_implicit_references()
 
 
 def get_tools() -> tuple[Tool[StepContext], ...]:
@@ -399,7 +384,7 @@ def run(
     oversight_token = _oversight_var.set(None)
     system_fragments_token = _system_prompt_suffix_fragments_var.set(())
     user_fragments_token = _user_prompt_suffix_fragments_var.set(())
-    implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set({})
+    task_name_to_value_token = _task_name_to_value_var.set({})
     tools_token = scoped_tools_var.set(())
     capabilities_token = _capabilities_var.set(())
     usage_meter_token = _usage_meter_var.set(run_usage_meter)
@@ -415,7 +400,7 @@ def run(
         _usage_meter_var.reset(usage_meter_token)
         _capabilities_var.reset(capabilities_token)
         scoped_tools_var.reset(tools_token)
-        _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
+        _task_name_to_value_var.reset(task_name_to_value_token)
         _user_prompt_suffix_fragments_var.reset(user_fragments_token)
         _system_prompt_suffix_fragments_var.reset(system_fragments_token)
         _lifecycle_var.reset(lifecycle_token)
@@ -444,14 +429,14 @@ def scope(
     lifecycle: StepLifecycle | None | UnsetType = UNSET,
     system_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
     user_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
-    implicit_references: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
+    task_references: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
     tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET,
     capabilities: Sequence[AbstractCapability[StepContext]] | Extend[AbstractCapability[StepContext]] | UnsetType = UNSET,
 ) -> Iterator[StepExecutor]:
     """Compose a nested execution scope and restore its parent on exit.
 
     Omission or UNSET inherits. Ordinary values replace; empty collections clear.
-    Extend appends ordered entries; Merge combines implicit references by identity.
+    Extend appends ordered entries; Merge combines task references by identity.
     Oversight and lifecycle accept None, which clears their hooks. Resolve all changes before
     installing context. Executor replacement precedes full configuration replacement.
     """
@@ -484,15 +469,13 @@ def scope(
     next_capabilities = _compose_sequence(_capabilities_var.get(), capabilities)
     if any(not isinstance(capability, AbstractCapability) for capability in next_capabilities):
         raise TypeError("Capabilities must be AbstractCapability instances")
-    next_implicit_reference_name_to_value = _implicit_reference_name_to_value_var.get()
-    if isinstance(implicit_references, Merge):
-        next_implicit_reference_name_to_value = _merge_implicit_reference_name_to_value_with_conflict_check(
-            next_implicit_reference_name_to_value, implicit_references.name_to_value
-        )
-    elif not isinstance(implicit_references, UnsetType):
-        if not isinstance(implicit_references, Mapping) or any(not isinstance(name, str) for name in implicit_references):
-            raise TypeError("implicit_references requires a string-keyed mapping, Merge, or UNSET")
-        next_implicit_reference_name_to_value = dict(implicit_references)
+    next_task_name_to_value = _task_name_to_value_var.get()
+    if isinstance(task_references, Merge):
+        next_task_name_to_value = _merge_task_name_to_value_with_conflict_check(next_task_name_to_value, task_references.name_to_value)
+    elif not isinstance(task_references, UnsetType):
+        if not isinstance(task_references, Mapping) or any(not isinstance(name, str) for name in task_references):
+            raise TypeError("task_references requires a string-keyed mapping, Merge, or UNSET")
+        next_task_name_to_value = dict(task_references)
     next_tools = scoped_tools_var.get()
     if isinstance(tools, Extend):
         next_tools = resolve_scoped_tools(next_tools, tools.values)
@@ -507,7 +490,7 @@ def scope(
     oversight_token = _oversight_var.set(next_oversight)
     system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
     user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
-    implicit_reference_name_to_value_token = _implicit_reference_name_to_value_var.set(next_implicit_reference_name_to_value)
+    task_name_to_value_token = _task_name_to_value_var.set(next_task_name_to_value)
     tools_token = scoped_tools_var.set(next_tools)
     capabilities_token = _capabilities_var.set(next_capabilities)
     try:
@@ -522,7 +505,7 @@ def scope(
     finally:
         _capabilities_var.reset(capabilities_token)
         scoped_tools_var.reset(tools_token)
-        _implicit_reference_name_to_value_var.reset(implicit_reference_name_to_value_token)
+        _task_name_to_value_var.reset(task_name_to_value_token)
         _user_prompt_suffix_fragments_var.reset(user_fragments_token)
         _system_prompt_suffix_fragments_var.reset(system_fragments_token)
         _lifecycle_var.reset(lifecycle_token)

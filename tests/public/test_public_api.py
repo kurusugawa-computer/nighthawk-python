@@ -13,6 +13,7 @@ import nighthawk as nh
 from nighthawk.errors import NighthawkError
 from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime import scoping as runtime_scoping
+from nighthawk.runtime.scoping import _current_task_references
 from nighthawk.runtime.step_executor import AgentStepExecutor
 from tests.execution.stub_executor import StubExecutor
 
@@ -128,66 +129,66 @@ def test_scope_requires_existing_step_executor():
         pass
 
 
-def test_scope_implicit_references_additive_across_nested_scopes() -> None:
+def test_scope_task_references_additive_across_nested_scopes() -> None:
     parent_function = object()
     child_function = object()
 
     with nh.run(StubExecutor()):
-        assert nh.get_implicit_references() == {}
+        assert _current_task_references() == {}
 
-        with nh.scope(implicit_references={"parent": parent_function}):
-            assert nh.get_implicit_references() == {"parent": parent_function}
+        with nh.scope(task_references={"parent": parent_function}):
+            assert _current_task_references() == {"parent": parent_function}
 
-            with nh.scope(implicit_references=nh.Merge({"child": child_function, "parent": parent_function})):
-                assert nh.get_implicit_references() == {"parent": parent_function, "child": child_function}
+            with nh.scope(task_references=nh.Merge({"child": child_function, "parent": parent_function})):
+                assert _current_task_references() == {"parent": parent_function, "child": child_function}
 
-            assert nh.get_implicit_references() == {"parent": parent_function}
+            assert _current_task_references() == {"parent": parent_function}
 
-        assert nh.get_implicit_references() == {}
+        assert _current_task_references() == {}
 
 
-def test_scope_implicit_references_rejects_conflicting_values_in_inherit_mode() -> None:
+def test_scope_task_references_rejects_conflicting_values_in_inherit_mode() -> None:
     with (
         nh.run(StubExecutor()),
-        nh.scope(implicit_references={"shared": object()}),
+        nh.scope(task_references={"shared": object()}),
         pytest.raises(
             NighthawkError,
-            match="Conflict for implicit reference",
+            match="Conflict for task reference",
         ),
-        nh.scope(implicit_references=nh.Merge({"shared": object()})),
+        nh.scope(task_references=nh.Merge({"shared": object()})),
     ):
         pass
 
 
-def test_scope_implicit_references_accepts_mapping() -> None:
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"one": object(), "two": object()}):
-        assert set(nh.get_implicit_references().keys()) == {"one", "two"}
+def test_scope_task_references_accepts_mapping() -> None:
+    with nh.run(StubExecutor()), nh.scope(task_references={"one": object(), "two": object()}):
+        assert set(_current_task_references().keys()) == {"one", "two"}
 
 
-def test_scope_replace_mode_unset_keeps_inherited_implicit_references() -> None:
+def test_scope_replace_mode_unset_keeps_inherited_task_references() -> None:
     parent_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(implicit_references=nh.UNSET):
-        assert nh.get_implicit_references() == {"parent": parent_function}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}), nh.scope(task_references=nh.UNSET):
+        assert _current_task_references() == {"parent": parent_function}
 
 
-def test_scope_replace_mode_explicit_empty_mapping_clears_implicit_references() -> None:
+def test_scope_replace_mode_explicit_empty_mapping_clears_task_references() -> None:
     parent_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}), nh.scope(implicit_references={}):
-        assert nh.get_implicit_references() == {}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}), nh.scope(task_references={}):
+        assert _current_task_references() == {}
 
 
-def test_scope_replace_mode_replaces_implicit_references_mapping() -> None:
+def test_scope_replace_mode_replaces_task_references_mapping() -> None:
     parent_function = object()
     replacement_function = object()
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(implicit_references={"parent": parent_function}),
-        nh.scope(implicit_references={"replacement": replacement_function}),
+        nh.scope(task_references={"parent": parent_function}),
+        nh.scope(task_references={"replacement": replacement_function}),
     ):
-        assert nh.get_implicit_references() == {"replacement": replacement_function}
+        assert _current_task_references() == {"replacement": replacement_function}
 
 
 def test_scope_replace_mode_unset_keeps_inherited_prompt_suffix_fragments() -> None:
@@ -210,15 +211,14 @@ def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
 
 
 def test_scope_ordinary_mapping_replaces() -> None:
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": object()}), nh.scope(implicit_references={"child": object()}):
-        assert set(nh.get_implicit_references().keys()) == {"child"}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": object()}), nh.scope(task_references={"child": object()}):
+        assert set(_current_task_references().keys()) == {"child"}
 
 
-def test_get_implicit_references_is_public() -> None:
-    assert hasattr(nh, "get_implicit_references")
-    assert "get_implicit_references" in nh.__all__
-    with nh.run(StubExecutor()):
-        assert nh.get_implicit_references() == {}
+def test_obsolete_task_injection_api_is_removed() -> None:
+    assert not hasattr(nh, "get_implicit_references")
+    with nh.run(StubExecutor()), pytest.raises(TypeError), nh.scope(implicit_references={}):  # type: ignore[call-arg]
+        pass
 
 
 def test_get_prompt_suffix_fragments_are_public() -> None:
@@ -233,34 +233,32 @@ def test_get_prompt_suffix_fragments_are_public() -> None:
 
 def test_ambient_getters_outside_run_raise() -> None:
     with pytest.raises(NighthawkError):
-        nh.get_implicit_references()
-    with pytest.raises(NighthawkError):
         nh.get_system_prompt_suffix_fragments()
     with pytest.raises(NighthawkError):
         nh.get_user_prompt_suffix_fragments()
 
 
-def test_get_implicit_references_reflects_nested_replace_scope() -> None:
+def test_task_references_reflect_nested_replace_scope() -> None:
     parent_function = object()
     replacement_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
-        assert nh.get_implicit_references() == {"parent": parent_function}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}):
+        assert _current_task_references() == {"parent": parent_function}
 
-        with nh.scope(implicit_references={"replacement": replacement_function}):
-            assert nh.get_implicit_references() == {"replacement": replacement_function}
+        with nh.scope(task_references={"replacement": replacement_function}):
+            assert _current_task_references() == {"replacement": replacement_function}
 
-        assert nh.get_implicit_references() == {"parent": parent_function}
+        assert _current_task_references() == {"parent": parent_function}
 
 
-def test_get_implicit_references_returns_snapshot_not_view() -> None:
+def test_task_references_return_snapshot_not_view() -> None:
     parent_function = object()
     child_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(implicit_references={"parent": parent_function}):
-        snapshot = nh.get_implicit_references()
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}):
+        snapshot = _current_task_references()
 
-        with nh.scope(implicit_references={"child": child_function}):
+        with nh.scope(task_references={"child": child_function}):
             assert dict(snapshot) == {"parent": parent_function}
 
         assert dict(snapshot) == {"parent": parent_function}
@@ -302,12 +300,12 @@ def test_scope_inherit_mode_appends_prompt_suffix_fragments() -> None:
         assert nh.get_system_prompt_suffix_fragments() == ("parent", "child")
 
 
-def test_scope_inherit_mode_rejects_invalid_implicit_reference_conflicts() -> None:
+def test_scope_inherit_mode_rejects_invalid_task_reference_conflicts() -> None:
     with (
         nh.run(StubExecutor()),
-        nh.scope(implicit_references={"shared": object()}),
-        pytest.raises(NighthawkError, match="Conflict for implicit reference"),
-        nh.scope(implicit_references=nh.Merge({"shared": object()})),
+        nh.scope(task_references={"shared": object()}),
+        pytest.raises(NighthawkError, match="Conflict for task reference"),
+        nh.scope(task_references=nh.Merge({"shared": object()})),
     ):
         pass
 

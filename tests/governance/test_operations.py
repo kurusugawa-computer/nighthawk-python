@@ -33,7 +33,7 @@ def new_context(**name_to_value: object) -> nh.StepContext:
         step_locals=name_to_value,
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
 

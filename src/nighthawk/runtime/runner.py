@@ -34,7 +34,7 @@ from .scoping import (
     SCOPE_ID,
     SOURCE_LOCATION,
     STEP_EXECUTION_ID,
-    _current_implicit_references,
+    _current_task_references,
     get_execution_reference,
     get_lifecycle,
     get_oversight,
@@ -92,7 +92,7 @@ def _infer_binding_types_from_initial_values(
             binding_name_to_type[name] = inferred_type
 
 
-def _discover_implicit_type_alias_reference_names(
+def _discover_type_alias_reference_names(
     *,
     step_locals: dict[str, object],
     step_globals: dict[str, object],
@@ -432,7 +432,7 @@ class Runner:
         self.allowed_step_kinds = allowed_step_kinds
 
         step_globals = _build_step_globals(python_globals)
-        scoped_implicit_reference_name_to_value = _current_implicit_references()
+        scoped_task_name_to_value = _current_task_references()
         step_locals = dict(python_locals)
         parent_stack = get_step_context_stack()
         parent_name_to_value = parent_stack[-1].environment.snapshot_working_state() if parent_stack else {}
@@ -462,7 +462,7 @@ class Runner:
             local_name_set=frozenset(local_name_set),
             python_name_to_cell=python_name_to_cell,
             parent_name_to_value=parent_name_to_value,
-            task_name_to_value=scoped_implicit_reference_name_to_value,
+            task_name_to_value=scoped_task_name_to_value,
             output_name_set=frozenset(output_binding_names),
             binding_name_to_type=binding_name_to_type,
         )
@@ -474,19 +474,10 @@ class Runner:
 
         binding_commit_targets = set(output_binding_names)
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets
-        implicit_type_alias_reference_names = _discover_implicit_type_alias_reference_names(
+        type_alias_reference_names = _discover_type_alias_reference_names(
             step_locals=step_locals,
             step_globals=step_globals,
             input_binding_names=input_binding_names,
-        )
-
-        implicit_reference_name_to_value: dict[str, object] = dict(scoped_implicit_reference_name_to_value)
-        implicit_reference_name_to_value.update(
-            {
-                implicit_reference_name: step_globals[implicit_reference_name]
-                for implicit_reference_name in implicit_type_alias_reference_names
-                if implicit_reference_name in step_globals
-            }
         )
 
         step_context = StepContext(
@@ -495,7 +486,8 @@ class Runner:
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,
             read_binding_names=read_binding_names,
-            implicit_reference_name_to_value=implicit_reference_name_to_value,
+            task_name_to_value=scoped_task_name_to_value,
+            type_alias_reference_names=type_alias_reference_names,
             processed_natural_program=processed_without_frontmatter,
             binding_name_to_type=binding_name_to_type,
             tool_result_rendering_policy=tool_result_rendering_policy,

@@ -18,7 +18,7 @@ def _new_step_context() -> StepContext:
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
 
@@ -64,7 +64,7 @@ def test_assign_rejects_rebind_of_read_binding() -> None:
         step_locals={"data": {"key": "old"}},
         binding_commit_targets=set(),
         read_binding_names=frozenset({"data"}),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     with pytest.raises(ToolBoundaryError):
@@ -80,7 +80,7 @@ def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
         step_locals={"data": {"key": "old"}},
         binding_commit_targets={"data"},
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     result = assign_tool(step_context, "data", "{'key': 'new'}")
@@ -97,7 +97,7 @@ def test_assign_allows_multiple_rebinds_of_new_local() -> None:
         step_locals={},
         binding_commit_targets=set(),
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     assign_tool(step_context, "temp", "1")
@@ -117,7 +117,7 @@ def test_assign_dotted_path_marks_write_binding_root_dirty() -> None:
         step_locals={"model": Model()},
         binding_commit_targets={"model"},
         read_binding_names=frozenset(),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     assign_tool(step_context, "model.value", "2")
@@ -136,7 +136,7 @@ def test_assign_dotted_path_read_binding_root_is_not_marked_dirty() -> None:
         step_locals={"model": Model()},
         binding_commit_targets=set(),
         read_binding_names=frozenset({"model"}),
-        implicit_reference_name_to_value={},
+        task_name_to_value={},
     )
 
     assign_tool(step_context, "model.value", "2")
