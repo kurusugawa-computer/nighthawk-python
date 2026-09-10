@@ -187,6 +187,7 @@ def test_return_await_failure_is_recorded_and_translated(tracing: bool, monkeypa
 
     @nh.natural_function
     async def workflow() -> int:
+        nonlocal calculate
         """natural
         <calculate>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}
@@ -225,6 +226,7 @@ def test_success_ledger_preserves_identity_and_validates_once() -> None:
 
     @nh.natural_function
     def workflow() -> Counted:  # type: ignore[valid-type]
+        nonlocal Counted
         value: Counted = original  # pyright: ignore[reportInvalidTypeForm]
         """natural
         <Counted> <:value>
@@ -322,6 +324,7 @@ def test_cancellation_is_stored_without_host_translation() -> None:
 
     @nh.natural_function
     async def workflow() -> int:
+        nonlocal cancelled
         """natural
         <cancelled>
         {"step_outcome": {"kind": "return", "return_expression": "cancelled()"}, "bindings": {}}
@@ -414,6 +417,7 @@ def test_nested_host_exception_still_records_each_execution() -> None:
 
     @nh.natural_function
     def outer() -> None:
+        nonlocal inner
         """natural
         <inner>
         {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}

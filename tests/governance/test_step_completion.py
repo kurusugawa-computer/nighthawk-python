@@ -88,6 +88,7 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
 
     @nh.natural_function
     def workflow() -> int:
+        nonlocal calculate
         """natural
         <calculate> <:value>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {"value": "7"}}
@@ -137,6 +138,7 @@ def test_return_expression_acceptance_evaluates_and_awaits_once() -> None:
 
     @nh.natural_function
     async def workflow() -> Counted:  # type: ignore[valid-type]
+        nonlocal Counted, expression
         """natural
         <expression> <Counted> <:value>
         {"step_outcome": {"kind": "return", "return_expression": "expression()"}, "bindings": {"value": 1}}
@@ -215,6 +217,7 @@ def test_cancellation_preserves_interruption_and_delivers_once(delivery_fails: b
 
     @nh.natural_function
     async def workflow() -> int:
+        nonlocal blocked
         """natural
         <blocked>
         {"step_outcome": {"kind": "return", "return_expression": "blocked()"}, "bindings": {}}
@@ -250,6 +253,7 @@ def test_raise_constructor_failure_is_not_domain_raise() -> None:
 
     @nh.natural_function
     def workflow() -> None:
+        nonlocal DomainError
         """natural
         <DomainError>
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "DomainError"}, "bindings": {}}
@@ -271,6 +275,7 @@ def test_domain_nighthawk_error_is_a_raised_record() -> None:
 
     @nh.natural_function
     def workflow() -> None:
+        nonlocal DomainError
         """natural
         <DomainError>
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "DomainError"}, "bindings": {}}
@@ -294,6 +299,7 @@ def test_nested_calls_and_scope_configuration_restore() -> None:
 
     @nh.natural_function
     def outer() -> None:
+        nonlocal inner
         """natural
         <inner>
         {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
@@ -381,6 +387,7 @@ def test_denied_return_never_calls_inspector_or_evaluator() -> None:
 
     @nh.natural_function
     def workflow() -> int:
+        nonlocal calls
         """natural
         ---
         deny: [return]
@@ -409,6 +416,7 @@ def test_pre_await_failure_preserves_original_exception(asynchronous: bool) -> N
 
     @nh.natural_function
     def synchronous() -> int:
+        nonlocal calculate
         """natural
         <calculate>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}
@@ -417,6 +425,7 @@ def test_pre_await_failure_preserves_original_exception(asynchronous: bool) -> N
 
     @nh.natural_function
     async def asynchronous_function() -> int:
+        nonlocal calculate
         """natural
         <calculate>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}

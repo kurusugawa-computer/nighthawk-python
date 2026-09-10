@@ -107,6 +107,7 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
 
         @nh.natural_function
         def f() -> None:
+            nonlocal a
             x = 10
             """natural
             Say hi.

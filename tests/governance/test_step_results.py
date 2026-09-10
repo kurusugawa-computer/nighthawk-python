@@ -64,6 +64,7 @@ def test_return_expression_runs_once_and_keeps_resolved_value(asynchronous: bool
 
     @nh.natural_function
     def synchronous() -> int:
+        nonlocal calculate
         """natural
         <calculate> <:result>
         {"step_outcome": {"kind": "return", "return_expression": "calculate() + result"}, "bindings": {"result": 1}}
@@ -72,6 +73,7 @@ def test_return_expression_runs_once_and_keeps_resolved_value(asynchronous: bool
 
     @nh.natural_function
     async def asynchronous_function() -> int:
+        nonlocal calculate_async
         """natural
         <calculate_async> <:result>
         {"step_outcome": {"kind": "return", "return_expression": "(await calculate_async()) + result"}, "bindings": {"result": 1}}
@@ -94,6 +96,7 @@ def test_accept_does_not_repeat_validators_and_replacement_does() -> None:
 
     @nh.natural_function
     def workflow() -> Counted:  # type: ignore[valid-type]
+        nonlocal Counted
         """natural
         <Counted>
         {"step_outcome": {"kind": "return", "return_expression": "4"}, "bindings": {}}
@@ -186,6 +189,7 @@ def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: n
 
     @nh.natural_function
     def workflow() -> int:
+        nonlocal invalid_exception
         """natural
         <invalid_exception>
         Raise an error.
@@ -215,6 +219,7 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
 
     @nh.natural_function
     def workflow() -> int:
+        nonlocal OriginalError
         """natural
         <OriginalError>
         Raise an error.

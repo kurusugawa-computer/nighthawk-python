@@ -28,6 +28,9 @@ class NaturalTransformer(ast.NodeTransformer):
         self._loop_depth = 0
 
     def _visit_function_like(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.AST:
+        if self._is_async_function_stack:
+            # A nested definition owns its source and decorators independently.
+            return node
         self._return_annotation_stack.append(node.returns)
         self._binding_name_to_type_expression_stack.append(self._collect_binding_name_to_type_expression(node))
         self._is_async_function_stack.append(isinstance(node, ast.AsyncFunctionDef))
@@ -71,82 +74,60 @@ class NaturalTransformer(ast.NodeTransformer):
 
             node = self.generic_visit(node)  # type: ignore[assignment]
 
-            if self._captured_name_tuple:
-                anchor_name = "__nh_cell_anchor__"
-                name_to_cell_name = "__nh_name_to_cell__"
+            anchor_name = "__nh_cell_anchor__"
+            name_to_cell_name = "__nh_name_to_cell__"
 
-                anchor_body: list[ast.stmt] = [
-                    ast.Return(
-                        value=ast.Tuple(
-                            elts=[ast.Name(id=name, ctx=ast.Load()) for name in self._captured_name_tuple],
-                            ctx=ast.Load(),
-                        )
+            anchor_body: list[ast.stmt] = [
+                ast.Return(
+                    value=ast.Tuple(
+                        elts=[ast.Name(id=name, ctx=ast.Load()) for name in self._captured_name_tuple],
+                        ctx=ast.Load(),
                     )
-                ]
-
-                anchor_function = ast.FunctionDef(
-                    name=anchor_name,
-                    args=ast.arguments(
-                        posonlyargs=[],
-                        args=[],
-                        kwonlyargs=[],
-                        kw_defaults=[],
-                        defaults=[],
-                    ),
-                    body=anchor_body,
-                    decorator_list=[],
-                    returns=None,
-                    type_comment=None,
                 )
+            ]
 
-                freevars_expression = ast.Attribute(
-                    value=ast.Attribute(value=ast.Name(id=anchor_name, ctx=ast.Load()), attr="__code__", ctx=ast.Load()),
-                    attr="co_freevars",
-                    ctx=ast.Load(),
-                )
+            anchor_function = ast.FunctionDef(
+                name=anchor_name,
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    defaults=[],
+                ),
+                body=anchor_body,
+                decorator_list=[],
+                returns=None,
+                type_comment=None,
+            )
 
-                closure_expression = ast.BoolOp(
-                    op=ast.Or(),
-                    values=[
-                        ast.Attribute(value=ast.Name(id=anchor_name, ctx=ast.Load()), attr="__closure__", ctx=ast.Load()),
-                        ast.Tuple(elts=[], ctx=ast.Load()),
-                    ],
-                )
+            name_to_cell_value = ast.Call(
+                func=ast.Name(id="__nh_function_name_to_cell__", ctx=ast.Load()),
+                args=[ast.Name(id=anchor_name, ctx=ast.Load())],
+                keywords=[],
+            )
 
-                name_to_cell_value = ast.Call(
-                    func=ast.Name(id="dict", ctx=ast.Load()),
-                    args=[
-                        ast.Call(
-                            func=ast.Name(id="zip", ctx=ast.Load()),
-                            args=[freevars_expression, closure_expression],
+            name_to_cell_assign = ast.Assign(
+                targets=[ast.Name(id=name_to_cell_name, ctx=ast.Store())],
+                value=name_to_cell_value,
+            )
+
+            with_statement = ast.With(
+                items=[
+                    ast.withitem(
+                        context_expr=ast.Call(
+                            func=ast.Name(id="__nh_python_cell_scope__", ctx=ast.Load()),
+                            args=[ast.Name(id=name_to_cell_name, ctx=ast.Load())],
                             keywords=[],
-                        )
-                    ],
-                    keywords=[],
-                )
+                        ),
+                        optional_vars=None,
+                    )
+                ],
+                body=node.body,
+                type_comment=None,
+            )
 
-                name_to_cell_assign = ast.Assign(
-                    targets=[ast.Name(id=name_to_cell_name, ctx=ast.Store())],
-                    value=name_to_cell_value,
-                )
-
-                with_statement = ast.With(
-                    items=[
-                        ast.withitem(
-                            context_expr=ast.Call(
-                                func=ast.Name(id="__nh_python_cell_scope__", ctx=ast.Load()),
-                                args=[ast.Name(id=name_to_cell_name, ctx=ast.Load())],
-                                keywords=[],
-                            ),
-                            optional_vars=None,
-                        )
-                    ],
-                    body=node.body,
-                    type_comment=None,
-                )
-
-                node.body = [anchor_function, name_to_cell_assign, with_statement]
-
+            node.body = [anchor_function, name_to_cell_assign, with_statement]
             return node
         finally:
             self._is_async_function_stack.pop()
@@ -159,6 +140,9 @@ class NaturalTransformer(ast.NodeTransformer):
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:  # noqa: N802
         return self._visit_function_like(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:  # noqa: N802
+        return node
 
     def visit_For(self, node: ast.For) -> ast.AST:
         self._loop_depth += 1

@@ -121,6 +121,7 @@ def test_nested_natural_counter_proof() -> None:
 
     @nh.natural_function
     async def block_one() -> list[str]:
+        nonlocal block_two
         messages: list[str] = []
         """natural
         Call <block_two> ten times, materializing i before each call, and collect <:messages>.

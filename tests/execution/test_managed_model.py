@@ -91,6 +91,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
 
     @nh.natural_function
     def workflow() -> int:
+        nonlocal invoked
         result: int = 0  # noqa: F841
         for _ in range(1):
             """natural
@@ -108,6 +109,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
 
     @nh.natural_function
     async def workflow_async() -> int:
+        nonlocal invoked
         result: int = 0  # noqa: F841
         for _ in range(1):
             """natural

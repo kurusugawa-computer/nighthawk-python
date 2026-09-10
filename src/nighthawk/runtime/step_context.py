@@ -96,7 +96,6 @@ _step_context_stack_var: ContextVar[tuple[StepContext, ...]] = ContextVar(
 
 @dataclass(frozen=True)
 class _PythonLookupState:
-    python_name_scope_stack: tuple[dict[str, object], ...] = ()
     python_cell_scope_stack: tuple[dict[str, CellType], ...] = ()
 
 
@@ -117,20 +116,6 @@ def step_context_scope(step_context: StepContext) -> Iterator[None]:
 
 
 @contextmanager
-def python_name_scope(name_to_value: dict[str, object]) -> Iterator[None]:
-    current_lookup_state = _python_lookup_state_var.get()
-    next_lookup_state = replace(
-        current_lookup_state,
-        python_name_scope_stack=(*current_lookup_state.python_name_scope_stack, dict(name_to_value)),
-    )
-    token = _python_lookup_state_var.set(next_lookup_state)
-    try:
-        yield
-    finally:
-        _python_lookup_state_var.reset(token)
-
-
-@contextmanager
 def python_cell_scope(name_to_cell: dict[str, CellType]) -> Iterator[None]:
     current_lookup_state = _python_lookup_state_var.get()
     next_lookup_state = replace(
@@ -146,10 +131,6 @@ def python_cell_scope(name_to_cell: dict[str, CellType]) -> Iterator[None]:
 
 def get_step_context_stack() -> tuple[StepContext, ...]:
     return _step_context_stack_var.get()
-
-
-def get_python_name_scope_stack() -> tuple[dict[str, object], ...]:
-    return _python_lookup_state_var.get().python_name_scope_stack
 
 
 def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:

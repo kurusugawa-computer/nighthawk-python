@@ -80,6 +80,7 @@ def test_name_only_policy_does_not_skip_return_validation() -> None:
 
     @nh.natural_function
     def workflow() -> Counted:  # pyright: ignore[reportInvalidTypeForm]
+        nonlocal Counted
         value: Counted = 0  # pyright: ignore[reportInvalidTypeForm]
         """natural
         <Counted> <:value>

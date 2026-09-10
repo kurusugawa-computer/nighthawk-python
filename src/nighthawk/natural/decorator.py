@@ -8,14 +8,15 @@ import textwrap
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
 from functools import wraps
-from types import FunctionType
+from types import CellType, FunctionType
 from typing import Any, cast
 
+from ..errors import NighthawkError
 from ..runtime.annotations import MISSING_ANNOTATION, SourceAnnotation
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
-from ..runtime.step_context import python_cell_scope, python_name_scope
-from .blocks import extract_program, find_natural_blocks
+from ..runtime.step_context import python_cell_scope
+from .blocks import extract_program
 from .transform import transform_module_ast
 
 type NaturalFunctionCallable = Callable[..., Any]
@@ -29,61 +30,8 @@ class _RunnerProxy:
         return runner.execution(caller_frame=caller_frame)
 
 
-def _extract_inline_fstring_name_set(function_source: str, *, function_name: str) -> set[str]:
-    """Extract names referenced in f-string expressions of inline Natural blocks."""
-    try:
-        module = ast.parse(function_source)
-    except SyntaxError:
-        return set()
-
-    function_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
-    for node in module.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
-            function_def = node
-            break
-    if function_def is None:
-        return set()
-
-    names: set[str] = set()
-
-    class Visitor(ast.NodeVisitor):
-        def visit_Name(self, node: ast.Name) -> None:  # noqa: N802
-            names.add(node.id)
-
-    visitor = Visitor()
-
-    for statement in function_def.body:
-        if not isinstance(statement, ast.Expr):
-            continue
-        value = statement.value
-        if not isinstance(value, ast.JoinedStr):
-            continue
-
-        first_part: ast.expr | None = value.values[0] if value.values else None
-        if not isinstance(first_part, ast.Constant) or not isinstance(first_part.value, str):
-            continue
-        if not first_part.value.startswith("natural\n"):
-            continue
-
-        for part in value.values:
-            if isinstance(part, ast.FormattedValue):
-                visitor.visit(part.value)
-
-    return names
-
-
-def _build_capture_name_set(source: str, function_name: str) -> set[str]:
-    """Build the set of names that need to be captured from the enclosing scope."""
-    capture_name_set: set[str] = set()
-    try:
-        for block in find_natural_blocks(source):
-            capture_name_set.update(block.input_bindings)
-            capture_name_set.update(block.output_bindings)
-        capture_name_set.update(_extract_inline_fstring_name_set(source, function_name=function_name))
-    except Exception as exception:
-        logging.getLogger("nighthawk").warning("Failed to extract capture names for %s: %s", function_name, exception)
-        capture_name_set = set()
-    return capture_name_set
+def _function_name_to_cell(function: FunctionType) -> dict[str, CellType]:
+    return dict(zip(function.__code__.co_freevars, function.__closure__ or (), strict=True))
 
 
 def _build_transformed_factory_module(
@@ -101,6 +49,11 @@ def _build_transformed_factory_module(
 
     if transformed_function_def is None:
         raise RuntimeError("Transformed function not found in transformed module")
+
+    # Defaults already ran when Python created the original function.
+    # Compile placeholders and restore their original live values on the new body.
+    transformed_function_def.args.defaults = [ast.Constant(None) for _ in transformed_function_def.args.defaults]
+    transformed_function_def.args.kw_defaults = [None if default is None else ast.Constant(None) for default in transformed_function_def.args.kw_defaults]
 
     captured_value_name = "__nh_captured_values__"
     factory_name = "__nh_factory__"
@@ -172,7 +125,12 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         decorated_class_function = natural_function(func.__func__)
         return cast(NaturalFunctionCallable, classmethod(decorated_class_function))
 
-    lines, starting_line_number = inspect.getsourcelines(func)
+    if sys.implementation.name != "cpython" or sys.version_info < (3, 13):
+        raise NighthawkError("Natural source instrumentation requires CPython 3.13 or later")
+    try:
+        lines, starting_line_number = inspect.getsourcelines(func)
+    except (OSError, TypeError) as exception:
+        raise NighthawkError("Natural functions require available Python def or async def source") from exception
     source = textwrap.dedent("".join(lines))
 
     try:
@@ -186,18 +144,9 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         logging.getLogger("nighthawk").warning("Failed to parse original module AST for %s: %s", func.__name__, exception)
         original_module = ast.Module(body=[], type_ignores=[])
 
-    capture_name_set = _build_capture_name_set(source, func.__name__)
-    capture_name_set.update(func.__code__.co_freevars)
+    capture_name_set = set(func.__code__.co_freevars) | set(func.__code__.co_cellvars)
 
-    definition_frame = inspect.currentframe()
     name_to_value: dict[str, object] = {}
-    if definition_frame is not None and definition_frame.f_back is not None:
-        caller_frame = definition_frame.f_back
-        if caller_frame.f_code.co_name != "<module>":
-            for name in capture_name_set:
-                if name in caller_frame.f_locals:
-                    name_to_value[name] = caller_frame.f_locals[name]
-
     original_name_to_cell = dict(zip(func.__code__.co_freevars, func.__closure__ or (), strict=True))
     for name, cell in original_name_to_cell.items():
         try:
@@ -221,6 +170,7 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         "__nh_python_cell_scope__": python_cell_scope,
         "__nh_source_annotation__": SourceAnnotation,
         "__nh_missing_annotation__": MISSING_ANNOTATION,
+        "__nh_function_name_to_cell__": _function_name_to_cell,
     }
     factory_name_to_value: dict[str, object] = {**name_to_value, **helper_name_to_value}
 
@@ -248,7 +198,7 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
             transformed.__code__,
             transformed.__globals__,
             transformed.__name__,
-            transformed.__defaults__,
+            func.__defaults__,
             tuple(
                 original_name_to_cell.get(name, cell)
                 for name, cell in zip(
@@ -279,9 +229,6 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            if name_to_value:
-                with python_name_scope(name_to_value):
-                    return await transformed_async(*args, **kwargs)
             return await transformed_async(*args, **kwargs)
 
         async_wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
@@ -289,9 +236,6 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        if name_to_value:
-            with python_name_scope(name_to_value):
-                return transformed(*args, **kwargs)
         return transformed(*args, **kwargs)
 
     wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
