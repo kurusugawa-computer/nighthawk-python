@@ -5,6 +5,7 @@ from typing import Any, Protocol, cast, runtime_checkable
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.messages import UserContent
+from pydantic_ai.tool_manager import ToolManager
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import StepExecutorConfiguration
@@ -320,6 +321,7 @@ class AgentStepExecutor:
         with (
             system_prompt_suffix_fragment_scope(step_system_prompt_fragment),
             step_context_scope(step_context),
+            ToolManager.parallel_execution_mode("sequential"),
         ):
             result = await self._run_agent(
                 user_prompt=user_prompt,
