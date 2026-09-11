@@ -4,18 +4,16 @@ This evaluation prototype makes the ratified tool-design proposals executable
 without changing the production Natural runtime. It uses Pydantic AI directly;
 it does not depend on the legacy promptfoo provider's private runtime patches.
 
-The implemented surfaces below are the 2026-09-09 experiment contracts. The
-2026-09-10 decisions approve a new comparison of dedicated discovery against
-`inspect(value)` and environment APIs through `nh_eval`. That comparison is not
-implemented or evaluated here yet. The controlled comparison is specified below;
-the [Ideal State](../../docs/ideal-state.md#13-model-facing-interface-and-evaluation)
-owns the target semantics and remaining interface choices.
+The original/refined/merged surfaces below retain the 2026-09-09 experiment contracts.
+The production-backed dedicated-tool versus helper comparison is implemented separately in `inspection_study.py`, with deterministic validation and no external model results yet.
+Its [protocol and prepared request contents](evidence/20260911-inspection-study-protocol.md) describe the controls, limits, and pending API execution.
+The [Ideal State](../../docs/ideal-state.md#13-model-facing-interface-and-evaluation) owns target semantics and remaining interface choices.
 In particular, the existing `merged` surface merges evaluation and assignment;
 it provides no evidence about removing the dedicated inspection tool.
 
 ## Approved inspection-helper comparison
 
-This is an approved experiment plan, not a completed result.
+This is an approved experiment plan with a locally validated implementation; external model results remain pending.
 
 P-REVIEW-005 approves showing known collisions and qualified references upfront.
 Evaluate its isolated effect while holding the existing tool surface fixed.
