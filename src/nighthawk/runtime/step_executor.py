@@ -7,12 +7,12 @@ from pydantic_ai import Agent, RunContext, StructuredDict
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.messages import UserContent
 from pydantic_ai.models import ModelRequestContext
-from pydantic_ai.tool_manager import ToolManager
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import StepExecutorConfiguration
 from ..errors import ExecutionError, NighthawkError
 from ..tools._admission import ToolAdmissionCapability
+from ..tools._ordering import sequential_model_tools
 from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
 from .async_bridge import run_coroutine_synchronously
@@ -336,7 +336,7 @@ class AgentStepExecutor:
         with (
             system_prompt_suffix_fragment_scope(step_system_prompt_fragment),
             step_context_scope(step_context),
-            ToolManager.parallel_execution_mode("sequential"),
+            sequential_model_tools(),
         ):
             try:
                 result = await self._run_agent(

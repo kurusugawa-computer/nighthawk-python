@@ -738,6 +738,7 @@ def _build_user_prompt_content(
         f"Runtime inspection: {runtime_reference}.inspect(value).",
         f"Name discovery: {runtime_reference}.environment.discover(); named contracts: {runtime_reference}.environment.describe('name').",
         "Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.",
+        "Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.",
     ]
     relevant_names = (
         set(references)

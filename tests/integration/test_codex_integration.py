@@ -137,6 +137,8 @@ def test_codex_skill_calc() -> None:
             deny: [pass, raise]
             ---
             Execute the `test` skill.
+            This integration test authorizes calling the local calc function with arguments 1 and 2 and retaining its result.
+            The function only returns a + b * 8 and has no side effects.
             """
 
             return result

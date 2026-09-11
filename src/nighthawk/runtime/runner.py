@@ -23,7 +23,7 @@ from ..oversight import (
     StepCommit,
     record_oversight_decision,
 )
-from .annotations import MISSING_ANNOTATION, SourceAnnotation, resolve_annotation
+from .annotations import MISSING_ANNOTATION, SourceAnnotation, module_annotations, resolve_annotation
 from .async_bridge import run_coroutine_synchronously
 from .description import annotation_arguments, describe_callable, exact_type
 from .environment import StepEnvironment, UnboundEnvironmentNameError
@@ -435,8 +435,10 @@ class Runner:
 
         local_name_set = set(caller_frame.f_code.co_varnames) | set(caller_frame.f_code.co_cellvars)
         cell_name_set = set(caller_frame.f_code.co_freevars)
-        module_name_to_annotation = python_globals.get("__annotations__", {})
-        binding_name_to_annotation = dict(module_name_to_annotation) if isinstance(module_name_to_annotation, dict) else {}
+        module_name_to_annotation = module_annotations(
+            python_globals, resolve_deferred=any(name not in local_name_set | cell_name_set for name in output_binding_names)
+        )
+        binding_name_to_annotation = dict(module_name_to_annotation)
         binding_name_to_annotation.update(
             {name: annotation for name, annotation in binding_name_to_type.items() if annotation is not MISSING_ANNOTATION}
         )
@@ -444,7 +446,7 @@ class Runner:
         for name in output_binding_names:
             annotation = binding_name_to_type.get(name, MISSING_ANNOTATION)
             if name not in local_name_set | cell_name_set:
-                if isinstance(module_name_to_annotation, dict) and name in module_name_to_annotation:
+                if name in module_name_to_annotation:
                     annotation = module_name_to_annotation[name]
                     if isinstance(annotation, str):
                         annotation = SourceAnnotation((annotation,))

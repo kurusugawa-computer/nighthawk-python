@@ -204,6 +204,8 @@ Type note:
 - An explicit annotation, including `object`, takes precedence over the initial value's type.
 - A variadic parameter's annotation constrains its elements: `*values: int` selects `tuple[int, ...]` and `**values: int` selects `dict[str, int]` for the local output binding. `Unpack` and starred tuple annotations already specify the collection contract.
 - Presentation-only annotation metadata is not evaluated to enrich a prompt or discovery response.
+- On Python 3.14, deferred callable annotations use bounded source-file acquisition when available; their spelling is shown without invoking `__annotate__`. Missing source and potentially modified deferred metadata are explicit limitations. Explicitly stored annotation dictionaries remain usable.
+- A global output can require the module's deferred annotation evaluator during preparation. Failure is a preparation error; it does not silently weaken the selected contract. This evaluator is not called merely to render unrelated module annotations.
 
 Runtime type inference:
 
@@ -824,6 +826,10 @@ The request includes the execution reference, operation Id, kind, and applicable
 Admission runs before inspection; inspection runs before any operation body or await of its result.
 Requests execute serially within each step: in emission order for an ordered model batch, and in admission order otherwise.
 Pydantic AI capability hooks cannot reorder an ordered batch across this boundary.
+Argument validation is included in that ordering: a rejected or terminally failed call stops subsequent validators as well as tool bodies.
+Pydantic AI 2.37 prevalidates batches before execution barriers, so Nighthawk installs context-scoped dispatch compatibility hooks and constrains the supported dependency to the 2.37 minor series.
+The hooks preserve Pydantic AI's validators, retries, deferrals, and completion strategies; ordinary Pydantic AI runs outside the Nighthawk dispatch context delegate unchanged.
+Under `exhaustive`, upfront Pydantic AI function-call events have `args_valid=None` until the corresponding ordered validation runs; Nighthawk operation records retain the actual admission result.
 Explicit Python concurrency inside a helper and separate child steps retain their own execution semantics.
 
 Operation rejection and inspection failures are terminal for that step.
@@ -874,6 +880,8 @@ On StepCompleted delivery failure, completed assignments remain visible and the 
 
 `StepInterrupted` holds the active `failure_stage` and original cancellation or process-control `BaseException`.
 An asynchronous notification receives a shielded delivery attempt bounded by `StepLifecycle.interruption_delivery_timeout`; a timed-out notification is cancelled.
+The synchronous bridge shares that deadline with its private event-loop shutdown, including operation notifications, so shutdown does not wait again for a cancellation-resistant handler.
+Pending cleanup may remain incomplete when that private loop closes; an asynchronous caller owns the later shutdown of its own event loop.
 If delivery also fails, the original interruption still propagates, explicitly chained from the delivery exception.
 Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translated into ordinary host execution failures.
 

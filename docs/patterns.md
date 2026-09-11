@@ -276,6 +276,7 @@ When `step_2(carry)` executes, the LLM sees the carry's current contents in LOCA
 Runtime inspection: __nighthawk_runtime_0.inspect(value).
 Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
 Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
 
 <<<NH:PROGRAM>>>
 Read <carry> for prior context.
@@ -534,7 +535,7 @@ For TTL-based caching, use [cachetools](https://cachetools.readthedocs.io/). Pla
 <!-- common-mistakes-table -->
 | Mistake | Why it breaks | Fix |
 |---|---|---|
-| Pass a callable as a parameter with generic type (`object`, `Any`) | Signature erased in LOCALS; LLM cannot discover arguments | Reference via `<name>` read binding so it appears in GLOBALS with full signature ([Keep locals minimal](natural-blocks.md#keep-locals-minimal)) |
+| Assume every callable has complete discoverable metadata | Dynamic signatures or unavailable deferred annotations may be omitted | Keep essential dependencies explicit and provide a short callable docstring or ordinary helper; generic parameter annotations do not erase callable metadata ([Keep locals minimal](natural-blocks.md#keep-locals-minimal)) |
 | Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place ([The carry pattern](#the-carry-pattern)) |
 | Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
 | Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python ([Responsibility split](natural-blocks.md#responsibility-split)) |

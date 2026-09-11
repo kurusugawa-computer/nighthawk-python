@@ -65,7 +65,7 @@ def test_annotation_metadata_and_callable_defaults_do_not_invoke_repr() -> None:
     def action(value: object = Metadata()) -> object:
         return value
 
-    action.__annotations__["value"] = Annotated[int, Metadata()]
+    action.__annotations__ = {"value": Annotated[int, Metadata()], "return": object}
     signature = describe_callable(action).signature_text
     assert signature is not None
     assert "Annotated[int, <opaque Metadata>]" in signature

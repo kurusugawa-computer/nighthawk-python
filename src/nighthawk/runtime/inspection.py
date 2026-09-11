@@ -27,7 +27,9 @@ def inspect_value(value: object, *, cursor: str | None = None, max_items: int = 
         description["async"] = callable_description.asynchronous
         if callable_description.signature is None:
             description["metadata_omission"] = "Callable signature is unavailable without executing application metadata."
-        if any(type(annotation) is str for annotation in callable_description.annotations):
+        if callable_description.annotation_note is not None:
+            description["annotation_note"] = callable_description.annotation_note
+        elif any(type(annotation) is str for annotation in callable_description.annotations):
             description["annotation_note"] = "String annotations retain their spelling and were not evaluated."
     described_members: list[dict[str, object]] = []
     for name in page.names:

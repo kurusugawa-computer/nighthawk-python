@@ -233,7 +233,10 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
             ),
         )
         transformed.__kwdefaults__ = func.__kwdefaults__
-        transformed.__annotations__ = func.__annotations__
+        if sys.version_info >= (3, 14) and func.__annotate__ is not None:
+            transformed.__annotate__ = func.__annotate__
+        else:
+            transformed.__annotations__ = func.__annotations__
 
     transformed_freevar_name_set = set(transformed.__code__.co_freevars)
     runner_proxy.runtime_name_set = runtime_names.allocated_names & (

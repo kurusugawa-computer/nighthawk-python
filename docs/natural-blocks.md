@@ -47,6 +47,7 @@ And call `classify_priority("Server is on fire!")`, Nighthawk assembles this use
 Runtime inspection: __nighthawk_runtime_0.inspect(value).
 Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
 Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
 
 <<<NH:PROGRAM>>>
 Read <text> and update <:priority> with one of: low, normal, high.
@@ -164,11 +165,11 @@ def judge_review(review_data: str) -> ReviewVerdict:
 
 When the LLM assigns a value to `verdict`, Nighthawk validates and coerces it to a `ReviewVerdict` instance. If the value does not conform to the model schema, a `ToolValidationError` is raised.
 
-**How write bindings appear in the prompt.** A pre-declared write binding with an initial value appears in LOCALS like any other local (e.g., `sentiment: str = "neutral"`). An annotation-only or undeclared write binding does not appear in LOCALS -- the LLM discovers it from the `<:name>` reference in the program text.
+**How write bindings appear in the prompt.** Initialized outputs appear with their values and selected contracts. Unbound outputs have no value preview; their declarations and contracts remain discoverable through the environment. If a context budget omits an entry, the presentation identifies the omission and gives retrieval references.
 
 ### Prompt appearance of bindings
 
-Read and write bindings are rendered identically in the LOCALS section (e.g., `name: type = value`). The `<name>` vs `<:name>` distinction in the Natural program text is the signal that tells the LLM which names it may update. At runtime, Nighthawk enforces the distinction: read bindings block rebinding, while write bindings allow rebinding and commit values back to Python locals.
+Read references prioritize presentation, while write declarations identify validated Python output slots. Both can include value previews, but output entries also identify their selected contracts. Existing Python names require an output declaration to be rebound through `nh_assign`, whether or not they were explicitly mentioned as reads. Earlier object mutations remain visible even if finalization rejects pending name assignments.
 
 ### Multimodal bindings
 
@@ -221,6 +222,7 @@ Calling `choose_policy("Breaking: earthquake hits downtown")` produces:
 Runtime inspection: __nighthawk_runtime_0.inspect(value).
 Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
 Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
 
 <<<NH:PROGRAM>>>
 Read <post>.
@@ -306,6 +308,7 @@ The LLM sees:
 Runtime inspection: __nighthawk_runtime_0.inspect(value).
 Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
 Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
 
 <<<NH:PROGRAM>>>
 Compute <:result> by choosing the most suitable local helper based on its docstring.
@@ -350,6 +353,7 @@ Calling `calculate_average([1, "2", "three", "cuatro"])` produces:
 Runtime inspection: __nighthawk_runtime_0.inspect(value).
 Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
 Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
+Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
 
 <<<NH:PROGRAM>>>
 Map each element of <numbers> to the number it represents,
@@ -378,13 +382,11 @@ python_average: (numbers)
 
 ### Keep locals minimal
 
-Function parameters and local variables appear in LOCALS. Module-level names referenced via `<name>` that are _not_ in locals appear in GLOBALS. Nighthawk renders callable entries with their full signature and docstring intent -- but only when type information is available.
+Function parameters and working locals are candidates for LOCALS, and explicit module-level references are candidates for GLOBALS. The default builder prioritizes explicit references and outputs, followed by working locals, inherited state, and task capabilities, using stable ordering within each priority. Tight budgets can omit even an explicit reference; use the displayed discovery references to retrieve it.
 
-This is a deliberate tradeoff: LOCALS stays a flat, predictable snapshot of what Python has already bound. If you want less prompt context, keep fewer locals alive at the block boundary. Section truncation still follows the normal lexicographic rendering order, so under tight budgets an explicitly referenced dotted multimodal leaf can still be omitted along with any other later entry.
+Keep fewer incidental locals alive when they do not help the judgment. A callable passed through a parameter retains its live callable metadata even when the parameter annotation is `object`, `Any`, or absent. Signature and documentation acquisition are best-effort and do not execute application properties or annotation expressions.
 
-When you pass a module-level callable as a function parameter with a generic type (`object`, `Any`, or no annotation), the name moves from GLOBALS to LOCALS and **its signature is erased**. The LLM cannot discover the correct arguments or return type.
-
-The principle extends beyond callables. Any module-level name that is stable across invocations -- constants, classes, utility functions -- should stay in GLOBALS via `<name>` read bindings rather than being pulled into LOCALS via parameters or local assignments. Reserve function parameters for data that genuinely varies per call.
+Use explicit parameters for essential inputs and independent reuse. Module globals and task injection can supply shared capabilities; inherited working state supplies deliberately shared parent context. These layers preserve their provenance and remain available beyond the initial presentation budget.
 
 **Note:** Nighthawk also accepts native tools through `nh.scope(tools=[...])`, which exposes functions via the model's native tool-calling interface for the duration of the scope. This path is reserved for cases that need native tool calling, such as strict argument schemas or Pydantic AI tool features. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [Runtime configuration](runtime-configuration.md#scoped-tools) and [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
 

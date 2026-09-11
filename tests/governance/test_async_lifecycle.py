@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepStarted
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepRequest, eval_expression
 from tests.execution.stub_executor import StubExecutor
 
 
@@ -197,3 +198,80 @@ def test_sync_bridge_reports_a_foreign_event_loop_resource() -> None:
             future.cancel()
 
     asyncio.run(execute())
+
+
+@pytest.mark.parametrize("inside_event_loop", [False, True])
+@pytest.mark.parametrize("operation_notification", [False, True])
+def test_interrupted_sync_notification_does_not_wait_again_during_loop_shutdown(inside_event_loop: bool, operation_notification: bool) -> None:
+    original = asyncio.CancelledError("original interruption")
+    notifications: list[StepFinished | OperationFinished] = []
+    cleanup_tasks: list[asyncio.Task[object]] = []
+
+    def interrupt() -> None:
+        raise original
+
+    class Executor:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            if operation_notification:
+                eval_expression(request.step_context, "interrupt()")
+            raise original
+
+    async def finished(event: StepFinished | OperationFinished) -> None:
+        notifications.append(event)
+        task = asyncio.current_task()
+        assert task is not None
+        cleanup_tasks.append(task)
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            # A finite resistant handler exposes an otherwise unbounded second
+            # wait in asyncio.run without hanging a failing regression test.
+            await asyncio.sleep(0.6)
+
+    @nh.natural_function
+    def workflow() -> None:
+        nonlocal interrupt
+        """natural
+        Interrupt this step.
+        """
+
+    def invoke() -> None:
+        with (
+            nh.run(Executor()),
+            nh.scope(
+                lifecycle=StepLifecycle(
+                    on_step_finished=None if operation_notification else finished,
+                    on_operation_finished=finished if operation_notification else None,
+                    interruption_delivery_timeout=0.02,
+                )
+            ),
+            pytest.raises(asyncio.CancelledError) as caught,
+        ):
+            workflow()
+        assert caught.value is original
+
+    async def invoke_inside_loop() -> None:
+        invoke()
+
+    started = time.monotonic()
+    try:
+        if inside_event_loop:
+            asyncio.run(invoke_inside_loop())
+        else:
+            invoke()
+        assert time.monotonic() - started < 0.3
+        assert len(notifications) == 1
+        assert isinstance(notifications[0], (StepInterrupted, OperationFinished))
+        if isinstance(notifications[0], OperationFinished):
+            assert notifications[0].status == "interrupted"
+        assert notifications[0].original_exception is original
+        assert cleanup_tasks[0].get_loop().is_closed()
+    finally:
+        # The production boundary promises bounded waiting, not completion of a
+        # cancellation-resistant coroutine. Explicitly dispose this test fixture.
+        for task in cleanup_tasks:
+            if not task.done():
+                task.get_loop().set_exception_handler(lambda loop, context: None)
+                coroutine = task.get_coro()
+                assert coroutine is not None
+                coroutine.close()

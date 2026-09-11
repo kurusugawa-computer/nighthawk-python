@@ -27,8 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Source instrumentation retains defaults, live closure cells and globals, Python unbound-name behavior, and application names that resemble generated helpers.
 - Variadic output bindings validate their tuple or dictionary elements, preserving `Annotated` constraints and unpacked collection contracts.
+- Python 3.14 callable descriptions recover source annotation spelling without invoking deferred evaluators. Natural decoration preserves deferred annotations, and global-output preparation obtains deferred module contracts.
 - Ordered model tool batches and coding-agent callbacks preserve per-step operation order and stop after terminal operation failure.
+- Native model batches also order argument validation before each corresponding body, preventing later validators from running ahead of an earlier rejection. A scoped Pydantic AI 2.37 compatibility adapter preserves its completion strategies; the dependency range is bounded to that minor series.
 - Coding-agent callbacks use the request's event loop and captured scope; process and transport failures preserve their originating exceptions.
+- Interrupted asynchronous notifications and synchronous bridge shutdown share one cleanup deadline, including handlers that suppress cancellation.
 
 ## [0.14.0]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Literal, Unpack, get_args, get_origin, get_type_hints
@@ -18,6 +19,24 @@ MISSING_ANNOTATION = MissingAnnotation()
 class SourceAnnotation:
     expressions: tuple[str, ...]
     parameter_kind: Literal["positional", "keyword", "unpacked"] | None = None
+
+
+def module_annotations(python_globals: dict[str, object], *, resolve_deferred: bool) -> dict[str, object]:
+    stored = python_globals.get("__annotations__")
+    if isinstance(stored, dict):
+        return dict(stored)
+    if resolve_deferred and sys.version_info >= (3, 14):
+        import annotationlib
+
+        annotate = python_globals.get("__annotate__")
+        if callable(annotate):
+            # This is mandatory global-output contract acquisition during
+            # preparation, never presentation-only metadata discovery.
+            resolved = annotationlib.call_annotate_function(annotate, annotationlib.Format.VALUE)
+            if not isinstance(resolved, dict):
+                raise TypeError("Module annotation metadata must be a dictionary")
+            return resolved
+    return {}
 
 
 def resolve_annotation(

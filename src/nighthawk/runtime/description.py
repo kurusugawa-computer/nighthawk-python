@@ -6,14 +6,17 @@ are not executed to obtain a description. Unknown values remain opaque.
 
 from __future__ import annotations
 
+import ast
 import functools
 import inspect
 import sys
+import tokenize
 import types
 import typing
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from pathlib import Path
 
 from .annotations import SourceAnnotation
 
@@ -223,6 +226,7 @@ class CallableDescription:
     signature: inspect.Signature | None
     documentation: str | None
     asynchronous: bool
+    annotation_note: str | None = None
 
     @property
     def signature_text(self) -> str | None:
@@ -239,6 +243,61 @@ class CallableDescription:
         )
 
 
+@functools.lru_cache(maxsize=64)
+def _source_annotation_inventory(filename: str, modified: int, size: int) -> dict[tuple[str, int], dict[str, object]]:
+    # Read a bounded source file directly. inspect.getsource/linecache may call
+    # an application loader, and annotationlib may call a custom __annotate__.
+    del modified
+    if size > 1_048_576:
+        return {}
+    try:
+        with tokenize.open(filename) as stream:
+            source = stream.read(1_048_577)
+        if len(source) > 1_048_576:
+            return {}
+        tree = ast.parse(source)
+    except (OSError, SyntaxError, UnicodeError):
+        return {}
+    function_location_to_annotation: dict[tuple[str, int], dict[str, object]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        first_line = min([node.lineno, *(decorator.lineno for decorator in node.decorator_list)])
+        annotation_name_to_value: dict[str, object] = {
+            argument.arg: ast.unparse(argument.annotation)
+            for argument in (
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+                *([node.args.vararg] if node.args.vararg else []),
+                *([node.args.kwarg] if node.args.kwarg else []),
+            )
+            if argument.annotation is not None
+        }
+        if node.returns is not None:
+            annotation_name_to_value["return"] = ast.unparse(node.returns)
+        function_location_to_annotation[node.name, first_line] = annotation_name_to_value
+    return function_location_to_annotation
+
+
+def _function_annotations(value: types.FunctionType) -> tuple[dict[str, object], str | None]:
+    if sys.version_info < (3, 14) or value.__annotate__ is None:
+        return dict(value.__annotations__), None
+    filename = value.__code__.co_filename
+    try:
+        metadata = Path(filename).stat()
+    except OSError:
+        return {}, "Deferred annotations omitted: source unavailable; annotation evaluator was not called."
+    annotations = _source_annotation_inventory(filename, metadata.st_mtime_ns, metadata.st_size).get(
+        (value.__code__.co_name, value.__code__.co_firstlineno)
+    )
+    if annotations is None:
+        return {}, "Deferred annotations omitted: source unavailable or unsupported; annotation evaluator was not called."
+    return dict(
+        annotations
+    ), "Annotations retain source spelling and were not evaluated; deferred or modified runtime annotation metadata was not read."
+
+
 def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
     if depth > 8:
         return CallableDescription(None, None, False)
@@ -246,6 +305,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
     signature: inspect.Signature | None = None
     documentation: object = None
     asynchronous = False
+    annotation_note: str | None = None
     if exact_type(value, types.FunctionType):
         documentation = value.__doc__
         asynchronous = bool(value.__code__.co_flags & inspect.CO_COROUTINE)
@@ -253,7 +313,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
         wrapped = value.__dict__.get("__wrapped__", _ABSENT)
         if declared_signature is _ABSENT and wrapped is not _ABSENT:
             description = describe_callable(wrapped, depth=depth + 1)
-            return CallableDescription(description.signature, description.documentation, asynchronous)
+            return CallableDescription(description.signature, description.documentation, asynchronous, description.annotation_note)
         if _is_supported_signature(declared_signature):
             signature = declared_signature
         elif declared_signature is _ABSENT or declared_signature is None:
@@ -261,8 +321,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
             # deferred annotation evaluator. inspect.signature only reads it.
             mirror = types.FunctionType(value.__code__, {}, value.__name__, value.__defaults__, value.__closure__)
             mirror.__kwdefaults__ = value.__kwdefaults__
-            if sys.version_info < (3, 14):
-                mirror.__annotations__ = dict(value.__annotations__)
+            mirror.__annotations__, annotation_note = _function_annotations(value)
             signature = inspect.signature(mirror, follow_wrapped=False, eval_str=False)
     elif exact_type(value, types.MethodType):
         description = describe_callable(value.__func__, depth=depth + 1)
@@ -271,7 +330,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
             parameters = list(signature.parameters.values())
             if parameters and parameters[0].kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
                 signature = signature.replace(parameters=parameters[1:])
-        return CallableDescription(signature, description.documentation, description.asynchronous)
+        return CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)
     elif exact_type(value, functools.partial):
         description = describe_callable(value.func, depth=depth + 1)
         if description.signature is not None:
@@ -284,7 +343,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
             keyword_name_to_value = {name: _DisplayText(safe_literal(item)) for name, item in (value.keywords or {}).items()}
             with suppress(TypeError, ValueError):
                 signature = inspect.signature(functools.partial(mirror, *arguments, **keyword_name_to_value), eval_str=False)
-        return CallableDescription(signature, description.documentation, description.asynchronous)
+        return CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)
     elif exact_type(value, types.BuiltinFunctionType):
         documentation = value.__doc__
         if value.__module__ == "builtins" or any(type(value.__self__) is candidate for candidate in (list, dict, str, set, tuple, bytes)):
@@ -299,7 +358,9 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
             if type(call) is types.FunctionType:
                 return describe_callable(types.MethodType(call, value), depth=depth + 1)
         documentation = static_attribute(value, "__doc__", None)
-    return CallableDescription(signature, inspect.cleandoc(documentation)[:2_000] if type(documentation) is str else None, asynchronous)
+    return CallableDescription(
+        signature, inspect.cleandoc(documentation)[:2_000] if type(documentation) is str else None, asynchronous, annotation_note
+    )
 
 
 def _instance_namespace(value: object) -> dict[str, object]:
