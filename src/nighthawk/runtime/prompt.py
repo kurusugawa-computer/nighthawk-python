@@ -465,8 +465,6 @@ def _collect_explicit_multimodal_reference_and_value_list(
             continue
 
         root_reference = reference_path.split(".", 1)[0]
-        if root_reference.startswith("__"):
-            continue
         local_names = (
             step_context.step_locals.keys()
             | step_context.environment.parent_name_to_value.keys()
@@ -499,8 +497,6 @@ def _render_locals_section(
 ) -> PromptContentTuple:
     eligible_reference_and_value_list: list[ReferenceAndValue] = []
     for reference in sorted(references):
-        if reference.startswith("__"):
-            continue
         try:
             value = step_context.environment.resolve(reference)
         except (MissingEnvironmentNameError, UnboundEnvironmentNameError):
@@ -568,8 +564,6 @@ def _render_globals_section(
 ) -> PromptContentTuple:
     eligible_reference_and_value_list: list[ReferenceAndValue] = []
     for reference in sorted(references):
-        if reference.startswith("__"):
-            continue
         if (
             reference in step_context.step_locals
             or reference in step_context.environment.parent_name_to_value

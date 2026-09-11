@@ -215,8 +215,9 @@ def _build_source_location(*, caller_frame: FrameType) -> str:
 
 
 class Runner:
-    def __init__(self, step_executor: StepExecutor) -> None:
+    def __init__(self, step_executor: StepExecutor, *, runtime_name_set: frozenset[str] = frozenset()) -> None:
         self.step_executor = step_executor
+        self.runtime_name_set = runtime_name_set
         self.failure_stage: FailureStage = "preparation"
         self.failure_description: str | None = None
         self.preparation: _StepPreparation | None = None
@@ -426,7 +427,7 @@ class Runner:
 
         step_globals = _build_step_globals(python_globals)
         scoped_task_name_to_value = _current_task_references()
-        step_locals = dict(python_locals)
+        step_locals = {name: value for name, value in python_locals.items() if name not in self.runtime_name_set}
         parent_stack = get_step_context_stack()
         parent_name_to_value = parent_stack[-1].environment.snapshot_working_state() if parent_stack else {}
         cell_scope_stack = get_python_cell_scope_stack()
@@ -464,6 +465,7 @@ class Runner:
             output_name_set=frozenset(output_binding_names),
             binding_name_to_annotation=binding_name_to_annotation,
             binding_name_to_type=binding_name_to_type,
+            runtime_name_set=self.runtime_name_set,
         )
         self.input_binding_name_to_value = {name: environment.resolve(name) for name in input_binding_names}
 

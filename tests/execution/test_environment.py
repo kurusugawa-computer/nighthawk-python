@@ -64,6 +64,7 @@ def test_parent_snapshot_preserves_associations_and_shares_objects() -> None:
         python_name_to_value={"shared": shared, "__nh_execution__": object()},
         python_globals={"global_value": 1},
         task_name_to_value={"injected": 1},
+        runtime_name_set=frozenset({"__nh_execution__"}),
     )
     parent.assign("i", 5)
     child = StepEnvironment(python_name_to_value={}, python_globals={}, parent_name_to_value=parent.snapshot_working_state())
@@ -102,7 +103,7 @@ def test_nested_expression_scopes_use_effective_lookup(expression: str, expected
 
 def test_existing_python_names_require_output_declaration() -> None:
     environment = StepEnvironment(python_name_to_value={"value": 7}, python_globals={"global_value": 1})
-    for name in ("value", "global_value", "len", "__nh_execution__"):
+    for name in ("value", "global_value", "len", environment.runtime_reference):
         with pytest.raises(ValueError, match="Cannot rebind"):
             environment.assign(name, 9)
 

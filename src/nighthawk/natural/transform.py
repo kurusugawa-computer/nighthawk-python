@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 
+from ._names import _RuntimeNames
 from .blocks import (
     _joined_string_is_natural_sentinel,
     _joined_string_scan_text,
@@ -19,8 +20,9 @@ def _copy_generated_location(statement: ast.stmt, source: ast.AST) -> ast.stmt:
 
 
 class NaturalTransformer(ast.NodeTransformer):
-    def __init__(self, *, captured_name_tuple: tuple[str, ...]) -> None:
+    def __init__(self, *, captured_name_tuple: tuple[str, ...], runtime_names: _RuntimeNames) -> None:
         super().__init__()
+        self._runtime_names = runtime_names
         self._captured_name_tuple = captured_name_tuple
         self._return_annotation_stack: list[ast.expr | None] = []
         self._binding_name_to_type_expression_stack: list[dict[str, list[ast.expr]]] = []
@@ -58,6 +60,7 @@ class NaturalTransformer(ast.NodeTransformer):
                             return_annotation,
                             is_in_loop=self._loop_depth > 0,
                             is_async_function=self._is_async_function_stack[-1],
+                            runtime_names=self._runtime_names,
                         )
 
                         # Preserve user-source location: the injected runtime call and its
@@ -74,8 +77,8 @@ class NaturalTransformer(ast.NodeTransformer):
 
             node = self.generic_visit(node)  # type: ignore[assignment]
 
-            anchor_name = "__nh_cell_anchor__"
-            name_to_cell_name = "__nh_name_to_cell__"
+            anchor_name = self._runtime_names.allocate("__nh_cell_anchor__")
+            name_to_cell_name = self._runtime_names.allocate("__nh_name_to_cell__")
 
             anchor_body: list[ast.stmt] = [
                 ast.Return(
@@ -102,7 +105,7 @@ class NaturalTransformer(ast.NodeTransformer):
             )
 
             name_to_cell_value = ast.Call(
-                func=ast.Name(id="__nh_function_name_to_cell__", ctx=ast.Load()),
+                func=ast.Name(id=self._runtime_names.allocate("__nh_function_name_to_cell__"), ctx=ast.Load()),
                 args=[ast.Name(id=anchor_name, ctx=ast.Load())],
                 keywords=[],
             )
@@ -116,7 +119,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 items=[
                     ast.withitem(
                         context_expr=ast.Call(
-                            func=ast.Name(id="__nh_python_cell_scope__", ctx=ast.Load()),
+                            func=ast.Name(id=self._runtime_names.allocate("__nh_python_cell_scope__"), ctx=ast.Load()),
                             args=[ast.Name(id=name_to_cell_name, ctx=ast.Load())],
                             keywords=[],
                         ),
@@ -185,6 +188,7 @@ class NaturalTransformer(ast.NodeTransformer):
                     return_annotation,
                     is_in_loop=is_in_loop,
                     is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
+                    runtime_names=self._runtime_names,
                 )
 
                 sentinel_location = ast.copy_location(ast.Pass(), node)
@@ -204,7 +208,7 @@ class NaturalTransformer(ast.NodeTransformer):
             binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
 
             extracted_program_call = ast.Call(
-                func=ast.Name(id="__nh_extract_program__", ctx=ast.Load()),
+                func=ast.Name(id=self._runtime_names.allocate("__nh_extract_program__"), ctx=ast.Load()),
                 args=[value],
                 keywords=[],
             )
@@ -217,6 +221,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 return_annotation,
                 is_in_loop=is_in_loop,
                 is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
+                runtime_names=self._runtime_names,
             )
 
             sentinel_location = ast.copy_location(ast.Pass(), node)
@@ -229,16 +234,15 @@ class NaturalTransformer(ast.NodeTransformer):
 
     def _current_return_annotation_expression(self) -> ast.expr:
         if not self._return_annotation_stack:
-            return ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
+            return ast.Name(id=self._runtime_names.allocate("__nh_missing_annotation__"), ctx=ast.Load())
         annotation = self._return_annotation_stack[-1]
         if annotation is None:
-            return ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
+            return ast.Name(id=self._runtime_names.allocate("__nh_missing_annotation__"), ctx=ast.Load())
         return self._source_annotation_expression([annotation])
 
-    @staticmethod
-    def _source_annotation_expression(annotations: list[ast.expr]) -> ast.expr:
+    def _source_annotation_expression(self, annotations: list[ast.expr]) -> ast.expr:
         return ast.Call(
-            func=ast.Name(id="__nh_source_annotation__", ctx=ast.Load()),
+            func=ast.Name(id=self._runtime_names.allocate("__nh_source_annotation__"), ctx=ast.Load()),
             args=[ast.Tuple(elts=[ast.Constant(ast.unparse(annotation)) for annotation in annotations], ctx=ast.Load())],
             keywords=[],
         )
@@ -290,7 +294,9 @@ class NaturalTransformer(ast.NodeTransformer):
             keys.append(ast.Constant(name))
             annotations = binding_name_to_type_expression.get(name)
             values.append(
-                self._source_annotation_expression(annotations) if annotations else ast.Name(id="__nh_missing_annotation__", ctx=ast.Load())
+                self._source_annotation_expression(annotations)
+                if annotations
+                else ast.Name(id=self._runtime_names.allocate("__nh_missing_annotation__"), ctx=ast.Load())
             )
 
         return ast.Dict(keys=keys, values=values)
@@ -305,14 +311,22 @@ def build_runtime_call_and_assignments(
     *,
     is_in_loop: bool,
     is_async_function: bool,
+    runtime_names: _RuntimeNames | None = None,
 ) -> list[ast.stmt]:
+    if runtime_names is None:
+        runtime_names = _RuntimeNames(set(input_binding_names) | set(output_binding_names))
+    execution_name = runtime_names.allocate("__nh_execution__")
+    envelope_name = runtime_names.allocate("__nh_envelope__")
+    bindings_name = runtime_names.allocate("__nh_bindings__")
+    runner_name = runtime_names.allocate("__nighthawk_runner__")
+    outcome_name = runtime_names.allocate("__nh_step_outcome__")
     # Build the runner method call (the only part requiring hand-built AST
     # because natural_program_expression, binding_types_dict_expression, and
     # return_annotation are dynamic AST nodes from the source).
     method_name = "run_step_async" if is_async_function else "run_step"
     call_expression = ast.Call(
         func=ast.Attribute(
-            value=ast.Name(id="__nh_execution__", ctx=ast.Load()),
+            value=ast.Name(id=execution_name, ctx=ast.Load()),
             attr=method_name,
             ctx=ast.Load(),
         ),
@@ -329,7 +343,7 @@ def build_runtime_call_and_assignments(
     envelope_value: ast.expr = ast.Await(value=call_expression) if is_async_function else call_expression
 
     # Parse template for the common envelope-unpacking structure.
-    statements: list[ast.stmt] = ast.parse('__nh_envelope__ = None\n__nh_bindings__ = __nh_envelope__["bindings"]\n').body
+    statements: list[ast.stmt] = ast.parse(f'{envelope_name} = None\n{bindings_name} = {envelope_name}["bindings"]\n').body
     # Replace the None placeholder with the actual call expression.
     statements[0].value = envelope_value  # type: ignore[attr-defined]
 
@@ -337,14 +351,14 @@ def build_runtime_call_and_assignments(
     for name in output_binding_names:
         statements.extend(
             ast.parse(
-                f'if "{name}" in __nh_bindings__:\n    {name} = __nh_bindings__["{name}"]\n    __nh_execution__.record_assignment("{name}", {name})\n'
+                f'if "{name}" in {bindings_name}:\n    {name} = {bindings_name}["{name}"]\n    {execution_name}.record_assignment("{name}", {name})\n'
             ).body
         )
 
     guard_source = (
-        "async with __nighthawk_runner__.execution_async() as __nh_execution__:\n    pass\n"
+        f"async with {runner_name}.execution_async() as {execution_name}:\n    pass\n"
         if is_async_function
-        else "with __nighthawk_runner__.execution() as __nh_execution__:\n    pass\n"
+        else f"with {runner_name}.execution() as {execution_name}:\n    pass\n"
     )
     guarded = ast.parse(guard_source).body[0]
     assert isinstance(guarded, (ast.With, ast.AsyncWith))
@@ -352,19 +366,19 @@ def build_runtime_call_and_assignments(
     statements = [guarded]
 
     # Add outcome extraction and dispatch.
-    statements.extend(ast.parse('__nh_step_outcome__ = __nh_envelope__["outcome"]').body)
+    statements.extend(ast.parse(f'{outcome_name} = {envelope_name}["outcome"]').body)
 
-    outcome_source = 'if __nh_step_outcome__ is not None:\n    if __nh_step_outcome__.kind == "return":\n        return __nh_step_outcome__.value\n'
+    outcome_source = f'if {outcome_name} is not None:\n    if {outcome_name}.kind == "return":\n        return {outcome_name}.value\n'
     if is_in_loop:
-        outcome_source += (
-            '    if __nh_step_outcome__.kind == "break":\n        break\n    if __nh_step_outcome__.kind == "continue":\n        continue\n'
-        )
+        outcome_source += f'    if {outcome_name}.kind == "break":\n        break\n    if {outcome_name}.kind == "continue":\n        continue\n'
     statements.extend(ast.parse(outcome_source).body)
 
     return statements
 
 
-def transform_module_ast(module: ast.Module, *, captured_name_tuple: tuple[str, ...] = ()) -> ast.Module:
-    module = NaturalTransformer(captured_name_tuple=captured_name_tuple).visit(module)  # type: ignore[assignment]
+def transform_module_ast(module: ast.Module, *, captured_name_tuple: tuple[str, ...] = (), runtime_names: _RuntimeNames | None = None) -> ast.Module:
+    if runtime_names is None:
+        runtime_names = _RuntimeNames({node.id for node in ast.walk(module) if isinstance(node, ast.Name)} | set(captured_name_tuple))
+    module = NaturalTransformer(captured_name_tuple=captured_name_tuple, runtime_names=runtime_names).visit(module)  # type: ignore[assignment]
     ast.fix_missing_locations(module)
     return module

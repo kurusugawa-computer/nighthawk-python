@@ -260,8 +260,12 @@ These descriptions do not change the live environment or its validation contract
 
 Selection:
 
-- Python working locals, parent working names, step assignments, and declared outputs are eligible, except names starting with `__`.
+- Python working locals, parent working names, step assignments, and declared outputs are eligible, including application names starting with `__`.
   Other available names remain retrievable through environment discovery.
+- Instrumentation allocates internal names that avoid application bindings and names present in the function source, including Natural text.
+  Only the internal bindings actually used by that transformed function are excluded from its Python environment, initial context, and inherited working state.
+  Application names are not excluded by a shared prefix; their lexical priority, unbound status, and explicit source references remain intact.
+  The separate prohibition on `__` segments in assignment-tool targets still applies (Section 8.3).
 
 Ordering:
 

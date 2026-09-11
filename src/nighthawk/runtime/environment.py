@@ -22,10 +22,6 @@ class UnboundEnvironmentNameError(UnboundLocalError):
     """A Python local or cell blocks Natural fallback."""
 
 
-def _is_runtime_name(name: str) -> bool:
-    return name.startswith(("__nh_", "__nighthawk_"))
-
-
 class _PythonEnvironmentView(Mapping[str, object]):
     def __init__(self, environment: StepEnvironment) -> None:
         self._environment = environment
@@ -44,7 +40,7 @@ class _PythonEnvironmentView(Mapping[str, object]):
                 | environment._python_global_name_to_value.keys()
                 | environment._python_builtin_name_to_value.keys()
             )
-            if not _is_runtime_name(name)
+            if not environment._is_runtime_name(name)
         )
 
     def __len__(self) -> int:
@@ -98,8 +94,10 @@ class StepEnvironment:
         output_name_set: frozenset[str] = frozenset(),
         binding_name_to_annotation: Mapping[str, object] | None = None,
         binding_name_to_type: Mapping[str, object] | None = None,
+        runtime_name_set: frozenset[str] = frozenset(),
     ) -> None:
-        self._python_name_to_value = {name: value for name, value in python_name_to_value.items() if not _is_runtime_name(name)}
+        self._runtime_name_set = frozenset(runtime_name_set)
+        self._python_name_to_value = {name: value for name, value in python_name_to_value.items() if not self._is_runtime_name(name)}
         self._python_global_name_to_value = python_globals
         builtins_value = python_globals.get("__builtins__", __builtins__)
         self._python_builtin_name_to_value: dict[str, object] = builtins_value if isinstance(builtins_value, dict) else vars(builtins_value)
@@ -121,14 +119,19 @@ class StepEnvironment:
             | self._python_name_to_cell.keys()
             | self.parent_name_to_value.keys()
             | self.task_name_to_value.keys()
+            | self._runtime_name_set
         )
         suffix = 0
         while f"__nighthawk_runtime_{suffix}" in known_names:
             suffix += 1
         self.runtime_reference = f"__nighthawk_runtime_{suffix}"
+        self._runtime_name_set = self._runtime_name_set | {self.runtime_reference}
+
+    def _is_runtime_name(self, name: str) -> bool:
+        return name in self._runtime_name_set
 
     def has_python_name(self, name: str) -> bool:
-        return not _is_runtime_name(name) and (
+        return not self._is_runtime_name(name) and (
             name in self._local_name_set
             or name in self._python_name_to_value
             or name in self._python_name_to_cell
@@ -137,7 +140,7 @@ class StepEnvironment:
         )
 
     def _resolve_python(self, name: str) -> object:
-        if _is_runtime_name(name):
+        if self._is_runtime_name(name):
             raise KeyError(name)
         if name in self._python_name_to_cell:
             try:
@@ -172,7 +175,7 @@ class StepEnvironment:
         raise MissingEnvironmentNameError(f"Name {name!r} is absent from the {source} environment", name=name)
 
     def check_assignment(self, name: str) -> None:
-        if _is_runtime_name(name) or (self.has_python_name(name) and name not in self._output_name_set):
+        if name == self.runtime_reference or (self.has_python_name(name) and name not in self._output_name_set):
             raise ValueError(f"Cannot rebind Python name {name!r}; declare <:{name}> for Python writeback")
 
     def assign(self, name: str, value: object) -> None:
@@ -182,7 +185,7 @@ class StepEnvironment:
     def snapshot_working_state(self) -> dict[str, object]:
         snapshot = dict(self.parent_name_to_value)
         for name in self._python_name_to_value.keys() | self._local_name_set | self._python_name_to_cell.keys():
-            if _is_runtime_name(name):
+            if self._is_runtime_name(name):
                 continue
             try:
                 snapshot[name] = self._resolve_python(name)
@@ -257,7 +260,8 @@ class StepEnvironment:
             "shadowed_sources": sources[1:],
             "unbound": unbound,
             "write_eligible": source in ("effective", "step")
-            and (name in self._output_name_set or (not self.has_python_name(name) and not _is_runtime_name(name))),
+            and name != self.runtime_reference
+            and (name in self._output_name_set or not self.has_python_name(name)),
             "annotation": None if annotation is MISSING_ANNOTATION else annotation_text(annotation),
             "output_contract": None if contract is MISSING_ANNOTATION else annotation_text(contract),
             "reference": self.reference(name, source=source),

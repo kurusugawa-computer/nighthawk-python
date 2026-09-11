@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import logging
+import re
 import sys
 import textwrap
 from collections.abc import Awaitable, Callable
@@ -16,6 +17,7 @@ from ..runtime.annotations import MISSING_ANNOTATION, SourceAnnotation
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope
+from ._names import _RuntimeNames
 from .blocks import extract_program
 from .transform import transform_module_ast
 
@@ -23,16 +25,17 @@ type NaturalFunctionCallable = Callable[..., Any]
 
 
 class _RunnerProxy:
-    @staticmethod
-    def execution() -> AbstractContextManager[Runner]:
+    def __init__(self) -> None:
+        self.runtime_name_set: frozenset[str] = frozenset()
+
+    def execution(self) -> AbstractContextManager[Runner]:
         caller_frame = sys._getframe(1)
-        runner = Runner(get_step_executor())
+        runner = Runner(get_step_executor(), runtime_name_set=self.runtime_name_set)
         return runner.execution(caller_frame=caller_frame)
 
-    @staticmethod
-    def execution_async() -> AbstractAsyncContextManager[Runner]:
+    def execution_async(self) -> AbstractAsyncContextManager[Runner]:
         caller_frame = sys._getframe(1)
-        runner = Runner(get_step_executor())
+        runner = Runner(get_step_executor(), runtime_name_set=self.runtime_name_set)
         return runner.execution_async(caller_frame=caller_frame)
 
 
@@ -45,6 +48,7 @@ def _build_transformed_factory_module(
     transformed_module: ast.Module,
     function_name: str,
     name_to_value: dict[str, object],
+    runtime_names: _RuntimeNames,
 ) -> ast.Module:
     """Build a factory-function module that captures enclosing-scope values via closure."""
     transformed_function_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
@@ -63,8 +67,8 @@ def _build_transformed_factory_module(
         None if default is None else ast.Constant(None) for default in transformed_function_def.args.kw_defaults
     ]
 
-    captured_value_name = "__nh_captured_values__"
-    factory_name = "__nh_factory__"
+    captured_value_name = runtime_names.allocate("__nh_captured_values__")
+    factory_name = runtime_names.allocate("__nh_factory__")
 
     factory_body: list[ast.stmt] = []
     for name in sorted(name_to_value.keys()):
@@ -164,7 +168,17 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
 
     captured_name_tuple = tuple(sorted(capture_name_set))
 
-    transformed_module = transform_module_ast(original_module, captured_name_tuple=captured_name_tuple)
+    # Include Natural text as well as compiled lexical names.
+    # An explicit read in a string must not collide with a helper introduced by instrumentation.
+    occupied_names = (
+        set(re.findall(r"\b[A-Za-z_]\w*\b", source))
+        | set(func.__code__.co_varnames)
+        | capture_name_set
+        | func.__globals__.keys()
+        | func.__builtins__.keys()
+    )
+    runtime_names = _RuntimeNames(occupied_names)
+    transformed_module = transform_module_ast(original_module, captured_name_tuple=captured_name_tuple, runtime_names=runtime_names)
 
     filename = inspect.getsourcefile(func) or "<nighthawk>"
 
@@ -172,13 +186,14 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
     # module globals. The transformed function therefore shares ``func.__globals__`` with the original
     # function: names defined in the module after decoration stay visible, and the module namespace is
     # never polluted with helper names.
+    runner_proxy = _RunnerProxy()
     helper_name_to_value: dict[str, object] = {
-        "__nighthawk_runner__": _RunnerProxy(),
-        "__nh_extract_program__": extract_program,
-        "__nh_python_cell_scope__": python_cell_scope,
-        "__nh_source_annotation__": SourceAnnotation,
-        "__nh_missing_annotation__": MISSING_ANNOTATION,
-        "__nh_function_name_to_cell__": _function_name_to_cell,
+        runtime_names.allocate("__nighthawk_runner__"): runner_proxy,
+        runtime_names.allocate("__nh_extract_program__"): extract_program,
+        runtime_names.allocate("__nh_python_cell_scope__"): python_cell_scope,
+        runtime_names.allocate("__nh_source_annotation__"): SourceAnnotation,
+        runtime_names.allocate("__nh_missing_annotation__"): MISSING_ANNOTATION,
+        runtime_names.allocate("__nh_function_name_to_cell__"): _function_name_to_cell,
     }
     factory_name_to_value: dict[str, object] = {**name_to_value, **helper_name_to_value}
 
@@ -186,13 +201,14 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         transformed_module=transformed_module,
         function_name=func.__name__,
         name_to_value=factory_name_to_value,
+        runtime_names=runtime_names,
     )
     code = compile(factory_module, filename, "exec")
 
     module_namespace: dict[str, object] = {}
     exec(code, func.__globals__, module_namespace)
 
-    factory = module_namespace.get("__nh_factory__")
+    factory = module_namespace.get(runtime_names.allocate("__nh_factory__"))
     if not callable(factory):
         raise RuntimeError("Transformed factory not found after compilation")
 
@@ -220,6 +236,9 @@ def natural_function(func: NaturalFunctionCallable | None = None) -> NaturalFunc
         transformed.__annotations__ = func.__annotations__
 
     transformed_freevar_name_set = set(transformed.__code__.co_freevars)
+    runner_proxy.runtime_name_set = runtime_names.allocated_names & (
+        transformed_freevar_name_set | set(transformed.__code__.co_varnames) | set(transformed.__code__.co_cellvars)
+    )
     captured_name_set = set(factory_name_to_value.keys())
 
     unexpected_freevar_name_set = transformed_freevar_name_set - captured_name_set
