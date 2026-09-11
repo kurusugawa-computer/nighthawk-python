@@ -43,6 +43,14 @@ and backends; report sample sizes and uncertainty. A deterministic child fixture
 tests parent-state mechanics and model tool use. Actual Natural parent/child
 composition requires separate integration coverage.
 
+Apply the ratified
+[selection criteria](../../docs/ideal-state.md#selection-criteria) when reviewing
+the comparison. Prioritize semantic success, permitted control results, and
+correct effects over operation count, tokens, or latency. When the evidence does
+not distinguish acceptable candidates, prefer lower implementation, explanation,
+and maintenance burden across the runtime, adapters, and model guidance. Report
+tradeoffs and uncertainty; fewer tools alone do not justify selection.
+
 ## Surfaces
 
 | Surface | Tools | Distinguishing behavior |

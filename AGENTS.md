@@ -17,6 +17,8 @@
 
 ### Rules
 
+- 改行 (line wrapping) は fixed column で hard-wrap しない.
+  - User が column 上限を明示しない限り, 文末 / clause 区切り / list item など意味の区切りでのみ改行する (semantic line break).
 - Use full words in all identifiers unless listed above.
 - Disallowed abbreviations: `ctx` -> `context`, `cfg` -> `configuration`, `repo` -> `repository`, `opts` -> `options`, `ref` -> `reference`.
 - Map/Dict: `(adjective + "_")* + key + "_to_" + value`.

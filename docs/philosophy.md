@@ -96,6 +96,13 @@ Nighthawk keeps orchestration in Python. State lives in Python variables and cro
 | Debugging | Framework-specific tooling | Prompt inspection | Python debugger, pytest, tracing |
 | Constraint model | Guardrails, schemas, routing conditions | Natural language conventions | Type validation, deny frontmatter, structured outcomes, scoped oversight |
 
+The [target design](ideal-state.md#1-purpose-and-principles) makes the meaning of explicit boundaries more precise: Python selects execution points, permitted control results, and validated name writeback.
+Input dependencies can also come from lexical values and inherited parent working state; they need not all appear in a function signature or read binding.
+The table above describes the current documented context surface; the target additionally specifies parent inheritance for joined child calls.
+That inheritance reduces argument plumbing but makes some dependencies contextual.
+Prefer explicit parameters for essential inputs and use inheritance for intentionally shared task policy.
+It does not carry a parent's model message transcript or make shared mutable objects read-only.
+
 Static constraint systems such as AGENTS.md-style rule files, lifecycle hooks, and permission modes remain useful around all three approaches. They are guardrail layers. They do not replace runtime orchestration or typed state transfer.
 
 ## Design consequences
