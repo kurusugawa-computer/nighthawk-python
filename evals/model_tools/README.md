@@ -5,15 +5,16 @@ without changing the production Natural runtime. It uses Pydantic AI directly;
 it does not depend on the legacy promptfoo provider's private runtime patches.
 
 The original/refined/merged surfaces below retain the 2026-09-09 experiment contracts.
-The production-backed dedicated-tool versus helper comparison is implemented separately in `inspection_study.py`, with deterministic validation and no external model results yet.
-Its [protocol and prepared request contents](evidence/20260911-inspection-study-protocol.md) describe the controls, limits, and pending API execution.
+The production-backed dedicated-tool versus helper comparison is implemented separately in `inspection_study.py`.
+Its [assessment](evidence/20260911-inspection-assessment.md) records 804 model trials and selects the existing evaluation/assignment surface with Python inspection helpers.
+Its [protocol](evidence/20260911-inspection-study-protocol.md) describes controls, limits, source snapshots, and backend differences.
 The [Ideal State](../../docs/ideal-state.md#13-model-facing-interface-and-evaluation) owns target semantics and remaining interface choices.
 In particular, the existing `merged` surface merges evaluation and assignment;
 it provides no evidence about removing the dedicated inspection tool.
 
 ## Approved inspection-helper comparison
 
-This is an approved experiment plan with a locally validated implementation; external model results remain pending.
+This approved plan has deterministic validation and completed model comparisons, reported separately from the historical prototype below.
 
 P-REVIEW-005 approves showing known collisions and qualified references upfront.
 Evaluate its isolated effect while holding the existing tool surface fixed.

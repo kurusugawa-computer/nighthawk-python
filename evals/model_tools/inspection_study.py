@@ -391,7 +391,7 @@ async def run_trial(
     state = make_trial(case)
     configuration = nh.StepExecutorConfiguration(
         model=model,
-        model_settings=model_settings or {"max_tokens": 4096, "timeout": 90},
+        model_settings=model_settings if model_settings is not None else {"max_tokens": 4096, "timeout": 90},
         context_limits=nh.StepContextLimits(tool_result_max_tokens=512),
         json_renderer_style="strict",
     )
@@ -547,9 +547,14 @@ async def main() -> None:
     parser.add_argument("--phrasings", type=int, choices=[1, 2], default=2)
     parser.add_argument("--concurrency", type=int, default=6)
     parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument(
+        "--model-settings", type=json.loads, help="Complete model settings JSON object; replaces the API defaults for coding backends"
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true", help="Export initial request contents using a local FunctionModel without API calls")
     arguments = parser.parse_args()
+    if arguments.model_settings is not None and not isinstance(arguments.model_settings, dict):
+        parser.error("Model settings must be a JSON object")
     if min(arguments.repetitions, arguments.concurrency, arguments.timeout) <= 0:
         parser.error("Repetitions, concurrency, and timeout must be positive")
     variants = [(surface, True) for surface in arguments.surfaces]
@@ -569,7 +574,9 @@ async def main() -> None:
         destination = source_directory / relative_source
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(source.read_bytes())
-    settings = {"max_tokens": 6144, "timeout": 90, "openai_reasoning_effort": "medium"}
+    settings = (
+        arguments.model_settings if arguments.model_settings is not None else {"max_tokens": 6144, "timeout": 90, "openai_reasoning_effort": "medium"}
+    )
     configuration = {
         **vars(arguments),
         "output": str(arguments.output),

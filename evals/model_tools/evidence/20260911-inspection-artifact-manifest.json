@@ -1,0 +1,107 @@
+[
+  {
+    "study": "smoke",
+    "record_kind": "model_trial",
+    "directory": "evals/model_tools/outputs/20260911-inspection-smoke",
+    "trials": 12,
+    "passed": 11,
+    "settings": {
+      "max_tokens": 6144,
+      "timeout": 90,
+      "openai_reasoning_effort": "medium"
+    },
+    "configuration_sha256": "c110076d3d2954cbd4cd607c3332e1afc8c0b127a845e6b384306b12717ef277",
+    "trials_sha256": "d98847e472922177900e054782f1d9aba7e56032fb5ef239a71dfaf3b54ba284",
+    "source_manifest_sha256": "59e2e31ee9d3accc15131774be93fda03e5b192b4e5d915b6ef79f8b3a2ea273"
+  },
+  {
+    "study": "main",
+    "record_kind": "model_trial",
+    "directory": "evals/model_tools/outputs/20260911-inspection-main",
+    "trials": 432,
+    "passed": 401,
+    "settings": {
+      "max_tokens": 6144,
+      "timeout": 90,
+      "openai_reasoning_effort": "medium"
+    },
+    "configuration_sha256": "070f13035f7d9c3c9559c59189d52f86580d2157dd0381c22865a952e7e351d3",
+    "trials_sha256": "afce8cccfcaeca651d08a4b68e144320cc5dad9e8b8d1ba7a34e30a8cc72af87",
+    "source_manifest_sha256": "59e2e31ee9d3accc15131774be93fda03e5b192b4e5d915b6ef79f8b3a2ea273"
+  },
+  {
+    "study": "guidance",
+    "record_kind": "model_trial",
+    "directory": "evals/model_tools/outputs/20260911-inspection-guidance",
+    "trials": 192,
+    "passed": 178,
+    "settings": {
+      "max_tokens": 6144,
+      "timeout": 90,
+      "openai_reasoning_effort": "medium"
+    },
+    "configuration_sha256": "a79115e81be0e504e16d4aa09e8a4e862b3e677d9c469180544686c9f4dc743e",
+    "trials_sha256": "8d3ec120c914c9d48a51077cc45315cf2fa6980133bcb3b7d8e27342b0f3def4",
+    "source_manifest_sha256": "59e2e31ee9d3accc15131774be93fda03e5b192b4e5d915b6ef79f8b3a2ea273"
+  },
+  {
+    "study": "chat",
+    "record_kind": "model_trial",
+    "directory": "evals/model_tools/outputs/20260911-inspection-chat",
+    "trials": 144,
+    "passed": 135,
+    "settings": {
+      "max_tokens": 6144,
+      "timeout": 90,
+      "openai_reasoning_effort": "medium"
+    },
+    "configuration_sha256": "c894de8e9f1ab953c9473dcb42827b052ae36ac7f0d012f4c4113088bbd24a9f",
+    "trials_sha256": "70378febebe26cbd2582ddc79686ab53aff2fcbe60728662174ded94ba61cabe",
+    "source_manifest_sha256": "59e2e31ee9d3accc15131774be93fda03e5b192b4e5d915b6ef79f8b3a2ea273"
+  },
+  {
+    "study": "codex",
+    "record_kind": "model_trial",
+    "directory": "evals/model_tools/outputs/20260911-inspection-codex",
+    "trials": 12,
+    "passed": 9,
+    "settings": {
+      "working_directory": "/tmp/nighthawk-inspection-coding-workspace",
+      "model_reasoning_effort": "medium"
+    },
+    "configuration_sha256": "bcf5b2bb127bf06c16d8b308d7e5c8910635206609920a96249ba966449763eb",
+    "trials_sha256": "ca5909241a679f8a05a82ad76c98b35ffc0b8e995fa437fa7d1ef7d282ab8a5e",
+    "source_manifest_sha256": "12c921ad196aa6b20d9bbdebef3afb19d06522568f1650a1b6d9add4376a10a6"
+  },
+  {
+    "study": "claude",
+    "record_kind": "model_trial",
+    "directory": "evals/model_tools/outputs/20260911-inspection-claude",
+    "trials": 12,
+    "passed": 4,
+    "settings": {
+      "working_directory": "/tmp/nighthawk-inspection-coding-workspace",
+      "max_turns": 32
+    },
+    "configuration_sha256": "8f875255d2496148ac8ff1ed9bbce5ad6e5b1ca08f489a78bf6d96054cbb21c6",
+    "trials_sha256": "2b4c49c870950ff0126aa718b5073afcfce156567f8b0cdc68ba088818a66e99",
+    "source_manifest_sha256": "12c921ad196aa6b20d9bbdebef3afb19d06522568f1650a1b6d9add4376a10a6"
+  },
+  {
+    "study": "coding",
+    "record_kind": "preflight_settings_failure",
+    "directory": "evals/model_tools/outputs/20260911-inspection-coding",
+    "trials": 24,
+    "passed": 0,
+    "settings": {
+      "max_tokens": 6144,
+      "timeout": 90,
+      "openai_reasoning_effort": "medium",
+      "working_directory": "/tmp/nighthawk-inspection-coding-workspace",
+      "model_reasoning_effort": "medium"
+    },
+    "configuration_sha256": "f020b56067ab3d3ad9eb450cd1246704017d53306bbb7f9a051910b426c09011",
+    "trials_sha256": "4b39474d15320efbb61f48b06f5bbf8bec29a4884df37312e490aff035a2dfd8",
+    "source_manifest_sha256": "7df1f054248f007cf805aafe84e645f6d606270f02ac131f510b2631821b4cf8"
+  }
+]
