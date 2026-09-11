@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any, Protocol, cast, runtime_checkable
 
 from pydantic import TypeAdapter
-from pydantic_ai import Agent, StructuredDict
+from pydantic_ai import Agent, RunContext, StructuredDict
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.messages import UserContent
+from pydantic_ai.models import ModelRequestContext
 from pydantic_ai.tool_manager import ToolManager
 from pydantic_ai.toolsets.function import FunctionToolset
 
@@ -39,6 +41,18 @@ from .step_contract import (
     build_step_system_prompt_suffix_fragment,
 )
 from .step_request import StepCandidate, StepRequest
+
+
+class _OperationFailureGuard(AbstractCapability[StepContext]):
+    """Keep failed operations terminal even when model capabilities recover them."""
+
+    # Keep Pydantic AI's keyword-compatible parameter name on this override.
+    async def before_model_request(self, ctx: RunContext[StepContext], request_context: ModelRequestContext) -> ModelRequestContext:
+        # Pydantic AI can classify a body ValidationError as retryable or let a capability supply a substitute result.
+        # Neither clears our operation failure, and neither may cause another model request for this step.
+        if ctx.deps.operation_failure is not None:
+            raise ctx.deps.operation_failure
+        return request_context
 
 
 @runtime_checkable
@@ -209,7 +223,7 @@ class AgentStepExecutor:
         normalized_user_prompt: str | tuple[UserContent, ...] = (
             user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
         )
-        capabilities = list(_current_capabilities())
+        capabilities = [*_current_capabilities(), _OperationFailureGuard()]
 
         if isinstance(self.agent, AsyncExecutionAgent):
             return await self.agent.run(
@@ -323,12 +337,22 @@ class AgentStepExecutor:
             step_context_scope(step_context),
             ToolManager.parallel_execution_mode("sequential"),
         ):
-            result = await self._run_agent(
-                user_prompt=user_prompt,
-                step_context=step_context,
-                toolset=toolset,
-                structured_output_type=structured_output_type,
-            )
+            try:
+                result = await self._run_agent(
+                    user_prompt=user_prompt,
+                    step_context=step_context,
+                    toolset=toolset,
+                    structured_output_type=structured_output_type,
+                )
+            except Exception:
+                failure = step_context.operation_failure
+                if failure is None:
+                    raise
+                # Preserve the operation exception and its original cause instead of a secondary retry-limit or capability exception.
+                raise failure from failure.__cause__
+
+        if step_context.operation_failure is not None:
+            raise step_context.operation_failure
 
         usage_meter = get_usage_meter()
         if usage_meter is not None and hasattr(result, "usage"):

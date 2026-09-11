@@ -81,8 +81,12 @@ def test_agent_step_executor_passes_scoped_capabilities_to_agent_run() -> None:
         with nh.scope(capabilities=[capability]):
             natural_pass_function()
 
-    assert recording_agent.received_keyword_arguments[0]["capabilities"] == []
-    assert recording_agent.received_keyword_arguments[1]["capabilities"] == [capability]
+    # Executors may add mandatory runtime capabilities alongside scoped ones.
+    received_scoped_capability_lists = [
+        [item for item in arguments["capabilities"] if isinstance(item, _MarkerCapability)]
+        for arguments in recording_agent.received_keyword_arguments
+    ]
+    assert received_scoped_capability_lists == [[], [capability]]
 
 
 def test_before_model_request_hook_fires_for_natural_block_on_test_model() -> None:

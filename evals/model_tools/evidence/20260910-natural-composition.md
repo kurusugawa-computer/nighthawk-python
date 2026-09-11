@@ -17,6 +17,11 @@ It used the production implementation at `149f16f`, plus the integration module 
 | Natural selects follow-up assessments | 3 | Only the numerical and causal claims reach children, each once; the documented numerical claim scores at least 0.8 and the unsupported causal assertion scores at most 0.2. | 24.050 s |
 | Natural materializes a counter and calls ten children | 11 | Children receive parent counter values 1 through 10; the fifth and eighth return their designated labels and all others return `ordinary`. | 115.349 s |
 
+On 2026-09-11, the same three cases also passed using `openai-responses:gpt-5.6-luna` with identical reasoning, token, and timeout settings.
+The run took 121.65 seconds against the production implementation at `a14a2b8`, before the subsequent operation-failure guard change.
+The individual durations were 12.575 seconds for Python iteration, 24.775 seconds for selected assessments, and 83.941 seconds for the ten-child counter.
+These durations describe single runs and do not establish a model latency ranking.
+
 The runtime supplied one start and one successful terminal event for each of the 17 steps, with unique invocation identities.
 Each model-invoked child started and finished within its parent's active lifetime, and its terminal event identified that parent.
 The summary assessor calls originate in ordinary Python after the summarization step has finished, so their parent step identities are empty.
@@ -49,16 +54,16 @@ With `OPENAI_API_KEY` already configured, run:
 NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run pytest -v tests/integration/test_natural_composition.py -k sol
 ```
 
-The module also parametrizes `gpt-5.6-luna`.
-Its execution was not completed in this session: automatic approval review rejected that invocation because it could not confirm authorization for the new payloads, separately from the previously approved 13 integration tests.
-The concurrently submitted Sol invocation was approved and completed successfully.
-No Luna result is inferred from Sol or from the earlier 13-test suite.
+Replace `-k sol` with `-k luna` to run the Luna cases, or omit the selection to run both models.
+The Luna invocation initially required additional authorization after automatic approval review rejected the new payloads.
+The user subsequently approved C-COMPOSITION-001 and general use of the configured `.env` key; the actual Luna execution then completed successfully.
 
-This is one execution per workflow on one provider and model, without automatic whole-workflow retries.
+This is one execution per workflow on each of two models using one provider, without automatic whole-workflow retries.
 It establishes working examples and regression oracles, not a reliability estimate, cross-backend equivalence, or general correctness of semantic judgments.
 The tests do not settle the dedicated-inspection-tool versus inspection-helper comparison.
 That comparison still requires controlled prompts, independent repetitions, additional task formulations, full interaction metrics, and separate evidence as specified in the [approved evaluation plan](../README.md#approved-inspection-helper-comparison).
 
 Local artifacts from this execution are `/tmp/nighthawk-composition-sol.log` and `/tmp/nighthawk-composition-sol.xml`.
+The subsequent Luna artifacts are `/tmp/nighthawk-composition-luna.log` and `/tmp/nighthawk-composition-luna.xml`.
 They contain pytest results and timings; they are not full model-interaction traces.
 The API key was read without displaying or recording it.
