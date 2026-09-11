@@ -45,8 +45,9 @@ def resolve_tool_result_rendering_policy(policy: ToolResultRenderingPolicy | Non
 class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
-    ``step_globals`` and ``step_locals`` are mutable dicts. All mutations to ``step_locals`` MUST go through :meth:`record_assignment` (for top-level name bindings) or through the dotted-path assignment in ``tools.assignment`` (which bumps ``step_locals_revision`` directly).
-    Direct dict writes bypass revision tracking, ``assigned_binding_names``, and ``dirty_output_binding_names`` bookkeeping, which will cause incorrect commit behavior at Natural block boundaries.
+    ``environment`` owns effective lookup and tracked step assignments.
+    Use :meth:`record_assignment` or the common assignment operations to keep that environment and ``step_locals`` bookkeeping consistent.
+    Revision and mutation marks describe tracked changes; finalization independently validates all initialized declared outputs, with explicit candidate proposals taking precedence.
     """
 
     execution_reference: ExecutionReference

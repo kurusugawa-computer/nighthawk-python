@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `StepEnvironment` separates Python lexical bindings, inherited working state, scoped task references, and tracked step assignments, with source-qualified lookup and progressing discovery.
+- Replaceable `ContextBuilder` presentation and shared static value inspection preserve application helper-name collisions and complete discovery continuations, including pages nested in ordinary containers.
+- Common operation admission, awaited inspection, serialized execution, and completion records cover evaluation, assignment, return-expression resolution, and native tools. Failed tool argument admission retains its identity and original exception.
+- Lifecycle start and operation notifications support asynchronous handlers alongside terminal delivery.
+
+### Changed
+
+- `task_references` replaces `implicit_references`. Injection remains separate from Python module globals.
+- Executors accept one `StepRequest` and return a resolved `StepCandidate`. Finalization validates all initialized declared outputs, rejects undeclared proposals, and independently validates return values. An initial `Raise` discards pending writes.
+- Commit rewrites validate supplied replacements once without repeating inspection or expression effects; supplied output mappings replace the full selected mapping.
+- Dotted assignment requires an ordinary Pydantic field with `validate_assignment=True`. Right-hand-side evaluation precedes live attribute traversal, and earlier effects are not rolled back on failure.
+- Ordinary application and propagated validator exceptions cross model and backend boundaries unchanged. Runtime input errors and explicit Pydantic AI control signals retain their recovery paths.
+- `Oversight.inspect_operation` replaces the separate return-expression inspection hook.
+
+### Fixed
+
+- Source instrumentation retains defaults, live closure cells and globals, Python unbound-name behavior, and application names that resemble generated helpers.
+- Ordered model tool batches and coding-agent callbacks preserve per-step operation order and stop after terminal operation failure.
+- Coding-agent callbacks use the request's event loop and captured scope; process and transport failures preserve their originating exceptions.
+
 ## [0.14.0]
 
 ### Added

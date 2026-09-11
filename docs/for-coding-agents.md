@@ -9,7 +9,7 @@ You are expected to write, review, and debug Python code that uses Nighthawk as 
 - Python owns deterministic logic. Use Python for computation, control flow, I/O, validation, retries, state management, orchestration, and data shaping.
 - Natural blocks are for semantic judgment. Use them for classification, interpretation, generation, ranking, and decisions that depend on context or world knowledge.
 - One Natural block should do one task with one contract. If a block makes two independent decisions, split it.
-- There is no implicit cross-block history. Persist state in Python values and pass it back explicitly.
+- Each block starts a fresh model interaction. Python values, scoped task references, and inherited parent working state carry context; a parent's model transcript is not inherited.
 - Natural blocks and imported markdown are trusted, repository-managed assets. Do not splice untrusted user input into Natural source text or markdown preprocessing. Pass untrusted data as bindings.
 - Prefer explicit, typed write bindings. Runtime inference exists for unannotated write bindings, but new code should not rely on it.
 - Keep outputs narrow and typed, especially when using coding agent backends. A block may do broad internal work, but the Python boundary should stay small.

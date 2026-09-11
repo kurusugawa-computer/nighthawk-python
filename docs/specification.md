@@ -75,6 +75,7 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
     - Compilation happens at decoration time, and Natural blocks are executed at function call time.
     - Note: The decorator requires the function source to be available for inspection.
     - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional. `nh.get_transformed_function(function)` exposes the compiled body sharing the original module globals. It follows outer wrappers and supported method descriptors, requires no run, and raises `TypeError` for invalid inputs or wrapper cycles. Execute through the decorated function to establish runtime context.
+    - Instrumentation preserves original defaults without evaluating them again, live closure cells, and defining module globals. Generated helper names avoid application bindings, including names appearing inside Natural text.
 
 ### 5.2. Configuration
 
@@ -182,12 +183,13 @@ Sentinel rules (both docstring and inline):
 
 The Natural program may contain bindings with angle brackets:
 
-- `<name>`: read binding. The current Python value of `name` is made available to the LLM.
-- `<:name>`: write binding. The LLM may update the value of `name`.
+- `<name>`: read binding. Resolve the current value of `name` in the effective environment and prioritize its presentation to the LLM.
+- `<:name>`: output binding. Authorize a pending Python name assignment at the block boundary.
 
 Resolution note:
 
-- Read binding reads resolve names using Python lexical rules (LEGB: locals, enclosing, globals, builtins).
+- Read bindings use the same environment as runtime operations: step assignments, Python lexical names, inherited working state, then scoped task references.
+- An unbound Python local or closure cell blocks fallback to a same-name parent or task value.
 - If a read binding is missing or unbound, preparation fails with the original `NameError` or `UnboundLocalError` stored in `StepFailed.original_exception`. Unless terminal delivery supplies a host exception, the caller receives `ExecutionError` chained from that original exception (see [Section 10.4](#104-terminal-delivery-and-host-ledgers)).
 
 Constraints:
@@ -198,14 +200,15 @@ Constraints:
 
 Type note:
 
-- Nighthawk extracts type information for `<:name>` bindings from the function source AST at compile time.
-- If no type annotation is found, the type is treated as `object`.
+- Nighthawk captures source annotations and resolves required output and return contracts during step preparation.
+- An explicit annotation, including `object`, takes precedence over the initial value's type.
+- Presentation-only annotation metadata is not evaluated to enrich a prompt or discovery response.
 
 Runtime type inference:
 
-- When a write binding has no explicit type annotation, the AST transformer assigns `object` as a placeholder type.
-- At runtime, before LLM execution, Nighthawk upgrades `object` placeholders to the type of the binding's initial value in `step_locals` (e.g., `result = ""` infers `str`).
-- Inference is skipped when the initial value is `None` or a generic `object()` instance.
+- A missing annotation has its own internal marker, distinct from an explicit `object` annotation.
+- At step entry, an unannotated initialized output uses the initial value's Python type (e.g., `result = ""` infers `str`).
+- An uninitialized output, `None`, or a generic `object()` instance uses `object` as its fallback contract.
 - This enables `nh_assign` type validation and retry for unannotated bindings that have typed initial values.
 
 Clarifying note (bindings vs tool targets):
@@ -218,23 +221,22 @@ Clarifying note (bindings vs tool targets):
 
 ### 8.1. State layers: python locals and step locals
 
-Nighthawk uses multiple state layers.
+`StepContext.environment` owns effective lookup and separate read-only views of Python, parent, task, and step bindings.
+Lookup prefers tracked step assignments, then Python locals/cells/globals/builtins, then inherited working state, then scoped task references.
+Python locals are captured from the instrumented function at block entry; closure cells and defining module globals remain live.
+Unbound locals and cells retain Python's blocking semantics.
+Unrelated caller frames are not lexical dependencies.
 
-1) Python locals (`python_locals`)
+A child captures its parent's materialized working associations, including inherited state, current Python working locals and cells, and tracked assignments.
+It does not inherit the parent's module globals, task configuration as locals, generated runtime bindings, or model transcript.
+The child's own scoped task references remain separately available.
+Parent membership and object associations are snapshots; referenced mutable objects remain shared.
 
-- These are the actual local variables in the executing Python function.
-- After a Natural block finishes, selected values are committed into Python locals so subsequent Python code can read them.
-
-2) Step locals (`step_locals`)
-
-- `step_locals` is a mapping used as the locals environment for LLM expression evaluation.
-- It is initialized at the start of each Natural block execution, in the following order:
-    1. If a parent step context exists on the step context stack, start from its `step_locals` values.
-    2. Overlay the caller frame's current `python_locals` (so current Python locals always win over inherited step-context state).
-    3. For each read binding (`<name>`), resolve the name using Python lexical rules (locals, enclosing cell scopes, name scopes, globals, builtins). Values resolved from locals, enclosing cell scopes, or name scopes are placed into `step_locals`. Values resolved from globals or builtins remain available through `step_globals` or its builtins namespace; they are not copied into `step_locals`. All resolved read bindings are included in `input_binding_name_to_value` for commit inspection and terminal records.
-- During execution, the LLM can update `step_locals` via tools (Section 8.3).
-- At the end of execution, values for `<:name>` bindings are committed into Python locals.
-
+`step_locals` holds captured Python working values and tracked assignment bookkeeping; it is not the complete effective environment.
+Use `environment.resolve`, its source views, or the common runtime operations for name lookup.
+Generated assignments write validated, selected `<:name>` values back to the corresponding Python locals, cells, or globals after finalization.
+All initialized declared outputs are considered, even without tracked assignment or mutation marks.
+Every block starts a fresh model interaction by default; Python values and inherited working state carry context between blocks.
 
 ### 8.2. Prompt context
 
@@ -474,14 +476,9 @@ Provided tools (built-in):
 - Provided tools are always available by default.
 - Provided tools are exposed with names prefixed by `nh_` to reduce collisions.
 
-Tools operate against `step_locals` and `step_globals`.
-
-Decision (step_globals):
-
-- `step_globals` is initialized from the function's Python module globals (`python_globals`), ensuring that module-level names (functions, classes, constants, imports) are available for expression evaluation. This mirrors Python's standard name resolution semantics (LEGB: locals, enclosing, globals, builtins).
-- `__builtins__` is guaranteed to be present in `step_globals`; if missing from the module globals, it is injected.
-
-Expressions are evaluated against `step_globals` + `step_locals`.
+Tools resolve names through `StepEnvironment`, using the precedence and source boundaries in Section 8.1.
+Expression evaluation uses one live namespace for both globals and locals, so immediately executed comprehensions, generators, and lambdas see the same environment.
+Deferred execution outside the owning step is not a workspace-lifetime guarantee.
 
 Eval tool:
 
@@ -505,28 +502,27 @@ Reserved targets:
 
 Semantics of `nh_assign`:
 
-- Evaluate `expression` as a Python expression using `step_globals` and `step_locals`.
-- If the evaluated expression is awaitable, it is awaited before assignment.
+- Admit the target grammar and root eligibility before evaluating the expression.
+- Evaluate `expression` once in the effective environment, awaiting its result when needed.
 - If `target_path` is a bare `name`:
-    - Assign into `step_locals[name]`.
-    - Validation:
-        - If extracted type information is available for the corresponding `<:name>` binding, validate/coerce to that type.
-        - Otherwise, assign without validation.
+    - A declared output validates against its entry-time contract before updating the tracked working value.
+    - An existing Python name requires an output declaration, including when the Python name is currently unbound.
+    - A new temporary name may shadow parent or task state; it receives no Python writeback without an output declaration.
+    - The generated environment helper root is protected from assignment.
 - If `target_path` is dotted (`name.field...`):
-    - Resolve the root object from `step_locals[name]`.
-    - Traverse attributes for each intermediate segment.
-    - Assign using attribute assignment on the final segment.
-    - Validation:
-        - Validate only the final assigned field when runtime type metadata is available; otherwise assign without validation.
+    - After right-hand-side evaluation, resolve the live root and intermediate attributes once.
+    - The final target must be an ordinary declared Pydantic field on a model with `validate_assignment=True` and standard assignment machinery.
+    - Invoke Pydantic's model assignment once; do not validate a detached field or run a second setter.
+    - Properties, custom assignment machinery, and other attribute targets return a recoverable unsupported-target observation recommending an ordinary Python helper.
 
 Commit and mutation notes:
 
 - Commit selection is controlled only by `<:name>` bindings.
 - `<:name>` selects which top-level names are committed from `step_locals` into Python locals at Natural block boundaries.
-- Dotted `nh_assign` on a write binding root marks that root as dirty for commit selection.
-- Dotted `nh_assign` on a read binding root does not participate in commit selection.
-- Final validation is applied only to committed write bindings at step finalization.
-- Dotted mutation on read bindings and in-place mutation via `nh_eval` are outside the final validation guarantee.
+- Tracked assignment and mutation marks support working-state bookkeeping; they do not select which initialized outputs receive final validation.
+- All initialized declared outputs receive final validation, with explicit candidate proposals taking precedence; an initial `Raise` discards pending writes.
+- Mutation of a shared object is immediately visible and does not require a generated name assignment.
+- Objects outside declared outputs are not recursively validated at finalization.
 
 Write tool return value:
 
@@ -586,9 +582,11 @@ Request cancellation cancels pending callbacks and cleans up the coding-agent pr
 
 The projected `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
 
-Atomicity requirement:
+Partial effects:
 
-- `nh_assign` is atomic: if traversal, evaluation, or validation fails, it performs no updates.
+- Static admission failure does not evaluate the right-hand side.
+- A failed pending name assignment retains its prior working value, but earlier helper, validator, or object-mutation effects remain.
+- Dotted traversal or model validation can fail after right-hand-side effects; the block provides no transaction or automatic rollback.
 
 #### 8.3.1. Supporting types (internal)
 
@@ -860,9 +858,12 @@ Generated Python resolves the candidate, performs each selected write assignment
 
 `StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`. All carry `execution_reference`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_step_kinds`, and `assigned_binding_name_to_value`. Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values. Runtime references require both step identity fields. Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity. Hosts must serialize or copy deliberately for durable records.
 
-`StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Invalid exception names fail at `raise_resolution`; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. Explicit rejection additionally carries `inspection_subject` and `rejection_reason`. Invalid hook decisions remain inspection failures.
+`StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Model-selected exception expressions use the operation pipeline; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. Explicit rejection additionally carries `inspection_subject` and `rejection_reason`. Invalid hook decisions remain inspection failures.
 
-`FailureStage` identifies preparation, executor, outcome_validation, binding_validation, return_inspection, return_evaluation, return_await, return_validation, commit_inspection, rewrite_validation, oversight_rejection, raise_resolution, raise_construction, or binding_assignment. Classification uses structured runtime state, not exception text. Ordinary execution exceptions propagate as `ExecutionError(step_failed)` chained from the record's original exception unless delivery supplies a host exception. DSL Raise propagates its prepared exception.
+`FailureStage` identifies preparation, started_delivery, operation_inspection, operation_execution, operation_delivery, executor, outcome_validation, binding_validation, return_await, return_validation, commit_inspection, rewrite_validation, oversight_rejection, raise_construction, or binding_assignment.
+Classification uses structured runtime state, not exception text.
+Terminal failures recorded by the operation pipeline propagate unchanged; other internal execution failures use `ExecutionError(step_failed)` chained from the original exception unless delivery supplies a host exception.
+DSL Raise propagates its prepared exception.
 
 The callback may append the record to a host-owned authoritative ledger and raise a public host exception containing that exact stored event. For StepFailed, core explicitly chains the callback exception from `original_exception`; for StepRaised, from the prepared domain exception. If the callback rethrows the exact original exception object, core preserves its existing cause rather than chaining the exception to itself. Arbitrary callback exceptions are preserved and never reclassified or redelivered. `StepDeliveryError(execution_reference, cause)` is available for host adapters reporting storage failure; its `delivery_cause` does not imply a durable event exists. During ordinary execution failure, the outward chain prioritizes the execution exception and the storage cause remains available in `delivery_cause`.
 
@@ -870,7 +871,10 @@ Executor and commit-inspector exceptions produce StepFailed delivery even when t
 
 On StepCompleted delivery failure, completed assignments remain visible and the callback's exception propagates. There is no original execution failure to fabricate as its cause, and the already-classified StepCompleted is not rewritten into StepFailed. Hosts may classify the overall operation as a commit/delivery failure and record their own anomaly; that classification is separate from core's execution result and does not authorize retrying the execution.
 
-`StepInterrupted` holds the active `failure_stage` and original cancellation or process-control `BaseException`. Delivery is attempted synchronously without an additional await. If delivery also fails, the original interruption still propagates, explicitly chained from the delivery exception. Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translated into ordinary host execution failures.
+`StepInterrupted` holds the active `failure_stage` and original cancellation or process-control `BaseException`.
+An asynchronous notification receives a shielded delivery attempt bounded by `StepLifecycle.interruption_delivery_timeout`; a timed-out notification is cancelled.
+If delivery also fails, the original interruption still propagates, explicitly chained from the delivery exception.
+Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translated into ordinary host execution failures.
 
 The guarantee is one in-process delivery attempt, not a transaction across Python and storage. A callback that appends and then raises cannot be distinguished automatically from an uncertain append failure. Hosts deduplicate and retry storage by `step_execution_id`, never by replaying a Natural execution. Hard process termination and unavailable storage cannot guarantee durable delivery. OpenTelemetry is optional diagnostics, not the authoritative ledger. Terminal tracing follows the typed classification: await failures receive `nighthawk.step.failed` and exception/error status; interruptions receive `nighthawk.step.interrupted`; delivery failures may add `nighthawk.step.delivery_failed` without a second execution terminal event.
 
@@ -903,11 +907,11 @@ Decision:
 
 Nighthawk does not define a built-in persistence or memory model.
 
-If you want a long-lived object, define it yourself and bind it as an ordinary Python value. Because expression evaluation and assignment operate on `step_locals`, bound values behave like any other local: they can be read via expressions and mutated in-place via `nh_eval`.
+If you want a long-lived object, define it yourself and expose it as an ordinary Python value through lexical state or scoped task references. Runtime expressions can read it and `nh_eval` can mutate it in place. Inherited working associations support child execution but do not provide durable persistence.
 
 ### 12.1. Carry pattern
 
-The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in-place via `nh_eval`. Read bindings prevent rebinding, so the caller's reference is preserved while the object contents are updated.
+The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable Python object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in place via `nh_eval`. Rebinding an existing Python name requires an output declaration, so a read-only declaration preserves the caller's name association while allowing object mutations.
 
 For practical examples and design tips, see [Patterns](patterns.md#cross-block-composition).
 
@@ -921,9 +925,10 @@ Exception hierarchy:
     - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
 - `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
     - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
-- `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception. A DSL Raise without an explicit type may also construct this exception with a message and no failure record.
-    - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, return value validation fails, or `raise` outcome is triggered without a matching exception type.
-- `ToolEvaluationError(NighthawkError)`: Low-level expression evaluation helper failure. Built-in tool boundaries convert this into a structured failure observation.
+- `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception.
+    - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, or boundary value validation fails outside the operation pipeline.
+    - A DSL Raise defaults to ordinary `Exception`; application operation failures retain their own exception types.
+- `ToolEvaluationError(NighthawkError)`: Exported exception type; current common expression operations use `OperationError` for recoverable runtime failures and propagate application exceptions.
 - `ToolValidationError(NighthawkError)`: Exported exception type; the built-in `nh_assign` implementation does not raise it.
 - `ToolBoundaryError(Exception)`: Internal tool boundary signal with an `ErrorKind` and optional guidance. A failed `nh_assign` value validation raises this signal with `kind="invalid_input"`; the tool wrapper converts it into `ToolOutcome.error` for the model. It is not a `NighthawkError` subclass.
 - `ToolDeclarationError(NighthawkError)`: Invalid tool declaration.

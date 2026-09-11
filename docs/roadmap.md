@@ -97,8 +97,7 @@ storage must not imply automatic replay of operations with possible side effects
 
 ### Execution context propagation
 
-- Propagate execution context and step-executor context across tool execution boundaries when tools run in different threads or processes.
-- Define an explicit serialization/propagation mechanism for multi-process execution.
+- Define an explicit serialization/propagation mechanism for multi-process execution beyond the existing in-process thread and event-loop bridges.
 
 Multi-process propagation is exploratory and concerns explicitly serialized host
 data and correlation metadata, not implicit transfer of live workspace objects
