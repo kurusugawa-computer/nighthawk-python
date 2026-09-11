@@ -93,7 +93,10 @@ def annotation_text(annotation: object, *, depth: int = 0) -> str:
     if type(annotation) is str:
         return annotation if len(annotation) <= 500 else annotation[:500] + "<snipped annotation spelling>"
     if type(annotation) is SourceAnnotation:
-        return " | ".join(annotation.expressions)[:500]
+        spelling = " | ".join(annotation.expressions)[:500]
+        if annotation.parameter_kind is not None:
+            return f"{spelling} ({annotation.parameter_kind} variadic parameter)"
+        return spelling
     if type(annotation) is typing.TypeAliasType:
         return annotation.__name__
     if _is_class(annotation):

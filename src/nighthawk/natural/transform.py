@@ -26,6 +26,7 @@ class NaturalTransformer(ast.NodeTransformer):
         self._captured_name_tuple = captured_name_tuple
         self._return_annotation_stack: list[ast.expr | None] = []
         self._binding_name_to_type_expression_stack: list[dict[str, list[ast.expr]]] = []
+        self._variadic_parameter_name_to_kind_stack: list[dict[str, str]] = []
         self._is_async_function_stack: list[bool] = []
         self._loop_depth = 0
 
@@ -35,6 +36,11 @@ class NaturalTransformer(ast.NodeTransformer):
             return node
         self._return_annotation_stack.append(node.returns)
         self._binding_name_to_type_expression_stack.append(self._collect_binding_name_to_type_expression(node))
+        self._variadic_parameter_name_to_kind_stack.append(
+            {argument.arg: kind for argument, kind in ((node.args.vararg, "positional"), (node.args.kwarg, "keyword")) if argument is not None}
+        )
+        if node.args.vararg is not None and isinstance(node.args.vararg.annotation, ast.Starred):
+            self._variadic_parameter_name_to_kind_stack[-1][node.args.vararg.arg] = "unpacked"
         self._is_async_function_stack.append(isinstance(node, ast.AsyncFunctionDef))
         saved_loop_depth = self._loop_depth
         self._loop_depth = 0
@@ -135,6 +141,7 @@ class NaturalTransformer(ast.NodeTransformer):
         finally:
             self._is_async_function_stack.pop()
             self._binding_name_to_type_expression_stack.pop()
+            self._variadic_parameter_name_to_kind_stack.pop()
             self._return_annotation_stack.pop()
             self._loop_depth = saved_loop_depth
 
@@ -240,11 +247,11 @@ class NaturalTransformer(ast.NodeTransformer):
             return ast.Name(id=self._runtime_names.allocate("__nh_missing_annotation__"), ctx=ast.Load())
         return self._source_annotation_expression([annotation])
 
-    def _source_annotation_expression(self, annotations: list[ast.expr]) -> ast.expr:
+    def _source_annotation_expression(self, annotations: list[ast.expr], *, parameter_kind: str | None = None) -> ast.expr:
         return ast.Call(
             func=ast.Name(id=self._runtime_names.allocate("__nh_source_annotation__"), ctx=ast.Load()),
             args=[ast.Tuple(elts=[ast.Constant(ast.unparse(annotation)) for annotation in annotations], ctx=ast.Load())],
-            keywords=[],
+            keywords=[ast.keyword(arg="parameter_kind", value=ast.Constant(parameter_kind))] if parameter_kind is not None else [],
         )
 
     def _collect_binding_name_to_type_expression(
@@ -261,7 +268,8 @@ class NaturalTransformer(ast.NodeTransformer):
             *([node.args.kwarg] if node.args.kwarg else []),
         ]:
             if argument.annotation is not None:
-                binding_name_to_type_expression[argument.arg] = [argument.annotation]
+                annotation = argument.annotation.value if isinstance(argument.annotation, ast.Starred) else argument.annotation
+                binding_name_to_type_expression[argument.arg] = [annotation]
 
         class AnnotationVisitor(ast.NodeVisitor):
             def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
@@ -294,7 +302,10 @@ class NaturalTransformer(ast.NodeTransformer):
             keys.append(ast.Constant(name))
             annotations = binding_name_to_type_expression.get(name)
             values.append(
-                self._source_annotation_expression(annotations)
+                self._source_annotation_expression(
+                    annotations,
+                    parameter_kind=self._variadic_parameter_name_to_kind_stack[-1].get(name) if self._variadic_parameter_name_to_kind_stack else None,
+                )
                 if annotations
                 else ast.Name(id=self._runtime_names.allocate("__nh_missing_annotation__"), ctx=ast.Load())
             )

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Source instrumentation retains defaults, live closure cells and globals, Python unbound-name behavior, and application names that resemble generated helpers.
+- Variadic output bindings validate their tuple or dictionary elements, preserving `Annotated` constraints and unpacked collection contracts.
 - Ordered model tool batches and coding-agent callbacks preserve per-step operation order and stop after terminal operation failure.
 - Coding-agent callbacks use the request's event loop and captured scope; process and transport failures preserve their originating exceptions.
 

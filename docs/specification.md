@@ -202,6 +202,7 @@ Type note:
 
 - Nighthawk captures source annotations and resolves required output and return contracts during step preparation.
 - An explicit annotation, including `object`, takes precedence over the initial value's type.
+- A variadic parameter's annotation constrains its elements: `*values: int` selects `tuple[int, ...]` and `**values: int` selects `dict[str, int]` for the local output binding. `Unpack` and starred tuple annotations already specify the collection contract.
 - Presentation-only annotation metadata is not evaluated to enrich a prompt or discovery response.
 
 Runtime type inference:
