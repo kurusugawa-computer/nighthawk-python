@@ -10,6 +10,49 @@ from dataclasses import dataclass
 import tiktoken
 
 
+def map_discovery_containers(
+    value: object, transform_leaf: Callable[[object], object], *, transform_key: Callable[[object], object] | None = None
+) -> object:
+    """Visit exact builtin containers, treating discovery pages as atomic leaves."""
+    active_object_id_set: set[int] = set()
+
+    def visit(item: object) -> object:
+        if type(item) not in (dict, list, tuple):
+            return transform_leaf(item)
+        if id(item) in active_object_id_set:
+            return "<cycle>"
+        active_object_id_set.add(id(item))
+        try:
+            if isinstance(item, dict):
+                return {(transform_key(key) if transform_key is not None else key): visit(value) for key, value in item.items()}
+            assert isinstance(item, (list, tuple))
+            return [visit(value) for value in item]
+        finally:
+            active_object_id_set.remove(id(item))
+
+    return visit(value)
+
+
+def contains_discovery_result(value: object) -> bool:
+    active_object_id_set: set[int] = set()
+
+    def contains(item: object) -> bool:
+        if type(item) is DiscoveryResult:
+            return True
+        if type(item) not in (dict, list, tuple) or id(item) in active_object_id_set:
+            return False
+        active_object_id_set.add(id(item))
+        try:
+            if isinstance(item, dict):
+                return any(contains(value) for value in item.values())
+            assert isinstance(item, (list, tuple))
+            return any(contains(value) for value in item)
+        finally:
+            active_object_id_set.remove(id(item))
+
+    return contains(value)
+
+
 class DiscoveryResult(dict[str, object]):
     """A description whose references and continuation must survive rendering."""
 

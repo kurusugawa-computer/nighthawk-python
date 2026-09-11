@@ -9,7 +9,7 @@ import headson
 import tiktoken
 from pydantic import BaseModel
 
-from .runtime.discovery import DiscoveryResult
+from .runtime.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
 
 type JsonRendererStyle = Literal["strict", "default", "detailed"]
 
@@ -25,6 +25,73 @@ _MINIMUM_OUTPUT = "{}"
 # most encodings, but varies by encoding. This constant is a fixed lower bound
 # used for budget arithmetic; the real token count is always recomputed when needed.
 _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT = 1
+
+
+@dataclasses.dataclass(frozen=True)
+class DiscoveryProjection:
+    value: object
+    text: str
+    token_count: int
+
+
+@dataclasses.dataclass(frozen=True)
+class _DiscoverySlot:
+    index: int
+
+
+def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoken.Encoding) -> DiscoveryProjection | None:
+    """Budget composed discovery atomically while preserving native content leaves.
+
+    Ordinary leaves are converted once before trying smaller pages, so budget
+    selection never repeats application serializers.
+    """
+    if not contains_discovery_result(value):
+        return None
+    pages: list[DiscoveryResult] = []
+
+    def prepare_leaf(item: object) -> object:
+        if type(item) is DiscoveryResult:
+            pages.append(item)
+            return _DiscoverySlot(len(pages) - 1)
+        return to_jsonable_value(item)
+
+    prepared = map_discovery_containers(
+        value, prepare_leaf, transform_key=lambda key: key if isinstance(key, str) else _render_compact_json(to_jsonable_value(key))
+    )
+
+    def candidate(page_budget: int) -> DiscoveryProjection:
+        replacements = [page.for_budget(page_budget, encoding) for page in pages]
+        projected = map_discovery_containers(prepared, lambda item: replacements[item.index] if type(item) is _DiscoverySlot else item)
+        text = _render_compact_json(to_jsonable_value(projected))
+        replacement_iterator = iter(replacements)
+        native_value = map_discovery_containers(value, lambda item: next(replacement_iterator) if type(item) is DiscoveryResult else item)
+        return DiscoveryProjection(native_value, text, count_tokens(text, encoding=encoding))
+
+    full = candidate(max_tokens)
+    if full.token_count <= max_tokens:
+        return full
+    best: DiscoveryProjection | None = None
+    lower, upper = 1, max_tokens - 1
+    while lower <= upper:
+        trial = (lower + upper) // 2
+        projected = candidate(trial)
+        if projected.token_count <= max_tokens:
+            best = projected
+            lower = trial + 1
+        else:
+            upper = trial - 1
+    if best is not None:
+        return best
+    for recovery in (
+        {"error": "Discovery response exceeds the response budget", "recovery": "Evaluate discovery separately or increase tool_result_max_tokens."},
+        {"recovery": "Evaluate discovery separately."},
+        {},
+    ):
+        text = _render_compact_json(to_jsonable_value(recovery))
+        token_count = count_tokens(text, encoding=encoding)
+        if token_count <= max_tokens or not recovery:
+            return DiscoveryProjection(recovery, text, token_count)
+    raise AssertionError("The minimum discovery response must be returned")
 
 
 def render_json_text(
@@ -54,8 +121,9 @@ def render_json_text(
     if max_tokens < _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT:
         raise ValueError(f"max_tokens must be >= {_MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT}")
 
-    if type(value) is DiscoveryResult:
-        value = value.for_budget(max_tokens, encoding)
+    discovery = project_discovery_value(value, max_tokens=max_tokens, encoding=encoding)
+    if discovery is not None:
+        return discovery.text, discovery.token_count
     jsonable = to_jsonable_value(value)
     compact_json_input = _render_compact_json(jsonable)
     compact_json_input_token_count = count_tokens(compact_json_input, encoding=encoding)

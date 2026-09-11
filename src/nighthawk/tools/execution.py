@@ -13,9 +13,9 @@ from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_core import PydanticSerializationError
 
-from ..json_renderer import to_jsonable_value
+from ..json_renderer import project_discovery_value, to_jsonable_value
 from ..runtime._user_content import is_top_level_sequence_payload
-from ..runtime.discovery import DiscoveryResult
+from ..runtime.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
 from ..runtime.operation_contract import OperationError
 from ..runtime.operations import OperationExecution, execute_operation_async, new_operation_request
 from ..runtime.step_context import StepContext
@@ -41,6 +41,8 @@ def _normalize_tool_return_item(item: object) -> object:
     """
     if type(item) is DiscoveryResult:
         return item
+    if contains_discovery_result(item):
+        return map_discovery_containers(item, _normalize_tool_return_item)
     if is_multi_modal_content(item):
         return item
     if isinstance(item, TextContent):
@@ -56,7 +58,9 @@ def _normalize_tool_return_item(item: object) -> object:
 
 
 def _normalize_tool_success(value: object) -> ToolOutcome:
-    if value is None:
+    if contains_discovery_result(value):
+        normalized_payload = map_discovery_containers(value, _normalize_tool_return_item)
+    elif value is None:
         normalized_payload = None
     elif isinstance(value, str | bytes | bytearray):
         normalized_payload = _normalize_tool_return_item(value)
@@ -159,13 +163,15 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
         Must not be removed while Nighthawk uses Pydantic AI's ``WrapperToolset``.
         """
         tool_outcome = await self.call_tool_outcome(name, tool_args, ctx, tool)
-        if type(tool_outcome["payload"]) is DiscoveryResult:
+        if contains_discovery_result(tool_outcome["payload"]):
             import tiktoken
 
             from ..runtime.step_context import resolve_tool_result_rendering_policy
 
             policy = resolve_tool_result_rendering_policy(ctx.deps.tool_result_rendering_policy)
-            payload = tool_outcome["payload"]
-            assert isinstance(payload, DiscoveryResult)
-            return payload.for_budget(policy.tool_result_max_tokens, tiktoken.get_encoding(policy.tokenizer_encoding_name))
+            projected = project_discovery_value(
+                tool_outcome["payload"], max_tokens=policy.tool_result_max_tokens, encoding=tiktoken.get_encoding(policy.tokenizer_encoding_name)
+            )
+            assert projected is not None
+            return projected.value
         return _build_standard_tool_return_value(tool_outcome=tool_outcome)

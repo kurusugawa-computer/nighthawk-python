@@ -412,6 +412,10 @@ Pages progress for stable name membership; changed membership or an invalid curs
 When a discovery page exceeds the tool-response budget, rendering reduces the page and preserves complete reference and continuation expressions.
 Metadata may be omitted explicitly to retain those expressions.
 If even one reference and its continuation cannot fit, the response explains the limit and recommends Python slices on environment views or a larger response budget; it does not return a truncated cursor.
+Discovery pages nested in builtin dictionaries, lists, and tuples receive the same protection and share the whole value's response budget.
+If the surrounding data cannot fit alongside the pages, the response recommends evaluating discovery separately or increasing the budget.
+Recovery records are complete JSON; extremely small budgets may retain only a shorter recovery record or `{}`.
+Composing discovery with native media preserves the native content objects when the composed value fits.
 Descriptors and unavailable metadata are identified as omissions, without promising that another page can execute them.
 Large collections can be examined with ordinary Python slices.
 

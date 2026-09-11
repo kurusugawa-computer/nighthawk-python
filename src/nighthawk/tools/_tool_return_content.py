@@ -14,8 +14,9 @@ from typing import NamedTuple
 
 from pydantic_ai.messages import ToolReturnPart, UserContent
 
+from ..json_renderer import project_discovery_value
 from ..runtime._user_content import try_project_ordered_user_content_sequence
-from ..runtime.discovery import DiscoveryResult
+from ..runtime.discovery import contains_discovery_result
 
 
 class ToolReturnSegments(NamedTuple):
@@ -59,13 +60,17 @@ def resolve_tool_return_segments(
     # trailing block, so we short-circuit here. Revisit if a future Pydantic AI
     # release preserves adjacency natively. Both halves of this contract are
     # pinned by ``tests/tools/test_tool_boundary.py``.
-    if type(payload) is DiscoveryResult:
+    if contains_discovery_result(payload):
         import tiktoken
 
         from ..backends.tool_bridge import resolve_current_tool_result_rendering_policy
 
         policy = resolve_current_tool_result_rendering_policy()
-        payload = payload.for_budget(policy.tool_result_max_tokens, tiktoken.get_encoding(policy.tokenizer_encoding_name))
+        projected = project_discovery_value(
+            payload, max_tokens=policy.tool_result_max_tokens, encoding=tiktoken.get_encoding(policy.tokenizer_encoding_name)
+        )
+        assert projected is not None
+        payload = projected.value
     ordered_user_content_tuple = try_project_ordered_user_content_sequence(payload)
     if ordered_user_content_tuple is not None:
         return ToolReturnSegments(response_text="", ordered_user_content=ordered_user_content_tuple)
