@@ -12,6 +12,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from ..configuration import StepExecutorConfiguration
 from ..errors import ExecutionError, NighthawkError
+from ..tools._admission import ToolAdmissionCapability
 from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
 from .async_bridge import run_coroutine_synchronously
@@ -223,7 +224,7 @@ class AgentStepExecutor:
         normalized_user_prompt: str | tuple[UserContent, ...] = (
             user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
         )
-        capabilities = [*_current_capabilities(), _OperationFailureGuard()]
+        capabilities = [*_current_capabilities(), _OperationFailureGuard(), ToolAdmissionCapability()]
 
         if isinstance(self.agent, AsyncExecutionAgent):
             return await self.agent.run(

@@ -32,6 +32,7 @@ async def execute_operation_async(
     *,
     admit: Callable[[], None],
     execute: Callable[[OperationExecution], Awaitable[object]],
+    recoverable_admission_error: BaseException | None = None,
 ) -> object:
     from .scoping import _lifecycle_var, _oversight_var
 
@@ -77,7 +78,10 @@ async def execute_operation_async(
                     status = "failed"
                 else:
                     status = "interrupted"
-                if not isinstance(exception, (OperationError, ModelRetry, ApprovalRequired, CallDeferred)) or execution.phase == "inspection":
+                recoverable_admission = execution.phase == "admission" and exception is recoverable_admission_error
+                if not recoverable_admission and (
+                    not isinstance(exception, (OperationError, ModelRetry, ApprovalRequired, CallDeferred)) or execution.phase == "inspection"
+                ):
                     step_context.operation_failure = exception
                     step_context.operation_failure_stage = "operation_inspection" if execution.phase == "inspection" else "operation_execution"
             finished = OperationFinished(

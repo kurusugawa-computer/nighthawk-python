@@ -33,6 +33,7 @@ from ..runtime.step_context import (
     resolve_tool_result_rendering_policy,
 )
 from ..runtime.tool_calls import generate_tool_call_id, run_tool_instrumented
+from ..tools._admission import with_tool_admission
 from ..tools.contracts import (
     RetryPromptObservation,
     ToolHandlerResult,
@@ -155,7 +156,7 @@ async def execute_tool_call(
             toolset=observed_toolset,
             ctx=run_context,
             tools={tool_name: tool},
-            root_capability=parent_manager.root_capability if parent_manager is not None else None,
+            root_capability=with_tool_admission(parent_manager.root_capability if parent_manager is not None else None),
         )
         try:
             value = await manager.handle_call(ToolCallPart(tool_name, arguments, tool_call_id), wrap_validation_errors=False)

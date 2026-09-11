@@ -834,6 +834,13 @@ Runtime syntax, name-resolution, and value-validation errors provide recoverable
 Each completed operation delivers an `OperationFinished` fact with its phase, whether evaluation started, and its live result or original exception.
 A notification failure does not change that fact or replay the operation.
 
+Pydantic AI validates native and provided tool arguments before entering the tool body boundary.
+A failed schema or argument-validator admission receives an operation Id and an `OperationFinished` record with `phase="admission"` and `evaluation_started=False`, retaining the original exception and unvalidated arguments.
+Malformed JSON arguments are retained under `unvalidated_arguments` in the request's argument mapping.
+Validation errors remain recoverable through Pydantic AI; ordinary exceptions propagated by application validators terminate the step unchanged.
+If a capability repairs invalid arguments, the failed admission remains recorded and the repaired request enters a separately identified inspected operation; the tool body runs once.
+Approval and deferral during argument validation remain in Pydantic AI's designated machinery and do not fabricate a failed admission.
+
 Model adapters resolve return expressions through this pipeline once before returning a candidate.
 Async Natural returns may await the expression result once; sync Natural returns reject awaitable expression results.
 Custom executors may directly construct `Return(value)` without evaluating an expression or creating an operation event.

@@ -117,4 +117,7 @@ def test_model_input_failure_and_explicit_retry_remain_recoverable(failure_origi
         asyncio.run(run_action())
     assert model_calls == 3
     assert body_calls == ([1] if failure_origin == "arguments" else [0, 1])
+    assert len(operations) == 2
+    assert operations[0].phase == ("admission" if failure_origin == "arguments" else "evaluation")
+    assert operations[0].evaluation_started is (failure_origin != "arguments")
     assert operations[-1].status == "succeeded"

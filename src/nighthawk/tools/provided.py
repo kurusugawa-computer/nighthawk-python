@@ -21,8 +21,6 @@ async def _eval_expression_or_raise_async(run_context: RunContext[StepContext], 
 
 
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
-    metadata = {"nighthawk.provided": True}
-
     async def nh_assign(
         run_context: RunContext[StepContext],
         target_path: str,
@@ -43,7 +41,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
             tool=Tool(
                 nh_assign,
                 name="nh_assign",
-                metadata=metadata,
+                metadata={"nighthawk.provided": True, "nighthawk.operation_kind": "assignment"},
                 description="Assign a Python expression to a declared output, a new temporary name, or a Pydantic field with assignment validation enabled. target_path: name(.field)*.",
             ),
         ),
@@ -52,7 +50,7 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
             tool=Tool(
                 nh_eval,
                 name="nh_eval",
-                metadata=metadata,
+                metadata={"nighthawk.provided": True, "nighthawk.operation_kind": "evaluation"},
                 description="Evaluate a Python expression and return the result. Examples: len(items), data.get('key', 0), items.sort(), add(3, 7).",
             ),
         ),
