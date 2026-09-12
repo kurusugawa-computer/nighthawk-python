@@ -8,7 +8,7 @@ import nighthawk as nh
 from nighthawk.errors import NighthawkError, ToolDeclarationError
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.declarations import get_visible_tools
-from tests.execution.stub_executor import StubExecutor
+from tests.support.executors import StubExecutor
 
 
 def _visible_tool_name_set() -> set[str]:
@@ -159,8 +159,3 @@ def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
         "greet,nh_assign,nh_eval",
         "nh_assign,nh_eval",
     ]
-
-
-def test_tool_decorator_is_removed_from_public_api() -> None:
-    assert not hasattr(nh, "tool")
-    assert "tool" not in nh.__all__

@@ -7,7 +7,7 @@ from functools import wraps
 import pytest
 
 import nighthawk as nh
-from tests.execution.stub_executor import StubExecutor
+from tests.support.executors import StubExecutor
 
 
 def test_original_unwrap_signature_and_transformed_accessor() -> None:

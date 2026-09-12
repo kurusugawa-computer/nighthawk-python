@@ -28,9 +28,9 @@ from nighthawk.backends.tool_bridge import build_tool_name_to_handler
 from nighthawk.backends.tool_transport import ToolTransport, wrap_transported_tool
 from nighthawk.tools.contracts import ToolHandlerResult
 from nighthawk.tools.declarations import get_visible_tools
-from tests.backends.test_codex import _write_executable_codex_stub
-from tests.execution.stub_executor import StubExecutor
-from tests.governance.test_operations import new_context
+from tests.support.codex import _write_executable_codex_stub
+from tests.support.contexts import new_context
+from tests.support.executors import StubExecutor
 
 
 @pytest.mark.parametrize("failure", [RuntimeError("application failed"), ApprovalRequired(), CallDeferred()])

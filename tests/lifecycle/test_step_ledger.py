@@ -1,0 +1,446 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Annotated
+
+import pytest
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import StatusCode
+from pydantic import AfterValidator, BaseModel
+
+import nighthawk as nh
+from nighthawk.lifecycle import FailureStage, StepCompleted, StepDeliveryError, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, scoping
+from nighthawk.testing import ScriptedExecutor, StepResponse
+from tests.support.executors import StubExecutor
+
+
+class NaturalExecutionError(Exception):
+    def __init__(self, event: StepFailed | StepRaised) -> None:
+        self.event = event
+        super().__init__(f"Host execution failed: {event.execution_reference.step_execution_id}")
+
+
+@dataclass
+class Ledger:
+    execution_id_to_event: dict[str, StepFinished] = field(default_factory=dict)
+
+    def finished(self, event: StepFinished) -> None:
+        execution_id = event.execution_reference.step_execution_id
+        assert execution_id is not None
+        if isinstance(event, StepFailed):
+            original = event.original_exception
+            if (
+                isinstance(original, NaturalExecutionError)
+                and original.event.execution_reference == event.execution_reference
+                and self.execution_id_to_event.get(execution_id) is original.event
+            ):
+                raise original
+        assert execution_id not in self.execution_id_to_event
+        self.execution_id_to_event[execution_id] = event
+        if isinstance(event, (StepFailed, StepRaised)):
+            raise NaturalExecutionError(event)
+
+
+@pytest.mark.parametrize(
+    "scenario,expected_stage",
+    [
+        ("binding", "binding_validation"),
+        ("evaluation", "operation_execution"),
+        ("validation", "return_validation"),
+        ("executor", "executor"),
+        ("rewrite", "rewrite_validation"),
+        ("reject", "oversight_rejection"),
+        ("inspector", "commit_inspection"),
+        ("return_inspector", "operation_inspection"),
+        ("outcome", "outcome_validation"),
+        ("undeclared", "binding_validation"),
+        ("raise_type", "executor"),
+    ],
+)
+def test_host_exception_references_single_ledger_event(scenario: str, expected_stage: FailureStage) -> None:
+    ledger = Ledger()
+
+    class Executor:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            if scenario == "executor":
+                raise ValueError("executor failed")
+            if scenario == "outcome":
+                return StepCandidate(outcome=nh.runtime.Break())
+            if scenario == "undeclared":
+                return StepCandidate(outcome=Pass(), binding_name_to_value={"unknown": 5})
+            return StubExecutor().run_step(request=request)
+
+    def inspect_commit(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
+        if scenario == "rewrite":
+            return nh.oversight.Rewrite(binding_name_to_value={"value": "bad"})
+        if scenario == "reject":
+            return nh.oversight.Reject("rejected")
+        if scenario == "inspector":
+            raise ValueError("inspection failed")
+        return nh.oversight.Accept()
+
+    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+        if scenario == "return_inspector":
+            raise ValueError("return inspection failed")
+        return nh.oversight.Accept()
+
+    program = json.dumps(
+        {
+            "step_outcome": {
+                "kind": "return",
+                "return_expression": "1/0" if scenario == "evaluation" else repr("bad") if scenario == "validation" else "7",
+            },
+            "bindings": {"value": "bad" if scenario == "binding" else 3},
+        }
+    )
+
+    @nh.natural_function
+    def workflow() -> int:
+        value: int = 0
+        f"""natural
+        <:value>
+        {program}
+        """
+        return value
+
+    @nh.natural_function
+    def disallowed() -> None:
+        """natural
+        {"step_outcome": {"kind": "break"}, "bindings": {}}
+        """
+
+    @nh.natural_function
+    def invalid_raise() -> None:
+        """natural
+        {"step_outcome": {"kind": "raise", "raise_message": "failed", "raise_error_type": "MissingException"}, "bindings": {}}
+        """
+
+    with (
+        nh.run(Executor()),
+        nh.scope(
+            lifecycle=StepLifecycle(ledger.finished),
+            oversight=nh.oversight.Oversight(
+                inspect_step_commit=inspect_commit,
+                inspect_operation=inspect_expression,
+            ),
+        ),
+        pytest.raises(NaturalExecutionError) as caught,
+    ):
+        if scenario == "outcome":
+            disallowed()
+        elif scenario == "raise_type":
+            invalid_raise()
+        else:
+            workflow()
+    assert len(ledger.execution_id_to_event) == 1
+    event = next(iter(ledger.execution_id_to_event.values()))
+    assert caught.value.event is event
+    assert isinstance(event, StepFailed) and event.failure_stage == expected_stage
+    assert caught.value.__cause__ is event.original_exception
+    assert event.assigned_binding_name_to_value == {}
+
+
+def test_inner_python_handler_does_not_hide_step_failure() -> None:
+    ledger = Ledger()
+
+    @nh.natural_function
+    def workflow() -> NaturalExecutionError | None:
+        try:
+            """natural
+            {"step_outcome": {"kind": "return", "return_expression": "1/0"}, "bindings": {}}
+            """
+        except NaturalExecutionError as exception:
+            return exception
+        return None
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)):
+        error = workflow()
+    assert isinstance(error, NaturalExecutionError)
+    assert list(ledger.execution_id_to_event.values()) == [error.event]
+
+
+@pytest.mark.parametrize("tracing", [False, True])
+def test_return_await_failure_is_recorded_and_translated(tracing: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = Ledger()
+    failure = ValueError("await failed")
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    if tracing:
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(scoping, "_tracer", provider.get_tracer(__name__))
+
+    async def calculate() -> int:
+        await asyncio.sleep(0)
+        raise failure
+
+    @nh.natural_function
+    async def workflow() -> int:
+        nonlocal calculate
+        """natural
+        <calculate>
+        {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}
+        """
+        return 0
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+        asyncio.run(workflow())
+    event = caught.value.event
+    assert list(ledger.execution_id_to_event.values()) == [event]
+    assert isinstance(event, StepFailed) and event.failure_stage == "operation_execution"
+    assert event.original_exception is failure is caught.value.__cause__
+    if tracing:
+        step_span = next(span for span in exporter.get_finished_spans() if span.name == "nighthawk.step")
+        assert step_span.status.status_code == StatusCode.ERROR
+        assert [event.name for event in step_span.events].count("nighthawk.step.failed") == 1
+        assert "exception" in {event.name for event in step_span.events}
+        assert "nighthawk.step.completed" not in {event.name for event in step_span.events}
+    provider.shutdown()
+
+
+def test_success_ledger_preserves_identity_and_validates_once() -> None:
+    ledger = Ledger()
+    validations: list[object] = []
+
+    class Record(BaseModel):
+        value: int
+
+    original = Record(value=3)
+
+    def validate(value: Record) -> Record:
+        validations.append(value)
+        return value
+
+    Counted = Annotated[Record, AfterValidator(validate)]  # noqa: N806
+
+    @nh.natural_function
+    def workflow() -> Counted:  # type: ignore[valid-type]
+        nonlocal Counted
+        value: Counted = original  # pyright: ignore[reportInvalidTypeForm]
+        """natural
+        <Counted> <:value>
+        Finish.
+        """
+        return value
+
+    executor = ScriptedExecutor([StepResponse(bindings={"value": original})])
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(ledger.finished)):
+        assert workflow() is original
+    event = next(iter(ledger.execution_id_to_event.values()))
+    assert isinstance(event, StepCompleted)
+    assert event.assigned_binding_name_to_value["value"] is original
+    assert validations == [original]
+    assert isinstance(event.assigned_binding_name_to_value, Mapping)
+    with pytest.raises(TypeError):
+        event.assigned_binding_name_to_value["value"] = 0  # type: ignore[index]
+
+
+@pytest.mark.parametrize("append_first", [False, True])
+def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: bool) -> None:
+    ledger = Ledger()
+    attempts: list[StepFinished] = []
+    storage_error = OSError("storage unavailable")
+
+    def finished(event: StepFinished) -> None:
+        attempts.append(event)
+        if append_first:
+            ledger.finished(event)
+        raise StepDeliveryError(event.execution_reference, storage_error)
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Finish.
+        """
+
+    executor = ScriptedExecutor()
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(StepDeliveryError) as caught:
+        workflow()
+    assert len(attempts) == len(executor.calls) == 1
+    assert len(ledger.execution_id_to_event) == int(append_first)
+    assert caught.value.execution_reference == attempts[0].execution_reference
+    assert caught.value.delivery_cause is storage_error is caught.value.__cause__
+
+
+def test_preparation_failure_has_identity_and_unknown_fields() -> None:
+    ledger = Ledger()
+
+    @nh.natural_function
+    def workflow() -> None:
+        preparation_text = "Finish."
+        f"""natural
+        ---
+        deny: [not_an_outcome]
+        ---
+        {preparation_text}
+        """
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+        workflow()
+    event = caught.value.event
+    assert isinstance(event, StepFailed) and event.failure_stage == "preparation"
+    assert event.allowed_step_kinds is None
+    assert event.input_binding_name_to_value is None
+    assert event.processed_natural_program is None
+    assert event.execution_reference.step_execution_id is not None
+
+
+def test_dsl_raise_translates_from_prepared_exception() -> None:
+    ledger = Ledger()
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        <ValueError>
+        {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "ValueError"}, "bindings": {}}
+        """
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+        workflow()
+    event = caught.value.event
+    assert isinstance(event, StepRaised)
+    assert isinstance(event.exception, ValueError)
+    assert caught.value.__cause__ is event.exception
+    assert list(ledger.execution_id_to_event.values()) == [event]
+
+
+def test_cancellation_is_stored_without_host_translation() -> None:
+    ledger = Ledger()
+    interruption = asyncio.CancelledError()
+
+    async def cancelled() -> int:
+        raise interruption
+
+    @nh.natural_function
+    async def workflow() -> int:
+        nonlocal cancelled
+        """natural
+        <cancelled>
+        {"step_outcome": {"kind": "return", "return_expression": "cancelled()"}, "bindings": {}}
+        """
+        return 0
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(asyncio.CancelledError):
+        asyncio.run(workflow())
+    event = next(iter(ledger.execution_id_to_event.values()))
+    assert isinstance(event, StepInterrupted) and event.original_exception is interruption
+
+
+@pytest.mark.parametrize("boundary", ["executor", "commit_inspection"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStage, asynchronous: bool) -> None:
+    ledger = Ledger()
+    original_cause = ValueError("admission failed")
+    notifications: list[StepFinished] = []
+    host_exceptions: list[NaturalExecutionError] = []
+
+    def record_early_failure() -> None:
+        reference = nh.get_execution_reference()
+        assert reference.step_execution_id is not None
+        event = StepFailed(execution_reference=reference, failure_stage=boundary, original_exception=original_cause)
+        ledger.execution_id_to_event[reference.step_execution_id] = event
+        exception = NaturalExecutionError(event)
+        host_exceptions.append(exception)
+        raise exception from original_cause
+
+    class Executor:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            assert request.step_context.execution_reference == nh.get_execution_reference()
+            if boundary == "executor":
+                record_early_failure()
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
+
+    def inspect_commit(commit: nh.oversight.StepCommit) -> nh.oversight.Accept:
+        record_early_failure()
+        return nh.oversight.Accept()
+
+    def finished(event: StepFinished) -> None:
+        notifications.append(event)
+        ledger.finished(event)
+
+    @nh.natural_function
+    def synchronous() -> None:
+        """natural
+        Finish.
+        """
+
+    @nh.natural_function
+    async def asynchronous_function() -> None:
+        """natural
+        Finish.
+        """
+
+    with (
+        nh.run(Executor()),
+        nh.scope(
+            lifecycle=StepLifecycle(finished),
+            oversight=nh.oversight.Oversight(inspect_step_commit=inspect_commit),
+        ),
+        pytest.raises(NaturalExecutionError) as caught,
+    ):
+        asyncio.run(asynchronous_function()) if asynchronous else synchronous()
+    assert len(notifications) == len(ledger.execution_id_to_event) == len(host_exceptions) == 1
+    assert caught.value is host_exceptions[0]
+    assert caught.value.__cause__ is original_cause
+    event = notifications[0]
+    assert isinstance(event, StepFailed) and event.failure_stage == boundary
+    assert event.original_exception is caught.value
+    assert next(iter(ledger.execution_id_to_event.values())) is caught.value.event
+
+
+def test_nested_host_exception_still_records_each_execution() -> None:
+    ledger = Ledger()
+
+    @nh.natural_function
+    def inner() -> None:
+        """natural
+        {"step_outcome": {"kind": "return", "return_expression": "1/0"}, "bindings": {}}
+        """
+
+    @nh.natural_function
+    def outer() -> None:
+        nonlocal inner
+        """natural
+        <inner>
+        {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
+        """
+
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+        outer()
+    assert len(ledger.execution_id_to_event) == 2
+    inner_event, outer_event = ledger.execution_id_to_event.values()
+    assert caught.value.event is outer_event
+    assert isinstance(caught.value.__cause__, NaturalExecutionError)
+    assert caught.value.__cause__.event is inner_event
+    assert inner_event.execution_reference.step_execution_id != outer_event.execution_reference.step_execution_id
+
+
+def test_returning_handler_does_not_preserve_host_exception_type() -> None:
+    event = StepFailed(
+        execution_reference=nh.ExecutionReference("earlier-run", "scope", "earlier-step", "test:1"),
+        failure_stage="executor",
+        original_exception=ValueError("earlier"),
+    )
+    original = NaturalExecutionError(event)
+    notifications: list[StepFinished] = []
+
+    class Executor:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            raise original
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Finish.
+        """
+
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(notifications.append)), pytest.raises(nh.ExecutionError) as caught:
+        workflow()
+    assert len(notifications) == 1
+    assert caught.value.__cause__ is original
+    assert caught.value.step_failed is notifications[0]

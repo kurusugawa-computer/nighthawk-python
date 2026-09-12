@@ -45,14 +45,21 @@ uv run pyright
 uv run pytest -q       # quiet output
 ```
 
+Test ownership and helper conventions are documented in [tests/README.md](tests/README.md).
+
 ### Integration tests
 
 The full setup command installs the OpenAI provider development dependency.
-Run integration tests with your `.env` loaded:
+Integration tests are opt-in; loading credentials alone does not enable them.
+Run OpenAI integration tests with your `.env` loaded:
 
 ```bash
-set -a; source .env; set +a; uv run pytest -q
+NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run --env-file .env pytest -q tests/integration/
 ```
+
+Add `NIGHTHAWK_OPENAI_MULTIMODAL_INTEGRATION_TESTS=1` to include the image cases.
+Coding agent tests use their respective flags: `NIGHTHAWK_CODEX_INTEGRATION_TESTS=1`, `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS=1`, or `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS=1`.
+Their executables and authentication must be available in the test environment.
 
 ### Trace inspection with otel-tui
 

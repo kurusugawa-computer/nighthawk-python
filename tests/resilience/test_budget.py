@@ -6,7 +6,7 @@ import logging
 from collections.abc import Generator
 
 import pytest
-from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic_ai.usage import RunUsage
@@ -15,7 +15,7 @@ import nighthawk as nh
 from nighthawk.resilience import BudgetExceededError, budget
 from nighthawk.runtime import scoping as runtime_scoping
 from nighthawk.runtime.scoping import get_usage_meter, span
-from tests.execution.stub_executor import StubExecutor
+from tests.support.executors import StubExecutor
 
 
 @pytest.fixture
@@ -30,10 +30,6 @@ def run_span_exporter() -> Generator[InMemorySpanExporter]:
         yield span_exporter
     finally:
         runtime_scoping._tracer = previous_tracer_provider
-
-
-def _get_finished_run_spans(run_span_exporter: InMemorySpanExporter) -> list[ReadableSpan]:
-    return [span_data for span_data in run_span_exporter.get_finished_spans() if span_data.name == "nighthawk.run"]
 
 
 def _find_finished_event(run_span_exporter: InMemorySpanExporter, *, event_name: str) -> object:

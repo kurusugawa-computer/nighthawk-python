@@ -70,7 +70,7 @@ def try_project_ordered_user_content_sequence(payload: object) -> tuple[UserCont
     Used by both the user-prompt path and the tool-return path. Bare scalar
     multimodal values are intentionally not handled here so the tool-return
     path can delegate them to Pydantic AI (pinned by
-    ``tests/tools/test_tool_boundary.py``).
+    ``tests/tools/test_execution.py``).
     """
     if not is_top_level_sequence_payload(payload):
         return None

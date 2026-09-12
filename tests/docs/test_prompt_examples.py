@@ -27,7 +27,7 @@ from nighthawk.runtime.annotations import MISSING_ANNOTATION
 from nighthawk.runtime.prompt import build_user_prompt
 from nighthawk.runtime.runner import _infer_binding_types_from_initial_values
 from nighthawk.runtime.step_context import StepContext
-from tests.execution.prompt_test_helpers import prompt_content_to_text
+from tests.support.prompts import prompt_content_to_text
 
 _DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
 _NATURAL_BLOCKS_PATH = _DOCS_DIR / "natural-blocks.md"
@@ -35,7 +35,7 @@ _PATTERNS_PATH = _DOCS_DIR / "patterns.md"
 _DEFAULT_CONFIGURATION = StepExecutorConfiguration()
 
 # Map example names to the file that owns them.
-_EXAMPLE_FILE_MAP: dict[str, Path] = {
+_EXAMPLE_NAME_TO_PATH: dict[str, Path] = {
     "basic-binding": _NATURAL_BLOCKS_PATH,
     "fstring-injection": _NATURAL_BLOCKS_PATH,
     "local-function-signature": _NATURAL_BLOCKS_PATH,
@@ -46,9 +46,9 @@ _EXAMPLE_FILE_MAP: dict[str, Path] = {
 
 def _extract_prompt_example(name: str) -> str:
     """Extract the prompt text for a named example from its canonical file."""
-    file_path = _EXAMPLE_FILE_MAP.get(name)
+    file_path = _EXAMPLE_NAME_TO_PATH.get(name)
     if file_path is None:
-        pytest.fail(f"prompt-example:{name} has no file mapping in _EXAMPLE_FILE_MAP")
+        pytest.fail(f"prompt-example:{name} has no file mapping in _EXAMPLE_NAME_TO_PATH")
     file_text = file_path.read_text(encoding="utf-8")
     pattern = re.compile(
         rf"<!-- prompt-example:{re.escape(name)} -->\s*```py\n(.*?)```\s*<!-- /prompt-example:{re.escape(name)} -->",

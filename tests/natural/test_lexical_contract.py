@@ -10,7 +10,7 @@ from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.step_contract import ReturnStepOutcome
 from nighthawk.tools.assignment import eval_expression
-from tests.execution.stub_executor import StubExecutor
+from tests.support.executors import StubExecutor
 
 _module_value = 99
 

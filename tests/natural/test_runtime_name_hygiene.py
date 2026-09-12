@@ -9,7 +9,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.runtime import Pass, StepCandidate, StepEnvironment, StepRequest, assign_tool_async, eval_expression_async
-from tests.execution.prompt_test_helpers import build_step_context, build_user_prompt_text
+from tests.support.prompts import build_step_context, build_user_prompt_text
 
 
 @pytest.mark.parametrize("name", ["__nh_application", "__nighthawk_application", "__nh_execution__"])

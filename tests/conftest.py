@@ -1,32 +1,23 @@
-import os
+import importlib.metadata
+from collections.abc import Generator
 
 import pytest
-from _pytest.runner import runtestprotocol
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+from nighthawk.runtime import scoping as runtime_scoping
 
 
-def _is_integration_test_item(item: pytest.Item) -> bool:
-    item_path = getattr(item, "path", None)
-    if item_path is None:
-        return False
+@pytest.fixture
+def step_span_exporter() -> Generator[InMemorySpanExporter]:
+    span_exporter = InMemorySpanExporter()
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
-    normalized_path = str(item_path).replace("\\", "/")
-    return "/tests/integration/" in normalized_path
-
-
-def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> object | None:
-    if os.getenv("NIGHTHAWK_OPENAI_INTEGRATION_TESTS") != "1":
-        return None
-
-    if not _is_integration_test_item(item):
-        return None
-
-    item_hook = item.ihook
-    item_hook.pytest_runtest_logstart(nodeid=item.nodeid, location=item.location)
-
-    reports = runtestprotocol(item, log=False, nextitem=nextitem)
-
-    for report in reports:
-        item_hook.pytest_runtest_logreport(report=report)
-
-    item_hook.pytest_runtest_logfinish(nodeid=item.nodeid, location=item.location)
-    return True
+    previous_tracer_provider = runtime_scoping._tracer
+    runtime_scoping._tracer = tracer_provider.get_tracer("nighthawk", importlib.metadata.version("nighthawk-python"))
+    try:
+        yield span_exporter
+    finally:
+        runtime_scoping._tracer = previous_tracer_provider
