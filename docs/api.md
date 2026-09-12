@@ -14,6 +14,15 @@
         - Merge
         - get_transformed_function
         - natural_function
+        - NaturalFunctionDefinition
+        - get_natural_function_definition
+        - FunctionCall
+        - FunctionCallHandler
+        - FunctionCallError
+        - function_call_scope
+        - get_function_call
+        - ModelSelection
+        - ConfigurableStepExecutor
         - run
         - scope
         - AgentStepExecutor

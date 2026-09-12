@@ -3,6 +3,7 @@ from __future__ import annotations
 from . import lifecycle, oversight, resilience, runtime
 from .composition import UNSET, Extend, Merge, UnsetType
 from .configuration import (
+    ModelSelection,
     StepContextLimits,
     StepExecutorConfiguration,
     StepPromptTemplates,
@@ -17,8 +18,10 @@ from .errors import (
     ToolNameConflictError,
     ToolValidationError,
 )
+from .function_call import FunctionCall, FunctionCallError, FunctionCallHandler, function_call_scope, get_function_call
 from .json_renderer import JsonableValue, to_jsonable_value
 from .natural.decorator import get_transformed_function, natural_function
+from .natural.definition import NaturalFunctionDefinition, get_natural_function_definition
 from .runtime.scoping import (
     ExecutionReference,
     UsageMeter,
@@ -35,9 +38,18 @@ from .runtime.scoping import (
     scope,
 )
 from .runtime.step_context import StepContext, get_step_context
-from .runtime.step_executor import AgentStepExecutor, StepExecutor
+from .runtime.step_executor import AgentStepExecutor, ConfigurableStepExecutor, StepExecutor
 
 __all__ = [
+    "FunctionCall",
+    "FunctionCallError",
+    "FunctionCallHandler",
+    "function_call_scope",
+    "get_function_call",
+    "NaturalFunctionDefinition",
+    "get_natural_function_definition",
+    "ModelSelection",
+    "ConfigurableStepExecutor",
     "runtime",
     "UNSET",
     "Extend",

@@ -70,3 +70,23 @@ For full control, implement `AsyncStepExecutor` directly. See [Specification Sec
 - **[For coding agents](for-coding-agents.md)** -- Condensed, decision-oriented operational guide for coding agents (LLMs) building Python projects with Nighthawk.
 
 After choosing and configuring your executor, continue to **[Runtime configuration](runtime-configuration.md)** for scoping, patching, context limits, and execution identity.
+
+## Preserving host controls during model selection
+
+The optional `nh.ConfigurableStepExecutor` protocol adds `resolve_model_selection(selection: nh.ModelSelection) -> nh.StepExecutor`.
+Core calls it on the active executor and validates the result; it never searches wrapper attributes for another resolver.
+The resolver may reject a model name or map it to a borrowed model, then return another wrapper sharing its host policy and observation objects.
+`selection.apply(current_configuration)` performs inert model-only inheritance or full replacement.
+The executor is responsible for provider construction only after resolution is permitted.
+A direct `AgentStepExecutor` supports this protocol; subclasses must implement it deliberately so their execution behavior cannot silently disappear into a reconstructed base instance.
+External agents retain their model ownership restrictions.
+
+The mandatory synchronous and asynchronous step protocols are unchanged.
+Executors return block candidates; completion of an executor does not prove generated assignments, notifications, or the containing Python function succeeded.
+Use `FunctionCallHandler` for the whole invocation and `StepLifecycle` for validated block facts.
+The standalone `examples/embedded_execution.py` contains a preserving host wrapper and a recording request capability using public APIs only.
+
+Provider-backed requests are observable at the Pydantic AI capability layer.
+SDK retries or separate HTTP attempts inside one visible request may be hidden.
+Codex and Claude Code backends can perform internal model requests that are not exposed as individual Core request observations.
+Strict per-transport-attempt accounting therefore requires a backend-specific facility with stronger evidence; Core does not manufacture those records.

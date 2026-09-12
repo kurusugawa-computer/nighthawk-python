@@ -9,7 +9,7 @@ from pydantic_ai.messages import UserContent
 from pydantic_ai.models import ModelRequestContext
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from ..configuration import StepExecutorConfiguration
+from ..configuration import ModelSelection, StepExecutorConfiguration
 from ..errors import ExecutionError, NighthawkError
 from ..tools._admission import ToolAdmissionCapability
 from ..tools._ordering import sequential_model_tools
@@ -96,6 +96,13 @@ class AsyncStepExecutor(Protocol):
 
 
 type StepExecutor = SyncStepExecutor | AsyncStepExecutor
+
+
+@runtime_checkable
+class ConfigurableStepExecutor(Protocol):
+    """Optional resolution owned by the active executor, including its host controls."""
+
+    def resolve_model_selection(self, selection: ModelSelection) -> StepExecutor: ...
 
 
 def _new_agent_step_executor(
@@ -209,6 +216,19 @@ class AgentStepExecutor:
     ) -> AgentStepExecutor:
         """Create an executor from a configuration, building a managed agent internally."""
         return cls(configuration=configuration)
+
+    def resolve_model_selection(self, selection: ModelSelection) -> StepExecutor:
+        """Resolve selection; subclasses must explicitly implement preserving resolution."""
+        if type(self) is not AgentStepExecutor:
+            raise NighthawkError("AgentStepExecutor subclasses must implement a preserving resolve_model_selection")
+        configuration = selection.apply(self.configuration)
+        if self.agent_is_managed:
+            return AgentStepExecutor.from_configuration(configuration=configuration)
+        if not isinstance(configuration.model, str) or configuration.model != self.configuration.model:
+            raise NighthawkError("The external agent owns model selection; scope cannot switch its model")
+        if self.agent is None:
+            raise NighthawkError("AgentStepExecutor.agent is not initialized")
+        return AgentStepExecutor.from_agent(agent=self.agent, configuration=configuration)
 
     async def _run_agent(
         self,

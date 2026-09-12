@@ -11,10 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 from opentelemetry.trace import Span, get_tracer_provider
 from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.models import Model
 from pydantic_ai.usage import RunUsage
 
 from ..composition import UNSET, Extend, Merge, UnsetType
-from ..configuration import StepExecutorConfiguration
+from ..configuration import ModelSelection, StepExecutorConfiguration, _model_selection
 from ..errors import NameConflictError, NighthawkError
 from ..tools.declarations import ToolEntry, get_scoped_tools, resolve_scoped_tools, scoped_tools_var
 from ..ulid import generate_ulid
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
     from ..oversight import Oversight
     from .context import ContextBuilder
     from .step_context import StepContext
-    from .step_executor import AgentStepExecutor, StepExecutor
+    from .step_executor import StepExecutor
 
 
 class UsageMeter:
@@ -311,34 +312,15 @@ def user_prompt_suffix_fragment_scope(fragment: str) -> Iterator[None]:
         _user_prompt_suffix_fragments_var.reset(token)
 
 
-def _resolve_agent_step_executor(step_executor: StepExecutor) -> AgentStepExecutor:
-    from .step_executor import AgentStepExecutor
+def _resolve_model_selection(step_executor: StepExecutor, selection: ModelSelection) -> StepExecutor:
+    from .step_executor import AsyncStepExecutor, ConfigurableStepExecutor, SyncStepExecutor
 
-    if not isinstance(step_executor, AgentStepExecutor):
-        raise NighthawkError("StepExecutor configuration updates require current step_executor to be AgentStepExecutor")
-    return step_executor
-
-
-def _replace_step_executor_with_configuration(
-    step_executor: StepExecutor,
-    *,
-    configuration: StepExecutorConfiguration,
-) -> StepExecutor:
-    from .step_executor import AgentStepExecutor
-
-    current_step_executor = _resolve_agent_step_executor(step_executor)
-
-    if current_step_executor.agent_is_managed:
-        return AgentStepExecutor.from_configuration(configuration=configuration)
-
-    if not isinstance(configuration.model, str) or configuration.model != current_step_executor.configuration.model:
-        raise NighthawkError("The external agent owns model selection; scope cannot switch its model")
-    if current_step_executor.agent is None:
-        raise NighthawkError("AgentStepExecutor.agent is not initialized")
-    return AgentStepExecutor.from_agent(
-        agent=current_step_executor.agent,
-        configuration=configuration,
-    )
+    if not isinstance(step_executor, ConfigurableStepExecutor):
+        raise NighthawkError("Current step_executor must implement ConfigurableStepExecutor to resolve model selection")
+    resolved = step_executor.resolve_model_selection(selection)
+    if not isinstance(resolved, (AsyncStepExecutor, SyncStepExecutor)):
+        raise NighthawkError("Model selection resolver must return a StepExecutor")
+    return resolved
 
 
 @contextmanager
@@ -428,6 +410,7 @@ def _compose_sequence[T](current: tuple[T, ...], supplied: Sequence[T] | Extend[
 @contextmanager
 def scope(
     *,
+    model: str | Model | UnsetType = UNSET,
     step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
     step_executor: StepExecutor | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
@@ -446,7 +429,9 @@ def scope(
     Extend appends ordered entries; Merge combines task references by identity.
     Context builders replace presentation while preserving the live environment.
     Oversight and lifecycle accept None, which clears their hooks. Resolve all changes before
-    installing context. Executor replacement precedes full configuration replacement.
+    installing context. Executor replacement precedes delegated model selection.
+    model replaces only the model; step_executor_configuration replaces all configuration
+    fields. Supplying both is invalid. Selection preserves unrelated scoped controls.
     """
     from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
@@ -468,8 +453,9 @@ def scope(
     if lifecycle is not None and not isinstance(lifecycle, (UnsetType, StepLifecycle)):
         raise TypeError("lifecycle must be StepLifecycle, None, or UNSET")
     next_step_executor = current_step_executor if isinstance(step_executor, UnsetType) else step_executor
-    if not isinstance(step_executor_configuration, UnsetType):
-        next_step_executor = _replace_step_executor_with_configuration(next_step_executor, configuration=step_executor_configuration)
+    selection = _model_selection(model, step_executor_configuration)
+    if selection is not None:
+        next_step_executor = _resolve_model_selection(next_step_executor, selection)
     next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid(), step_execution_id=None, source_location=None)
     next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
     next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from functools import wraps
+from typing import Any, cast
 
 import pytest
 
@@ -21,7 +22,7 @@ def test_original_unwrap_signature_and_transformed_accessor() -> None:
     decorated = nh.natural_function(original)
 
     @wraps(decorated)
-    def outer(*arguments: object, **keywords: object) -> object:
+    def outer(*arguments: Any, **keywords: Any) -> object:
         return decorated(*arguments, **keywords)
 
     assert inspect.unwrap(decorated) is original
@@ -46,9 +47,9 @@ def test_async_and_method_descriptors() -> None:
     assert inspect.iscoroutinefunction(nh.get_transformed_function(decorated))
 
     class Container:
-        method = decorated
+        method = cast(Any, decorated)
         static = staticmethod(decorated)
-        class_method = classmethod(decorated)
+        class_method = classmethod(cast(Any, decorated))
 
     for function in (Container.static, Container.__dict__["static"], Container.class_method, Container.__dict__["class_method"], Container().method):
         assert nh.get_transformed_function(function) is nh.get_transformed_function(decorated)

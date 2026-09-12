@@ -12,6 +12,7 @@ from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
 from ..errors import NighthawkError
 from ..oversight import Accept, OversightRejectedError, Reject, record_oversight_decision
 from ..ulid import generate_ulid
+from .interruption import chain_cleanup_errors
 from .notifications import await_notification
 from .operation_contract import OperationDeliveryError, OperationError, OperationFinished, OperationKind, OperationPhase, OperationRequest
 from .step_context import StepContext
@@ -102,7 +103,8 @@ async def execute_operation_async(
                     )
                 except BaseException as delivery_cause:
                     if original_exception is not None and not isinstance(original_exception, Exception):
-                        raise original_exception from delivery_cause
+                        chain_cleanup_errors(original_exception, delivery_cause)
+                        raise original_exception from original_exception.__cause__
                     if not isinstance(delivery_cause, Exception):
                         step_context.operation_failure = delivery_cause
                         step_context.operation_failure_stage = "operation_delivery"

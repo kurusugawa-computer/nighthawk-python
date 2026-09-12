@@ -515,7 +515,7 @@ def test_natural_function_rejects_step_executor_configuration_updates_for_non_ag
             with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")):
                 pass
 
-        with pytest.raises(NighthawkError, match="AgentStepExecutor"):
+        with pytest.raises(NighthawkError, match="ConfigurableStepExecutor"):
             f()
 
 

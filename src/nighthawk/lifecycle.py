@@ -110,6 +110,8 @@ class StepLifecycle:
     A callback may persist a record and raise a host exception referencing it.
     Callback errors never trigger another execution notification or rollback.
     Rethrowing the exact original exception preserves its existing cause.
+    interruption_delivery_timeout requests cancellation of an interrupted delivery;
+    Core still waits for its cleanup, without a completion deadline.
     Host deduplication must match both execution identity and the stored event.
     """
 

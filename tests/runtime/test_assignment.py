@@ -182,3 +182,38 @@ def test_assignment_validation_failure_preserves_pending_value_and_right_side_ef
         assign_tool(context, "value", "(effects.append('right'), -1)[1]")
     assert context.environment.resolve("value") == 7
     assert effects == ["right"]
+
+
+def test_validation_failure_does_not_close_nested_application_awaitable() -> None:
+    import asyncio
+    import inspect
+
+    import pytest
+
+    from nighthawk.runtime import OperationError, assign_tool_async
+    from tests.support.contexts import new_context
+
+    async def inner() -> int:
+        return 5
+
+    retained = inner()
+
+    async def outer():
+        return retained
+
+    initial = new_context(outer=outer)
+    context = type(initial)(
+        execution_reference=initial.execution_reference,
+        step_globals={},
+        step_locals={"outer": outer},
+        binding_commit_targets={"result"},
+        binding_name_to_type={"result": int},
+        read_binding_names=frozenset(),
+        task_name_to_value={},
+    )
+    try:
+        with pytest.raises(OperationError):
+            asyncio.run(assign_tool_async(context, "result", "outer()"))
+        assert inspect.getcoroutinestate(retained) == inspect.CORO_CREATED
+    finally:
+        retained.close()

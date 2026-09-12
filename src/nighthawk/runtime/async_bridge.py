@@ -1,102 +1,153 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import contextvars
 import inspect
 import threading
-import time
 from collections.abc import Awaitable, Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
+
+from .interruption import chain_cleanup_errors
 
 
 @dataclass
-class _BridgeCleanup:
-    deadline: float | None = None
+class _BridgeState:
+    lock: threading.RLock = field(default_factory=threading.RLock)
+    completed: threading.Event = field(default_factory=threading.Event)
+    loop: asyncio.AbstractEventLoop | None = None
+    task: asyncio.Task[Any] | None = None
+    cancellation_requested: bool = False
+    cancellation_delivered: bool = False
+    result: Any = None
+    exception: BaseException | None = None
+
+    def request_cancellation(self) -> None:
+        with self.lock:
+            self.cancellation_requested = True
+            if self.loop is not None and self.task is not None and not self.cancellation_delivered:
+                self.cancellation_delivered = True
+                self.loop.call_soon_threadsafe(self.task.cancel)
 
 
-_bridge_cleanup: contextvars.ContextVar[_BridgeCleanup | None] = contextvars.ContextVar("nighthawk_bridge_cleanup", default=None)
-
-
-def bound_interrupted_bridge_cleanup(timeout: float) -> None:
-    cleanup = _bridge_cleanup.get()
-    if cleanup is not None:
-        deadline = time.monotonic() + timeout
-        cleanup.deadline = min(deadline, cleanup.deadline) if cleanup.deadline is not None else deadline
-
-
-def _close_loop_with_deadline(loop: asyncio.AbstractEventLoop, deadline: float) -> None:
-    """Keep cancellation-resistant cleanup from extending an interruption.
-
-    asyncio.run waits for every cancelled task during shutdown. An interrupted
-    notification instead gets one shared budget for delivery and loop cleanup.
-    Closing this private loop does not prove that pending cleanup completed.
-    """
-    try:
-        pending = asyncio.all_tasks(loop)
-        for task in pending:
+async def _shutdown_loop_work() -> None:
+    current = asyncio.current_task()
+    pending = [task for task in asyncio.all_tasks() if task is not current and not task.done()]
+    for task in pending:
+        if not task.cancelling():
             task.cancel()
-        remaining = deadline - time.monotonic()
-        if remaining > 0:
-            pending.add(loop.create_task(loop.shutdown_asyncgens()))
-            # wait_for(gather(...)) can itself wait forever for cancellation.
-            # Cleanup must not replace the original interruption.
-            with contextlib.suppress(BaseException):
-                loop.run_until_complete(asyncio.wait(pending, timeout=remaining))
-        for task in pending:
-            if not task.done():
-                task.cancel()
-            elif not task.cancelled():
-                task.exception()
+    failures: list[BaseException] = []
+    if pending:
+        outcomes = await asyncio.gather(*pending, return_exceptions=True)
+        failures.extend(outcome for outcome in outcomes if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError))
+    loop = asyncio.get_running_loop()
+    for shutdown in (loop.shutdown_asyncgens, loop.shutdown_default_executor):
+        try:
+            await shutdown()
+        except BaseException as exception:
+            failures.append(exception)
+    if failures:
+        raise BaseExceptionGroup("Errors shutting down bridge-owned work", failures)
+
+
+def _execute_coroutine(state: _BridgeState, coroutine_call: Callable[[], Coroutine[Any, Any, Any]]) -> None:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    primary: BaseException | None = None
+
+    def finish(task: asyncio.Task[Any]) -> Any:
+        nonlocal primary
+        while not task.done():
+            try:
+                loop.run_until_complete(task)
+            except BaseException as exception:
+                if task.done():
+                    raise
+                if primary is None:
+                    primary = exception
+                    state.request_cancellation()
+                # Subsequent caller interruptions do not cancel a finalizer again.
+        return task.result()
+
+    try:
+        coroutine = coroutine_call()
+        try:
+            task = loop.create_task(coroutine)
+        except BaseException:
+            coroutine.close()
+            raise
+        with state.lock:
+            state.loop, state.task = loop, task
+            if state.cancellation_requested:
+                state.request_cancellation()
+        try:
+            state.result = finish(task)
+        except BaseException as exception:
+            state.exception = exception
+    except BaseException as exception:
+        state.exception = exception
     finally:
-        asyncio.set_event_loop(None)
-        loop.close()
+        # Stop publishing a task before shutdown, so a concurrent cancellation
+        # request cannot target a closed loop or interrupt shutdown finalizers.
+        with state.lock:
+            state.loop, state.task = None, None
+        try:
+            finish(loop.create_task(_shutdown_loop_work()))
+        except BaseException as exception:
+            if state.exception is None:
+                state.exception = exception
+            else:
+                chain_cleanup_errors(state.exception, exception)
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+        if primary is not None:
+            if state.exception is not None:
+                chain_cleanup_errors(primary, state.exception)
+            state.exception = primary
 
 
 def run_coroutine_synchronously(coroutine_call: Callable[[], Coroutine[Any, Any, Any]]) -> Any:
-    def execute_coroutine() -> Any:
-        cleanup = _BridgeCleanup()
-        cleanup_token = _bridge_cleanup.set(cleanup)
-        runner = asyncio.Runner()
-        try:
-            return runner.run(coroutine_call())
-        finally:
-            try:
-                if cleanup.deadline is None:
-                    runner.close()
-                else:
-                    _close_loop_with_deadline(runner.get_loop(), cleanup.deadline)
-            finally:
-                _bridge_cleanup.reset(cleanup_token)
+    """Run and join owned async work, cooperatively delivering caller interruption.
 
+    Completion has no deadline: resistant cleanup must actually finish. An explicit
+    completion signal, not Thread.join's platform-dependent status, proves shutdown.
+    """
+    state = _BridgeState()
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return execute_coroutine()
+        _execute_coroutine(state, coroutine_call)
+    else:
+        execution_context = contextvars.copy_context()
 
-    execution_context = contextvars.copy_context()
-    result_container: dict[str, Any] = {}
-    exception_container: dict[str, BaseException] = {}
+        def worker() -> None:
+            try:
+                execution_context.run(_execute_coroutine, state, coroutine_call)
+            except BaseException as exception:
+                state.exception = exception
+            finally:
+                state.completed.set()
 
-    def run_coroutine_call_in_thread() -> None:
-        try:
-            result_container["result"] = execution_context.run(execute_coroutine)
-        except BaseException as exception:
-            exception_container["exception"] = exception
-
-    thread = threading.Thread(
-        target=run_coroutine_call_in_thread,
-        name="nighthawk-sync-bridge",
-    )
-    thread.start()
-    thread.join()
-
-    exception = exception_container.get("exception")
-    if exception is not None:
-        raise exception.with_traceback(exception.__traceback__)
-
-    return result_container["result"]
+        thread = threading.Thread(target=worker, name="nighthawk-sync-bridge")
+        thread.start()
+        primary: BaseException | None = None
+        while not state.completed.is_set():
+            try:
+                thread.join(0.05)
+                if not state.completed.is_set():
+                    state.completed.wait(0.01)
+            except BaseException as exception:
+                if primary is None:
+                    primary = exception
+                    state.request_cancellation()
+        if primary is not None:
+            if state.exception is not None:
+                chain_cleanup_errors(primary, state.exception)
+            raise primary
+    if state.exception is not None:
+        raise state.exception
+    return state.result
 
 
 def run_awaitable_value_synchronously(value: object) -> object:

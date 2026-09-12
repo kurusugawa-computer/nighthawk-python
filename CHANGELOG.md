@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Exact Natural definition lookup, optional whole-function call handlers, inert function model declarations, and preserving executor model resolution.
+
 - `StepEnvironment` separates Python lexical bindings, inherited working state, scoped task references, and tracked step assignments, with source-qualified lookup and progressing discovery.
 - Replaceable `ContextBuilder` presentation and shared static value inspection preserve application helper-name collisions and complete discovery continuations, including pages nested in ordinary containers.
 - Common operation admission, awaited inspection, serialized execution, and completion records cover evaluation, assignment, return-expression resolution, and native tools. Failed tool argument admission retains its identity and original exception.
@@ -35,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ordered model tool batches and coding-agent callbacks preserve per-step operation order and stop after terminal operation failure.
 - Native model batches also order argument validation before each corresponding body, preventing later validators from running ahead of an earlier rejection. A scoped Pydantic AI 2.37 compatibility adapter preserves its completion strategies; the dependency range is bounded to that minor series.
 - Coding-agent callbacks use the request's event loop and captured scope; process and transport failures preserve their originating exceptions.
-- Interrupted asynchronous notifications and synchronous bridge shutdown share one cleanup deadline, including handlers that suppress cancellation.
+- Interrupted asynchronous notifications and synchronous bridge shutdown wait for actual owned cleanup completion. `interruption_delivery_timeout` requests notification cancellation but no longer bounds total cleanup time, including handlers that suppress cancellation.
+- Rejected synchronous DSL returns preserve borrowed application coroutines; only Core-created unstarted await wrappers are disposed.
 
 ### Removed
 

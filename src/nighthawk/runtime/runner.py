@@ -28,6 +28,7 @@ from .async_bridge import run_coroutine_synchronously
 from .description import annotation_arguments, describe_callable, exact_type
 from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
+from .interruption import chain_cleanup_errors
 from .notifications import await_notification
 from .scoping import (
     RUN_ID,
@@ -321,7 +322,8 @@ class Runner:
                 # existing cause instead of creating an exception self-cycle.
                 raise
             if isinstance(finished, StepInterrupted):
-                raise finished.original_exception from delivery_exception
+                chain_cleanup_errors(finished.original_exception, delivery_exception)
+                raise finished.original_exception from finished.original_exception.__cause__
             if original_exception is not None:
                 raise delivery_exception from original_exception
             raise

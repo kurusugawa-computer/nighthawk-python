@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import time
+import threading
 
 import pytest
 
@@ -202,10 +202,13 @@ def test_sync_bridge_reports_a_foreign_event_loop_resource() -> None:
 
 @pytest.mark.parametrize("inside_event_loop", [False, True])
 @pytest.mark.parametrize("operation_notification", [False, True])
-def test_interrupted_sync_notification_does_not_wait_again_during_loop_shutdown(inside_event_loop: bool, operation_notification: bool) -> None:
+def test_interrupted_sync_notification_joins_cleanup_before_return(inside_event_loop: bool, operation_notification: bool) -> None:
     original = asyncio.CancelledError("original interruption")
     notifications: list[StepFinished | OperationFinished] = []
     cleanup_tasks: list[asyncio.Task[object]] = []
+    cleanup_entered = threading.Event()
+    release = threading.Event()
+    cleanup_finished = threading.Event()
 
     def interrupt() -> None:
         raise original
@@ -224,9 +227,10 @@ def test_interrupted_sync_notification_does_not_wait_again_during_loop_shutdown(
         try:
             await asyncio.sleep(1)
         except asyncio.CancelledError:
-            # A finite resistant handler exposes an otherwise unbounded second
-            # wait in asyncio.run without hanging a failing regression test.
-            await asyncio.sleep(0.6)
+            cleanup_entered.set()
+            while not release.is_set():
+                await asyncio.sleep(0.001)
+            cleanup_finished.set()
 
     @nh.natural_function
     def workflow() -> None:
@@ -253,25 +257,81 @@ def test_interrupted_sync_notification_does_not_wait_again_during_loop_shutdown(
     async def invoke_inside_loop() -> None:
         invoke()
 
-    started = time.monotonic()
+    def release_cleanup() -> None:
+        assert cleanup_entered.wait(3)
+        assert not cleanup_finished.is_set()
+        release.set()
+
+    controller = threading.Thread(target=release_cleanup)
+    controller.start()
     try:
         if inside_event_loop:
             asyncio.run(invoke_inside_loop())
         else:
             invoke()
-        assert time.monotonic() - started < 0.3
+        assert cleanup_finished.is_set()
         assert len(notifications) == 1
         assert isinstance(notifications[0], (StepInterrupted, OperationFinished))
         if isinstance(notifications[0], OperationFinished):
             assert notifications[0].status == "interrupted"
         assert notifications[0].original_exception is original
+        assert cleanup_tasks[0].done()
         assert cleanup_tasks[0].get_loop().is_closed()
     finally:
-        # The production boundary promises bounded waiting, not completion of a
-        # cancellation-resistant coroutine. Explicitly dispose this test fixture.
-        for task in cleanup_tasks:
-            if not task.done():
-                task.get_loop().set_exception_handler(lambda loop, context: None)
-                coroutine = task.get_coro()
-                assert coroutine is not None
-                coroutine.close()
+        release.set()
+        controller.join()
+
+
+@pytest.mark.parametrize("boundary", ["started", "finished", "operation"])
+def test_repeated_async_cancellation_joins_owned_notification(boundary: str) -> None:
+    async def execute() -> None:
+        entered, cleanup, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        effects: list[str] = []
+        original: list[BaseException] = []
+
+        async def notification(event: object) -> None:
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError as exception:
+                original.append(exception)
+                cleanup.set()
+                await release.wait()
+                effects.append("cleaned")
+
+        class Executor:
+            async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+                if boundary == "operation":
+                    await nh.runtime.eval_expression_async(request.step_context, "1")
+                return StepCandidate(outcome=Pass(), binding_name_to_value={})
+
+        @nh.natural_function
+        async def workflow() -> None:
+            """natural
+            Complete this block.
+            """
+
+        lifecycle = StepLifecycle(
+            on_step_started=notification if boundary == "started" else None,
+            on_step_finished=notification if boundary == "finished" else None,
+            on_operation_finished=notification if boundary == "operation" else None,
+        )
+        with nh.run(Executor()), nh.scope(lifecycle=lifecycle):
+            task = asyncio.create_task(workflow())
+            try:
+                await entered.wait()
+                task.cancel("first")
+                await cleanup.wait()
+                task.cancel("second")
+                await asyncio.sleep(0)
+                assert not task.done()
+                assert effects == []
+            finally:
+                release.set()
+            with pytest.raises(asyncio.CancelledError) as caught:
+                await task
+            assert str(caught.value) == "first"
+            assert effects == ["cleaned"]
+            assert len(original) == 1
+
+    asyncio.run(execute())

@@ -43,7 +43,10 @@ async def evaluate_compiled_expression(
         value = eval(compiled, namespace, namespace)
         if inspect.isawaitable(value):
             if not allow_awaitable_result:
-                if inspect.iscoroutine(value):
+                # eval creates the top-level-await wrapper itself. Other returned
+                # awaitables may be borrowed from application state, including a
+                # Python helper that retains its result; Core cannot dispose them.
+                if compiled.co_flags & inspect.CO_COROUTINE and inspect.iscoroutine(value):
                     value.close()
                 raise NighthawkError("Sync Natural function cannot return an awaitable value. Use async def and await the function call.")
             return await value

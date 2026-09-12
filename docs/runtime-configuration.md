@@ -410,3 +410,45 @@ with nh.run(step_executor):
 ## Next steps
 
 Continue to **[Patterns](patterns.md)** for outcomes, error handling, async, cross-block composition, resilience, and common mistakes.
+
+## Model selection and function admission
+
+`model=` changes only the model; `step_executor_configuration=` replaces the whole configuration.
+Both accept omission or `nh.UNSET` for inheritance and cannot be supplied together.
+The active executor resolves selection through `ConfigurableStepExecutor`; a host wrapper must return a wrapper retaining its controls.
+Unsupported executors fail before model requests, and custom `AgentStepExecutor` subclasses must explicitly implement resolution.
+
+```python
+@nh.natural_function(model="openai-responses:gpt-5.6-luna")
+async def child() -> int:
+    """natural
+    Return the integer 17.
+    """
+    return 0
+
+
+with nh.run(executor), nh.scope(capabilities=[request_observer]):
+    with nh.scope(model=borrowed_model):
+        result = parent()
+```
+
+Model declarations are inert until invocation is accepted; they neither initialize providers during decoration nor require credentials for definition lookup.
+Selection is applied before the Python body, and parent settings are restored before the host call handler observes return or failure.
+The same meter, capabilities, oversight, lifecycle, task references, and call handler survive model-only selection.
+Explicit replacement, clearing hooks, or starting another run remains application-controlled.
+
+A host installs `nh.function_call_scope(handler)` independently of an executor run.
+Its `invoke(call, proceed)` method calls `proceed()` synchronously; `invoke_async(call, proceed)` awaits `proceed()`.
+Refuse by raising before continuation entry.
+Returning without completing the continuation is a contract error.
+Call identities and exact definitions are described in the [boundary contract](specification.md#embedded-execution-boundaries).
+The executable [embedded execution example](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/examples/embedded_execution.py) demonstrates both invocation modes without credentials.
+
+For request budgets, observe available usage in a Pydantic AI wrapping capability and refuse the next request when accumulated observations reach your threshold.
+Two requests totaling 120 may be accepted against 100 before the next sequential request is refused; concurrent requests may overrun further.
+Keep these host request records separate from the `UsageMeter` aggregate to avoid double counting.
+Missing reported model names remain unknown; absent usage may already be normalized by the dependency and is not proof of zero cost.
+
+`StepLifecycle.interruption_delivery_timeout` now requests cancellation of an interrupted notification rather than setting an overall completion deadline.
+Core waits for notification cleanup, including after repeated caller cancellation.
+Resistant cleanup can block indefinitely; the host still owns detached application work and durable recording.

@@ -832,7 +832,7 @@ API:
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
     - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
     - `context_builder` replaces prompt construction; omission or `UNSET` inherits. See Section 8.2.4.
-    - Executor replacement precedes full configuration replacement. Configuration updates require an `AgentStepExecutor` and respect managed/external ownership.
+    - Executor replacement precedes model selection. Selection delegates to the active `ConfigurableStepExecutor`; direct `AgentStepExecutor` resolution respects managed/external ownership.
     - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
     - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.
 - `nighthawk.get_step_executor() -> StepExecutor`
@@ -980,10 +980,13 @@ Executor and commit-inspector exceptions produce StepFailed delivery even when t
 On StepCompleted delivery failure, completed assignments remain visible and the callback's exception propagates. There is no original execution failure to fabricate as its cause, and the already-classified StepCompleted is not rewritten into StepFailed. Hosts may classify the overall operation as a commit/delivery failure and record their own anomaly; that classification is separate from core's execution result and does not authorize retrying the execution.
 
 `StepInterrupted` holds the active `failure_stage` and original cancellation or process-control `BaseException`.
-An asynchronous notification receives a shielded delivery attempt bounded by `StepLifecycle.interruption_delivery_timeout`; a timed-out notification is cancelled.
-The synchronous bridge shares that deadline with its private event-loop shutdown, including operation notifications, so shutdown does not wait again for a cancellation-resistant handler.
-Pending cleanup may remain incomplete when that private loop closes; an asynchronous caller owns the later shutdown of its own event loop.
-If delivery also fails, the original interruption still propagates, explicitly chained from the delivery exception.
+An interrupted asynchronous notification receives a shielded attempt until `StepLifecycle.interruption_delivery_timeout`, which requests cancellation.
+Core then waits until the notification and its cancellation cleanup actually finish.
+The synchronous bridge propagates caller interruption cooperatively and joins worker processing, notifications, asynchronous generators, and owned loop shutdown before returning or raising.
+A cancellation-resistant handler can delay completion indefinitely; neither timeout nor thread status proves completion.
+Repeated caller interruptions do not abandon cleanup or repeatedly cancel the same finalizer.
+An asynchronous caller likewise waits for owned notifications, while retaining ownership of its loop and unrelated tasks.
+The first interruption retains its identity and preexisting cause; additional cleanup failures are explicitly chained, using a `BaseExceptionGroup` when necessary.
 Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translated into ordinary host execution failures.
 
 The guarantee is one in-process delivery attempt, not a transaction across Python and storage. A callback that appends and then raises cannot be distinguished automatically from an uncertain append failure. Hosts deduplicate and retry storage by `step_execution_id`, never by replaying a Natural execution. Hard process termination and unavailable storage cannot guarantee durable delivery. OpenTelemetry is optional diagnostics, not the authoritative ledger. Terminal tracing follows the typed classification: await failures receive `nighthawk.step.failed` and exception/error status; interruptions receive `nighthawk.step.interrupted`; delivery failures may add `nighthawk.step.delivery_failed` without a second execution terminal event.
@@ -1001,7 +1004,7 @@ Host integrations can separate responsibilities: the executor boundary admits an
 | Terminal delivery of `StepRaised` or `StepFailed` fails | Preserve the original execution record and cause alongside delivery failure; do not emit another terminal event. |
 
 The terminal attempt precedes any Python `except` outside the Natural boundary.
-`StepLifecycle.interruption_delivery_timeout` defaults to one second for bounded asynchronous interruption cleanup; it does not bound a blocking synchronous hook or guarantee storage.
+`StepLifecycle.interruption_delivery_timeout` defaults to one second before requesting cancellation of interrupted asynchronous delivery; it does not bound total cleanup time, a blocking synchronous hook, or guarantee storage.
 Cancellation while approval is pending does not start the operation.
 Cancellation after execution starts leaves possible external effects for host reconciliation.
 Host domain operations should validate, approve, execute, and record their own concrete requests whether invoked by Python or Natural; core hooks add intervention points without replacing that authority.
@@ -1210,3 +1213,76 @@ The contracts above own these semantics; this table collects review cases for im
 | Caller assignments succeed and terminal storage fails | Assigned values remain; delivery failure propagates without rerunning execution. |
 | Caller catches a Natural failure in Python | The terminal delivery attempt already occurred. |
 | Model returns an expression with effects | The common engine evaluates it once; validation, approval, and rewrite do not replay it. |
+
+
+## Embedded execution boundaries
+
+Python owns task decomposition, execution units, approval policy, and recovery.
+Core supplies optional call interception, exact transformation correspondence, context propagation, and completion of its owned work.
+
+| Boundary | Owner | Entry | Successful exit | Refusal | Interruption | Delivery failure |
+| --- | --- | --- | --- | --- | --- | --- |
+| Function | Core wrapper; host admission and execution unit | Handler before model resolution and Python body | Body, Python finally, explicitly joined children, and owned processing ended; model scope restored | Handler raises before calling continuation; no body effects or provider initialization | Propagates after owned cleanup; completion does not imply success or rollback | Handler sees eventual exception; a successful block fact can coexist with a failed function |
+| Natural block | Core preparation, operations, validation, writeback, notifications | Started notification before preparation | Selected assignments and validation completed, then one terminal attempt ended | Operation or commit rejection follows its existing boundary | StepInterrupted retains primary interruption; notification cleanup is joined | Already established terminal fact and writes remain; no redelivery or replay |
+| Model request | Executor transport; host capability observation and admission | Capability-visible model request | Available response and usage observed before next sequential admission | Host raises before forwarding request | Wrapping capability can distinguish BaseException from success | Host owns records and deduplication; SDK retries and coding-agent internal calls may be invisible |
+
+### Whole-function interception and exact definitions
+
+`nh.function_call_scope(handler)` installs a synchronous/asynchronous `FunctionCallHandler` independently of `nh.run()`.
+`None` explicitly clears it until scope exit.
+A handler can accept a call and establish a run before invoking `proceed()`.
+Core reads the current handler when the wrapper executes, so aliases created before installation still enter the boundary.
+Async calls use the context in which the coroutine runs; a Task uses its selected creation context rather than a later waiter's context.
+Argument expressions and unrelated outer decorators execute outside this boundary.
+Arguments retain object identity, and inspection never evaluates deferred annotations.
+
+`FunctionCall` exposes `call_id`, `parent_call_id`, `definition`, `arguments`, the immutable shallow `keyword_name_to_value` mapping, and inert `model_selection`.
+`nh.get_function_call()` returns the current invocation or `None`.
+Every intercepted nested call gets its own identity; Core does not assign host execution units or implicitly start another run.
+Handler ordering is entry, permitted selection resolution, body and owned processing, model-scope restoration, then handler return or failure.
+
+The continuation may start once, only while its handler is active and in that same Task and thread.
+A normal handler return without completing its continuation raises `FunctionCallError`; refusal raises the host's own exception before proceeding.
+After starting, ordinary host exception handling is allowed and Core never retries the body.
+Async handlers must await their continuation; Core closes its own unstarted continuation coroutines when a handler discards them.
+A synchronous function returning a coroutine returns that exact object without implicit await or close.
+Intercepted generator and async-generator functions raise `FunctionCallError` before body execution because iterator creation is not completion of their lifetime.
+Detached application tasks, unjoined threads, external service work, hard process termination, and malicious internal mutation are outside this guarantee.
+
+`nh.get_natural_function_definition(value)` returns a frozen `NaturalFunctionDefinition` only for a registered public wrapper or its standard bound-method, staticmethod, or classmethod descriptor.
+Its `original_function`, `function`, and `transformed_function` fields are the actual objects.
+Copied attributes, raw source/body functions, and unrelated outer wrappers are not exact registration evidence.
+The registry uses weak ownership; a snapshot held by the application intentionally retains its functions.
+The existing `get_transformed_function()` remains the convenience accessor that follows conventional wrapper chains.
+
+### Model declarations and observation
+
+`@nh.natural_function(model=...)` and `nh.scope(model=...)` replace only the model, retaining other configuration fields.
+`step_executor_configuration=...` replaces the full configuration, including default values of omitted fields.
+Omission and `UNSET` inherit, and supplying both selections is invalid.
+A `ModelSelection` is inert: decoration and definition lookup do not initialize providers or credentials.
+Function declarations apply only inside an accepted continuation and restore the parent even on failure or cancellation.
+
+The active executor's optional `ConfigurableStepExecutor.resolve_model_selection()` accepts, maps, or rejects selection synchronously.
+Core never unwraps a host executor to bypass its policy, and verifies the returned executor protocol.
+Direct `AgentStepExecutor` supports resolution; subclasses must explicitly implement preserving resolution.
+Borrowed model identity and client ownership remain with the application; externally supplied agents continue to own model selection.
+Selection alone preserves scoped usage meters, capabilities, oversight, lifecycle, task references, and the call handler.
+Explicit executor replacement, cleared hooks, and new runs retain their documented effects and are not prohibited.
+
+Hosts may use a Pydantic AI wrapping request capability for admission and one accounting record per visible request.
+Keep selected model identity separate from the reported model name, and unknown usage separate from zero.
+Pydantic AI 2.37 can normalize absent usage to zero; the executable example conservatively treats an all-zero total as unknown.
+Transport errors and cancellations without exposed usage do not invent a successful observation.
+A host accumulator of 120 after two admitted requests against a threshold of 100 refuses the third sequential request.
+Concurrent or already admitted requests may overrun that threshold; Core supplies neither reservations nor a strict cost cap.
+`UsageMeter` remains a separate completed-agent-run aggregate: do not add it to request observations as another charge.
+These observations cover capability-visible requests, not every provider SDK retry, HTTP attempt, or coding-agent internal request.
+
+### Coroutine ownership
+
+DSL tool expressions still await an awaitable result once, including from synchronous Natural functions.
+Top-level await compilation creates a Core-owned wrapper; rejecting that unstarted wrapper closes it without executing its body.
+A returned Python coroutine may be borrowed, retained by a helper, or nested inside an application value; rejection and normalization failure do not authorize closing it.
+Application helpers remain responsible for unstarted coroutine temporaries they create and discard before an expression yields a value.
+Core does not recursively dispose application containers or silently await ordinary synchronous Python returns.

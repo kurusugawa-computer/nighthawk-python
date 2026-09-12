@@ -295,3 +295,29 @@ Traces appear in the terminal UI in real time.
 See [Specification Section 10.1](specification.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
 
 For authoritative execution history, install [terminal delivery](runtime-configuration.md#record-completed-executions). StepCompleted is delivered after caller assignments; StepFailed includes return-await failures and their stage. Tracing is optional and independent of ledger recording. A delivery failure can add `nighthawk.step.delivery_failed`, but never a second execution terminal event. Cancellation is recorded separately as `nighthawk.step.interrupted`.
+
+## Embedded invocation and completion verification
+
+Run the deterministic example with `uv run python examples/embedded_execution.py`.
+It needs no provider credentials and asserts synchronous/asynchronous invocation, refusal before effects, model restoration, request accounting, and notification cleanup completion.
+Expected output is:
+
+```text
+refused_body_effects=0
+models=A,B,A
+observed_tokens=120
+next_request_refused=True
+returned_after_notification_cleanup=True
+```
+
+`tests/natural/test_function_definition.py` verifies exact provenance and collection of abandoned namespaces.
+`tests/natural/test_function_call.py` verifies context timing, parent identities, guarded continuations, and synchronous coroutine-return identity.
+`tests/runtime/test_async_bridge.py` exercises interruption races in independently watched subprocesses.
+Lifecycle regressions release resistant cleanup explicitly and require it to finish before return.
+`tests/runtime/test_model_selection.py` and `test_request_observation.py` cover preserving resolution, approximate admission, failure, cancellation, and concurrent overrun.
+Expression, assignment, and tool ownership tests distinguish Core-created await wrappers from retained application coroutines.
+
+For distribution validation, build a wheel, install it in a fresh environment outside the source tree, copy the example there, and run the environment's Python with `-I` and no `PYTHONPATH`.
+Verify `nighthawk.__file__` points to that environment's installed package.
+A source-tree test alone is not installed-distribution evidence.
+Real-provider tests remain opt-in supplementary evidence; they cannot establish race or cleanup guarantees.

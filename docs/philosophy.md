@@ -216,3 +216,9 @@ One-time compilation has additional limitations:
 With coding-agent backends, evaluating every time means launching an autonomous agent for each Natural block invocation. The cost is higher, but the execution can adapt to the specific repository state, files, tests, commands, and task context.
 
 Nighthawk addresses reliability through constraints rather than compilation: type validation on write bindings, deny frontmatter, structured outcome kinds, scoped execution, resilience wrappers, and a [two-layer testing strategy](verification.md).
+
+Embedded applications can place an optional function-call handler around Natural wrappers to admit work before Python body effects and observe the invocation after its owned work finishes.
+The host owns execution units, budgets, approval decisions, and recovery; Core supplies identity, a guarded continuation, exact transformation correspondence, and context restoration.
+Model selection delegates through the current executor so composition can retain host controls.
+Completion means owned work actually ended, including notification cleanup, even when it failed or took indefinitely long.
+It does not mean earlier effects were rolled back, nor does it make Core a scheduler, sandbox, or durable execution engine.

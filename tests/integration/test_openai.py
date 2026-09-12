@@ -83,3 +83,34 @@ def test_provided_tools_smoke():
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
         assert f() == 3
+
+
+@pytest.mark.asyncio
+async def test_embedded_selection_and_request_observation():
+    from examples.embedded_execution import RecordingHandler, RequestObserver
+
+    requires_openai_integration()
+    observer = RequestObserver(threshold=100_000)
+    handler = RecordingHandler()
+    configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna", model_settings={"openai_reasoning_effort": "low"})
+
+    @nh.natural_function(model="openai-responses:gpt-5.6-luna")
+    async def child() -> int:
+        """natural
+        ---
+        deny: [pass, raise]
+        ---
+        Return the integer 17.
+        """
+        return 0
+
+    executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+    with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer]):
+        assert await child() == 17
+        assert nh.get_step_executor() is executor
+    assert len(handler.calls) == 1
+    assert observer.records
+    assert all(record.call_id == handler.calls[0].call_id for record in observer.records)
+    assert all(record.status == "succeeded" for record in observer.records)
+    print("provider_evidence", [(record.configured_model, record.reported_model, record.tokens) for record in observer.records])
+    print("settings", {"openai_reasoning_effort": "low"})
