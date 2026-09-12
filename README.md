@@ -16,6 +16,9 @@ Nighthawk is a Python library where Python controls flow and LLMs or coding agen
 
 The same mechanism handles lightweight LLM judgments ("classify this sentiment") and autonomous agent executions ("refactor this module and write tests"). See **[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/)** for the full design rationale.
 
+Python determines where Natural runs, which control results may leave a block, and which names receive validated outputs.
+Natural supplies judgment using Python values, including intentionally inherited parent task context; inputs need not all appear in a function signature or read binding.
+
 This repository is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
 
 ## Installation
@@ -34,7 +37,7 @@ For other providers, see [Pydantic AI providers](https://kurusugawa-computer.git
 import nighthawk as nh
 
 
-def python_average(numbers):
+def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
 
@@ -43,15 +46,19 @@ step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExe
 with nh.run(step_executor):
 
     @nh.natural_function
-    def calculate_average(numbers):
+    def calculate_average(numbers: list[object]) -> float:
+        result: float = 0.0
         """natural
         Map each element of <numbers> to the number it represents,
         then compute <:result> by calling <python_average> with the mapped list.
         """
         return result
 
-    calculate_average([1, "2", "three", "cuatro"])  # 2.5
+    print(calculate_average([1, "2", "three", "cuatro"]))  # 2.5
 ```
+
+Natural interprets the mixed representations, `python_average` performs the deterministic calculation, and the output binding validates `result` as a `float` before Python resumes.
+Type validation constrains the result's shape; it does not prove the interpretation is correct.
 
 See the **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** for setup details, credentials, and troubleshooting.
 

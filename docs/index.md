@@ -15,7 +15,7 @@ The same mechanism handles lightweight LLM judgments ("classify this sentiment")
 import nighthawk as nh
 
 
-def python_average(numbers):
+def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
 
@@ -24,19 +24,21 @@ step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExe
 with nh.run(step_executor):
 
     @nh.natural_function
-    def calculate_average(numbers):
+    def calculate_average(numbers: list[object]) -> float:
+        result: float = 0.0
         """natural
         Map each element of <numbers> to the number it represents,
         then compute <:result> by calling <python_average> with the mapped list.
         """
         return result
 
-    calculate_average([1, "2", "three", "cuatro"])  # 2.5
+    print(calculate_average([1, "2", "three", "cuatro"]))  # 2.5
 ```
 
 The LLM interprets the mixed-format input list via `<numbers>`, calls the Python function `<python_average>` through a binding, and commits the result into `<:result>`.
 Python controls the flow; the LLM handles the semantic interpretation.
-Binding functions appear as compact signatures that guide Python composition; output annotations constrain validated writeback when a task needs a narrower result contract.
+The `float` output contract validates `result` before Python resumes; it does not prove the interpretation is correct.
+Binding functions appear as compact signatures that guide Python composition.
 See **[Philosophy](philosophy.md)** for the full design rationale.
 
 ## Getting started

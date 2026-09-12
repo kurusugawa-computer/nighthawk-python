@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaceable `ContextBuilder` presentation and shared static value inspection preserve application helper-name collisions and complete discovery continuations, including pages nested in ordinary containers.
 - Common operation admission, awaited inspection, serialized execution, and completion records cover evaluation, assignment, return-expression resolution, and native tools. Failed tool argument admission retains its identity and original exception.
 - Lifecycle start and operation notifications support asynchronous handlers alongside terminal delivery.
+- `ExecutionReference.parent_step_execution_id` correlates joined child steps with their active parent.
 
 ### Changed
 
@@ -21,7 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Commit rewrites validate supplied replacements once without repeating inspection or expression effects; supplied output mappings replace the full selected mapping.
 - Dotted assignment requires an ordinary Pydantic field with `validate_assignment=True`. Right-hand-side evaluation precedes live attribute traversal, and earlier effects are not rolled back on failure.
 - Ordinary application and propagated validator exceptions cross model and backend boundaries unchanged. Runtime input errors and explicit Pydantic AI control signals retain their recovery paths.
-- `Oversight.inspect_operation` replaces the separate return-expression inspection hook.
+- `Oversight.inspect_operation` replaces both tool-call and return-expression inspection hooks with one `OperationRequest` boundary.
+- Output contracts use supported explicit annotations before initial-value inference; unresolved required annotations fail preparation rather than weakening validation.
+- Lexical support is bounded to source-available functions, live defining-module globals, and existing closure cells, including declared global/nonlocal output writeback. Natural text alone does not capture an otherwise inaccessible outer variable. Parent-state inheritance covers joined child calls; deferred generated expressions and children that outlive their parent have no lifetime guarantee.
+- Integrated Natural execution contracts into the specification and usage guides, with practical parent/child examples and explicit validation, inheritance, and host-delivery boundaries. The README and landing-page example now demonstrate typed output validation.
 
 ### Fixed
 
@@ -32,6 +36,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native model batches also order argument validation before each corresponding body, preventing later validators from running ahead of an earlier rejection. A scoped Pydantic AI 2.37 compatibility adapter preserves its completion strategies; the dependency range is bounded to that minor series.
 - Coding-agent callbacks use the request's event loop and captured scope; process and transport failures preserve their originating exceptions.
 - Interrupted asynchronous notifications and synchronous bridge shutdown share one cleanup deadline, including handlers that suppress cancellation.
+
+### Removed
+
+- `scope(implicit_references=...)` and `get_implicit_references()`; use scoped task references and the active step environment.
+- `Oversight.inspect_tool_call`, `Oversight.inspect_return_expression`, and the associated `ToolCall`, `ToolCallDecision`, and `ReturnExpression` types.
+- `Rewrite.return_value`; replace a return through `Rewrite.outcome`.
+- The executor protocol's separate program, context, binding, and control arguments and outcome/bindings tuple result; use `StepRequest` and `StepCandidate`.
+
+### Migration notes for hosts
+
+These changes apply after 0.14.0; earlier release sections describe their own APIs.
+The removed entry points have no compatibility aliases.
+
+| Before | After |
+| --- | --- |
+| `nh.scope(implicit_references=task_name_to_value)` | `nh.scope(task_references=task_name_to_value)`; task injection no longer overrides Python globals. Omission, `UNSET`, replacement, and `Merge` keep their composition roles. |
+| `nh.get_implicit_references()` | During a step, use `nh.get_step_context().environment.task_name_to_value`. Outside a step, retain the task mapping supplied by the host; there is no run-only replacement getter. |
+| `inspect_tool_call(ToolCall)` / `inspect_return_expression(ReturnExpression)` | Install `inspect_operation(operation: OperationRequest)`, returning `Accept` or `Reject`, directly or asynchronously. Inspect `operation.kind` and the applicable expression/tool fields; ordinary helper calls through evaluation have kind `"evaluation"`. |
+| `ToolCallDecision` | Use `Accept` or `Reject` for operation decisions; `StepCommitDecision` additionally permits `Rewrite`. |
+| `Rewrite(return_value=value)` | `Rewrite(outcome=Return(value))`, importing `Return` from `nighthawk.runtime`. Use `Return(None)` for an explicit `None`, subject to the return contract. |
+| `run_step(...)` / `run_step_async(...)` with separate boundary arguments and a tuple result | Accept keyword-only `request: StepRequest` and return `StepCandidate(outcome=..., binding_name_to_value=...)`. Import both types and resolved outcomes from `nighthawk.runtime`; read live values through `request.step_context.environment`. |
+| An outer value mentioned only in Natural text | Pass it explicitly, establish an existing cell with a valid `nonlocal` declaration, or inject a task reference. |
+
+Custom executors still pass through mandatory finalization.
+Ordinary helper exceptions now propagate to Python; return a domain observation when an expected failure should be handled by the model.
+See the [executor contract](docs/specification.md#14-step-executor), [environment boundaries](docs/specification.md#81-state-layers-python-locals-and-step-locals), and [host configuration guide](docs/runtime-configuration.md#oversight-in-scopes) for complete semantics.
 
 ## [0.14.0]
 
