@@ -2,7 +2,10 @@
 
 Nighthawk is built around one constraint: Python owns the control flow, and the LLM works inside explicit typed boundaries.
 
-The host program decides when reasoning happens, which data crosses into the prompt, which tools are visible, how failures are handled, and how results are merged. Natural blocks provide the judgment point. Python provides the surrounding contract.
+Nighthawk is a general-purpose library for natural-language work inside Python, from small classifications to autonomous agent tasks.
+The host program decides when reasoning happens, how context is presented, how failures are handled, and how results are merged.
+Natural blocks supply judgment using accessible Python values and inherited task context.
+Explicit boundaries constrain execution, control results, and validated name writeback; input dependencies can extend beyond function parameters and read bindings.
 
 This page is written for readers deciding whether Nighthawk fits an existing Python system. It explains the execution model, the design landscape Nighthawk occupies, the consequences of a boundary-first approach, and the tradeoffs that follow.
 
@@ -10,7 +13,7 @@ This page is written for readers deciding whether Nighthawk fits an existing Pyt
 
 Nighthawk embeds Natural blocks inside ordinary Python functions. Each block has a boundary:
 
-- Read bindings (`<name>`) pass Python values in.
+- Read bindings (`<name>`) identify required values and prioritize their presentation; they are not an access allowlist.
 - Write bindings (`<:name>`) pass results back out.
 - Type annotations on write bindings guide what the LLM should produce.
 - Pydantic validates committed write bindings at step finalization.
@@ -53,7 +56,8 @@ From those annotations, the model can infer useful composition facts: `fetch_ite
 
 When the rendered prompt exceeds context limits, the runtime omits remaining entries from the rendered context and appends a `<snipped>` marker. The underlying data stays in Python memory. Binding functions that retrieve host-side data can still query it at runtime, so truncation reduces prompt load without deleting host-side state.
 
-Because each Natural block is a fresh prompt, the prompt surface is determined by the host program at each invocation: block text, f-string interpolation for inline Natural blocks, bindings, visible globals, and scoped configuration. Changing one invocation does not mutate the implicit memory of another block because there is no implicit block-to-block memory.
+Because each Natural block starts a fresh model interaction, the prompt surface is determined at each invocation: trusted block text and interpolation, lexical values, inherited working state, and scoped configuration.
+Shared Python objects can carry mutations between invocations; a model transcript is not automatically shared.
 
 ## Design landscape
 
@@ -91,14 +95,14 @@ Nighthawk keeps orchestration in Python. State lives in Python variables and cro
 | | Orchestration frameworks | Literate harnesses | Nighthawk |
 |---|---|---|---|
 | Control | Graph or agent runtime | Natural language instructions | Python control flow |
-| State | Graph state, message history | Prompt narrative | Python locals, explicit bindings |
-| Cross-step context | Often implicit | Often implicit | Explicit bindings and scoped injection |
+| State | Graph state, message history | Prompt narrative | Python values and declared output bindings |
+| Cross-step context | Often implicit | Often implicit | Python values, inherited working state, scoped task injection |
 | Debugging | Framework-specific tooling | Prompt inspection | Python debugger, pytest, tracing |
 | Constraint model | Guardrails, schemas, routing conditions | Natural language conventions | Type validation, deny frontmatter, structured outcomes, scoped oversight |
 
-The [target design](ideal-state.md#1-purpose-and-principles) makes the meaning of explicit boundaries more precise: Python selects execution points, permitted control results, and validated name writeback.
+Python selects execution points, permitted control results, and validated name writeback, as defined by the [specification](specification.md#1-goals).
 Input dependencies can also come from lexical values and inherited parent working state; they need not all appear in a function signature or read binding.
-The table above describes the current documented context surface; the target additionally specifies parent inheritance for joined child calls.
+Parent inheritance covers child calls that finish while the parent waits for them, including calls joined by a Python helper.
 That inheritance reduces argument plumbing but makes some dependencies contextual.
 Prefer explicit parameters for essential inputs and use inheritance for intentionally shared task policy.
 It does not carry a parent's model message transcript or make shared mutable objects read-only.
@@ -129,7 +133,7 @@ Hosts inspect one validated candidate per step. Acceptance preserves its values;
 
 ### Scoped execution contexts
 
-`run()` establishes the execution boundary by linking a step executor to the current context through an explicit Python `with` statement. `scope()` narrows configuration within an existing run: model override, prompt suffix, executor replacement, implicit references, or oversight.
+`run()` establishes the execution boundary by linking a step executor to the current context through an explicit Python `with` statement. `scope()` narrows configuration within an existing run: model override, prompt suffix, executor replacement, task references, context construction, or optional host hooks.
 
 Configuration follows the active execution context and propagates through calls and async tasks using Python context variables. The host program's control flow, not a framework runtime, determines which configuration is active at any point. Runtime behavior lives in Python structures rather than in prose-only instructions or static configuration. See [Runtime configuration](runtime-configuration.md) for details.
 
@@ -163,13 +167,22 @@ Nighthawk is not a multi-agent framework. It is a building block that composes w
 
 **Communication.** Between Natural blocks within a function, Python variables carry state forward. Read bindings expose values, write bindings commit validated values, and function return values connect larger units. For distributed work, ordinary Python mechanisms such as `asyncio`, queues, task brokers, or service calls can orchestrate Natural functions because they are ordinary callables.
 
-**Isolation.** Nighthawk provides logical isolation at binding boundaries. Read bindings prevent name rebinding, write bindings are type-validated, and each Natural block has an independent step context with no implicit message history. Read bindings do not prevent in-place mutation of mutable objects; this is intentional and enables the [carry pattern](patterns.md#the-carry-pattern). OS-level isolation, filesystem permissions, and sandboxing are delegated to the execution backend.
+**Isolation.** Each Natural block has its own working assignments and no implicit message history.
+Rebinding an existing Python name requires a declared output; output values are validated at finalization.
+Parent snapshots retain object references, so in-place mutations remain shared, including through read bindings and the [carry pattern](patterns.md#the-carry-pattern).
+OS-level isolation, filesystem permissions, and sandboxing belong to the host or backend.
 
 **Result merging.** The resilience module provides common aggregation patterns such as `vote` and `fallback`. Domain-specific merging belongs in user code because merge semantics are domain-specific. Nighthawk ensures that each result crosses the boundary as a typed Python object that merge logic can inspect and validate.
 
 ## Trust and safety boundaries
 
 Typed bindings are output and state-transfer boundaries. They are not a sandbox for arbitrary untrusted instructions.
+
+A block is not a transaction: application calls, object mutations, validators, and external operations may have effects before finalization.
+Rejecting a final candidate prevents pending name assignments but cannot undo those earlier effects.
+An optional Generic Agent host owns approval, concrete domain operations, durable task history, and retry or compensation decisions.
+Ordinary Natural functions need no ledger or host-hook construction.
+Approval can wait within a running coroutine; durable Python suspension, workspace reconstruction after a restart, and automatic replay are outside the runtime contract.
 
 Natural DSL sources, imported markdown, and prompt fragments are part of the program. They define the execution boundary itself: which bindings are visible, how the prompt is structured, which tools the model may invoke, and which write types it may commit. Treating them as trusted, repository-managed assets is not a convenience but a consequence of their role -- a change to a Natural source is a change to the program's contract with the model, comparable to editing a function signature or a route definition.
 

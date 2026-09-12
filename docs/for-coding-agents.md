@@ -89,7 +89,8 @@ with nh.run(executor):
 
 See [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/) for provider alternatives and credentials.
 
-With coding agent backends, each Natural block is an autonomous agent execution. The agent may read files, run commands, and invoke skills inside the block. Python still owns the workflow, and only the declared outputs cross the boundary back to Python.
+With coding agent backends, each Natural block is an autonomous agent execution. The agent may read files, run commands, and invoke skills inside the block. Python still owns the workflow, and declared outputs determine validated name writeback.
+Earlier helper effects and shared-object mutations remain visible even when finalization fails.
 
 Example: mix a cheap classifier with a deep analysis step in one workflow.
 
@@ -222,8 +223,11 @@ See [Natural blocks: Designing structured output](https://kurusugawa-computer.gi
 
 Rules:
 
-- `<name>` is a read binding. The model can inspect the value but cannot rebind the name.
+- `<name>` is a read binding: it requires the value and prioritizes presentation, without limiting other environment access. Existing Python names require an output declaration for rebinding.
 - `<:name>` is a write binding. The model sets a new top-level value that commits back into Python locals after the block. Always add type annotations to write bindings.
+- Prefer explicit parameters for essential child inputs; use inherited state for intentionally shared task policy.
+- Joined children snapshot parent associations at entry; child rebinding stays local, and children that outlive their parent have no inheritance guarantee.
+- Python names, including globals and builtins, precede parent and task references. An unbound local blocks fallback; Natural text alone does not create a Python closure.
 - Read bindings expose shared mutable objects. If the model mutates a bound list, dict, or object in place, the caller sees the mutation. Use this intentionally for the carry pattern, not casually.
 
 This is why the carry pattern uses a read binding:
@@ -328,6 +332,8 @@ Async rule:
 Resilience rule:
 
 - Keep retry, fallback, timeout, budget, and circuit-breaker policy in Python, not inside Natural text.
+- A failed block may already have effects; reconcile them before retrying and never replay an execution to repair lifecycle storage failure.
+- Ordinary helper and child exceptions propagate to Python; return a domain observation from a helper when the model should handle an expected failure.
 - Import primitives from `nighthawk.resilience`. After `import nighthawk as nh`, the module namespace is also available as `nh.resilience`:
 
 ```py
@@ -381,7 +387,7 @@ Integration-test rules:
 | Use Natural for deterministic computation | Higher cost, worse reliability, weaker tests | Write plain Python |
 | Put two unrelated tasks in one block | Ambiguous contract, hard to test | Split into separate `@nh.natural_function` functions |
 | Use coding agent backends for every block | Slow, expensive, oversized execution surface | Reserve them for deep autonomous steps |
-| Omit type annotations on write bindings | No validation or coercion at commit time | Always annotate: `result: str = ""`, not just `result = ""` |
+| Rely on initial-value inference for structured output | Inference captures only the outer runtime type | Annotate collections and constraints explicitly, such as `results: list[str] = []` |
 | Erase callable type with `object` | Model loses the signature it needs | Use precise types: `fetch: Callable[[str], Data]` |
 | Solve truncation by only raising limits | Prompt bloat hides design problems | Shrink context first (section 9) |
 | Depend on hidden cross-block memory | Blocks execute independently | Pass or return explicit state |

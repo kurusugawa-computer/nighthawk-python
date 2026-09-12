@@ -2,7 +2,7 @@
 
 ## Scope and execution
 
-The [Ideal State examples](../../../docs/ideal-state.md#9-behavioral-examples-and-acceptance-criteria) require actual model-backed composition in addition to deterministic environment tests.
+The [Ideal State examples](../../../docs/specification.md#145-behavioral-acceptance-cases) require actual model-backed composition in addition to deterministic environment tests.
 The new [integration module](../../../tests/integration/test_natural_composition.py) exercises three workflows using production source instrumentation, context construction, operations, finalization, and lifecycle delivery.
 Every child in these tests runs another Natural block against the model; no scripted child substitutes for it.
 

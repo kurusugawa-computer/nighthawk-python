@@ -49,8 +49,9 @@ Parameters:
 - `step_executor_configuration`: replace the entire configuration.
 - `step_executor`: replace the step executor entirely.
 - `usage_meter`: replace the `UsageMeter` that steps in this scope record into. See [Usage metering](#usage-metering).
-- `oversight`: scope-level synchronous tool-call, return-expression, and resolved step-commit inspection hooks.
-- `lifecycle`: synchronous terminal delivery after caller assignments.
+- `oversight`: operation and resolved commit inspection, with direct or awaitable decisions.
+- `lifecycle`: started, operation-finished, and terminal notifications, with direct or awaitable completion.
+- `context_builder`: replace context presentation without changing value access or validation.
 - `system_prompt_suffix_fragments`: scope-level system suffix fragments.
 - `user_prompt_suffix_fragments`: scope-level user suffix fragments.
 - `task_references`: values in the scoped task environment.
@@ -217,11 +218,11 @@ During a Natural step, task references are available through `nh.get_step_contex
 When configuring nested scopes outside a step, keep the original task mapping and pass the desired subset as an ordinary mapping.
 
 ```py
-task_references = {"a": helper_a, "b": helper_b}
+task_name_to_value = {"a": helper_a, "b": helper_b}
 with nh.run(step_executor):
-    with nh.scope(task_references=task_references):
-        narrowed = {name: value for name, value in task_references.items() if name != "b"}
-        with nh.scope(task_references=narrowed):
+    with nh.scope(task_references=task_name_to_value):
+        selected_task_name_to_value = {name: value for name, value in task_name_to_value.items() if name != "b"}
+        with nh.scope(task_references=selected_task_name_to_value):
             triage_issue(ticket_text)
 ```
 
@@ -387,6 +388,7 @@ execution_reference = nh.get_execution_reference()
 execution_reference.run_id  # trace root -- stable across nested scopes
 execution_reference.scope_id  # current scope -- changes with each nh.scope()
 execution_reference.step_execution_id  # Unique per invocation; None outside a step
+execution_reference.parent_step_execution_id  # Active parent step, when present
 execution_reference.source_location  # Source module and line; None outside a step
 ```
 

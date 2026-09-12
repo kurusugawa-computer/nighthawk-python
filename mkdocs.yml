@@ -81,7 +81,6 @@ nav:
       - Philosophy: philosophy.md
   - Project:
       - Roadmap: roadmap.md
-      - Ideal state (target design): ideal-state.md
 
 markdown_extensions:
   - admonition

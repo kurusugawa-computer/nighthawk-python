@@ -218,6 +218,30 @@ def test_classify_iteration():
 
 Run repeatedly with `pytest -x -k test_classify_iteration` to validate prompt changes against specific inputs that previously failed.
 
+## Contract checks and model evaluations
+
+Verify deterministic runtime mechanics separately from model judgment.
+Scripted executors use `StepRequest` and return resolved `StepCandidate` values; the common runtime still validates outputs, returns, and allowed outcomes.
+Exercise live lexical lookup, unbound names, annotation acquisition, joined child snapshots, assignment validation and partial effects, ordered operations, awaited approval, rewrites, and terminal delivery through their actual runtime boundaries.
+The [acceptance cases](specification.md#145-behavioral-acceptance-cases) define review scenarios, and the [implementation audit](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20260911-ideal-state-audit.md) maps them to existing tests and dated results.
+
+Real model tests should check observable task results, child calls, selected capabilities, and retrieval of omitted context.
+Type validation alone cannot prove a judgment's factual accuracy, call count, or effect correctness.
+The [composition integration tests](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/tests/integration/test_natural_composition.py) exercise Python iteration, judgment-selected children inheriting review policy, and the ten-call counter example with actual Natural functions.
+Their inputs are synthetic; inspect assertions and lifecycle facts rather than requiring a particular expression sequence.
+
+### Interface evaluation criteria
+
+Semantic success, permitted control results, and correct effects take precedence over call count, token usage, and latency.
+Keep failed and duplicate effects in the results; efficiency cannot compensate for lost semantic reliability.
+Use independent repetitions, varied formulations, and representative models/backends; report sample sizes, uncertainty, and unavoidable differences in guidance.
+When evidence does not distinguish acceptable alternatives, prefer lower implementation, explanation, and maintenance burden across the runtime, adapters, and guidance.
+Fewer tools alone do not establish a simpler or more reliable system.
+
+The [inspection assessment](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20260911-inspection-assessment.md) records 804 model trials and the selection of Python inspection helpers on the existing evaluation/assignment surface.
+The [protocol](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20260911-inspection-study-protocol.md) owns experimental controls and source snapshots.
+This is a bounded selection with reported failures, not statistical equivalence or a universal claim about models or backends.
+
 ## Observability
 
 Nighthawk emits [OpenTelemetry](https://opentelemetry.io/) spans for runs, scopes, and step executions. If your application has an OpenTelemetry tracer configured, Nighthawk traces appear automatically -- no Nighthawk-specific setup is required.

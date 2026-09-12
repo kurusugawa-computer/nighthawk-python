@@ -6,16 +6,15 @@ This roadmap is intentionally future-facing.
 - It avoids implementation details.
 - It should not restate what is already implemented today.
 
-The [Ideal State](ideal-state.md) owns the ratified target contracts. The ideas
-below are exploratory unless included in that target. In particular, expression
-sandboxing and durable workspace reconstruction are no longer core goals;
-external isolation and durable application records remain host/backend concerns.
+The [specification](specification.md) owns runtime contracts; the ideas below are exploratory extensions.
+External isolation and durable application records remain host/backend concerns.
 
 ## Prompt and context
 
 ### Prompt context: locals digest
 
-Introduce an optional "locals digest": a very short, high-signal summary of the current evaluation locals.
+Explore reusable summarization strategies built on the existing [context builder](specification.md#824-replaceable-context-construction).
+The extension would provide a short summary of task-relevant working state.
 
 Motivation:
 
@@ -27,11 +26,10 @@ Non-goals:
 - This is not a security feature.
 - This is not a substitute for structured memory.
 
-### Prompt context improvements
+### Domain-specific context descriptions
 
-- More explicit control over what appears in prompt context.
-- Better structured rendering for common Python values.
-- Clearer contracts for truncation and prioritization when context budgets are exceeded.
+Explore reusable descriptions for domain values that remain opaque under the existing bounded, non-executing [inspection contract](specification.md#825-value-inspection-and-name-discovery).
+Preserve omitted-name retrieval, provenance, and live-value access independently of richer descriptions.
 
 ### Model-capability-aware prompting
 
@@ -70,10 +68,8 @@ Considerations:
 
 ### Resilience defaults via scope
 
-Exploratory, outside the ratified target. Python function transformers remain the
-target's retry mechanism, with host-selected retry boundaries. Any scope-default
-proposal must preserve that ownership and must not introduce automatic replay
-after partial effects or lifecycle-delivery failure.
+Python function transformers remain the [retry mechanism](patterns.md#resilience-patterns), with host-selected retry boundaries.
+Any scope-default proposal must preserve that ownership and must not introduce automatic replay after partial effects or lifecycle-delivery failure.
 
 Allow hosts to set default resilience policies (retry attempts, timeout, fallback chain) at the `nighthawk.scope()` level, so that all Natural block executions within a scope inherit a baseline policy without per-call wrapping.
 
@@ -105,7 +101,9 @@ or reconstruction of a suspended step.
 
 ### Async bridge ContextVar propagation
 
-The `run_coroutine_synchronously` bridge copies `contextvars` into a background thread, but changes made inside the thread are not propagated back to the caller. This is safe today because mutable state flows through shared references (e.g. `StepContext.step_locals`), but future features that rely on ContextVar side-effects across the sync-async boundary will need an explicit propagation mechanism.
+Explore explicit propagation back to the caller for future features relying on context-variable rebinding inside a bridge thread.
+The existing bridge propagates execution context into supported thread calls and shares referenced objects; it does not propagate arbitrary context-variable rebinding back.
+Any extension must retain the [parent lifetime and shared-value boundaries](specification.md#813-parent-lifetime-and-expression-lifetime).
 
 ## Implementation hardening
 
@@ -137,7 +135,8 @@ Improve conventions for sharing skill definitions across backends beyond symlink
 
 ## Open questions
 
-- How to best represent tool results in the prompt for robust reasoning.
+- Whether statement/iteration conveniences or a redesigned completion interface improve semantic reliability enough to justify their complexity; neither is an accepted runtime requirement.
+- Which task-specific guidance improves result use under the existing bounded inspection and discovery contract.
 - How to debug Natural blocks deterministically (unit testing is addressed via `nighthawk.testing`; debugging the LLM's reasoning path remains open).
 - Which shared OpenTelemetry event/attribute schema should resilience primitives follow (retry, timeout, budget, vote, fallback, circuit breaker)?
 - How should fallback/vote decisions be represented in traces (detail level, cardinality limits, and noise control)?

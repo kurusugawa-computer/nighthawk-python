@@ -50,7 +50,7 @@ def _collect_nav_files(nav: list) -> set[str]:
 # -- Stale reference tests ----------------------------------------------------
 
 
-_OBSOLETE_FILENAMES = {"guide.md", "design.md", "providers.md"}
+_OBSOLETE_FILENAMES = {"guide.md", "design.md", "providers.md", "ideal-state.md"}
 
 
 class TestStaleReferences:

@@ -38,7 +38,9 @@ def process_posts(posts: list[str]) -> list[str]:
     return summaries
 ```
 
-`summary: str` declares a type annotation without an initial value. The variable does not appear in the LOCALS section -- the LLM discovers the binding from `<:summary>` in the program text. The type annotation enables validation when the LLM assigns a value.
+`summary: str` declares an unbound output with a static contract.
+Its declaration and contract remain discoverable even without a value preview.
+If it remains unassigned, a later Python read raises normally.
 
 ```py
 @nh.natural_function
@@ -151,7 +153,8 @@ except InputError as e:
 
 ### Error types
 
-All Nighthawk exceptions inherit from `NighthawkError`. The most common exception in application code is `ExecutionError`, raised when a Natural block produces an invalid outcome, a disallowed outcome type, or a validation failure.
+Public library errors inherit from `NighthawkError`; ordinary application/helper exceptions and explicit Natural raises retain their own types.
+Expected domain failures that the model should act on can instead be returned as ordinary helper results. The most common exception in application code is `ExecutionError`, raised when a Natural block produces an invalid outcome, a disallowed outcome type, or a validation failure.
 
 For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolDeclarationError`), see [Specification Section 13](specification.md#13-error-handling).
 
@@ -233,7 +236,87 @@ You can therefore use async binding functions through tools without changing a s
 
 ## Cross-block composition
 
-Since each Natural block executes independently ([one block, one task](natural-blocks.md#one-block-one-task)), cross-block context must be explicit.
+Each Natural block starts a fresh model interaction ([one block, one task](natural-blocks.md#one-block-one-task)).
+Use Python arguments and returned values for essential inputs and results, inherited parent working state for intentionally shared task context, and scoped task references for injected capabilities.
+Joined children inherit materialized parent associations at entry; shared objects remain live, while child name rebinding does not update the parent.
+Children that outlive their parent have no inheritance guarantee.
+The [environment contract](specification.md#813-parent-lifetime-and-expression-lifetime) defines the precise boundaries.
+
+### Python iteration with Natural judgment
+
+Here Python determines that each summary line is assessed once. Natural blocks perform the summarization and confidence judgments. Essential inputs are explicit parameters, so the assessor can also be called independently. Call the outer function inside `nh.run(executor)`.
+
+```python
+from typing import Annotated
+
+from pydantic import Field
+
+import nighthawk as nh
+
+
+@nh.natural_function
+async def assess_line(document: str, line: str) -> float:
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
+    """natural
+    Assess how strongly <document> supports <line>.
+    Set <:confidence> to a score from 0.0 to 1.0.
+    """
+    return confidence
+
+
+@nh.natural_function
+async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
+    summary = ""
+    """natural
+    Summarize <document> in <:summary>, with one claim per line.
+    """
+    assessments: list[tuple[str, float]] = []
+    for line in summary.splitlines():
+        confidence = await assess_line(document, line)
+        assessments.append((line, confidence))
+    return assessments
+```
+
+### Natural selects follow-up assessments
+
+Here the parent chooses which claims need review.
+The child receives the document and claim explicitly, and inherits the parent's materialized review policy.
+Call these ordinary Natural functions inside `nh.run(executor)`:
+
+```python
+from typing import Annotated
+
+from pydantic import Field
+
+import nighthawk as nh
+
+
+@nh.natural_function
+async def assess_claim(document: str, claim: str) -> float:
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
+    """natural
+    Assess how strongly <document> supports <claim>, applying <review_guidance>.
+    Set <:confidence> to a score from 0.0 to 1.0.
+    """
+    return confidence
+
+
+@nh.natural_function
+async def review_claims(document: str, claims: list[str]) -> list[tuple[str, float]]:
+    review_guidance = "Check quantitative and causal claims against direct evidence."
+    assessments: list[tuple[str, float]] = []
+    """natural
+    Use <review_guidance> to choose claims from <claims> that need closer review.
+    Call <assess_claim> with <document> and each selected claim, awaiting each result.
+    Store the selected claims and their returned scores in <:assessments>.
+    """
+    return assessments
+```
+
+The parent step remains active until its chosen calls finish.
+The policy does not need to pass through intermediate helper signatures, but `assess_claim` now has an inherited dependency: calling it independently requires supplying that policy, for example through task injection.
+Prefer an explicit policy parameter when independent reuse matters.
+The [nested execution acceptance example](specification.md#144-nested-execution-acceptance-example) isolates inheritance mechanics separately from this judgment task.
 
 ### The carry pattern
 
@@ -315,7 +398,9 @@ result_b = branch_multiply(carry_b)  # independent path
 
 ### f-string injection as alternative
 
-When the carry's locals summary footprint is too large, or context is pre-formatted, inject it directly via f-string ([f-string injection](natural-blocks.md#f-string-injection)):
+Use f-strings only when the inserted text is a trusted, repository-managed program fragment ([f-string injection](natural-blocks.md#f-string-injection)).
+Keep user input and model-generated history in ordinary bindings, even when preformatted or large; use context budgets or a custom context builder to reduce presentation size.
+For a trusted fragment:
 
 ```py
 @nh.natural_function
@@ -385,7 +470,9 @@ resilient = retrying(
 )(classify)
 ```
 
-Use only what you need. For most cases, `retrying(attempts=3)(fn)` is enough.
+Use only what you need. For simple judgments, `retrying(attempts=3)(classify)` is enough.
+Choose retry boundaries around known effects: a failed block may already have mutated shared state or performed external operations.
+A lifecycle-delivery failure never justifies replaying an execution; hosts retry storage separately and reconcile uncertain domain effects.
 
 ### Fallback
 
@@ -539,7 +626,7 @@ For TTL-based caching, use [cachetools](https://cachetools.readthedocs.io/). Pla
 | Use `<:carry>` (write binding) for mutable context | Rebinding breaks the caller's reference | Use `<carry>` (read binding); mutate in-place ([The carry pattern](#the-carry-pattern)) |
 | Put two independent tasks in one block | Non-deterministic, hard to test, unclear contract | Split into two blocks connected by Python |
 | Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python ([Responsibility split](natural-blocks.md#responsibility-split)) |
-| Forget type annotations on write bindings | No validation or coercion at commit time | Always annotate `<:name>` bindings |
+| Rely on inference for structured outputs | Initial-value inference captures only the outer runtime type | Annotate `<:name>` bindings when element types or constraints matter |
 | Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding ([Keep locals minimal](natural-blocks.md#keep-locals-minimal)) |
 | Try to "compile" a Natural block into deterministic Python | Judgment tasks cannot be reduced to static code; input space is unbounded | Keep the Natural block; use Python only for deterministic operations ([Philosophy](philosophy.md#why-evaluate-every-time)) |
 | Add resilience logic inside a Natural block | LLM cannot reliably retry itself or manage timeouts | Wrap the Natural function call from Python using `nighthawk.resilience` ([Resilience patterns](#resilience-patterns)) |

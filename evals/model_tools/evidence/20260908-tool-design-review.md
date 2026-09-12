@@ -5,7 +5,7 @@ References to "current" tools below describe the code inspected at review time.
 This record preserves the initial rationale, not the current target contract.
 P-TOOLS-001 through P-TOOLS-004 and P-TOOLS-EVAL-001 were ratified on 2026-09-09.
 The later inspection-helper decisions make dedicated tool exposure provisional;
-see the [Ideal State](../../../docs/ideal-state.md).
+see the [Ideal State](../../../docs/specification.md).
 
 ## Evidence and limits
 
@@ -57,4 +57,4 @@ useful internally; it does not require the model to choose among five
 environments for every expression or to navigate `StepContext` in ordinary tasks.
 The later [GPT-5.6 assessment](20260909-gpt56-assessment.md) revises the empirical
 priorities. Current target contracts and approved follow-ups are maintained in
-the [Ideal State](../../../docs/ideal-state.md).
+the [Ideal State](../../../docs/specification.md).

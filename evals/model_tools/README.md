@@ -8,7 +8,7 @@ The original/refined/merged surfaces below retain the 2026-09-09 experiment cont
 The production-backed dedicated-tool versus helper comparison is implemented separately in `inspection_study.py`.
 Its [assessment](evidence/20260911-inspection-assessment.md) records 804 model trials and selects the existing evaluation/assignment surface with Python inspection helpers.
 Its [protocol](evidence/20260911-inspection-study-protocol.md) describes controls, limits, source snapshots, and backend differences.
-The [Ideal State](../../docs/ideal-state.md#13-model-facing-interface-and-evaluation) owns target semantics and remaining interface choices.
+The [specification](../../docs/specification.md#825-value-inspection-and-name-discovery) owns runtime semantics and the selected inspection/discovery interface.
 In particular, the existing `merged` surface merges evaluation and assignment;
 it provides no evidence about removing the dedicated inspection tool.
 
@@ -44,7 +44,7 @@ tests parent-state mechanics and model tool use. Actual Natural parent/child
 composition requires separate integration coverage.
 
 Apply the ratified
-[selection criteria](../../docs/ideal-state.md#selection-criteria) when reviewing
+[selection criteria](../../docs/verification.md#interface-evaluation-criteria) when reviewing
 the comparison. Prioritize semantic success, permitted control results, and
 correct effects over operation count, tokens, or latency. When the evidence does
 not distinguish acceptable candidates, prefer lower implementation, explanation,

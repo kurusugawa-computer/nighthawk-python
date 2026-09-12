@@ -210,6 +210,7 @@
       members:
         - OperationRequest
         - OperationFinished
+        - OperationError
 
 ::: nighthawk.runtime.expression
     options:
@@ -220,6 +221,7 @@
 ::: nighthawk.runtime.assignment
     options:
       members:
+        - AssignmentResult
         - assign_tool
         - assign_tool_async
 

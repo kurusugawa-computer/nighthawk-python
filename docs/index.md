@@ -34,7 +34,10 @@ with nh.run(step_executor):
     calculate_average([1, "2", "three", "cuatro"])  # 2.5
 ```
 
-The LLM interprets the mixed-format input list via `<numbers>`, calls the Python function `<python_average>` through a binding, and commits the result into `<:result>`. Python controls the flow; the LLM handles the semantic interpretation. Binding functions like `<python_average>` appear in the prompt as a single signature line, giving the LLM type-safe composability with no JSON Schema overhead. See **[Philosophy](philosophy.md)** for the full design rationale.
+The LLM interprets the mixed-format input list via `<numbers>`, calls the Python function `<python_average>` through a binding, and commits the result into `<:result>`.
+Python controls the flow; the LLM handles the semantic interpretation.
+Binding functions appear as compact signatures that guide Python composition; output annotations constrain validated writeback when a task needs a narrower result contract.
+See **[Philosophy](philosophy.md)** for the full design rationale.
 
 ## Getting started
 

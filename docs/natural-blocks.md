@@ -69,21 +69,30 @@ text: str = "Server is on fire!"
 Three sections:
 
 - **`<<<NH:PROGRAM>>>`** -- your Natural block text (after sentinel removal and `textwrap.dedent`).
-- **`<<<NH:LOCALS>>>`** -- step locals, rendered alphabetically as `name: type = value`.
-  Nighthawk renders the full current locals snapshot by design; control context size by deciding which locals exist before the block.
-- **`<<<NH:GLOBALS>>>`** -- module-level names referenced via `<name>` that are not in step locals.
+- **`<<<NH:LOCALS>>>`** -- bounded working context, with origins and output contracts.
+  Explicit references and outputs take priority, followed by Python working locals and inherited state, with alphabetical ordering within each priority class.
+- **`<<<NH:GLOBALS>>>`** -- referenced globals and builtins, plus scoped task capabilities not already presented as working state.
+
+Design the locals at the block boundary to show what matters for the task.
+Budgets can omit even explicit references; omitted names remain available through environment discovery.
+Presentation is a view of accessible state, not its authority or a replacement for live objects.
 
 ### One block, one task
 
-Each Natural block performs one task -- one set of input bindings, one set of output bindings, one outcome -- and executes independently. There is no implicit message history between blocks. The LLM sees only the prompt assembled for that specific block. Cross-block context must be explicit (see [Patterns: cross-block composition](patterns.md#cross-block-composition)).
+Each Natural block performs one task with declared output bindings and one outcome.
+There is no implicit model message history between blocks.
+Python values, inherited parent working state, and scoped task references supply context to each fresh interaction (see [Patterns: cross-block composition](patterns.md#cross-block-composition)).
 
 ## Providing data to a block
 
-Two mechanisms supply data to a Natural block: **bindings** and **f-string injection**.
+Pass external input as Python values through **bindings**.
+Use **f-string injection** only for trusted program fragments; interpolation changes Natural source before execution.
 
 ### Read bindings (`<name>`)
 
-A read binding makes a Python value visible in the LOCALS section. The name cannot be rebound by the LLM.
+A read binding resolves a required value and prioritizes it in the prompt.
+It does not restrict access to other lexical, inherited, or scoped task values.
+An existing Python name can be rebound only if also declared as an output.
 
 ```py
 @nh.natural_function
@@ -137,7 +146,13 @@ def detect_language(text: str):
     return language
 ```
 
-Type annotations on write bindings enable validation and coercion at step finalization for values that are actually committed.
+An explicit output annotation determines its validation contract at block entry.
+Without one, the runtime infers the initialized value's type, except for `None` and a plain `object()`; otherwise the output is unconstrained.
+Annotate collections explicitly when element types matter: `findings: list[Finding] = []` retains its element contract, while `findings = []` selects only `list`.
+An unresolved explicit annotation fails preparation instead of silently falling back to inference.
+All bound declared outputs receive final validation even if the model never assigns them; an initial Raise discards pending outputs.
+Output contracts constrain values, not the factual correctness of a judgment.
+See [binding contracts](specification.md#7-natural-dsl-bindings) for annotation acquisition and global/nonlocal writeback.
 
 ### Pydantic model write bindings
 
@@ -163,13 +178,17 @@ def judge_review(review_data: str) -> ReviewVerdict:
     return verdict
 ```
 
-When the LLM assigns a value to `verdict`, Nighthawk validates and coerces it to a `ReviewVerdict` instance. If the value does not conform to the model schema, a `ToolValidationError` is raised.
+When the LLM assigns a value to `verdict`, Nighthawk validates and coerces it to a `ReviewVerdict` instance.
+Assignment validation failures give the model recoverable feedback; boundary validation failure prevents pending Python name assignments.
+For direct model-field mutation, use ordinary declared Pydantic fields with `validate_assignment=True`.
+Their constraints, validators, and frozen restrictions apply through Pydantic's assignment machinery.
+Use ordinary Python helpers for properties, custom objects, and other mutation routes; helper effects are not automatically validated or rolled back.
 
 **How write bindings appear in the prompt.** Initialized outputs appear with their values and selected contracts. Unbound outputs have no value preview; their declarations and contracts remain discoverable through the environment. If a context budget omits an entry, the presentation identifies the omission and gives retrieval references.
 
 ### Prompt appearance of bindings
 
-Read references prioritize presentation, while write declarations identify validated Python output slots. Both can include value previews, but output entries also identify their selected contracts. Existing Python names require an output declaration to be rebound through `nh_assign`, whether or not they were explicitly mentioned as reads. Earlier object mutations remain visible even if finalization rejects pending name assignments.
+Read references prioritize presentation, while write declarations identify validated Python output slots. Both can include value previews, but output entries also identify their selected contracts. Existing Python names require an output declaration to be rebound by a Natural operation, whether or not they were explicitly mentioned as reads. Earlier object mutations remain visible even if finalization rejects pending name assignments.
 
 ### Multimodal bindings
 

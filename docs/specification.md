@@ -24,22 +24,39 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 
 ## 1. Goals
 
-- Provide a compact reimplementation of nightjarpy-like Natural blocks in Python.
-- Support a hybrid style where Python controls flow, while the LLM executes a Natural DSL embedded as:
-    - Function docstring Natural blocks
-    - Inline Natural blocks (standalone string literal statements)
-- Reduce the "LLM is a black box" problem by actively mapping LLM-relevant state into the Python interpreter:
-    - expose a summary of step locals to the LLM
-    - allow the LLM to synchronize intermediate state into a step locals mapping during reasoning
-    - commit selected state back into Python locals at Natural block boundaries
-- Provide a coherent execution model where all state is ordinary Python values in step locals, and persistence (if desired) is user-managed via ordinary bindings.
+Execute natural-language descriptions of work inside ordinary Python programs, from small classifications to autonomous agent tasks.
+Python owns deterministic procedure, execution points, permitted control results, and declared names receiving validated writes.
+Natural supplies judgment using accessible lexical values, inherited parent working state, and scoped task references.
+Read bindings express dependencies and presentation priority, not an access allowlist.
+Essential inputs should normally be explicit parameters; inherited task policy trades less argument plumbing for contextual dependencies.
+
+Ordinary applications need `natural_function`, output contracts, and an executor selected through `run`; `scope` varies configuration and task injection.
+Host approval and lifecycle records are optional integration surfaces, while runtime validation is mandatory for every executor.
+Use native Pydantic and Pydantic AI value contracts, models, agents, tools, content, capabilities, and usage types where they fit.
+Source instrumentation enters the runtime and dispatches results; Natural prose remains interpreted work rather than generated deterministic Python source.
+
+| Component | Responsibility |
+| --- | --- |
+| Python application | Calls, lexical state, deterministic control flow, domain types, and task decomposition. |
+| Generic Agent host, when used | Task history, concrete domain operations, approval, durable records, and retry or compensation policy. |
+| Natural runtime | Environments, operation admission and execution, validation, control results, and lifecycle notifications. |
+| Pydantic / Pydantic AI | Value contracts, model and tool interaction, content, capabilities, and usage. |
+| Backend adapter | Transport and model-facing translation through the common runtime boundaries. |
+| Context builder | Bounded presentation of accessible state, without changing lookup or authority. |
 
 ## 2. Non-goals
 
-- Sandboxing or hard security isolation.
-- Persistence across processes.
-- A full "Skills" framework (Nighthawk delegates to the backend CLI's native skill system; see [Coding agent backends](coding-agent-backends.md#skills)).
-- Executing Python code blocks embedded in markdown (a broader "Natural -> Python -> Natural" nesting beyond docstrings).
+- Sandboxing hostile generated Python; isolation belongs to the host or backend.
+- Compiling Natural prose into deterministic Python.
+- Durable suspended Python execution, workspace reconstruction across restarts, or automatic operation replay.
+- Automatic background scheduling or joining of child tasks.
+- A full skills framework; coding backends use their native skill systems.
+- Executing Python code blocks embedded in markdown as a separate nesting mechanism.
+
+A block is not a transaction.
+Object mutations, helper calls, validators, and external operations may have effects before finalization; rejection prevents pending name assignments but cannot undo those effects.
+Frozen records and shallow read-only mappings protect structure, not the referenced object graph.
+Each block starts a fresh model interaction; inherited working values do not include a parent's model message transcript.
 
 ## 3. Hard constraints
 
@@ -54,12 +71,13 @@ The condensed coding agent guide (`for-coding-agents.md`) is a derivative docume
 - Natural DSL: the constrained syntax inside a Natural block (token binding plus free-form instructions).
 - Python locals (`python_locals`): the actual Python local variables in the function's frame.
 - Python globals (`python_globals`): the Python module globals for the compiled function.
-- Step locals (`step_locals`): a locals mapping used as the execution environment for LLM expressions; updated during reasoning via tools.
-- Step globals (`step_globals`): a limited globals mapping used as the execution environment for LLM expressions.
+- Step locals (`step_locals`): captured working values and tracked assignment bookkeeping; the environment owns full expression lookup.
+- Step environment (`StepEnvironment`): provenance-preserving Python, parent, task, and step views with one effective lookup contract.
+- Step globals (`step_globals`): internal namespace storage; it is not an independent lookup authority.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
     - Required fields include `execution_reference`, containing invocation identity and source location.
     - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
-- Locals summary: a bounded text rendering of selected values from `step_locals`, included in the LLM prompt.
+- Locals summary: a bounded presentation of selected working values and their provenance, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Outcome: the single, unambiguous result of executing a Natural block.
 - Outcome kind: the required `kind` field on an outcome object. The baseline kinds are `pass`, `return`, `break`, `continue`, and `raise`.
@@ -120,6 +138,7 @@ External agents own model selection: both the constructor and `from_agent` rejec
     - `run_id`: the Id of the outermost run (trace root).
     - `scope_id`: the Id of the current scope.
     - `step_execution_id`: a fresh Id for each runtime invocation, otherwise `None`.
+    - `parent_step_execution_id`: the active parent step Id, or `None`.
     - `source_location`: the source label (`python_module:line`) during an invocation, otherwise `None`.
 
 ### 5.4. Runtime accessors
@@ -207,6 +226,19 @@ Type note:
 - On Python 3.14, deferred callable annotations use bounded source-file acquisition when available; their spelling is shown without invoking `__annotate__`. Missing source and potentially modified deferred metadata are explicit limitations. Explicitly stored annotation dictionaries remain usable.
 - A global output can require the module's deferred annotation evaluator during preparation. Failure is a preparation error; it does not silently weaken the selected contract. This evaluator is not called merely to render unrelated module annotations.
 
+Annotation acquisition:
+
+| Annotation source | Required acquisition |
+| --- | --- |
+| Decorated function parameters and local declarations | Capture annotations from the function's source, including declarations inside compound statements, excluding nested function and class scopes. A single declaration for an output establishes its static annotation; reject ambiguous multiple declarations rather than guessing from branch execution. |
+| A `global` output | Use the defining module's annotation metadata when present; no module-source reconstruction is required. Otherwise use initial-value inference. |
+| A `nonlocal` output | Preserve the cell and writeback destination. Recovering an enclosing function's local annotation is outside the guarantee; use initial-value inference without scanning outer source or caller frames. |
+
+Required annotations, including the Natural return contract, resolve during preparation with `Annotated` metadata retained.
+Resolution failure is a preparation error; presentation-only metadata remains best-effort.
+Freeze contracts at entry, including explicit `object`, `Any`, and `None`.
+Ordinary Python assignments and helper bodies are not intercepted for validation.
+
 Runtime type inference:
 
 - A missing annotation has its own internal marker, distinct from an explicit `object` annotation.
@@ -240,6 +272,61 @@ Use `environment.resolve`, its source views, or the common runtime operations fo
 Generated assignments write validated, selected `<:name>` values back to the corresponding Python locals, cells, or globals after finalization.
 All initialized declared outputs are considered, even without tracked assignment or mutation marks.
 Every block starts a fresh model interaction by default; Python values and inherited working state carry context between blocks.
+
+#### 8.1.1. Environment views and lookup
+
+All environment views have string keys and shallow read-only structure.
+
+| Member | Meaning |
+| --- | --- |
+| `python_name_to_value` | Values accessible through the block's Python lexical environment, including enclosing cells, globals, and builtins. |
+| `parent_name_to_value` | A snapshot of inherited parent working state, with the nearest parent taking precedence. |
+| `task_name_to_value` | The resolved mapping injected by the active scope. |
+| `step_name_to_value` | Values explicitly assigned in this step, including pending declared outputs and temporary working names. |
+| `resolve(name, *, source="effective")` | Resolve a name from the effective environment or specifically from `python`, `parent`, `task`, or `step`. |
+| `describe(name)` | Describe the effective origin, shadowed alternatives, write eligibility, captured annotation, selected output contract, and usable references without evaluating the value's properties. |
+
+Effective lookup uses tracked step assignments, Python locals, enclosing cells, globals, builtins, nearest inherited parent state, then task references.
+A Python binding with value `None` is present; an unbound local or cell blocks fallback with its Python lookup error.
+Absence everywhere raises `NameError`.
+Step temporaries may shadow parent or task names, but an existing Python name can be rebound only as a declared output.
+Select a shadowed value with `environment.resolve(name, source="parent")` or `source="task"`; selection applies to that value reference, not an entire expression's namespace.
+Bindings, evaluation, assignment expressions, model-selected return and exception expressions, and discovery share this resolution contract.
+
+#### 8.1.2. Supported Python source forms
+
+The baseline is source-available ordinary `def` and `async def` functions on supported CPython 3.13+ versions.
+
+| Source form | Contract |
+| --- | --- |
+| Parameters and ordinary function locals, including `a: int = 0` and uninitialized `a: int` | Required: preserve local classification; obtain declared output annotations from source and distinguish an unbound name from an absent one. |
+| Module globals and builtins | Required: resolve through the defining function's live module environment, including later rebinding. |
+| Existing Python closure cells | Required: retain the original cells, observe later rebinding, and report an empty cell without falling back to parent or task state. |
+| `<:name>` with a valid Python `global name` declaration | Required: validate the declared output and write back to the defining module at finalization. |
+| `<:name>` with a valid Python `nonlocal name` declaration | Required: validate the declared output and write back to the existing enclosing cell at finalization. |
+| An outer function's variable mentioned only in Natural text and absent from the decorated function's original closure | Outside the guaranteed contract: do not create a stale decorator-time capture. Use an explicit parameter, a valid `nonlocal` declaration establishing a cell, or task injection. |
+| Unavailable function source, arbitrary caller-frame reconstruction, or an unverified interpreter implementation | Outside the required baseline; report unsupported source/interpreter forms explicitly. |
+
+Natural text alone does not establish a Python closure, and arbitrary caller-frame reconstruction is unsupported.
+Use explicit inputs, a valid `nonlocal` declaration establishing a cell, or task injection for otherwise inaccessible outer values.
+Lexical value access does not imply recovery of an enclosing source annotation; Section 7 bounds annotation acquisition separately.
+
+#### 8.1.3. Parent lifetime and expression lifetime
+
+Parent inheritance is guaranteed for child calls whose completion the parent waits for, synchronously or with `await`, directly or through a Python helper.
+A helper can run children concurrently if it joins them before returning.
+Each child snapshots associations at its own entry; later parent rebinding does not change that snapshot, while shared-object mutation remains visible.
+Child temporary rebinding does not write back to its parent, and siblings have separate workspaces.
+Cleared task injection cannot reappear as copied parent task configuration; an actual materialized parent temporary remains parent state.
+
+Children that outlive their parent step are outside this inheritance guarantee.
+Copied context variables do not extend a finished step's lifetime; hosts establish explicit inputs and execution scope for independent work.
+Supported thread bridges propagate context; separate processes do not inherit live objects through an execution Id.
+
+Within one operation, immediately invoked lambdas and consumed generators use effective lookup for surrounding names and ordinary Python parameter/iteration scopes.
+Retaining a generated lambda or generator for a later operation, even within the same step, has no guaranteed capture or rebinding semantics.
+Taking one outside its creating step also has no guaranteed environment lifetime.
+Original application callables retain their own Python closures and live globals; the Natural environment applies to the operation expression, not arbitrary called function bodies.
 
 ### 8.2. Prompt context
 
@@ -489,6 +576,7 @@ Eval tool:
     - Evaluate a Python expression and return the result. Use to inspect values, call functions, and mutate objects in-place.
     - In-place mutations performed via `nh_eval` are not runtime-validated.
     - If the evaluated expression is awaitable, it is awaited before returning.
+    - Named assignment expressions such as `(value := 8)` are rejected; use `nh_assign` for tracked name assignment.
 
 Binding tool:
 
@@ -505,7 +593,9 @@ Reserved targets:
 
 Semantics of `nh_assign`:
 
-- Admit the target grammar and root eligibility before evaluating the expression.
+- Admit target grammar, root eligibility, and known missing/unbound attribute roots before inspection or expression evaluation, without invoking application getters.
+- Subscripts, calls, destructuring, and mapping-key fallback are not assignment targets.
+- To mutate an explicitly selected parent or task object, retain it under an eligible temporary name before using an attribute path.
 - Evaluate `expression` once in the effective environment, awaiting its result when needed.
 - If `target_path` is a bare `name`:
     - A declared output validates against its entry-time contract before updating the tracked working value.
@@ -516,6 +606,9 @@ Semantics of `nh_assign`:
     - After right-hand-side evaluation, resolve the live root and intermediate attributes once.
     - The final target must be an ordinary declared Pydantic field on a model with `validate_assignment=True` and standard assignment machinery.
     - Invoke Pydantic's model assignment once; do not validate a detached field or run a second setter.
+    - Preserve field metadata, constraints, model and field validators, configuration, and target identity; frozen fields/models reject writes.
+    - Do not read the final attribute merely to infer its contract or probe its setter.
+    - The right-hand side may change which live object is subsequently selected; a later traversal or validation failure retains earlier effects.
     - Properties, custom assignment machinery, and other attribute targets return a recoverable unsupported-target observation recommending an ordinary Python helper.
 
 Commit and mutation notes:
@@ -715,6 +808,7 @@ Runtime execution identity is modeled separately in `ExecutionReference`:
 - `run_id`: the Id of the outermost run (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
 - `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
 - `step_execution_id`: a fresh Id for each runtime invocation, including repeated loop iterations and concurrent calls. Executor retries retain this Id; executing the block again allocates another.
+- `parent_step_execution_id`: the active parent step Id for correlation, or `None`; it does not transfer workspace objects across processes.
 - `source_location`: the source label (`python_module:line`), shared by invocations of the same block. Both step fields are `None` outside active step execution.
 
 Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the host application layer that embeds Nighthawk.
@@ -725,7 +819,7 @@ API:
 - `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | UnsetType = UNSET)`
     - Replaces the current context step executor with the provided step executor.
     - Installs `usage_meter` as the run-level meter when given; omission or `UNSET` creates a fresh `UsageMeter`; `None` is invalid.
-    - Resets scoped tools and capabilities to empty, and oversight and lifecycle to `None`, for the run.
+    - Resets scoped tools, capabilities, and task references to empty, oversight and lifecycle to `None`, and context construction to `DefaultContextBuilder` for the run.
     - Generates a new `ExecutionReference` for the duration of the `with`.
     - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
     - Always generates a fresh `scope_id`.
@@ -791,6 +885,9 @@ Semantics:
 Every executor returns a resolved `StepCandidate` containing an outcome and a shallow read-only `binding_name_to_value` mapping.
 The runner requires this contract for custom executors and managed agents alike.
 It checks allowed kinds, rejects undeclared output proposals, validates all initialized declared outputs with explicit proposals taking precedence, and independently validates a resolved return value.
+Unbound outputs without proposals remain absent; a later Python read raises normally.
+Assignment validation and finalization are separate boundaries and may each run validators.
+For example, an initialized `Annotated[str, AfterValidator(str.strip)]` output containing `" draft "` finalizes as `"draft"` even without model assignment.
 Selected output contracts are fixed at step entry.
 A custom executor cannot change finalization contracts by replacing context metadata.
 
@@ -836,6 +933,10 @@ Operation rejection and inspection failures are terminal for that step.
 Later queued operations cannot execute their bodies, and an executor cannot suppress the failure and finalize a successful candidate.
 Ordinary exceptions from application helpers and native tools propagate to Python.
 Runtime syntax, name-resolution, and value-validation errors provide recoverable operation feedback; Pydantic AI control signals retain their native meaning.
+Classify failures by origin, not exception class: `NameError` or `ValueError` from a helper body remains an application exception.
+An uncaught child Natural exception preserves its child terminal event and also fails its parent operation.
+Return expected domain failures as ordinary helper results when the model should act on them; Python helpers may catch specific domain exceptions to construct those results.
+Preserve explicit `ModelRetry`, `CallDeferred`, and `ApprovalRequired` signals through Pydantic AI machinery, and distinguish Pydantic validation failures from propagated validator exceptions.
 Each completed operation delivers an `OperationFinished` fact with its phase, whether evaluation started, and its live result or original exception.
 A notification failure does not change that fact or replay the operation.
 
@@ -889,6 +990,22 @@ The guarantee is one in-process delivery attempt, not a transaction across Pytho
 
 Host integrations can separate responsibilities: the executor boundary admits and accounts for execution, `inspect_step_commit` approves or rewrites the resolved candidate before assignment, and StepLifecycle records the terminal result and translates failures. Preparation can fail before executor admission; terminal consumers must accept records without a matching admission event. The shared `execution_reference.step_execution_id` correlates executor StepContext, inspectors, and terminal records without storing a live StepContext or pending-commit ContextVar. Terminal records make type-erasing validation workarounds unnecessary for catching binding, expression, and return-validation failures, but do not remove the host's other validation requirements. No external host code or host-specific serialization schema is provided by core. The deterministic ledger fixture in `tests/governance/test_step_ledger.py` demonstrates recording even when Python inside the Natural function catches the translated host exception.
 
+#### 10.4.1. Delivery failure cases
+
+| Delivery failure | Execution fact and boundary behavior |
+| --- | --- |
+| `on_step_started` fails | No preparation or executor body starts. Attempt terminal delivery with `StepFailed` identifying started delivery as the failure stage. |
+| An operation succeeds, then `on_operation_finished` fails | Preserve the successful `OperationFinished` fact and its effects. Stop queued operations and finalization; attempt `StepFailed` terminal delivery identifying operation delivery as the failure stage. |
+| An operation fails, then its notification also fails | Retain both the operation failure and notification failure. Stop the step and attempt terminal delivery; do not convert the notification error into recoverable model feedback. |
+| Caller writes succeed, then `on_step_finished(StepCompleted)` fails | Keep the writes and completed record. Propagate delivery failure without emitting `StepFailed` or executing again. |
+| Terminal delivery of `StepRaised` or `StepFailed` fails | Preserve the original execution record and cause alongside delivery failure; do not emit another terminal event. |
+
+The terminal attempt precedes any Python `except` outside the Natural boundary.
+`StepLifecycle.interruption_delivery_timeout` defaults to one second for bounded asynchronous interruption cleanup; it does not bound a blocking synchronous hook or guarantee storage.
+Cancellation while approval is pending does not start the operation.
+Cancellation after execution starts leaves possible external effects for host reconciliation.
+Host domain operations should validate, approve, execute, and record their own concrete requests whether invoked by Python or Natural; core hooks add intervention points without replacing that authority.
+
 ## 11. Interpolation (opt-in, f-strings only)
 
 ### 11.1. Rationale
@@ -905,7 +1022,7 @@ Natural blocks often need to embed computed values (for example, paths or JSON e
 
 Note:
 
-- This interpolation mechanism is distinct from the `nh_eval` tool. f-string evaluation runs in the normal Python execution context, while `nh_eval` evaluates expressions inside the Natural execution environment (`step_globals` + `step_locals`).
+- This interpolation mechanism is distinct from the `nh_eval` tool. f-string evaluation runs in the normal Python execution context, while `nh_eval` evaluates expressions inside the Natural execution environment (`StepEnvironment`).
 
 Decision:
 
@@ -1008,3 +1125,88 @@ class MyExecutor(AsyncStepExecutor):
 For most custom backends, wrapping a Pydantic AI `Agent` via `AgentStepExecutor.from_agent` (see [Executors](executors.md#custom-backends)) is simpler than implementing the protocol directly. Direct implementation is appropriate when the backend does not use a Pydantic AI agent at all.
 
 See the [API Reference](api.md#base) for the full protocol definition.
+
+### 14.4. Nested execution acceptance example
+
+This is a proof example for nested Natural execution and materialized parent state. Its fixed counter and labels isolate the semantics; they are not intended as a useful application by themselves. `block_two` receives its iteration context from the active parent step, not a Python parameter.
+
+```python
+import nighthawk as nh
+
+
+@nh.natural_function
+async def block_two() -> str:
+    message = ""
+    """natural
+    Inspect <i>, the parent's current one-based iteration.
+    Set <:message> to 'fifth' on iteration 5, 'eighth' on iteration 8,
+    and 'ordinary' on every other iteration.
+    """
+    return message
+
+
+@nh.natural_function
+async def block_one() -> list[str]:
+    messages: list[str] = []
+    """natural
+    Call <block_two> ten times in sequence.
+    Before each call, use nh_assign to set the temporary name i to the
+    current one-based iteration, from 1 through 10.
+    Collect the returned strings in <:messages> in call order.
+    """
+    return messages
+```
+
+The executor materializes `i` before invoking the child; mentioning a counter in prose does not create runtime state. The fifth and eighth calls inherit 5 and 8. Later parent assignment does not change an already started child's inherited `i`.
+
+Call `await block_one()` inside `nh.run(executor)`.
+The expected successful result is four `ordinary` entries, `fifth`, two `ordinary` entries, `eighth`, and two `ordinary` entries.
+Deterministic executor tests establish the environment mechanics; model evaluations measure whether an LLM follows the ten-call instruction.
+The runtime must not claim that type validation of `list[str]` proves the count or contents.
+
+Custom executors materialize parent working names using `assign_tool_async` and call children using `eval_expression_async`, both exported from `nighthawk.runtime`.
+Their synchronous counterparts are `assign_tool` and `eval_expression`.
+These entry points include admission, inspection, ordering, workspace updates, and lifecycle delivery; do not mutate environment views or build a second operation policy.
+Directly constructing a `StepCandidate` proposes final values but creates no intermediate operation or inherited temporary state.
+
+### 14.5. Behavioral acceptance cases
+
+The contracts above own these semantics; this table collects review cases for implementations and adapters.
+
+| Scenario | Required result |
+| --- | --- |
+| Child Python parameter `i=99`, parent `i=5`, injected `i=8` | Bare `i` is 99; explicit parent access is 5; explicit task access is 8. |
+| Child module global `i=99`, parent `i=5` | Bare `i` is 99; inherited state does not override module globals. |
+| Child Python local `i` is unbound, parent `i=5` | `UnboundLocalError`; no fallback. |
+| Child local `i=None`, parent `i=5` | Resolve `None`. |
+| No lexical `i`, parent `i=5`, injected `i=8` | Resolve 5; if no parent has it, resolve 8. |
+| Inner scope clears task references | Cleared injection cannot reappear through copied parent globals or task values. An actual parent temporary with that name remains parent state. |
+| Visible local `value=7` evaluated as `(lambda: value)()` | Return 7 using the same environment as direct lookup. |
+| Visible local `value=7` evaluated as `list(value + i for i in range(2))` | Return `[7, 8]`; the generator is consumed within one operation. |
+| Existing closure cell is rebound before the Natural call, or an explicit global/nonlocal output is committed | Observe the latest cell value, or update the declared module/cell destination; do not use a captured value copy. |
+| `nh_eval` receives `(value := 8)` | Reject the named assignment and direct the model to tracked assignment. |
+| `nh_assign` targets an existing Python name not declared as an output, and its right-hand side calls a helper | Reject before invoking the helper; a new eligible temporary name is allowed. |
+| An initialized declared output is never assigned by the executor | Include it in non-Raise finalization; its validators may transform it or reject it. |
+| Local `a: int = 0` is declared as `<:a>` and receives `'invalid'` through `nh_assign` | Reject at assignment validation and retain its previous working value; final output validation remains a separate boundary. |
+| A Pydantic model with `validate_assignment=True` has `confidence: float = Field(ge=0.0, le=1.0)` and receives `2.0` | Reject through the model-aware assignment path; the plain `float` annotation alone is insufficient. |
+| A dotted target is an annotated ordinary object attribute or a model field with assignment validation disabled | Report an unsupported target and recommend a Python helper. Report any earlier right-hand-side effects. |
+| An eligible assignment's helper mutates a list, then its return fails validation | The pending name assignment fails; the list mutation remains. |
+| An admitted dotted assignment has an intermediate getter that fails | The right-hand side has already run once; its effects remain, and no final setter runs. |
+| One model batch assigns the parent temporary `i=5`, then invokes a child with no lexical `i` | Run in that order; the child inherits 5. Awaited approval does not allow the child call to overtake the assignment. |
+| Child assigns a temporary inherited name | Parent name is unchanged; child lookup uses its own working value. |
+| Child mutates an inherited list | Parent observes the same list mutation. |
+| Host rejects the final candidate after an earlier approved operation | No pending caller assignments; the earlier operation remains recorded and effective. |
+| Host awaits approval and rejects | Operation body is not invoked; rejection has a correlated record. |
+| Host rewrites the output mapping to `{}` | No caller name assignments; workspace values are not automatically added back. |
+| Host supplies `Rewrite(outcome=Return(None))` | Validate `None` against the return contract; retain the candidate's output mapping. |
+| Initial `Raise` has invalid pending output values | Skip final validation of discarded values and inspect an empty output mapping. |
+| Host rewrites `Raise` to `Pass` without replacement outputs | Commit no outputs; discarded values remain absent from the candidate. |
+| Model evaluates `inspect(some.function)` | Evaluate the argument normally, describe the resulting value, and deliver one evaluation-operation record. |
+| A supported explicit output annotation cannot be resolved | Fail preparation; do not infer a weaker contract from its initial value. |
+| `inspect` cannot resolve a presentation-only annotation | Preserve its available spelling and report the limitation; leave the output contract unchanged. |
+| An empty list has a captured `list[Finding]` output annotation | Name-based discovery exposes that contract; value inspection does not infer it from the empty list. |
+| Runtime lookup cannot find a name in a generated expression | Return a recoverable lookup observation. A `NameError` raised inside a called helper instead propagates. |
+| A child Natural raises during a parent operation | Preserve the child terminal event and propagate through ordinary Python exception handling; an uncaught exception also fails the parent. |
+| Caller assignments succeed and terminal storage fails | Assigned values remain; delivery failure propagates without rerunning execution. |
+| Caller catches a Natural failure in Python | The terminal delivery attempt already occurred. |
+| Model returns an expression with effects | The common engine evaluates it once; validation, approval, and rewrite do not replay it. |
