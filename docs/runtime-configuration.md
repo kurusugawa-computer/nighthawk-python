@@ -9,40 +9,13 @@ Scope composition is shared across backends; model-selection support and request
 
 Use `nh.scope()` to override execution settings within an existing run. Each scope generates a new `scope_id` while keeping the current `run_id`.
 
+The examples below use a configured `step_executor` and application functions such as `summarize_ticket`.
+For a complete initial setup, see [Quickstart](quickstart.md).
+
 ```py
 with nh.run(step_executor):
-    # Replace the full executor configuration, including defaults for its omitted fields.
-    # Other omitted scope arguments inherit the parent scope values.
-    with nh.scope(
-        step_executor_configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.6-luna",
-        ),
-    ) as scoped_executor:
-        expensive_analysis(data)
-
-    # Replace explicitly provided values. [] / {} clear collections.
-    with nh.scope(
-        system_prompt_suffix_fragments=["Always respond in formal English."],
-        task_references={},
-    ):
-        formal_summary(text)
-
-    # Replace the step executor entirely for a section
-    with nh.scope(step_executor=another_executor):
-        specialized_step(data)
-
-    # Inject task helpers for this scope
-    with nh.scope(task_references={"search_repository": search_repository}):
-        typed_labeling_step(ticket_text)
-
-    # Add operation and commit oversight for this scope
-    with nh.scope(
-        oversight=nh.oversight.Oversight(
-            inspect_operation=inspect_operation,
-            inspect_step_commit=inspect_step_commit,
-        )
-    ):
-        inspected_step(ticket_text)
+    with nh.scope(user_prompt_suffix_fragments=["Use concise answers."]):
+        summarize_ticket(ticket_text)
 ```
 
 Parameters:
@@ -71,12 +44,6 @@ Composition is selected by each supplied value:
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
-`StepExecutorConfiguration` also accepts `system_prompt_suffix_fragments` and `user_prompt_suffix_fragments` (tuples of strings) as baseline suffix fragments for the whole run. Resolved scope fragments follow configuration-level baseline fragments. Clearing scope fragments preserves that configuration baseline.
-
-System prompt suffix fragments are rendered with the same `$tool_result_max_tokens` placeholder used by built-in prompt templates. Use `$$tool_result_max_tokens` if the literal text must appear in the final prompt.
-
-Text-projected backends that expose Nighthawk tools automatically add a short tool-result preview warning to the system prompt. You do not need to add a separate preview warning fragment for coding-agent or other text-projected tool transports.
-
 ## Scoped task references
 
 `task_references` supplies helpers and values through a separate task environment.
@@ -93,29 +60,7 @@ with nh.run(step_executor):
         triage_issue(ticket_text)
 ```
 
-Mappings replace inherited references. Use `nh.Merge({"child": search_repository})` to add references with identity-based conflict checks.
-
-```py
-with nh.run(step_executor), nh.scope(task_references={"parent": search_repository}):
-    with nh.scope(task_references={}):
-        triage_issue(ticket_text)
-```
-
-The inner scope above clears inherited task references.
-
-```py
-with nh.scope(task_references={"child": search_repository}):
-    triage_issue(ticket_text)
-```
-
-This fully replaces inherited references with the provided mapping.
-
-```py
-with nh.scope(task_references=nh.UNSET):
-    triage_issue(ticket_text)
-```
-
-This keeps inherited references unchanged.
+Use the [composition rules](#scoped-overrides-with-nhscope) to replace, merge, or clear task references.
 
 ## Scoped tools
 
@@ -164,71 +109,29 @@ Use capabilities to observe, gate, or instrument model requests with Pydantic AI
 
 ## Prompt suffix fragments in scopes
 
-Use list values when setting scope-level suffix fragments:
+Set system and user suffixes together; use `nh.Extend` to append to inherited fragments:
 
 ```py
-with nh.run(step_executor):
-    with nh.scope(system_prompt_suffix_fragments=["Use concise answers."]):
+with nh.run(step_executor), nh.scope(system_prompt_suffix_fragments=["Be concise."]):
+    with nh.scope(
+        system_prompt_suffix_fragments=nh.Extend(["Cite sources."]),
+        user_prompt_suffix_fragments=["Focus on actionable output."],
+    ):
         summarize_ticket(ticket_text)
 ```
 
-`user_prompt_suffix_fragments` follows the same rules.
-
-```py
-with nh.scope(user_prompt_suffix_fragments=["Focus on actionable output."]):
-    summarize_ticket(ticket_text)
-```
-
-Use `nh.Extend(["child"])` to append fragments; plain sequences replace inherited scope fragments.
-
-```py
-with nh.run(step_executor), nh.scope(system_prompt_suffix_fragments=["parent"]):
-    with nh.scope(system_prompt_suffix_fragments=["child_1", "child_2"]):
-        summarize_ticket(ticket_text)
-```
-
-Pass `[]` to clear inherited fragments.
-
-```py
-with nh.scope(system_prompt_suffix_fragments=[]):
-    summarize_ticket(ticket_text)
-```
-
-Omit the field or pass `nh.UNSET` to keep inherited fragments unchanged.
-
-```py
-with nh.scope(system_prompt_suffix_fragments=nh.UNSET):
-    summarize_ticket(ticket_text)
-```
-
-The same `replace` semantics apply to `user_prompt_suffix_fragments`.
+Configuration-level suffixes precede scope fragments.
+Clearing scope fragments with `[]` preserves that configuration baseline.
+System suffixes expand `$tool_result_max_tokens`; use `$$` for a literal dollar sign.
 
 ## Reading the active scope
 
-Within an active `nh.run()` context, snapshot getters expose the current scope's accumulated state:
+Use `nh.get_step_executor()`, `nh.get_lifecycle()`, or `nh.get_capabilities()` to inspect the selected configuration.
+Scope getters require an active run and raise `NighthawkError` outside it.
+`nh.get_step_context()` additionally requires an active step and exposes `environment.task_name_to_value` for task references.
 
-- `nh.get_system_prompt_suffix_fragments()` returns the system prompt suffix fragments as a `tuple[str, ...]`.
-- `nh.get_user_prompt_suffix_fragments()` returns the user prompt suffix fragments as a `tuple[str, ...]`.
-- `nh.get_tools()` returns the scoped native tools as a `tuple[Tool[StepContext], ...]`, excluding built-in tools.
-- `nh.get_capabilities()` returns the scoped Pydantic AI capabilities as a tuple.
-- `nh.get_lifecycle()` returns the active `StepLifecycle`, or `None`.
-- `nh.get_oversight()` returns the active `Oversight`, or `None` when none is installed.
-
-The prompt suffix getters return only fragments accumulated via `nh.scope(...)`; configuration-level baseline fragments from `StepExecutorConfiguration` are not included.
-
-During a Natural step, task references are available through `nh.get_step_context().environment.task_name_to_value`.
-When configuring nested scopes outside a step, keep the original task mapping and pass the desired subset as an ordinary mapping.
-
-```py
-task_name_to_value = {"a": helper_a, "b": helper_b}
-with nh.run(step_executor):
-    with nh.scope(task_references=task_name_to_value):
-        selected_task_name_to_value = {name: value for name, value in task_name_to_value.items() if name != "b"}
-        with nh.scope(task_references=selected_task_name_to_value):
-            triage_issue(ticket_text)
-```
-
-All getters listed above, including `nh.get_oversight()`, require an active run context. Outside `nh.run()` they raise `NighthawkError`, matching `nh.get_step_executor()` semantics. Catch `NighthawkError` if a helper needs to detect the absence of a run.
+Prompt suffix getters return scope fragments without configuration-level baselines.
+See [API reference](api.md) for the accessor inventory and return types.
 
 ## Record completed executions
 
@@ -256,17 +159,11 @@ with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(record_finished)):
     result = my_natural_function()
 ```
 
-This example is an in-memory history. Durable storage, serialization, and deduplication belong to the host. Callback failures do not roll back assignments or retry execution. See [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers) for exception chaining, cancellation, and storage failure handling.
+This example is an in-memory history. Durable storage, serialization, and deduplication belong to the host. Callback failures do not roll back assignments or retry execution.
 
-For a host ledger, use `FunctionCallHandler` for admission before Python body effects, `inspect_step_commit` for approval before assignment, and `StepLifecycle` for block terminal recording and exception translation.
-The executor boundary covers its own block processing, after earlier Python code and block preparation may already have effects.
-Correlate block records with `execution_reference.step_execution_id`, which is unique per block execution; `source_location` only groups executions of the same source block.
-Use `nh.get_function_call().call_id` when a handler is active to associate blocks and request observations with their enclosing function invocation.
-Preparation failures may have no executor admission record.
-
-If an earlier host boundary already stored a failure and raised its public exception, the lifecycle handler still receives StepFailed. Skip a duplicate append only after verifying that exception refers to the stored event for this same execution, then rethrow the same exception. Core preserves its original cause. Merely returning from the handler results in an ExecutionError wrapper; suppressing all exceptions of the host type would incorrectly omit parent events for failed nested executions.
-
-At a host-controlled admission boundary, `nh.get_lifecycle() is expected_lifecycle` can verify that the required callback is configured. If it has been cleared, record the bypass through that still-active boundary: the missing lifecycle cannot record its own absence. Delivery is one in-process attempt with a configured handler, not guaranteed persistence. A callback exception after successful assignment propagates without undoing writes; host delivery-failure and anomaly records are separate from the completed core record. The full rules are in [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers).
+Choose the observation boundary by purpose: function admission before Python body effects, commit inspection before assignment, or lifecycle notification at block exit.
+Use `step_execution_id` to correlate block records and the active `FunctionCall.call_id` to group them by function invocation.
+The [delivery contract](specification.md#104-terminal-delivery-and-host-ledgers) defines exception translation and deduplication responsibilities.
 
 ## Oversight in scopes
 
@@ -331,11 +228,12 @@ with nh.run(executor):
     result = workflow()
 ```
 
-Here `credentials` is supplied by the host. The host owns credential delivery, including Docker input channels, and the client lifetime. Nighthawk borrows the Model without extracting keys or transporting them through environment variables, process launch arguments, prompts, or its diagnostics. Pydantic AI may read environment variables; existing string-based provider authentication remains supported.
+The host supplies `credentials` and owns the Model's client lifetime.
+`nh.scope(model=another_model)` selects a borrowed Model while retaining the other configuration fields, then restores the parent executor on exit.
+External agents created through `from_agent` own their model selection.
 
-Managed scopes can replace the Model, including with another instance of the same name, and restore the exact parent executor. For prompt-only changes, `configuration.model_copy(update={"prompts": nh.StepPromptTemplates(step_system_prompt_template="Updated instructions")})` retains the Model. Supply valid typed updates: `model_copy` does not validate them. External agents own model selection: `from_agent` rejects instance-valued configuration models, and scopes reject changes to their configured model string.
-
-Live Models are runtime resources, not portable settings. Configuration representations omit the model. Dumps containing it raise `PydanticSerializationError`; use `configuration.model_dump(exclude={"model"})` for partial settings. Explicit tokenizer encoding wins; otherwise the model name is used, with `o200k_base` as fallback. Configuration settings override Model defaults under Pydantic AI's usual precedence. Forwarding `openai_store=False` sets the request field; it does not certify remote retention behavior. The [specification](specification.md#52-configuration) owns this contract.
+Live Models cannot be serialized as settings; use `configuration.model_dump(exclude={"model"})` for a partial export.
+See the [configuration contract](specification.md#52-configuration) for ownership, serialization, and setting precedence.
 
 ## Mixing executors
 
@@ -364,11 +262,9 @@ Use `nh.scope(context_builder=builder)` when the application needs to choose or 
 Implement `build(request: ContextRequest)` and return a sequence of Pydantic AI `UserContent` items.
 Import `ContextRequest` and `DefaultContextBuilder` from `nighthawk.runtime`; the default builder can be called from your implementation when retaining part of its presentation.
 
-The request exposes the live environment, Natural program, explicit references, output contracts, and configured budgets.
-Changing presentation does not change which values runtime operations can access.
-Prompt suffix fragments are appended once after your builder returns.
-Nested scopes inherit the builder unless replaced, and a new run uses the default.
-The complete contract is in [context construction](specification.md#824-replaceable-context-construction).
+The request exposes the live environment, Natural program, output contracts, and presentation budgets.
+Presentation changes do not change runtime value access.
+See [context construction](specification.md#824-replaceable-context-construction) for the contract.
 
 ## Context limits
 
@@ -461,18 +357,10 @@ Refuse by raising before continuation entry.
 Returning without completing the continuation is a contract error.
 The continuation may start once, only during its handler's active invocation and in the same Task and thread.
 A handler can establish `nh.run(executor)` before proceeding; no run is required to refuse the call.
-Previously created aliases still enter the handler.
-An async function uses the context in which its coroutine executes, and a Task uses its own selected context.
-`nh.function_call_scope(None)` clears the handler explicitly; nested `nh.run()` contexts do not clear it.
-Completion includes Python `finally` processing and explicitly joined children; intercepted generators and async generators are unsupported.
-A synchronous Python return of a coroutine preserves that exact object without awaiting or closing it; DSL tool expressions retain their separate auto-await behavior.
-
-`nh.get_natural_function_definition(function)` returns the exact registered wrapper's original function, public wrapper, and transformed body, or `None` for an unrelated callable.
-Standard method descriptors are normalized, but copied attributes and unrelated outer wrappers are not registration evidence.
-The registry does not retain abandoned namespaces; a returned snapshot intentionally retains its callable objects while the host holds it.
-Use `nh.get_transformed_function()` when conventional outer-wrapper traversal is desired instead.
-Call identities and exact definitions are described in the [boundary contract](specification.md#embedded-execution-boundaries).
-The executable [embedded execution example](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/examples/embedded_execution.py) demonstrates both invocation modes without credentials.
+Function completion includes Python `finally` processing and explicitly joined children.
+Generators are unsupported at this boundary.
+For context timing, exact definition lookup, and coroutine ownership, see [execution boundaries](specification.md#embedded-execution-boundaries).
+The [embedded execution example](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/examples/embedded_execution.py) demonstrates synchronous and asynchronous handlers without credentials.
 
 ### Request usage and admission
 
@@ -487,13 +375,10 @@ Backend-specific facilities are needed for stricter observation; Core does not i
 
 ### Completion and interruption
 
-`StepLifecycle.interruption_delivery_timeout` now requests cancellation of an interrupted notification rather than setting an overall completion deadline.
-Core waits for started, operation-finished, and terminal notification cleanup, including after repeated caller cancellation.
-The synchronous bridge delivers caller interruption cooperatively and joins its worker and owned loop shutdown before propagating it.
-Existing cancellation cleanup is preserved, and the first interruption retains its identity with additional cleanup failures chained to it.
-Async callers retain ownership of their event loops and unrelated tasks.
-Resistant cleanup can block indefinitely; the host still owns detached application work and durable recording.
-An executor return, a completed block, and function completion remain separate facts; failure never implies rollback or permission to replay.
+`StepLifecycle.interruption_delivery_timeout` requests notification cancellation.
+Core joins owned notification and synchronous-bridge cleanup before returning or propagating interruption; resistant cleanup can wait indefinitely.
+The host owns detached work, event loops supplied to async calls, and durable records.
+See [interruption and delivery](specification.md#104-terminal-delivery-and-host-ledgers) for exception ordering and cleanup guarantees.
 
 ## Next steps
 

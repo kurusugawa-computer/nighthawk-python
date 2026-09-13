@@ -1,436 +1,134 @@
 # Nighthawk guide for coding agents
 
-> Give this document to a coding agent developing Python code that uses Nighthawk. It is not a contributor guide for nighthawk-python itself. This is a derivative guide. If it conflicts with `specification.md`, the specification document wins.
+Use this guide when writing Python applications with Nighthawk.
+The [specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) defines runtime behavior; this page selects the operational rules.
 
-You are expected to write, review, and debug Python code that uses Nighthawk as a senior engineer. Apply the rules below without waiting to be prompted.
+## Choose the boundary
 
-## 1. Non-negotiables
+- Python owns computation, I/O, validation, branching, retries, state, and orchestration.
+- Natural blocks supply semantic judgment: interpretation, classification, generation, ranking, or context-dependent selection.
+- Give each block one task and a narrow, typed output. Split independent judgments into separate calls.
+- Start with a provider-backed executor. Use a coding-agent backend for blocks needing repository access, commands, or autonomous investigation.
+- Natural source, imported markdown, and prompt fragments are trusted, repository-managed code. Pass user input as binding values, never as interpolated Natural source.
 
-- Python owns deterministic logic. Use Python for computation, control flow, I/O, validation, retries, state management, orchestration, and data shaping.
-- Natural blocks are for semantic judgment. Use them for classification, interpretation, generation, ranking, and decisions that depend on context or world knowledge.
-- One Natural block should do one task with one contract. If a block makes two independent decisions, split it.
-- Each block starts a fresh model interaction. Python values, scoped task references, and inherited parent working state carry context; a parent's model transcript is not inherited.
-- Natural blocks and imported markdown are trusted, repository-managed assets. Do not splice untrusted user input into Natural source text or markdown preprocessing. Pass untrusted data as bindings.
-- Prefer explicit, typed write bindings. Runtime inference exists for unannotated write bindings, but new code should not rely on it.
-- Keep outputs narrow and typed, especially when using coding agent backends. A block may do broad internal work, but the Python boundary should stay small.
-- When prompt context is truncated and you see `<snipped>`, first reduce context surface or split the block. Increase `StepContextLimits` only after simplification fails.
-- Explicit dotted multimodal references such as `<holder.photo>` can still be omitted under tight `locals_max_items` / `locals_max_tokens`; resize budgets rather than assuming hoisting is unconditional.
+See [executor selection](https://kurusugawa-computer.github.io/nighthawk-python/executors/) for backend tradeoffs.
 
-## 2. First decision: should this be Natural at all?
+## A working template
 
-Use Natural only when the block genuinely needs model judgment.
-
-Use Python when the result is computable from explicit rules:
-
-- parsing, filtering, arithmetic, sorting, schema validation
-- deterministic routing and retries
-- filesystem and network plumbing
-- transforming one known structure into another
-
-Use Natural when the block needs semantic interpretation:
-
-- classify a report into categories
-- summarize or rewrite text for a target audience
-- extract structured meaning from messy language
-- choose among options using contextual judgment
-
-Default bias: if you can write the correct answer directly in Python, do not use Natural.
-
-## 3. Second decision: which executor should this block use?
-
-Nighthawk supports two different execution styles for Natural blocks. Choose per block, not per project.
-
-| Use case | Preferred executor | Why |
-|---|---|---|
-| Bounded judgment, extraction, labeling, summarization, structured output | Pydantic AI provider-backed executor | Lower cost, lower latency, tighter surface area |
-| Repository inspection, multi-file reasoning, command use, adaptive long-horizon work | Coding agent backend | The block becomes an autonomous agent execution with tools and its own reasoning loop |
-
-Recommended default:
-
-- Start with a Pydantic AI provider-backed executor for most blocks.
-- Escalate only the blocks that truly need autonomous agent behavior to a coding agent backend.
-- Do not default an entire workflow to coding agent backends just because one block is deep.
-
-### Minimal setup
-
-Install Nighthawk and a provider (adjust the extra for your provider):
+Install `nighthawk-python` and the provider dependency:
 
 ```sh
 pip install nighthawk-python "pydantic-ai-slim[openai]"
 ```
 
-An active `nh.run()` is required when a Natural block executes or a function's declared model selection resolves.
-Usually wrap the call site as below; an optional function-call handler may instead establish the run after accepting the invocation.
-Decoration, exact definition lookup, and refusal before continuation entry need no run.
+Set `OPENAI_API_KEY`, then save and run this Python file:
 
 ```py
+from typing import Literal
+
 import nighthawk as nh
 
 
 @nh.natural_function
-def summarize(text: str) -> str:
-    summary: str = ""
+def classify_ticket(text: str) -> Literal["bug", "feature", "question"]:
+    label: Literal["bug", "feature", "question"] = "question"
     """natural
     ---
     deny: [raise, return]
     ---
-    Read <text> and set <:summary> to a concise summary.
-    """
-    return summary
-
-
-executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(
-        model="openai-responses:gpt-5.6-luna",
-    ),
-)
-
-with nh.run(executor):
-    result = summarize("long document text")
-```
-
-See [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/) for provider alternatives and credentials.
-
-With coding agent backends, each Natural block is an autonomous agent execution. The agent may read files, run commands, and invoke skills inside the block. Python still owns the workflow, and declared outputs determine validated name writeback.
-Earlier helper effects and shared-object mutations remain visible even when finalization fails.
-
-Example: mix a cheap classifier with a deep analysis step in one workflow.
-
-```py
-import nighthawk as nh
-
-
-fast_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(
-        model="openai-responses:gpt-5.6-luna",
-    ),
-)
-
-deep_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(
-        model="codex:default",
-    ),
-)
-
-
-def search_repository(query: str) -> list[str]: ...
-
-
-@nh.natural_function
-def classify_ticket(text: str) -> str:
-    label: str = ""
-    """natural
-    ---
-    deny: [raise, return]
-    ---
-    Read <text> and set <:label> to one of: bug, feature, question.
+    Read <text> and set <:label> to bug, feature, or question.
     """
     return label
 
 
-@nh.natural_function
-def write_analysis_report(ticket_text: str, product_context: str) -> str:
-    report: str = ""
-    """natural
-    ---
-    deny: [raise, return]
-    ---
-    Read <ticket_text> and <product_context>.
-    Analyze the issue, identify likely causes, and set <:report> to a detailed analysis.
-    """
-    return report
-
-
-with nh.run(fast_executor):
-    label = classify_ticket(ticket_text)
-    with nh.scope(
-        step_executor=deep_executor,
-        task_references={"search_repository": search_repository},
-    ):
-        report = write_analysis_report(ticket_text, product_summary)
-```
-
-- `task_references` inject helper functions as block capabilities.
-- `nh.scope()` must run inside `nh.run()`; it keeps `run_id` and creates a new `scope_id`.
-- Omission or `nh.UNSET` inherits; ordinary values replace and `[]`/`{}` clear collections.
-- Use `nh.Extend([...])` to append suffix fragments and `nh.Merge({...})` to merge task references by identity.
-- `oversight` and `lifecycle` accept `None` to clear their hooks; other scope fields reject it.
-- Executor replacement precedes delegated model selection. Borrowed Model instances retain identity; external agents own their model selection.
-
-### Embedding in a host
-
-- Install `nh.function_call_scope(handler)` to admit a whole Natural function before Python body effects and declared model resolution. Implement `invoke(call, proceed)` with `proceed()` and `invoke_async(call, proceed)` with `await proceed()`. Refuse by raising before proceeding.
-- A continuation starts at most once, in the same Task and thread, while its handler is active. Returning without completing it is `FunctionCallError`; ordinary Python exception handling after starting is allowed.
-- Old aliases enter the current handler. Async functions read the context where their coroutines execute; Tasks use their selected contexts. `nh.function_call_scope(None)` explicitly clears the handler, while `nh.run()` leaves it installed.
-- `nh.get_function_call()` returns the current intercepted call or `None`, without requiring a run. `call_id` and `parent_call_id` identify function invocations; `ExecutionReference.step_execution_id` identifies a single block execution. Keep host execution-unit and request identities separate.
-- Use `nh.get_natural_function_definition(function)` for exact transformation correspondence. It returns the actual original, public wrapper, and transformed body, or `None` for an unrelated wrapper. Standard method descriptors are supported; copied metadata is insufficient. Snapshots retain their callables while held, but the registry does not retain abandoned namespaces. `nh.get_transformed_function()` remains a wrapper-following inspection convenience.
-- `@nh.natural_function(model=...)` and `nh.scope(model=...)` replace only the model. `step_executor_configuration=...` replaces the full configuration, including defaults. Omission or `nh.UNSET` inherits; supplying both is invalid. Declarations are inert until accepted execution.
-- Selection delegates synchronously to the active `ConfigurableStepExecutor.resolve_model_selection`. A host wrapper must preserve itself and its controls; Core never unwraps it. Unsupported executors fail explicitly, and `AgentStepExecutor` subclasses must opt in with their own resolver. Perform asynchronous approval in the handler before proceeding.
-- Model selection preserves scoped meters, capabilities, oversight, lifecycle, task references, and the call handler. Its scope applies before the body and restores the parent before handler exit, including on failure or cancellation. Explicit executor replacement, cleared hooks, and nested runs retain their documented effects.
-
-See [execution boundaries](specification.md#embedded-execution-boundaries) for the complete contract and [the executable example](verification.md#embedded-invocation-and-completion-verification) for credential-free synchronous and asynchronous checks.
-
-## 4. The standard contract shape
-
-Prefer the post-block logic pattern. Let the block write a typed value, then validate or transform it in Python.
-
-```py
-@nh.natural_function
-def summarize(text: str) -> str:
-    summary: str = ""
-    """natural
-    ---
-    deny: [raise, return]
-    ---
-    Read <text> and set <:summary> to a concise summary.
-    """
-    if not summary.strip():
-        raise ValueError("Summary must not be empty")
-    return summary
-```
-
-Why this is the default:
-
-- Python gets the final say on validation.
-- The Natural block stays focused on judgment, not host control flow.
-- Tests can lock down post-block behavior deterministically.
-
-Use direct return only for leaf steps whose whole purpose is to return immediately:
-
-```py
-@nh.natural_function
-def choose_title(text: str) -> str:
-    """natural
-    ---
-    deny: [pass, raise]
-    ---
-    Read <text> and return a title.
-    """
-```
-
-Structured output with Pydantic models:
-
-```py
-from pydantic import BaseModel
-
-
-class TicketClassification(BaseModel):
-    label: str
-    confidence: float
-    reasoning: str
-
-
-@nh.natural_function
-def classify_ticket_structured(text: str) -> TicketClassification:
-    result: TicketClassification
-    """natural
-    ---
-    deny: [raise, return]
-    ---
-    Read <text> and set <:result> to the classification.
-    """
-    return result
-```
-
-See [Natural blocks: Designing structured output](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/#designing-structured-output-models) for guidelines on model design.
-
-## 5. State boundary and bindings
-
-Rules:
-
-- `<name>` is a read binding: it requires the value and prioritizes presentation, without limiting other environment access. Existing Python names require an output declaration for rebinding.
-- `<:name>` is a write binding. The model sets a new top-level value that commits back into Python locals after the block. Always add type annotations to write bindings.
-- Prefer explicit parameters for essential child inputs; use inherited state for intentionally shared task policy.
-- Joined children snapshot parent associations at entry; child rebinding stays local, and children that outlive their parent have no inheritance guarantee.
-- Python names, including globals and builtins, precede parent and task references. An unbound local blocks fallback; Natural text alone does not create a Python closure.
-- Read bindings expose shared mutable objects. If the model mutates a bound list, dict, or object in place, the caller sees the mutation. Use this intentionally for the carry pattern, not casually.
-
-This is why the carry pattern uses a read binding:
-
-```py
-@nh.natural_function
-def step_1(carry: list[str]) -> int:
-    result: int = 0
-    """natural
-    Set <:result> to 10.
-    Append a one-line summary of what you did to <carry>.
-    """
-    return result
-```
-
-Additional rules:
-
-- Bindings are simple identifiers only. `<name>` and `<:name>` do not take dotted paths.
-- Dotted paths belong to internal tool expressions for attribute mutation, not to bindings.
-- There is no hidden memory between blocks. If later blocks need state, return it, pass it, or mutate a shared object explicitly.
-
-## 6. Block text, interpolation, and context
-
-Natural blocks come in two forms:
-
-- A function docstring beginning with `natural\n`
-- An inline string literal statement beginning with `natural\n`, including inline f-strings
-
-Docstring Natural blocks are literal. Inline f-string Natural blocks evaluate Python expressions before the model sees the prompt.
-
-Use f-strings only for static configuration or already-shaped context:
-
-```py
-PROJECT_POLICY = ["cite assumptions", "be concise", "avoid speculation"]
-
-
-@nh.natural_function
-def choose_policy(post: str) -> str:
-    selected_policy: str = ""
-    f"""natural
-    Read <post>.
-    Available policies: {PROJECT_POLICY}
-    Set <:selected_policy> to the single best policy.
-    """
-    return selected_policy
-```
-
-Do not inject untrusted raw text into Natural source. If input is user-controlled, pass it as a binding such as `<post>`.
-
-## 7. Exposing functions and capabilities to the model
-
-Rules:
-
-- The model sees callable signatures from both LOCALS and GLOBALS.
-- For object read bindings, the model also sees a capability view: object header, public methods (with signatures), and public fields (with typed previews).
-- Object capability views expose public members only. Private/dunder members are omitted, and properties are not evaluated.
-- Put per-invocation data in function parameters. Put stable, reusable capabilities at module level.
-- Do not annotate callable parameters as `object` or `Any` -- this erases the signature the model needs:
-
-```py
-@nh.natural_function
-async def summarize(query: str, fetch_data: object) -> str:
-    result: str = ""
-    """natural
-    Use <fetch_data> to get data for <query> and set <:result>.
-    """
-    return result
-```
-
-`fetch_data: object` hides useful type information. The model sees an unhelpful surface.
-
-Prefer one of these:
-
-- Expose a stable module-level helper through `<fetch_data>`
-- Wrap complex operations in a smaller helper with a simple signature
-- Keep callable parameters precisely typed if they truly must be local
-
-Good binding functions have small signatures and clear first-line docstrings. Every extra parameter is another decision point for the model.
-
-## 8. Control flow and failure handling
-
-Natural blocks have five outcome kinds: `pass`, `return`, `break`, `continue`, and `raise`.
-
-Use `deny` frontmatter to constrain outcomes the model should not choose.
-
-Default patterns:
-
-- Post-block logic pattern: `deny: [raise, return]`
-- Direct-return pattern: `deny: [pass, raise]`
-
-Error-handling rule:
-
-- Let the model signal failure with `raise`.
-- Catch failures in Python with `except nh.ExecutionError`, or expose explicit exception types if you want the block to raise them directly.
-
-Async rule:
-
-- Both sync and async Natural functions can call async binding functions through tools; tool expressions await their results.
-- Only an async Natural function may have a final return expression that produces an awaitable. A sync Natural function rejects that final result with `ExecutionError`.
-- Make the Natural function `async` when it needs an awaitable final return expression, not merely because it uses an async binding function.
-- An ordinary synchronous Python `return coroutine` preserves that exact object without implicit awaiting or closing. Do not close borrowed application coroutines to silence warnings; Core disposes only its own discarded unstarted wrappers.
-
-Completion and accounting rules:
-
-- Function completion includes Python `finally`, explicitly joined children, and Core-owned processing. Intercepted generator and async-generator functions are unsupported. Detached tasks and unjoined application threads are outside the guarantee.
-- `StepCompleted` follows validation and selected assignments, before the containing function necessarily finishes. `StepLifecycle` also reports failures and interruptions, including before preparation completes. Executor return alone proves neither block nor function success. Notification failure propagates without rollback, replay, or a second terminal event.
-- Core joins its notification and synchronous-bridge cleanup. `interruption_delivery_timeout` requests notification cancellation; it does not bound total waiting. Repeated caller interruption preserves ongoing cancellation cleanup and the original interruption, chaining additional cleanup failures. Async callers retain their loop and unrelated tasks.
-- `UsageMeter` is a separate aggregate recorded after an agent run returns, not a live request ledger or proof of successful Python completion. Failed or cancelled runs can consume unrecorded tokens. Do not add its total to host request observations as another charge.
-- For admission within an unfinished block, use Pydantic AI wrapping request capabilities. Keep one host record per visible request, correlated to the function and block; distinguish configured/reported model names, unknown usage, failure, and cancellation. Wrapping hooks can catch `BaseException`; ordinary request-error hooks handle `Exception` only.
-- Refuse the next sequential request after observed usage reaches the host threshold. Two 60-token requests may consume 120 against a threshold of 100; already admitted and concurrent requests may overrun further. SDK retries, HTTP attempts, and coding-agent internal requests may be hidden. This is approximate admission, with no strict advance cost guarantee.
-
-Resilience rule:
-
-- Keep retry, fallback, timeout, budget, and circuit-breaker policy in Python, not inside Natural text.
-- A failed block may already have effects; reconcile them before retrying and never replay an execution to repair lifecycle storage failure.
-- Ordinary helper and child exceptions propagate to Python; return a domain observation from a helper when the model should handle an expected failure.
-- Import primitives from `nighthawk.resilience`. After `import nighthawk as nh`, the module namespace is also available as `nh.resilience`:
-
-```py
-from nighthawk.resilience import retrying
-
-resilient_classify = retrying(attempts=3)(classify_ticket)
-
+executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
+)
 with nh.run(executor):
-    label = resilient_classify(ticket_text)
+    print(classify_ticket("The application crashes when opening a file."))
 ```
 
-See [Patterns: Resilience](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) for `fallback`, `vote`, `timeout`, `budget`, and `circuit_breaker`.
+An active run is required when a block executes or a function's model declaration resolves.
+Decoration, definition lookup, and host refusal before body entry need no run.
+See [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/) for setup and credentials.
 
-## 9. Context budget discipline
+## Bindings and context
 
-Prompt context is finite. When you see `<snipped>`, the marked data is truncated from the prompt but remains in Python memory -- the model can still reach it through binding functions. Fix context pressure in this order:
+- `<name>` requires a value and prioritizes its presentation; it is not an access allowlist.
+- `<:name>` declares a validated Python output slot. Annotate it explicitly; use `Literal`, collections, or Pydantic models to express the result contract.
+- Prefer a block that writes outputs followed by ordinary Python checks. Use direct Natural return for leaf judgments and `deny: [pass, raise]` when return is required.
+- Inputs can include lexical values, inherited parent working state, and scoped task references. Pass essential child inputs explicitly; reserve inheritance for shared policy or context.
+- Child rebinding stays local. Object mutations are shared and can survive failure. Only children joined by their parent have the parent-lifetime inheritance guarantee.
+- Each block starts a fresh model interaction. Carry state through Python parameters, return values, or deliberate shared objects.
+- Bindings name Python variables. Dotted references can present multimodal leaves; they do not declare dotted write bindings.
+- Inline f-string blocks evaluate Python expressions before prompt construction. Interpolate only trusted configuration; use bindings for user data.
 
-1. Remove irrelevant locals and globals from the function scope.
-2. Split the block into smaller, focused blocks.
-3. Pre-compute or pre-format context in Python before the block.
-4. Replace complex helper signatures with simpler wrapper functions.
-5. Increase `StepContextLimits` only as a last resort.
+See [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) for binding syntax, structured outputs, and prompt examples.
 
-Do not raise limits as a first response to truncation. The root cause is usually too much state in scope.
+## Python helpers
 
-## 10. Testing strategy
+Expose small Python functions with precise signatures and short docstrings.
+Use module-level helpers for stable capabilities and parameters for invocation-specific values.
+A callable passed through a parameter retains its live signature even if that parameter is annotated as `object` or `Any`; precise annotations also help Python tooling and readers.
+Metadata discovery is best-effort, so make essential dependencies explicit.
 
-Test two layers separately.
+Reduce incidental locals and large previews before increasing `StepContextLimits`.
+A `<snipped>` marker means presentation was truncated; values can be retrieved through discovery or helpers.
+Even explicit multimodal references can be omitted when the presentation budget is exhausted.
 
-| Layer | What to verify | Main tool |
-|---|---|---|
-| Deterministic Python shell around Natural blocks | control flow, validation, resilience, binding wiring, executor selection | `nighthawk.testing` |
-| Natural block effectiveness | semantic correctness of the prompt against a real model | integration tests |
+See [binding function design](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/#designing-binding-functions).
 
-Mock-test rules:
+## Scopes and models
 
-- Use `ScriptedExecutor` for deterministic multi-step tests.
-- Use `CallbackExecutor` when the response depends on the input.
-- Inspect `executor.calls` to verify visible locals, globals, write bindings, and allowed outcomes.
+- `nh.run(executor)` establishes an executor and usage meter. `nh.scope(...)` composes settings within that run and restores its parent on exit.
+- Omission or `nh.UNSET` inherits; ordinary values replace; empty collections clear. `nh.Extend` appends sequences, and `nh.Merge` merges task references with identity-based conflict checks.
+- `oversight=None` and `lifecycle=None` clear those hooks. Other scope fields reject `None`.
+- `model=...` selects only the model in a scope or `@nh.natural_function(...)` declaration. `step_executor_configuration=...` replaces all configuration fields. Do not supply both.
+- Declarations are inert until execution. Selection applies before the body and restores the parent on success, failure, or cancellation.
+- Model selection delegates to the active executor's `ConfigurableStepExecutor` resolver. Host wrappers and `AgentStepExecutor` subclasses must implement preserving resolution; unsupported executors fail explicitly.
+- Use `task_references` for injected helpers and `step_executor` for deliberate executor replacement. Starting a nested run resets scoped defaults; function-call interception is independent.
 
-Integration-test rules:
+The [runtime configuration guide](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) contains examples for model selection, task injection, and mixed executors.
 
-- Gate them behind an explicit opt-in.
-- Assert on type, schema, range, or semantic class, not exact wording.
-- For mixed-executor workflows, test both the cheap block and the deep block in the configuration they actually use.
+## Host admission and completion
 
-## 11. Anti-patterns
+Use `nh.function_call_scope(handler)` to refuse a function before Python body effects or declared model resolution.
+Implement `invoke(call, proceed)` using `proceed()` and `invoke_async(call, proceed)` using `await proceed()`.
+Refuse by raising; a continuation must finish once within its handler's active Task and thread.
+The handler may establish a run before proceeding.
 
-| Anti-pattern | Why it is bad | Better pattern |
-|---|---|---|
-| Use Natural for deterministic computation | Higher cost, worse reliability, weaker tests | Write plain Python |
-| Put two unrelated tasks in one block | Ambiguous contract, hard to test | Split into separate `@nh.natural_function` functions |
-| Use coding agent backends for every block | Slow, expensive, oversized execution surface | Reserve them for deep autonomous steps |
-| Rely on initial-value inference for structured output | Inference captures only the outer runtime type | Annotate collections and constraints explicitly, such as `results: list[str] = []` |
-| Erase callable type with `object` | Model loses the signature it needs | Use precise types: `fetch: Callable[[str], Data]` |
-| Solve truncation by only raising limits | Prompt bloat hides design problems | Shrink context first (section 9) |
-| Depend on hidden cross-block memory | Blocks execute independently | Pass or return explicit state |
-| Inject untrusted text into Natural source | Breaks the trust model | Pass user data through bindings: `<user_input>` |
+`nh.get_function_call()` exposes invocation and parent Ids.
+Use `nh.get_natural_function_definition()` for exact original/wrapper/transformed correspondence; `nh.get_transformed_function()` follows conventional outer wrappers for inspection.
 
-## 12. References
+Keep three boundaries distinct:
 
-Start here:
+- Function completion includes Python `finally`, explicitly joined children, and Core-owned work. Intercepted generators are unsupported.
+- Block lifecycle facts cover preparation, validation, assignments, and failures. A completed block does not prove the containing function succeeded.
+- Request capabilities observe the Pydantic AI request boundary. SDK retries and coding-agent internal requests can be hidden.
 
-- [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) -- block anatomy, bindings, functions, binding function design, structured output
-- [Executors](https://kurusugawa-computer.github.io/nighthawk-python/executors/) -- executor selection and configuration basics
-- [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) -- scope composition, model selection, function admission, usage, and execution identity
-- [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) -- outcomes, deny, async, carry, resilience, and common mistakes
-- [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- testing and debugging
+Core joins its notification and synchronous-bridge cleanup; resistant cleanup may wait indefinitely.
+`interruption_delivery_timeout` requests cancellation, not an overall completion deadline.
+The host owns detached work and durable records.
+See [execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) for context timing, interruption, and ownership details.
 
-Canonical references:
+## Failures, async, and budgets
 
-- [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) -- canonical specification
-- [Pydantic AI providers](https://kurusugawa-computer.github.io/nighthawk-python/pydantic-ai-providers/) -- model and provider configuration
-- [Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/) -- backend-specific configuration and behavior
-- [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- public API surface
+- Catch `nh.ExecutionError` for runtime failures; catch application exception types when helpers or Natural outcomes raise them directly.
+- Reconcile partial effects before retrying. A lifecycle storage failure never justifies replaying a Natural execution.
+- DSL tool expressions await awaitable results in both sync and async functions. Awaitable final Natural returns require `async def`; an ordinary synchronous Python return preserves its coroutine object without awaiting or closing it.
+- Use `nighthawk.resilience` to compose retry, fallback, voting, timeout, budget, and circuit-breaker policy in Python.
+- Async timeouts are cooperative. The sync timeout wrapper waits for its worker and does not copy caller context variables; prefer async execution when inheriting host scopes.
+- `UsageMeter` records returned agent-run aggregates and may miss usage from failed runs. Function-level budget checks are not a strict cost cap.
+- For admission within an unfinished block, keep a separate host request accumulator and refuse the next sequential request after the threshold is reached. Already admitted or concurrent work can overrun it. Never add the meter total as a second charge.
+- Keep unknown model/usage metadata unknown, and distinguish failure and cancellation from successful responses.
+
+See [workflow and resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) and [request accounting](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/#request-usage-and-admission).
+
+## Verification
+
+Use `nighthawk.testing.ScriptedExecutor` for fixed response sequences and `CallbackExecutor` for input-dependent responses.
+Assert Python control flow, output validation, call counts, selected scopes, and relevant effects.
+Run opt-in provider tests for the actual prompt's semantic result; assert types, ranges, or categories instead of exact prose.
+Mock success is not evidence of model judgment quality.
+
+See [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) for executable tests and debugging, and [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) for public interfaces.

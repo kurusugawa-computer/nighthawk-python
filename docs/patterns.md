@@ -398,24 +398,6 @@ result_a = branch_add(carry_a)  # diverges from here
 result_b = branch_multiply(carry_b)  # independent path
 ```
 
-### f-string injection as alternative
-
-Use f-strings only when the inserted text is a trusted, repository-managed program fragment ([f-string injection](natural-blocks.md#f-string-injection)).
-Keep user input and model-generated history in ordinary bindings, even when preformatted or large; use context budgets or a custom context builder to reduce presentation size.
-For a trusted fragment:
-
-```py
-@nh.natural_function
-def compute_with_context(context_text: str) -> int:
-    result = 0
-    f"""natural
-    Prior context: {context_text}
-    Based on the context, the previous result was 42.
-    Set <:result> to 43 (previous result plus 1).
-    """
-    return result
-```
-
 ### Design tips
 
 - Use `<carry>` (read binding), not `<:carry>` (write binding). Read bindings prevent rebinding the name, which would break the caller's reference.

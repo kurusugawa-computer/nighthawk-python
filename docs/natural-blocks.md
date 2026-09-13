@@ -186,10 +186,6 @@ Use ordinary Python helpers for properties, custom objects, and other mutation r
 
 **How write bindings appear in the prompt.** Initialized outputs appear with their values and selected contracts. Unbound outputs have no value preview; their declarations and contracts remain discoverable through the environment. If a context budget omits an entry, the presentation identifies the omission and gives retrieval references.
 
-### Prompt appearance of bindings
-
-Read references prioritize presentation, while write declarations identify validated Python output slots. Both can include value previews, but output entries also identify their selected contracts. Existing Python names require an output declaration to be rebound by a Natural operation, whether or not they were explicitly mentioned as reads. Earlier object mutations remain visible even if finalization rejects pending name assignments.
-
 ### Multimodal bindings
 
 A binding may hold a Pydantic AI multimodal value -- `BinaryContent`, `ImageUrl`, `AudioUrl`, `DocumentUrl`, `VideoUrl`, or `UploadedFile`. These are first-class binding values: reference them with `<name>` like any other binding, and Nighthawk renders the inline placeholder (`<image>` for image media, `<file>` otherwise) in the LOCALS or GLOBALS line. Explicit dotted leaf references use the same mechanism, and dotted `list` / `tuple` leaves are hoisted when they satisfy the same `UserContent` rule as top-level bindings. `UploadedFile` is only usable as native user-prompt content on provider-backed executors that can resolve the provider-owned file reference; coding-agent backends reject it at the user-prompt boundary.
@@ -413,24 +409,10 @@ Use explicit parameters for essential inputs and independent reuse. Module globa
 
 ### Responsibility split
 
-**Use Natural when the task requires judgment** -- decisions that depend on interpretation, world knowledge, or subjective evaluation:
-
-- Classification and routing (e.g., categorize a support ticket).
-- Text generation (e.g., summarize, draft, translate, reformulate).
-- Interpretation of ambiguous or unstructured input.
-- Selection among options based on context (e.g., choose the best policy).
-
-**Use Python for everything deterministic** -- operations whose result is fully determined by the input:
-
-- Computation (arithmetic, string manipulation, data transformation).
-- Control flow (loops, conditionals, sequencing of Natural blocks).
-- I/O and side effects (file operations, API calls, database queries).
-- Validation, type enforcement, and error recovery.
-- State management and data flow between Natural blocks.
-
-**Decision rule:** if the correct output can be computed without an LLM, use Python. Natural blocks add latency, cost, and non-determinism -- reserve them for tasks that genuinely require LLM capabilities.
-
-A corollary: do not attempt to "compile" a Natural block into equivalent Python code via a one-time LLM translation. Natural blocks exist for tasks whose correct output depends on interpretation, world knowledge, and context that cannot be captured in static code. If the task could be reduced to deterministic Python, it should be written in Python from the start. See [Philosophy](philosophy.md#why-evaluate-every-time) for the full rationale.
+Use Natural for interpretation, classification, generation, and other judgments that depend on context.
+Use Python for computation, control flow, I/O, validation, and recovery.
+If explicit rules can determine the answer, write those rules in Python.
+See [Philosophy](philosophy.md#why-evaluate-every-time) for why Natural judgments execute for each input.
 
 #### Type boundary placement
 

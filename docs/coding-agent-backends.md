@@ -4,10 +4,6 @@
 
 The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural block execution to a coding agent CLI. All three implement the Pydantic AI `Model` protocol internally and expose Nighthawk tools to the CLI via an embedded MCP server. See [For coding agents](for-coding-agents.md) for a development guide targeting coding agents building Python projects with Nighthawk.
 
-## Why coding agent backends
-
-With coding agent backends, each Natural block becomes an autonomous agent execution -- the agent can read files, run commands, and invoke skills, constrained by Nighthawk's typed binding contract at the boundary. See [Philosophy](philosophy.md#execution-model) for the full positioning argument and [Executors](executors.md#capability-matrix) for capability and cost comparisons.
-
 ## Minimal configuration
 
 Claude Code (SDK):
@@ -33,10 +29,8 @@ Backend-specific settings are configured via the `model_settings` field of `Step
 
 All three backends provide capabilities not available with Pydantic AI providers. See the [capability matrix](executors.md#capability-matrix) for a summary.
 
-The [embedded execution boundaries](specification.md#embedded-execution-boundaries) also apply to these backends.
-Function admission and scoped model selection can retain host controls, while block completion remains distinct from the eventual Python function outcome.
-A Pydantic AI request capability observes the backend's exposed request, which can contain multiple internal coding-agent model calls.
-It cannot supply per-internal-request admission or complete transport accounting; stricter visibility requires a backend-specific facility.
+Pydantic AI capabilities observe the backend's exposed request, which may contain multiple internal model calls.
+Per-internal-request admission requires backend-specific support; see [request observation](runtime-configuration.md#request-usage-and-admission).
 
 - **Skill execution:** The CLI loads and executes skills from its standard skill directories. See [Skills](#skills) below.
 - **MCP tool exposure:** Nighthawk tools are exposed to the CLI via an embedded MCP server started automatically.
@@ -50,7 +44,7 @@ Coding agent backends do not receive native VLM-style user-prompt multimodal inp
 - `BinaryContent` is staged to a local file and referenced in the prompt with `<image>` / `<file>` plus a local file path.
 - URL-based content (`ImageUrl`, `AudioUrl`, `DocumentUrl`, `VideoUrl`) is referenced by URL in the projected prompt text.
 - `UploadedFile` user-prompt content is rejected because these backends cannot resolve provider-owned file identifiers. Tool results still preserve the rest of the payload and replace only the `UploadedFile` item with explanatory fallback text.
-- Tool results cross the backend boundary as MCP content. Image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items travel natively as `ImageContent` / `AudioContent`; all other `BinaryContent` and `FileUrl` items project to `TextContent` so the MCP path stays symmetric with the text-projected prompt path. Native MCP video carriage is intentionally unsupported for now because video-modal requirements are unstable; document carriage also remains text-projected unless a future backend advertises an explicit capability. When mixed top-level text/multimodal tool-result sequences preserve their original order they satisfy the same `UserContent` rule used for prompt hoisting. The user prompt itself remains text-projected for these backends.
+- Tool results cross the backend boundary as MCP content. Image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items travel natively as `ImageContent` / `AudioContent`; all other `BinaryContent` and `FileUrl` items project to `TextContent` so the MCP path stays symmetric with the text-projected prompt path. Document and video content use text projection. When mixed top-level text/multimodal tool-result sequences preserve their original order they satisfy the same `UserContent` rule used for prompt hoisting. The user prompt itself remains text-projected for these backends.
 - When a successful tool result splits to no text and no user content, the projected prompt stays header-only rather than inserting the preview JSON envelope.
 
 This differs from provider-backed executors that can pass a `tuple[UserContent, ...]` to a multimodal-capable provider API directly.
@@ -234,12 +228,6 @@ configuration = nh.StepExecutorConfiguration(
 | `sandbox_mode` | `"read-only"` \| `"workspace-write"` \| `"danger-full-access"` \| `None` | `None` | Sandbox policy for CLI commands |
 | `model_reasoning_effort` | `"minimal"` \| `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `None` | `None` | Reasoning effort level |
 
-### Known issue: MCP tools + structured output
-
-The OpenAI Responses API intermittently fails with "stream disconnected" errors when a request contains both MCP-sourced function tools and `text.format.json_schema` (structured output via `--output-schema`). This affects all Codex CLI versions tested (0.110.0 through 0.116.0). When Nighthawk exposes tools via MCP and the step executor requests structured output, the combination may trigger server-side errors in the upstream API.
-
-**Current status:** awaiting an upstream fix in the Codex CLI or OpenAI Responses API. No workaround is applied on the Nighthawk side. Promptfoo evaluations for the `codex` provider may show intermittent errors for this reason.
-
 ## Skills
 
 A **skill** is a reusable, project-scoped instruction set that a coding agent can discover and execute. Claude Code skills use `.claude/skills/` ([documentation](https://code.claude.com/docs/en/skills)); Codex skills use `.agents/skills/` ([documentation](https://developers.openai.com/codex/skills/)). Nighthawk does not define its own skill format -- it delegates to the backend CLI's native skill system.
@@ -334,4 +322,5 @@ Nighthawk starts an embedded MCP server on a random local port. Ensure no firewa
 
 **Codex structured output errors ("stream disconnected")**
 
-The OpenAI Responses API intermittently fails when a request contains both MCP-sourced function tools and structured output (`--output-schema`). This affects Codex CLI versions 0.110.0 through 0.116.0. No workaround is available; awaiting an upstream fix. See [Known issue](#known-issue-mcp-tools-structured-output) above.
+If a Codex request fails while combining MCP tools and structured output, inspect the CLI diagnostics and reproduce with the installed CLI version before retrying.
+Check for partial tool effects before rerunning the block.

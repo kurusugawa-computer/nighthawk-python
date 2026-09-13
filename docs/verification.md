@@ -2,11 +2,8 @@
 
 > Mock testing is readable after [Natural blocks](natural-blocks.md); later sections assume [Patterns](patterns.md).
 
-A Nighthawk application has two distinct layers that need testing: the **Python logic** around Natural blocks (control flow, error handling, composition) and the **Natural blocks themselves** (whether the prompt elicits the intended LLM judgment). Each layer requires a different approach.
-
-Mock tests cover the Python layer -- they are fast, deterministic, and free from API calls, but they bypass the LLM entirely. A mock test passes even when the Natural block text is completely wrong. Integration tests cover the Natural block layer -- they call a real LLM and verify actual judgments, but they are slower, non-deterministic, and require API credentials.
-
-**Use both:** mock tests to lock down the deterministic Python shell, integration tests to validate that each Natural block's prompt produces correct results.
+Test Python control flow and validation with deterministic executors; test Natural judgment with opt-in real-model calls.
+A mock verifies the surrounding Python behavior, not the quality of the prompt.
 
 ## Mock tests
 
@@ -69,38 +66,8 @@ def test_fallback_on_error():
     assert result == "unknown"
 ```
 
-**Testing multi-step composition.** When a pipeline contains multiple Natural blocks, script one response per block:
-
-```py
-def test_pipeline_classify_then_summarize():
-    executor = ScriptedExecutor(
-        responses=[
-            pass_response(category="bug"),
-            pass_response(summary="Login crash on mobile"),
-        ]
-    )
-    with nh.run(executor):
-        result = triage_pipeline("App crashes when I log in on my phone")
-
-    assert result.category == "bug"
-    assert result.summary == "Login crash on mobile"
-```
-
-**Default response.** When a pipeline has many Natural blocks and only a few need specific responses, use `default_response` to avoid enumerating every step:
-
-```py
-def test_pipeline_with_default():
-    executor = ScriptedExecutor(
-        responses=[pass_response(category="bug")],
-        default_response=pass_response(result=""),
-    )
-    with nh.run(executor):
-        result = long_pipeline("input")
-
-    assert result.category == "bug"
-```
-
-Scripted responses are consumed in order; once exhausted, `default_response` is returned for all subsequent Natural blocks.
+For a pipeline, supply one response per block in execution order.
+`default_response` supplies the response used after the explicit sequence is exhausted.
 
 **Verifying binding wiring.** Use recorded calls to check that the right data is visible to the LLM:
 
@@ -160,21 +127,13 @@ def test_classify_with_real_llm():
 
 **Assertion strategy:** assert on type, value range, and semantic consistency rather than exact string matches. LLMs are non-deterministic; brittle equality checks produce flaky tests.
 
-**Gating:** integration tests are slow, costly, and non-deterministic. Gate them behind an explicit opt-in so they never run by default.
+**Gating:** configure the test suite to exclude integration tests by default, then opt in with a marker selection:
 
 ```bash
 pytest -m integration
 ```
 
-## When to use which
-
-| Question | Mock test | Integration test |
-|---|---|---|
-| Does my Python control flow work given specific LLM outputs? | Yes | Overkill |
-| Does error handling recover correctly? | Yes | Overkill |
-| Are the right bindings visible to the LLM? | Yes | Also works, but slower |
-| Does this Natural block actually produce useful results? | No | Yes |
-| Is my prompt wording effective? | No | Yes |
+Keep representative failures as regression inputs and use `pytest -x -k test_name` for focused prompt iteration.
 
 ## Inspecting the assembled prompt
 
@@ -197,33 +156,12 @@ When the LOCALS or GLOBALS section is too large, Nighthawk truncates it and appe
 - Reduce the number of locals by moving stable values to module-level (GLOBALS).
 - Use f-string injection for pre-formatted context instead of large binding values.
 
-## Tracing tool calls with OpenTelemetry
-
-When a Natural block produces unexpected results, inspect the tool call sequence via OpenTelemetry spans. See [Observability](#observability) for setup. The `nighthawk.step` span records each tool invocation, making it possible to trace the LLM's reasoning path.
-
-## Integration test iteration
-
-When iterating on Natural block text, use a focused integration test with a real LLM:
-
-```py
-def test_classify_iteration():
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
-    )
-    with nh.run(step_executor):
-        result = classify("ambiguous input that failed before")
-
-    assert result in ("positive", "negative", "neutral")
-```
-
-Run repeatedly with `pytest -x -k test_classify_iteration` to validate prompt changes against specific inputs that previously failed.
-
 ## Contract checks and model evaluations
 
 Verify deterministic runtime mechanics separately from model judgment.
-Scripted executors use `StepRequest` and return resolved `StepCandidate` values; the common runtime still validates outputs, returns, and allowed outcomes.
+Scripted executors use `StepRequest` and return resolved `StepCandidate` values; the common runtime validates outputs, returns, and allowed outcomes.
 Exercise live lexical lookup, unbound names, annotation acquisition, joined child snapshots, assignment validation and partial effects, ordered operations, awaited approval, rewrites, and terminal delivery through their actual runtime boundaries.
-The [acceptance cases](specification.md#145-behavioral-acceptance-cases) define review scenarios, and the [implementation audit](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20260911-ideal-state-audit.md) maps them to existing tests and dated results.
+The [acceptance cases](specification.md#145-behavioral-acceptance-cases) define runtime review scenarios.
 
 Real model tests should check observable task results, child calls, selected capabilities, and retrieval of omitted context.
 Type validation alone cannot prove a judgment's factual accuracy, call count, or effect correctness.
@@ -237,10 +175,6 @@ Keep failed and duplicate effects in the results; efficiency cannot compensate f
 Use independent repetitions, varied formulations, and representative models/backends; report sample sizes, uncertainty, and unavoidable differences in guidance.
 When evidence does not distinguish acceptable alternatives, prefer lower implementation, explanation, and maintenance burden across the runtime, adapters, and guidance.
 Fewer tools alone do not establish a simpler or more reliable system.
-
-The [inspection assessment](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20260911-inspection-assessment.md) records 804 model trials and the selection of Python inspection helpers on the existing evaluation/assignment surface.
-The [protocol](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20260911-inspection-study-protocol.md) owns experimental controls and source snapshots.
-This is a bounded selection with reported failures, not statistical equivalence or a universal claim about models or backends.
 
 ## Observability
 
@@ -256,25 +190,8 @@ Each Nighthawk execution produces a tree of spans:
 | `nighthawk.scope` | `nh.scope()` context manager | `scope.id` |
 | `nighthawk.step` | Each Natural block execution | `step.execution.id` (invocation), `step.source_location` (`python_module:line`) |
 
-### Step events
-
-Events are emitted on the `nighthawk.step` span:
-
-| Event | When | Key attributes |
-|---|---|---|
-| `nighthawk.step.completed` | Natural block succeeds | `outcome_kind` |
-| `nighthawk.step.raised` | `raise` outcome (domain-level) | `outcome_kind`, `raise_message`, `raise_error_type` |
-| `nighthawk.step.failed` | Internal Nighthawk failure | `error_kind`, `error_message` |
-
-The `raise` outcome is domain-level behavior (the LLM chose to signal an error). Internal failures (`failed`) indicate a Nighthawk-side problem (invalid JSON, validation failure, etc.).
-
-### Resilience events
-
-The `budget` transformer emits an event on the current span when a budget limit is breached:
-
-| Event | When | Key attributes |
-|---|---|---|
-| `nighthawk.budget.exceeded` | Token or cost budget exceeded | `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` |
+Inspect step spans to correlate tool calls, outcomes, interruptions, and delivery failures.
+[The observability contract](specification.md#101-observability-contract-opentelemetry-spanevent) defines event names and attributes.
 
 ### Local trace inspection with otel-tui
 
@@ -292,9 +209,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 python my_script.py
 
 Traces appear in the terminal UI in real time.
 
-See [Specification Section 10.1](specification.md#101-observability-contract-opentelemetry-spanevent) for the full span and event specification.
-
-For authoritative execution history, install [terminal delivery](runtime-configuration.md#record-completed-executions). StepCompleted is delivered after caller assignments; StepFailed includes return-await failures and their stage. Tracing is optional and independent of ledger recording. A delivery failure can add `nighthawk.step.delivery_failed`, but never a second execution terminal event. Cancellation is recorded separately as `nighthawk.step.interrupted`.
+Use [lifecycle recording](runtime-configuration.md#record-completed-executions) when the application needs authoritative block records; traces support diagnosis.
 
 ## Embedded invocation and completion verification
 
@@ -310,13 +225,8 @@ next_request_refused=True
 returned_after_notification_cleanup=True
 ```
 
-`tests/natural/test_function_definition.py` verifies exact provenance and collection of abandoned namespaces.
-`tests/natural/test_function_call.py` verifies context timing, parent identities, guarded continuations, and synchronous coroutine-return identity.
-`tests/runtime/test_async_bridge.py` exercises interruption races in independently watched subprocesses.
-It also verifies that caller interruption preserves a root task's existing cancellation cleanup in direct and worker execution, including inspectable cleanup failures.
-Lifecycle regressions release resistant cleanup explicitly and require it to finish before return.
-`tests/runtime/test_model_selection.py` and `test_request_observation.py` cover preserving resolution, approximate admission, failure, cancellation, and concurrent overrun.
-Expression, assignment, and tool ownership tests distinguish Core-created await wrappers from retained application coroutines.
+Test cancellation with a controlled cleanup release and an independent process timeout, so regressions cannot hang the suite.
+Verify refusal before effects, nested model restoration, and request accounting independently of real-provider responses.
 
 For distribution validation, build a wheel, install it in a fresh environment outside the source tree, copy the example there, and run the environment's Python with `-I` and no `PYTHONPATH`.
 Verify `nighthawk.__file__` points to that environment's installed package.

@@ -11,15 +11,8 @@
 
 Nighthawk is a Python library where Python controls flow and LLMs or coding agents reason within constrained Natural blocks.
 
-- **Hard control** (Python code): strict procedure, verification, and deterministic flow.
-- **Soft reasoning** (an LLM or coding agent): semantic interpretation inside small embedded "Natural blocks".
-
-The same mechanism handles lightweight LLM judgments ("classify this sentiment") and autonomous agent executions ("refactor this module and write tests"). See **[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/)** for the full design rationale.
-
-Python determines where Natural runs, which control results may leave a block, and which names receive validated outputs.
-Natural supplies judgment using Python values, including intentionally inherited parent task context; inputs need not all appear in a function signature or read binding.
-
-This repository is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
+Use Natural blocks for interpretation, classification, and other judgments; keep computation, control flow, and recovery in Python.
+The same typed boundaries support provider-backed LLM calls and coding-agent executions.
 
 ## Installation
 
@@ -64,39 +57,21 @@ See the **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/qu
 
 ## Embedding in an application
 
-An optional `nh.function_call_scope(handler)` lets a host refuse a Natural function before its Python body or declared model resolution runs, and observe its result after Python cleanup and explicitly joined children finish.
-`nh.get_natural_function_definition(function)` identifies the exact original, public wrapper, and transformed body.
-Function calls, validated block outcomes (`StepLifecycle`), and capability-visible model requests are separate observation boundaries.
-
-Declare a child model with `@nh.natural_function(model=...)` or select it lexically with `nh.scope(model=...)`.
-Selection delegates to the active executor and preserves scoped host controls; full configuration replacement remains explicit.
-Hosts can account for observed request usage and refuse subsequent requests, with possible overrun from already admitted work.
-Core waits for its owned notification and bridge cleanup; resistant cleanup can delay completion indefinitely.
-Python continues to own approval, budgets, recovery, and detached application work.
-
-See [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/#model-selection-and-function-admission) for the APIs and [execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) for their guarantees.
-The [embedded execution example](examples/embedded_execution.py) demonstrates synchronous and asynchronous admission, model restoration, request accounting, and cleanup without credentials.
+Hosts can admit whole function calls, select models without losing scoped controls, and observe block outcomes and model usage.
+See [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) for usage and [execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) for the guarantees.
+The [embedded execution example](examples/embedded_execution.py) runs without credentials.
 
 ## Documentation
 
-- **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** -- Setup and first example.
-- **[Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/)** -- Block anatomy, bindings, functions, and writing guidelines.
-- **[Executors](https://kurusugawa-computer.github.io/nighthawk-python/executors/)** -- Choose an execution backend.
-- **[Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/)** -- Scope composition, model selection, function admission, usage, and execution identity.
-- **[Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/)** -- Outcomes, async, composition, resilience, and common mistakes.
-- **[Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/)** -- Mock tests, integration tests, and OpenTelemetry tracing.
-- **[Pydantic AI providers](https://kurusugawa-computer.github.io/nighthawk-python/pydantic-ai-providers/)** -- LLM provider configuration.
-- **[Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/)** -- Claude Code and Codex integration.
-- **[Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/)** -- Canonical specification.
-- **[API Reference](https://kurusugawa-computer.github.io/nighthawk-python/api/)** -- Auto-generated API documentation.
-- **[For coding agents](https://kurusugawa-computer.github.io/nighthawk-python/for-coding-agents/)** -- Development guide for coding agents (LLMs) building Python projects with Nighthawk.
-- **[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/)** -- Design rationale and positioning.
-- **[Roadmap](https://kurusugawa-computer.github.io/nighthawk-python/roadmap/)** -- Future directions.
+- [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/) -- Install and run a Natural function.
+- [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) -- Design prompts, bindings, and Python helpers.
+- [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) and [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- Compose, test, and debug workflows.
+- [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) and [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- Runtime contracts and public interfaces.
+- [For coding agents](https://kurusugawa-computer.github.io/nighthawk-python/for-coding-agents/) -- A compact operational guide.
+- [Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) -- Design rationale.
 
 ## Development & Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, development commands, and contribution guidelines.
 
-## References
-
-- Nightjar (upstream concept): https://github.com/psg-mit/nightjarpy
+Inspired by [Nightjar](https://github.com/psg-mit/nightjarpy).

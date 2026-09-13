@@ -4,23 +4,8 @@ This document is the specification for Nighthawk.
 
 ## 0. Document scope and alignment policy
 
-This document specifies:
-
-- What counts as a Natural block (docstring and inline).
-- The Natural DSL binding syntax (`<name>`, `<:name>`).
-- The execution model (state layers, tools, and the final JSON contract).
-- The host-facing environment API and configuration surface.
-
-This document does not attempt to describe every compilation or implementation detail. The current implementation in `src/nighthawk/` is expected to match this specification.
-
-Nighthawk treats this document as the target behavior. If you find a mismatch between this document and the implementation:
-
-- Prefer changing the implementation to match this document.
-- If the document is wrong or outdated, update the document and adjust tests so the spec and implementation remain aligned.
-
-This file intentionally does not maintain a persistent divergence ledger.
-
-The condensed coding agent guide (`for-coding-agents.md`) is a derivative document. It distills actionable rules from this specification and the learner-facing pages. If the guide contradicts this document, this document prevails.
+This document defines Natural syntax, runtime behavior, and host-facing contracts.
+[API reference](api.md) owns signatures and the public symbol inventory; task-oriented guides explain usage.
 
 ## 1. Goals
 
@@ -644,7 +629,7 @@ Tool result transport contract:
     - Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
 - Multimodal-capable transports MAY send top-level multimodal payload items natively instead of embedding them into the preview text.
     - When they do, they preserve the original top-level content item order from the tool payload, including text/media adjacency for qualifying mixed `list` / `tuple` payloads.
-    - The MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Native MCP video carriage is intentionally not part of this contract because video-modal requirements are still unstable. Native MCP document carriage may be added only behind an explicit transport capability; until then, document items also remain text-projected. Multimodal-capable providers that bypass MCP still send supported items natively via `ToolReturnPart.files`.
+    - The MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Native MCP document and video carriage are unsupported. Multimodal-capable providers that bypass MCP still send supported items natively via `ToolReturnPart.files`.
 - Provider-backed backends that use Pydantic AI's standard tool loop SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts.
     - Argument validation failures and explicit `ModelRetry` use the dedicated retry-prompt path (for example via `RetryPromptPart.model_response()`).
       Ordinary application exceptions propagate to Python.
@@ -928,8 +913,8 @@ Admission runs before inspection; inspection runs before any operation body or a
 Requests execute serially within each step: in emission order for an ordered model batch, and in admission order otherwise.
 Pydantic AI capability hooks cannot reorder an ordered batch across this boundary.
 Argument validation is included in that ordering: a rejected or terminally failed call stops subsequent validators as well as tool bodies.
-Pydantic AI 2.37 prevalidates batches before execution barriers, so Nighthawk installs context-scoped dispatch compatibility hooks and constrains the supported dependency to the 2.37 minor series.
-The hooks preserve Pydantic AI's validators, retries, deferrals, and completion strategies; ordinary Pydantic AI runs outside the Nighthawk dispatch context delegate unchanged.
+Operation dispatch preserves Pydantic AI validators, retries, deferrals, and completion strategies within the Nighthawk boundary.
+Pydantic AI runs outside that boundary use their own dispatch behavior.
 Under `exhaustive`, upfront Pydantic AI function-call events have `args_valid=None` until the corresponding ordered validation runs; Nighthawk operation records retain the actual admission result.
 Explicit Python concurrency inside a helper and separate child steps retain their own execution semantics.
 
@@ -1261,7 +1246,7 @@ Detached application tasks, unjoined threads, external service work, hard proces
 Its `original_function`, `function`, and `transformed_function` fields are the actual objects.
 Copied attributes, raw source/body functions, and unrelated outer wrappers are not exact registration evidence.
 The registry uses weak ownership; a snapshot held by the application intentionally retains its functions.
-The existing `get_transformed_function()` remains the convenience accessor that follows conventional wrapper chains.
+`get_transformed_function()` follows conventional wrapper chains for inspection.
 
 ### Model declarations and observation
 
@@ -1280,7 +1265,7 @@ Explicit executor replacement, cleared hooks, and new runs retain their document
 
 Hosts may use a Pydantic AI wrapping request capability for admission and one accounting record per visible request.
 Keep selected model identity separate from the reported model name, and unknown usage separate from zero.
-Pydantic AI 2.37 can normalize absent usage to zero; the executable example conservatively treats an all-zero total as unknown.
+Pydantic AI can normalize absent usage to zero; the executable example conservatively treats an all-zero total as unknown.
 Transport errors and cancellations without exposed usage do not invent a successful observation.
 A host accumulator of 120 after two admitted requests against a threshold of 100 refuses the third sequential request.
 Concurrent or already admitted requests may overrun that threshold; Core supplies neither reservations nor a strict cost cap.
@@ -1289,7 +1274,7 @@ These observations cover capability-visible requests, not every provider SDK ret
 
 ### Coroutine ownership
 
-DSL tool expressions still await an awaitable result once, including from synchronous Natural functions.
+DSL tool expressions await an awaitable result once, including from synchronous Natural functions.
 Top-level await compilation creates a Core-owned wrapper; rejecting that unstarted wrapper closes it without executing its body.
 A returned Python coroutine may be borrowed, retained by a helper, or nested inside an application value; rejection and normalization failure do not authorize closing it.
 Application helpers remain responsible for unstarted coroutine temporaries they create and discard before an expression yields a value.

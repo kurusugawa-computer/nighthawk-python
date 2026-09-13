@@ -1,6 +1,6 @@
 # Nighthawk quickstart
 
-This quickstart focuses on the shortest path to running your first Natural block.
+> Start here to install Nighthawk and run a Natural function.
 
 ## Setup
 
@@ -11,8 +11,6 @@ Install Nighthawk and a provider:
 ```bash
 pip install nighthawk-python pydantic-ai-slim[openai]
 ```
-
-For other providers, see [Pydantic AI providers](pydantic-ai-providers.md).
 
 ## First example
 
@@ -36,8 +34,6 @@ with nh.run(step_executor):
     print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
 ```
 
-For higher quality results, see [Pydantic AI providers](pydantic-ai-providers.md) for recommended models.
-
 Run with your API key:
 
 ```bash
@@ -48,21 +44,15 @@ python quickstart.py
 
 In this example, `<items>` is a **read binding** (the LLM can see its value) and `<:total>` is a **write binding** (the LLM sets a new value, committed back into Python locals). See [Natural blocks](natural-blocks.md#providing-data-to-a-block) for details on bindings, functions, and composition.
 
-## Credentials
-
-Set `OPENAI_API_KEY` for OpenAI models (used in the first example above). For other providers, see [Pydantic AI providers](pydantic-ai-providers.md). For coding agent backends, see [Coding agent backends](coding-agent-backends.md).
-
 ## Troubleshooting
 
 **`NighthawkError: StepExecutor is not set`**
 
-A Natural block or a function's declared model selection needs an active `nh.run(step_executor)`.
-Wrap the call site in that context, or let a [function-call handler](runtime-configuration.md#whole-function-admission) establish it before proceeding.
-Decoration, definition lookup, and host refusal before proceeding do not require a run.
+Run the function inside `with nh.run(step_executor):`, as in the example.
 
 **`OPENAI_API_KEY` not set**
 
-Set the environment variable before running: `export OPENAI_API_KEY=sk-xxxxxxxxx`. For other providers, see the credentials section above.
+Set the environment variable in the shell that runs Python, as shown above.
 
 For other errors (model identifiers, missing provider packages, authentication), see [Pydantic AI providers troubleshooting](pydantic-ai-providers.md#troubleshooting).
 

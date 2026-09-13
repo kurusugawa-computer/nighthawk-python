@@ -6,10 +6,8 @@
 
 Nighthawk is a Python library where Python controls flow and LLMs or coding agents reason within constrained Natural blocks.
 
-- **Hard control** (Python code): strict procedure, verification, and deterministic flow.
-- **Soft reasoning** (an LLM or coding agent): semantic interpretation inside small embedded "Natural blocks".
-
-The same mechanism handles lightweight LLM judgments ("classify this sentiment") and autonomous agent executions ("refactor this module and write tests").
+Use Natural blocks for interpretation, classification, and other judgments; keep computation, control flow, and recovery in Python.
+The same typed boundaries support provider-backed LLM calls and coding-agent executions.
 
 ```py
 import nighthawk as nh
@@ -35,28 +33,15 @@ with nh.run(step_executor):
     print(calculate_average([1, "2", "three", "cuatro"]))  # 2.5
 ```
 
-The LLM interprets the mixed-format input list via `<numbers>`, calls the Python function `<python_average>` through a binding, and commits the result into `<:result>`.
-Python controls the flow; the LLM handles the semantic interpretation.
-The `float` output contract validates `result` before Python resumes; it does not prove the interpretation is correct.
-Binding functions appear as compact signatures that guide Python composition.
-See **[Philosophy](philosophy.md)** for the full design rationale.
+Natural interprets the input, a Python helper calculates the average, and Pydantic validates the output binding.
+Validation constrains the result's type, not the accuracy of the interpretation.
+See [Philosophy](philosophy.md) for the design rationale.
 
 ## Getting started
 
 - **[Quickstart](quickstart.md)** -- Setup and first example. Start here.
 - **[Natural blocks](natural-blocks.md)** -- Learn what Natural blocks are: bindings, functions, writing guidelines, and binding function design.
 - **[Executors](executors.md)** -- Choose an execution backend: Pydantic AI provider, coding agent, or custom.
-
-## Embedding in an application
-
-Use an optional function-call handler to refuse work before Python body effects and model resolution, then observe the invocation after its owned work finishes.
-Exact definition lookup identifies Core's original function, public wrapper, and transformed body.
-Model selection delegates through the active executor while preserving scoped controls.
-Function completion, validated block outcomes, and capability-visible model requests have distinct [execution boundaries](specification.md#embedded-execution-boundaries).
-
-The host owns approval, request accounting, budgets, and recovery.
-Core joins its owned notification and bridge cleanup, which may wait indefinitely if cleanup resists cancellation.
-See [model selection and function admission](runtime-configuration.md#model-selection-and-function-admission) and the [credential-free example](verification.md#embedded-invocation-and-completion-verification).
 
 ## Patterns and verification
 
@@ -67,11 +52,11 @@ See [model selection and function admission](runtime-configuration.md#model-sele
 
 - **[Pydantic AI providers](pydantic-ai-providers.md)** -- Provider-specific installation, model identifiers, credentials, and model settings.
 - **[Coding agent backends](coding-agent-backends.md)** -- Claude Code and Codex backend configuration, skills, and MCP tool exposure.
-- **[Runtime configuration](runtime-configuration.md)** -- Scope composition, model selection, function admission, usage, and execution identity.
+- **[Runtime configuration](runtime-configuration.md)** -- Configure scopes, select models, and embed Nighthawk in a host application.
 
 ## Reference
 
-- **[Specification](specification.md)** -- Canonical specification (target behavior for implementation).
+- **[Specification](specification.md)** -- Runtime contracts and boundaries.
 - **[API Reference](api.md)** -- Auto-generated API documentation from source docstrings.
 - **[For coding agents](for-coding-agents.md)** -- Condensed, decision-oriented development reference for coding agents (LLMs) building Python projects with Nighthawk.
 
