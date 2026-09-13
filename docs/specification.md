@@ -987,6 +987,7 @@ This includes interruption while `Thread.start()` waits for an already launched 
 Asynchronous generator shutdown errors are propagated or chained to the original interruption, including when asyncio reports them through its loop exception handler.
 A cancellation-resistant handler can delay completion indefinitely; neither timeout nor thread status proves completion.
 Repeated caller interruptions do not abandon cleanup or repeatedly cancel the same finalizer.
+If a notification is already handling its own cancellation, caller interruption or the delivery timeout joins that cleanup without cancelling it again.
 An asynchronous caller likewise waits for owned notifications, while retaining ownership of its loop and unrelated tasks.
 The first interruption retains its identity and preexisting cause; additional cleanup failures are explicitly chained, using a `BaseExceptionGroup` when necessary.
 Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translated into ordinary host execution failures.

@@ -12,6 +12,7 @@ import pytest
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepStarted
 from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepRequest, eval_expression
+from nighthawk.runtime.notifications import await_notification
 from tests.support.executors import StubExecutor
 
 
@@ -305,11 +306,12 @@ def _exercise_interrupted_sync_notification(inside_event_loop: bool, operation_n
 
 
 @pytest.mark.parametrize("boundary", ["started", "finished", "operation"])
-def test_repeated_async_cancellation_joins_owned_notification(boundary: str) -> None:
-    _run_completion_scenario("asynchronous", boundary)
+@pytest.mark.parametrize("self_cancel", [False, True])
+def test_repeated_async_cancellation_joins_owned_notification(boundary: str, self_cancel: bool) -> None:
+    _run_completion_scenario("asynchronous", boundary, str(self_cancel))
 
 
-def _exercise_repeated_async_cancellation(boundary: str) -> None:
+def _exercise_repeated_async_cancellation(boundary: str, self_cancel: bool) -> None:
     async def execute() -> None:
         entered, cleanup, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
         effects: list[str] = []
@@ -317,6 +319,10 @@ def _exercise_repeated_async_cancellation(boundary: str) -> None:
 
         async def notification(event: object) -> None:
             entered.set()
+            if self_cancel:
+                current = asyncio.current_task()
+                assert current is not None
+                current.cancel("notification cancellation")
             try:
                 await asyncio.Event().wait()
             except asyncio.CancelledError as exception:
@@ -346,10 +352,13 @@ def _exercise_repeated_async_cancellation(boundary: str) -> None:
             task = asyncio.create_task(workflow())
             try:
                 await entered.wait()
+                if self_cancel:
+                    await cleanup.wait()
                 task.cancel("first")
                 await cleanup.wait()
                 task.cancel("second")
-                await asyncio.sleep(0)
+                for _ in range(5):
+                    await asyncio.sleep(0)
                 assert not task.done()
                 assert effects == []
             finally:
@@ -363,12 +372,55 @@ def _exercise_repeated_async_cancellation(boundary: str) -> None:
     asyncio.run(execute())
 
 
+def test_notification_timeout_preserves_existing_cancellation_cleanup() -> None:
+    _run_completion_scenario("timeout")
+
+
+def _exercise_notification_timeout() -> None:
+    async def execute() -> None:
+        cleanup, release = asyncio.Event(), asyncio.Event()
+        effects: list[str] = []
+        cleanup_error = RuntimeError("notification cleanup failed")
+
+        async def notification() -> None:
+            current = asyncio.current_task()
+            assert current is not None
+            current.cancel("notification cancellation")
+            try:
+                await asyncio.sleep(0)
+            finally:
+                cleanup.set()
+                await release.wait()
+                effects.append("cleaned")
+                raise cleanup_error
+
+        task = asyncio.create_task(await_notification(notification(), interrupted=True, timeout=0.01))
+        try:
+            await cleanup.wait()
+            await asyncio.sleep(0.05)
+            assert not task.done()
+            assert effects == []
+        finally:
+            release.set()
+            with pytest.raises(TimeoutError) as caught:
+                await task
+        assert effects == ["cleaned"]
+        cause = caught.value.__cause__
+        assert isinstance(cause, BaseExceptionGroup)
+        assert cleanup_error in cause.exceptions
+        assert any(isinstance(exception, asyncio.CancelledError) for exception in cause.exceptions)
+
+    asyncio.run(execute())
+
+
 if __name__ == "__main__":
     faulthandler.dump_traceback_later(10)
     try:
         if sys.argv[1] == "synchronous":
             _exercise_interrupted_sync_notification(sys.argv[2] == "True", sys.argv[3] == "True")
+        elif sys.argv[1] == "timeout":
+            _exercise_notification_timeout()
         else:
-            _exercise_repeated_async_cancellation(sys.argv[2])
+            _exercise_repeated_async_cancellation(sys.argv[2], sys.argv[3] == "True")
     finally:
         faulthandler.cancel_dump_traceback_later()

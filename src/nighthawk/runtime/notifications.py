@@ -21,7 +21,9 @@ async def await_notification(result: object, *, interrupted: bool = False, timeo
         return
     except BaseException as exception:
         primary = exception
-    if not task.done():
+    # A notification can already be unwinding its own cancellation. Cancelling
+    # that Task again would interrupt the cleanup we promise to join.
+    if not task.done() and (not isinstance(task, asyncio.Task) or not task.cancelling()):
         task.cancel()
     while not task.done():
         try:
