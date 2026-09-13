@@ -376,19 +376,24 @@ def budget(
 ) -> _BudgetHandle:
     """Create a budget enforcement transformer.
 
-    Enforces token usage limits on wrapped functions. Requires an active :func:`~nighthawk.run` context with a :class:`~nighthawk.UsageMeter`. Outside a run context the transformer is a no-op.
+    Checks recorded usage around function calls using an active :func:`~nighthawk.run` context with a :class:`~nighthawk.UsageMeter`.
+    Outside a run context the transformer is a no-op.
+    Post-call checks run only after normal return; agent runs that fail before metering may consume unrecorded usage.
+    Concurrent calls sharing a meter can contribute to the same measured call delta.
+    This transformer does not gate requests within an unfinished block or guarantee a strict spending cap.
+    Use a separate host request capability for request-level admission without adding the meter total as another charge.
 
     Recommended composition order::
 
         timeout -> budget -> vote -> retrying -> circuit_breaker -> fallback
 
     Args:
-        tokens: Maximum cumulative tokens across all calls. Checked before and after each call.
-        tokens_per_call: Maximum tokens for a single call. Checked after each call completes.
-        cost: Maximum cumulative monetary cost. Requires *cost_function*.
-        cost_per_call: Maximum monetary cost for a single call. Requires *cost_function*.
+        tokens: Cumulative recorded-token threshold. Checked before invocation and after normal return.
+        tokens_per_call: Recorded-token delta threshold. Checked after normal return.
+        cost: Cumulative recorded-cost threshold. Requires *cost_function*.
+        cost_per_call: Recorded-cost delta threshold. Requires *cost_function*.
         cost_function: Callable that converts :class:`RunUsage` to a monetary cost (float). Required when *cost* or *cost_per_call* is set.
-        estimate_usage: Optional callable that estimates the next call usage from positional/keyword arguments. When provided, over-limit calls fail fast before execution.
+        estimate_usage: Optional callable estimating the next call usage from positional/keyword arguments. Rejects predicted over-limit work before execution, without reserving usage or guaranteeing actual cost.
 
     Returns:
         A handle that wraps a function with budget enforcement.

@@ -221,7 +221,9 @@ async def classify_batch(texts: list[str]) -> list[str]:
     return list(await asyncio.gather(*(classify(t) for t in texts)))
 ```
 
-Each concurrent Natural block executes independently -- there is no shared message history or state between them. This makes `asyncio.gather` safe for Natural blocks that do not share mutable bindings.
+Each concurrent Natural block has its own step context and no shared model message history.
+Inherited Python objects and host accounting can still be shared; `asyncio.gather` is appropriate when those shared values are safe for concurrent use.
+Tasks capture their selected context when created, including model selection and function-call handlers; awaiting a task elsewhere does not replace that context.
 
 ### Async and sync interoperability
 
@@ -502,7 +504,7 @@ Async functions run concurrently via `asyncio.gather`. Sync functions run sequen
 
 ### Timeout
 
-Enforce a time limit on function execution.
+Set a timeout threshold for a function call; cleanup can extend the total waiting time.
 
 ```py
 from nighthawk.resilience import timeout
@@ -511,7 +513,12 @@ timed_classify = timeout(seconds=30)(classify)
 result = timed_classify(text)
 ```
 
-For async functions, uses `asyncio.timeout` (true cancellation). For sync functions, runs in a background thread -- note that the underlying thread continues after timeout. Also available as an async context manager:
+For async functions, `asyncio.timeout` requests cooperative cancellation.
+Natural notification cleanup is still joined, so cancellation-resistant cleanup can delay the timeout's propagation indefinitely.
+For sync functions, the wrapper runs the function in a `ThreadPoolExecutor`; timeout does not stop the worker, and executor shutdown waits for it before `TimeoutError` reaches the caller.
+The synchronous wrapper does not copy the caller's context variables: a worker executing Natural blocks must establish its own `nh.run()` and host scopes.
+Use async Natural functions with the async timeout form when the caller's scoped controls should propagate normally.
+The async context manager form is:
 
 ```py
 async with timeout(seconds=30):
@@ -520,7 +527,8 @@ async with timeout(seconds=30):
 
 ### Budget
 
-Enforce token or monetary cost limits on wrapped functions. Requires an active `nh.run()` context (the run-scoped `UsageMeter` tracks cumulative usage automatically).
+Check token or monetary thresholds around wrapped function calls using the active run's `UsageMeter`.
+Outside `nh.run()`, the transformer performs no budget checks.
 
 ```py
 from nighthawk.resilience import budget
@@ -529,7 +537,14 @@ safe_classify = budget(tokens=50_000, tokens_per_call=5_000)(classify)
 result = safe_classify(text)
 ```
 
-`tokens` caps cumulative usage across all calls; `tokens_per_call` caps a single call. Both are checked before and after each invocation. When a limit is breached, `BudgetExceededError` is raised -- combine with `fallback` to degrade gracefully:
+`tokens` checks recorded cumulative usage before invocation and after normal return; `tokens_per_call` checks the meter delta after normal return.
+An optional `estimate_usage` can reject predicted over-limit work before invocation, but an estimate does not reserve usage or guarantee the final cost.
+The meter records returned agent-run aggregates, so failed runs can consume unrecorded usage, and concurrent calls sharing a meter can contribute to the same measured delta.
+These checks do not stop requests within an unfinished block or guarantee a strict spending cap.
+For that earlier admission boundary, use [host request observations](runtime-configuration.md#request-usage-and-admission), keeping their accumulator separate from the meter.
+
+When a checked threshold is exceeded, `BudgetExceededError` is raised.
+Combine with `fallback` only when another execution is acceptable after any earlier effects and spending:
 
 ```py
 from nighthawk.resilience import budget, fallback, BudgetExceededError
@@ -590,9 +605,9 @@ Recommended composition order (innermost to outermost):
 
 | Order | Transformer | Why |
 |---|---|---|
-| 1 | `timeout` | Bound each individual call |
-| 2 | `budget` | Cap token or monetary cost |
-| 3 | `vote` | Aggregate multiple bounded calls |
+| 1 | `timeout` | Request cancellation or detect elapsed time; still wait for owned cleanup |
+| 2 | `budget` | Check observed token or monetary thresholds around calls |
+| 3 | `vote` | Aggregate multiple attempts |
 | 4 | `retrying` | Retry the aggregated operation |
 | 5 | `circuit_breaker` | Protect against persistent failure |
 | 6 | `fallback` | Switch to alternative on exhaustion |

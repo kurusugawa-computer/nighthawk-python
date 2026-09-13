@@ -59,7 +59,9 @@ Install Nighthawk and a provider (adjust the extra for your provider):
 pip install nighthawk-python "pydantic-ai-slim[openai]"
 ```
 
-Every Natural function call must happen inside an `nh.run()` context. Without it, Nighthawk raises `NighthawkError: StepExecutor is not set`.
+An active `nh.run()` is required when a Natural block executes or a function's declared model selection resolves.
+Usually wrap the call site as below; an optional function-call handler may instead establish the run after accepting the invocation.
+Decoration, exact definition lookup, and refusal before continuation entry need no run.
 
 ```py
 import nighthawk as nh
@@ -153,7 +155,20 @@ with nh.run(fast_executor):
 - Omission or `nh.UNSET` inherits; ordinary values replace and `[]`/`{}` clear collections.
 - Use `nh.Extend([...])` to append suffix fragments and `nh.Merge({...})` to merge task references by identity.
 - `oversight` and `lifecycle` accept `None` to clear their hooks; other scope fields reject it.
-- Executor replacement precedes full configuration replacement. Managed Model instances retain identity; external agents own their model selection.
+- Executor replacement precedes delegated model selection. Borrowed Model instances retain identity; external agents own their model selection.
+
+### Embedding in a host
+
+- Install `nh.function_call_scope(handler)` to admit a whole Natural function before Python body effects and declared model resolution. Implement `invoke(call, proceed)` with `proceed()` and `invoke_async(call, proceed)` with `await proceed()`. Refuse by raising before proceeding.
+- A continuation starts at most once, in the same Task and thread, while its handler is active. Returning without completing it is `FunctionCallError`; ordinary Python exception handling after starting is allowed.
+- Old aliases enter the current handler. Async functions read the context where their coroutines execute; Tasks use their selected contexts. `nh.function_call_scope(None)` explicitly clears the handler, while `nh.run()` leaves it installed.
+- `nh.get_function_call()` returns the current intercepted call or `None`, without requiring a run. `call_id` and `parent_call_id` identify function invocations; `ExecutionReference.step_execution_id` identifies a single block execution. Keep host execution-unit and request identities separate.
+- Use `nh.get_natural_function_definition(function)` for exact transformation correspondence. It returns the actual original, public wrapper, and transformed body, or `None` for an unrelated wrapper. Standard method descriptors are supported; copied metadata is insufficient. Snapshots retain their callables while held, but the registry does not retain abandoned namespaces. `nh.get_transformed_function()` remains a wrapper-following inspection convenience.
+- `@nh.natural_function(model=...)` and `nh.scope(model=...)` replace only the model. `step_executor_configuration=...` replaces the full configuration, including defaults. Omission or `nh.UNSET` inherits; supplying both is invalid. Declarations are inert until accepted execution.
+- Selection delegates synchronously to the active `ConfigurableStepExecutor.resolve_model_selection`. A host wrapper must preserve itself and its controls; Core never unwraps it. Unsupported executors fail explicitly, and `AgentStepExecutor` subclasses must opt in with their own resolver. Perform asynchronous approval in the handler before proceeding.
+- Model selection preserves scoped meters, capabilities, oversight, lifecycle, task references, and the call handler. Its scope applies before the body and restores the parent before handler exit, including on failure or cancellation. Explicit executor replacement, cleared hooks, and nested runs retain their documented effects.
+
+See [execution boundaries](specification.md#embedded-execution-boundaries) for the complete contract and [the executable example](verification.md#embedded-invocation-and-completion-verification) for credential-free synchronous and asynchronous checks.
 
 ## 4. The standard contract shape
 
@@ -217,7 +232,7 @@ def classify_ticket_structured(text: str) -> TicketClassification:
     return result
 ```
 
-See [Natural blocks: Designing structured output](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/#designing-structured-output) for guidelines on model design.
+See [Natural blocks: Designing structured output](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/#designing-structured-output-models) for guidelines on model design.
 
 ## 5. State boundary and bindings
 
@@ -328,6 +343,16 @@ Async rule:
 - Both sync and async Natural functions can call async binding functions through tools; tool expressions await their results.
 - Only an async Natural function may have a final return expression that produces an awaitable. A sync Natural function rejects that final result with `ExecutionError`.
 - Make the Natural function `async` when it needs an awaitable final return expression, not merely because it uses an async binding function.
+- An ordinary synchronous Python `return coroutine` preserves that exact object without implicit awaiting or closing. Do not close borrowed application coroutines to silence warnings; Core disposes only its own discarded unstarted wrappers.
+
+Completion and accounting rules:
+
+- Function completion includes Python `finally`, explicitly joined children, and Core-owned processing. Intercepted generator and async-generator functions are unsupported. Detached tasks and unjoined application threads are outside the guarantee.
+- `StepCompleted` follows validation and selected assignments, before the containing function necessarily finishes. `StepLifecycle` also reports failures and interruptions, including before preparation completes. Executor return alone proves neither block nor function success. Notification failure propagates without rollback, replay, or a second terminal event.
+- Core joins its notification and synchronous-bridge cleanup. `interruption_delivery_timeout` requests notification cancellation; it does not bound total waiting. Repeated caller interruption preserves ongoing cancellation cleanup and the original interruption, chaining additional cleanup failures. Async callers retain their loop and unrelated tasks.
+- `UsageMeter` is a separate aggregate recorded after an agent run returns, not a live request ledger or proof of successful Python completion. Failed or cancelled runs can consume unrecorded tokens. Do not add its total to host request observations as another charge.
+- For admission within an unfinished block, use Pydantic AI wrapping request capabilities. Keep one host record per visible request, correlated to the function and block; distinguish configured/reported model names, unknown usage, failure, and cancellation. Wrapping hooks can catch `BaseException`; ordinary request-error hooks handle `Exception` only.
+- Refuse the next sequential request after observed usage reaches the host threshold. Two 60-token requests may consume 120 against a threshold of 100; already admitted and concurrent requests may overrun further. SDK retries, HTTP attempts, and coding-agent internal requests may be hidden. This is approximate admission, with no strict advance cost guarantee.
 
 Resilience rule:
 
@@ -399,7 +424,7 @@ Start here:
 
 - [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) -- block anatomy, bindings, functions, binding function design, structured output
 - [Executors](https://kurusugawa-computer.github.io/nighthawk-python/executors/) -- executor selection and configuration basics
-- [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) -- scoping, patching, context limits, and execution identity
+- [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) -- scope composition, model selection, function admission, usage, and execution identity
 - [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) -- outcomes, deny, async, carry, resilience, and common mistakes
 - [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- testing and debugging
 

@@ -47,6 +47,17 @@ See **[Philosophy](philosophy.md)** for the full design rationale.
 - **[Natural blocks](natural-blocks.md)** -- Learn what Natural blocks are: bindings, functions, writing guidelines, and binding function design.
 - **[Executors](executors.md)** -- Choose an execution backend: Pydantic AI provider, coding agent, or custom.
 
+## Embedding in an application
+
+Use an optional function-call handler to refuse work before Python body effects and model resolution, then observe the invocation after its owned work finishes.
+Exact definition lookup identifies Core's original function, public wrapper, and transformed body.
+Model selection delegates through the active executor while preserving scoped controls.
+Function completion, validated block outcomes, and capability-visible model requests have distinct [execution boundaries](specification.md#embedded-execution-boundaries).
+
+The host owns approval, request accounting, budgets, and recovery.
+Core joins its owned notification and bridge cleanup, which may wait indefinitely if cleanup resists cancellation.
+See [model selection and function admission](runtime-configuration.md#model-selection-and-function-admission) and the [credential-free example](verification.md#embedded-invocation-and-completion-verification).
+
 ## Patterns and verification
 
 - **[Patterns](patterns.md)** -- Apply Natural blocks in real workflows: outcomes, deny frontmatter, async, cross-block composition, resilience.
@@ -56,7 +67,7 @@ See **[Philosophy](philosophy.md)** for the full design rationale.
 
 - **[Pydantic AI providers](pydantic-ai-providers.md)** -- Provider-specific installation, model identifiers, credentials, and model settings.
 - **[Coding agent backends](coding-agent-backends.md)** -- Claude Code and Codex backend configuration, skills, and MCP tool exposure.
-- **[Runtime configuration](runtime-configuration.md)** -- Scoping, configuration patching, context limits, and execution identity.
+- **[Runtime configuration](runtime-configuration.md)** -- Scope composition, model selection, function admission, usage, and execution identity.
 
 ## Reference
 

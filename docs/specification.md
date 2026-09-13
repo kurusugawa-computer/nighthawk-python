@@ -90,10 +90,13 @@ Each block starts a fresh model interaction; inherited working values do not inc
 
 - `nighthawk.natural_function`
     - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
-    - Compilation happens at decoration time, and Natural blocks are executed at function call time.
+    - Compilation happens at decoration time; blocks execute when the synchronous body runs or the asynchronous coroutine executes.
+    - Bare and parameterized decorator forms are supported. `model=...` declares model-only selection; `step_executor_configuration=...` declares full configuration replacement. Omission or `UNSET` inherits, and simultaneous selections are invalid.
+    - Declarations are inert until execution. Optional whole-function admission precedes declared selection resolution and body effects; see [embedded execution boundaries](#embedded-execution-boundaries).
     - Note: The decorator requires the function source to be available for inspection.
     - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional. `nh.get_transformed_function(function)` exposes the compiled body sharing the original module globals. It follows outer wrappers and supported method descriptors, requires no run, and raises `TypeError` for invalid inputs or wrapper cycles. Execute through the decorated function to establish runtime context.
     - Instrumentation preserves original defaults without evaluating them again, live closure cells, and defining module globals. Generated helper names avoid application bindings, including names appearing inside Natural text.
+    - `nh.get_natural_function_definition(function)` supplies exact transformation correspondence without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions).
 
 ### 5.2. Configuration
 
@@ -826,6 +829,7 @@ API:
     - Can be used even when no step executor is currently set.
 - `nighthawk.scope(...) -> Iterator[StepExecutor]`
     - Every configurable parameter defaults to `UNSET`; omission and explicit `UNSET` inherit.
+    - `model=...` replaces only the model; `step_executor_configuration=...` replaces the full configuration, including defaults. Supplying both is invalid.
     - Ordinary values replace; empty sequences or mappings clear inherited collections.
     - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
     - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.

@@ -62,12 +62,27 @@ Type validation constrains the result's shape; it does not prove the interpretat
 
 See the **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** for setup details, credentials, and troubleshooting.
 
+## Embedding in an application
+
+An optional `nh.function_call_scope(handler)` lets a host refuse a Natural function before its Python body or declared model resolution runs, and observe its result after Python cleanup and explicitly joined children finish.
+`nh.get_natural_function_definition(function)` identifies the exact original, public wrapper, and transformed body.
+Function calls, validated block outcomes (`StepLifecycle`), and capability-visible model requests are separate observation boundaries.
+
+Declare a child model with `@nh.natural_function(model=...)` or select it lexically with `nh.scope(model=...)`.
+Selection delegates to the active executor and preserves scoped host controls; full configuration replacement remains explicit.
+Hosts can account for observed request usage and refuse subsequent requests, with possible overrun from already admitted work.
+Core waits for its owned notification and bridge cleanup; resistant cleanup can delay completion indefinitely.
+Python continues to own approval, budgets, recovery, and detached application work.
+
+See [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/#model-selection-and-function-admission) for the APIs and [execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) for their guarantees.
+The [embedded execution example](examples/embedded_execution.py) demonstrates synchronous and asynchronous admission, model restoration, request accounting, and cleanup without credentials.
+
 ## Documentation
 
 - **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/)** -- Setup and first example.
 - **[Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/)** -- Block anatomy, bindings, functions, and writing guidelines.
 - **[Executors](https://kurusugawa-computer.github.io/nighthawk-python/executors/)** -- Choose an execution backend.
-- **[Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/)** -- Scoping, patching, context limits, and execution identity.
+- **[Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/)** -- Scope composition, model selection, function admission, usage, and execution identity.
 - **[Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/)** -- Outcomes, async, composition, resilience, and common mistakes.
 - **[Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/)** -- Mock tests, integration tests, and OpenTelemetry tracing.
 - **[Pydantic AI providers](https://kurusugawa-computer.github.io/nighthawk-python/pydantic-ai-providers/)** -- LLM provider configuration.

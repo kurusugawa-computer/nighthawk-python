@@ -2,7 +2,8 @@
 
 > This page assumes you have completed [Executors](executors.md).
 
-This page covers how to configure execution at runtime: scope composition, prompt suffix fragments, context limits, JSON rendering, and execution identity. These settings are independent of executor choice and apply equally to Pydantic AI providers and coding agent backends.
+This page covers scope composition, model selection, function admission, request observation, cleanup, and execution identity, alongside prompt and context settings.
+Scope composition is shared across backends; model-selection support and request visibility depend on the active executor.
 
 ## Scoped overrides with `nh.scope()`
 
@@ -46,6 +47,7 @@ with nh.run(step_executor):
 
 Parameters:
 
+- `model`: replace only the model while preserving other executor configuration fields; cannot be combined with `step_executor_configuration`.
 - `step_executor_configuration`: replace the entire configuration.
 - `step_executor`: replace the step executor entirely.
 - `usage_meter`: replace the `UsageMeter` that steps in this scope record into. See [Usage metering](#usage-metering).
@@ -230,7 +232,12 @@ All getters listed above, including `nh.get_oversight()`, require an active run 
 
 ## Record completed executions
 
-Install `nh.lifecycle.StepLifecycle` to record actual execution endings, including preparation, validation, and return-await failures. The callback runs after generated assignments and can raise a host exception referring to its stored record. Use `Oversight.inspect_operation` to inspect expression execution and `inspect_step_commit` to inspect validated results. All hooks support direct or asynchronous completion.
+Install `nh.lifecycle.StepLifecycle` to record Natural block endings, including preparation, validation, and return-await failures.
+Successful block notification follows generated assignments; the containing Python function may still run more code or fail in its `finally` block.
+Use a [function-call handler](#whole-function-admission) to observe that eventual function outcome.
+The lifecycle callback can raise a host exception referring to its stored record.
+Use `Oversight.inspect_operation` to inspect expression execution and `inspect_step_commit` to inspect validated results.
+All hooks support direct or asynchronous completion.
 
 ```python
 import nighthawk as nh
@@ -251,7 +258,11 @@ with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(record_finished)):
 
 This example is an in-memory history. Durable storage, serialization, and deduplication belong to the host. Callback failures do not roll back assignments or retry execution. See [terminal delivery semantics](specification.md#104-terminal-delivery-and-host-ledgers) for exception chaining, cancellation, and storage failure handling.
 
-For a host ledger, use the executor boundary for admission and execution accounting, `inspect_step_commit` for approval before assignment, and StepLifecycle for terminal recording and exception translation. Correlate them with `execution_reference.step_execution_id`, which is unique per invocation; `source_location` only groups executions of the same source block. Preparation failures may have no admission record.
+For a host ledger, use `FunctionCallHandler` for admission before Python body effects, `inspect_step_commit` for approval before assignment, and `StepLifecycle` for block terminal recording and exception translation.
+The executor boundary covers its own block processing, after earlier Python code and block preparation may already have effects.
+Correlate block records with `execution_reference.step_execution_id`, which is unique per block execution; `source_location` only groups executions of the same source block.
+Use `nh.get_function_call().call_id` when a handler is active to associate blocks and request observations with their enclosing function invocation.
+Preparation failures may have no executor admission record.
 
 If an earlier host boundary already stored a failure and raised its public exception, the lifecycle handler still receives StepFailed. Skip a duplicate append only after verifying that exception refers to the stored event for this same execution, then rethrow the same exception. Core preserves its original cause. Merely returning from the handler results in an ExecutionError wrapper; suppressing all exceptions of the host type would incorrectly omit parent events for failed nested executions.
 
@@ -387,16 +398,23 @@ Each `nh.run()` generates an `ExecutionReference` with a unique `run_id` (trace 
 execution_reference = nh.get_execution_reference()
 execution_reference.run_id  # trace root -- stable across nested scopes
 execution_reference.scope_id  # current scope -- changes with each nh.scope()
-execution_reference.step_execution_id  # Unique per invocation; None outside a step
+execution_reference.step_execution_id  # Unique per block execution; None outside a step
 execution_reference.parent_step_execution_id  # Active parent step, when present
 execution_reference.source_location  # Source module and line; None outside a step
 ```
 
 Use `run_id` to correlate distributed agent processes in logs and traces. Use `scope_id` to identify the current logical execution context. See [Specification Section 10](specification.md#10-runtime-scoping) for the full specification and [Verification: observability](verification.md#observability) for tracing integration.
 
+An intercepted function has its own `FunctionCall.call_id` and `parent_call_id`, independent of block and run identities.
+`nh.get_function_call()` returns the current intercepted call or `None`, including outside a run; function admission can precede run creation.
+
 ## Usage metering
 
-Each `nh.run()` creates a `UsageMeter` that accumulates LLM token usage across all Natural block executions in the run. The meter is thread-safe and updated automatically after each step. Pass `nh.run(step_executor, usage_meter=meter)` to supply your own meter, and `nh.scope(usage_meter=meter)` to meter a nested section in isolation: steps inside the scope record into the scoped meter only, and totals are not forwarded to the enclosing meter.
+Each `nh.run()` creates a thread-safe `UsageMeter`.
+`AgentStepExecutor` records available aggregate usage after its agent run returns without a recorded operation failure, before candidate resolution, Python writeback, and block notification finish.
+An agent run that fails or is cancelled before that point may have consumed tokens without adding them to the meter; a metered run can still fail later validation or delivery.
+Custom executors own their metering integration.
+Pass `nh.run(step_executor, usage_meter=meter)` to supply your own meter, and `nh.scope(usage_meter=meter)` to meter a nested section in isolation: steps inside the scope record into the scoped meter only, and totals are not forwarded to the enclosing meter.
 
 ```py
 with nh.run(step_executor):
@@ -405,11 +423,9 @@ with nh.run(step_executor):
     meter.snapshot()  # independent RunUsage copy of current totals
 ```
 
-`get_usage_meter()` requires an active `nh.run()` context. Use the meter to inspect cumulative cost at decision points -- for example, to choose a cheaper model mid-pipeline when spend is high. For automatic budget enforcement, see [Patterns: Budget](patterns.md#budget).
-
-## Next steps
-
-Continue to **[Patterns](patterns.md)** for outcomes, error handling, async, cross-block composition, resilience, and common mistakes.
+`get_usage_meter()` requires an active `nh.run()` context.
+Use it for aggregate decisions between calls; [Patterns: Budget](patterns.md#budget) describes the function-level budget transformer.
+For admission between requests within an unfinished block, use [request usage and admission](#request-usage-and-admission).
 
 ## Model selection and function admission
 
@@ -437,18 +453,48 @@ Selection is applied before the Python body, and parent settings are restored be
 The same meter, capabilities, oversight, lifecycle, task references, and call handler survive model-only selection.
 Explicit replacement, clearing hooks, or starting another run remains application-controlled.
 
+### Whole-function admission
+
 A host installs `nh.function_call_scope(handler)` independently of an executor run.
 Its `invoke(call, proceed)` method calls `proceed()` synchronously; `invoke_async(call, proceed)` awaits `proceed()`.
 Refuse by raising before continuation entry.
 Returning without completing the continuation is a contract error.
+The continuation may start once, only during its handler's active invocation and in the same Task and thread.
+A handler can establish `nh.run(executor)` before proceeding; no run is required to refuse the call.
+Previously created aliases still enter the handler.
+An async function uses the context in which its coroutine executes, and a Task uses its own selected context.
+`nh.function_call_scope(None)` clears the handler explicitly; nested `nh.run()` contexts do not clear it.
+Completion includes Python `finally` processing and explicitly joined children; intercepted generators and async generators are unsupported.
+A synchronous Python return of a coroutine preserves that exact object without awaiting or closing it; DSL tool expressions retain their separate auto-await behavior.
+
+`nh.get_natural_function_definition(function)` returns the exact registered wrapper's original function, public wrapper, and transformed body, or `None` for an unrelated callable.
+Standard method descriptors are normalized, but copied attributes and unrelated outer wrappers are not registration evidence.
+The registry does not retain abandoned namespaces; a returned snapshot intentionally retains its callable objects while the host holds it.
+Use `nh.get_transformed_function()` when conventional outer-wrapper traversal is desired instead.
 Call identities and exact definitions are described in the [boundary contract](specification.md#embedded-execution-boundaries).
 The executable [embedded execution example](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/examples/embedded_execution.py) demonstrates both invocation modes without credentials.
+
+### Request usage and admission
 
 For request budgets, observe available usage in a Pydantic AI wrapping capability and refuse the next request when accumulated observations reach your threshold.
 Two requests totaling 120 may be accepted against 100 before the next sequential request is refused; concurrent requests may overrun further.
 Keep these host request records separate from the `UsageMeter` aggregate to avoid double counting.
 Missing reported model names remain unknown; absent usage may already be normalized by the dependency and is not proof of zero cost.
+Keep one host accounting record per visible request, correlated to the block and intercepted function, and record failure and cancellation separately from success.
+Pydantic AI wrapping hooks can observe `BaseException`, including cancellation; ordinary request-error hooks handle `Exception` only.
+SDK retries, HTTP attempts, and coding-agent internal requests may be hidden within one capability-visible request.
+Backend-specific facilities are needed for stricter observation; Core does not infer missing requests or usage.
+
+### Completion and interruption
 
 `StepLifecycle.interruption_delivery_timeout` now requests cancellation of an interrupted notification rather than setting an overall completion deadline.
-Core waits for notification cleanup, including after repeated caller cancellation.
+Core waits for started, operation-finished, and terminal notification cleanup, including after repeated caller cancellation.
+The synchronous bridge delivers caller interruption cooperatively and joins its worker and owned loop shutdown before propagating it.
+Existing cancellation cleanup is preserved, and the first interruption retains its identity with additional cleanup failures chained to it.
+Async callers retain ownership of their event loops and unrelated tasks.
 Resistant cleanup can block indefinitely; the host still owns detached application work and durable recording.
+An executor return, a completed block, and function completion remain separate facts; failure never implies rollback or permission to replay.
+
+## Next steps
+
+Continue to **[Patterns](patterns.md)** for outcomes, error handling, async, cross-block composition, resilience, and common mistakes.

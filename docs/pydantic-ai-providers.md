@@ -10,6 +10,11 @@ import nighthawk as nh
 configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
 ```
 
+The configuration also accepts a borrowed Pydantic AI `Model` instance; the host retains its client lifetime.
+For per-function or lexical model-only selection that preserves other configuration fields and scoped controls, see [model selection and function admission](runtime-configuration.md#model-selection-and-function-admission).
+Request capabilities observe the Pydantic AI request boundary; provider SDK retries or individual HTTP attempts can remain hidden inside it.
+See [request usage and admission](runtime-configuration.md#request-usage-and-admission) before treating observations as a transport ledger or strict budget cap.
+
 The default model is `openai-responses:gpt-5.6-luna`. Recommended model for quality: `openai-responses:gpt-5.6-terra`.
 
 ## Pydantic AI providers

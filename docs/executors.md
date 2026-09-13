@@ -37,14 +37,18 @@ configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-lun
 step_executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
 ```
 
-The `model` field accepts a `provider:model` format identifier. The default model is `openai-responses:gpt-5.6-luna`.
+The `model` field accepts a `provider:model` identifier or a borrowed Pydantic AI `Model` instance whose client lifetime remains with the host.
+The default model is `openai-responses:gpt-5.6-luna`.
 
-All Natural functions must be called inside a `with nh.run(step_executor):` context:
+An active `nh.run(step_executor)` is required when a Natural block executes or a function's declared model selection resolves:
 
 ```py
 with nh.run(step_executor):
     result = classify(text)
 ```
+
+A [function-call handler](runtime-configuration.md#whole-function-admission) may establish that run after accepting the invocation and before calling its continuation.
+Definition lookup, refusal before continuation entry, and functions with neither an executed block nor a model declaration need no run.
 
 ## Mixing executors
 
@@ -62,14 +66,6 @@ executor = nh.AgentStepExecutor.from_agent(agent=agent)
 ```
 
 For full control, implement `AsyncStepExecutor` directly. See [Specification Section 14.3](specification.md#143-custom-backends) for the protocol shape and [API Reference](api.md#base) for the full protocol definition.
-
-## Next steps
-
-- **[Pydantic AI providers](pydantic-ai-providers.md)** -- Installation, model identifiers, credentials, and model settings for each Pydantic AI provider.
-- **[Coding agent backends](coding-agent-backends.md)** -- Backend-specific settings, skills, MCP tool exposure, and working directory configuration.
-- **[For coding agents](for-coding-agents.md)** -- Condensed, decision-oriented operational guide for coding agents (LLMs) building Python projects with Nighthawk.
-
-After choosing and configuring your executor, continue to **[Runtime configuration](runtime-configuration.md)** for scoping, patching, context limits, and execution identity.
 
 ## Preserving host controls during model selection
 
@@ -90,3 +86,11 @@ Provider-backed requests are observable at the Pydantic AI capability layer.
 SDK retries or separate HTTP attempts inside one visible request may be hidden.
 Codex and Claude Code backends can perform internal model requests that are not exposed as individual Core request observations.
 Strict per-transport-attempt accounting therefore requires a backend-specific facility with stronger evidence; Core does not manufacture those records.
+
+## Next steps
+
+- **[Pydantic AI providers](pydantic-ai-providers.md)** -- Installation, model identifiers, credentials, and model settings for each Pydantic AI provider.
+- **[Coding agent backends](coding-agent-backends.md)** -- Backend-specific settings, skills, MCP tool exposure, and working directory configuration.
+- **[For coding agents](for-coding-agents.md)** -- Condensed, decision-oriented operational guide for coding agents (LLMs) building Python projects with Nighthawk.
+
+Continue to **[Runtime configuration](runtime-configuration.md)** for scope composition, model selection, function admission, and request accounting.

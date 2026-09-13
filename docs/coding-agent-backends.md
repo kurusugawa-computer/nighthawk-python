@@ -33,6 +33,11 @@ Backend-specific settings are configured via the `model_settings` field of `Step
 
 All three backends provide capabilities not available with Pydantic AI providers. See the [capability matrix](executors.md#capability-matrix) for a summary.
 
+The [embedded execution boundaries](specification.md#embedded-execution-boundaries) also apply to these backends.
+Function admission and scoped model selection can retain host controls, while block completion remains distinct from the eventual Python function outcome.
+A Pydantic AI request capability observes the backend's exposed request, which can contain multiple internal coding-agent model calls.
+It cannot supply per-internal-request admission or complete transport accounting; stricter visibility requires a backend-specific facility.
+
 - **Skill execution:** The CLI loads and executes skills from its standard skill directories. See [Skills](#skills) below.
 - **MCP tool exposure:** Nighthawk tools are exposed to the CLI via an embedded MCP server started automatically.
 - **Callable discoverability:** Same rules as [Natural blocks](natural-blocks.md#functions-and-discoverability).

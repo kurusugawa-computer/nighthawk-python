@@ -64,9 +64,10 @@ class _TimeoutHandle:
     interrupt a running thread from the same thread. Use the decorator
     form instead.
 
-    For sync functions wrapped via the decorator form, the function runs
-    in a background thread. Note that the underlying thread continues
-    running after timeout, only the caller is unblocked.
+    For sync functions wrapped via the decorator form, the function runs in a background thread.
+    Timeout does not stop it; executor shutdown waits for the worker before the error reaches the caller.
+    Caller context variables are not copied into that worker.
+    Async cancellation is cooperative and may wait indefinitely for cleanup.
     """
 
     def __init__(self, *, seconds: float) -> None:
@@ -110,18 +111,15 @@ def timeout(*, seconds: float) -> _TimeoutHandle:
         async with timeout(seconds=30):
             await slow_operation()
 
-    For sync functions, the function runs in a background thread via
-    :class:`concurrent.futures.ThreadPoolExecutor`. Note that the
-    underlying thread continues running after timeout, only the caller
-    is unblocked with a :class:`TimeoutError`. This is a documented
-    limitation of the thread-based approach, chosen for cross-platform
-    compatibility.
+    For sync functions, the function runs in a background thread via :class:`concurrent.futures.ThreadPoolExecutor`.
+    Timeout does not stop that worker, and executor shutdown waits for it before propagating :class:`TimeoutError`.
+    Caller context variables are not copied; Natural execution in the worker must establish its own run and host scopes.
 
-    For async functions, uses :func:`asyncio.timeout` which provides true
-    cancellation.
+    For async functions, :func:`asyncio.timeout` requests cooperative cancellation in the caller's context.
+    Owned Natural notification cleanup is still joined, so resistant cleanup can delay propagation indefinitely.
 
     Args:
-        seconds: Maximum execution time in seconds.
+        seconds: Timeout threshold in seconds, excluding any additional waiting for cleanup or worker completion.
 
     Returns:
         A handle usable as decorator factory or async context manager.

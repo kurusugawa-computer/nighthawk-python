@@ -56,7 +56,9 @@ Set `OPENAI_API_KEY` for OpenAI models (used in the first example above). For ot
 
 **`NighthawkError: StepExecutor is not set`**
 
-Natural functions must be called inside a `with nh.run(step_executor):` context. Ensure your call site is wrapped in a run context.
+A Natural block or a function's declared model selection needs an active `nh.run(step_executor)`.
+Wrap the call site in that context, or let a [function-call handler](runtime-configuration.md#whole-function-admission) establish it before proceeding.
+Decoration, definition lookup, and host refusal before proceeding do not require a run.
 
 **`OPENAI_API_KEY` not set**
 
