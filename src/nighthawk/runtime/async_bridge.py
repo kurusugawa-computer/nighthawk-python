@@ -27,7 +27,15 @@ class _BridgeState:
             self.cancellation_requested = True
             if self.loop is not None and self.task is not None and not self.cancellation_delivered:
                 self.cancellation_delivered = True
-                self.loop.call_soon_threadsafe(self.task.cancel)
+                task = self.task
+
+                def cancel_unless_unwinding() -> None:
+                    # Check on the owning loop: independent cancellation can enter
+                    # cleanup between publication and delivery of our request.
+                    if not task.done() and not task.cancelling():
+                        task.cancel()
+
+                self.loop.call_soon_threadsafe(cancel_unless_unwinding)
 
 
 async def _shutdown_loop_work() -> None:

@@ -313,6 +313,7 @@ returned_after_notification_cleanup=True
 `tests/natural/test_function_definition.py` verifies exact provenance and collection of abandoned namespaces.
 `tests/natural/test_function_call.py` verifies context timing, parent identities, guarded continuations, and synchronous coroutine-return identity.
 `tests/runtime/test_async_bridge.py` exercises interruption races in independently watched subprocesses.
+It also verifies that caller interruption preserves a root task's existing cancellation cleanup in direct and worker execution, including inspectable cleanup failures.
 Lifecycle regressions release resistant cleanup explicitly and require it to finish before return.
 `tests/runtime/test_model_selection.py` and `test_request_observation.py` cover preserving resolution, approximate admission, failure, cancellation, and concurrent overrun.
 Expression, assignment, and tool ownership tests distinguish Core-created await wrappers from retained application coroutines.

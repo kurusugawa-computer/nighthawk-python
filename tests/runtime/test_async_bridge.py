@@ -31,6 +31,9 @@ from nighthawk.runtime.async_bridge import _BridgeState, run_coroutine_synchrono
         "bootstrap_interrupted",
         "async_generator_error",
         "async_generator_error_after_interruption",
+        "self_cancelled_worker",
+        "self_cancelled_direct",
+        "self_cancelled_cleanup_error",
     ],
 )
 def test_bridge_completion_in_independent_process(scenario: str) -> None:
@@ -42,6 +45,9 @@ def test_bridge_completion_in_independent_process(scenario: str) -> None:
 
 
 def exercise(scenario: str) -> None:
+    if scenario.startswith("self_cancelled_"):
+        exercise_existing_cancellation(scenario)
+        return
     original = KeyboardInterrupt("first interruption")
     existing_cause = ValueError("existing cause")
     original.__cause__ = existing_cause
@@ -283,6 +289,80 @@ def exercise(scenario: str) -> None:
     else:
         asyncio.run(invoke())
     assert context.get() == "outside"
+
+
+def exercise_existing_cancellation(scenario: str) -> None:
+    original = KeyboardInterrupt("caller interruption during existing cancellation cleanup")
+    existing_cause = ValueError("existing cause")
+    original.__cause__ = existing_cause
+    cleanup_error = RuntimeError("cleanup failure")
+    cleanup, interrupted, release, finished, returned = (threading.Event() for _ in range(5))
+    controller_failures: list[BaseException] = []
+
+    def interrupt() -> None:
+        interrupted.set()
+        raise original
+
+    async def work() -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        task.cancel()
+        try:
+            await asyncio.sleep(0)
+        finally:
+            cleanup.set()
+            if scenario == "self_cancelled_direct":
+                asyncio.get_running_loop().call_soon(interrupt)
+            while not release.is_set():
+                await asyncio.sleep(0.001)
+            finished.set()
+            if scenario == "self_cancelled_cleanup_error":
+                raise cleanup_error
+
+    def control() -> None:
+        try:
+            assert cleanup.wait(5)
+            assert interrupted.wait(5)
+            assert not returned.wait(0.1), "Bridge returned before cancellation cleanup was released"
+            assert not finished.is_set()
+        except BaseException as exception:
+            controller_failures.append(exception)
+        finally:
+            release.set()
+
+    def interrupted_join(self: threading.Thread, timeout: float | None = None) -> None:
+        if not interrupted.is_set():
+            assert cleanup.wait(5)
+            interrupt()
+        # The bridge must use its completion signal even if join returns early.
+
+    async def invoke() -> None:
+        with patch.object(threading.Thread, "join", interrupted_join):
+            run_coroutine_synchronously(work)
+
+    controller = threading.Thread(target=control)
+    controller.start()
+    try:
+        try:
+            if scenario == "self_cancelled_direct":
+                run_coroutine_synchronously(work)
+            else:
+                asyncio.run(invoke())
+        finally:
+            returned.set()
+    except KeyboardInterrupt as exception:
+        assert exception is original
+        assert isinstance(exception.__cause__, BaseExceptionGroup)
+        assert existing_cause in exception.__cause__.exceptions
+        if scenario == "self_cancelled_cleanup_error":
+            assert cleanup_error in exception.__cause__.exceptions
+    else:
+        raise AssertionError("Caller interruption was lost")
+    finally:
+        controller.join()
+    if controller_failures:
+        raise controller_failures[0]
+    assert finished.is_set()
 
 
 if __name__ == "__main__":

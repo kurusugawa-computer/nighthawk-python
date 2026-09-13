@@ -988,6 +988,7 @@ Asynchronous generator shutdown errors are propagated or chained to the original
 A cancellation-resistant handler can delay completion indefinitely; neither timeout nor thread status proves completion.
 Repeated caller interruptions do not abandon cleanup or repeatedly cancel the same finalizer.
 If a notification is already handling its own cancellation, caller interruption or the delivery timeout joins that cleanup without cancelling it again.
+The bridge likewise preserves existing cancellation cleanup in its root task, checking on that task's event loop when delivering the caller's cancellation request.
 An asynchronous caller likewise waits for owned notifications, while retaining ownership of its loop and unrelated tasks.
 The first interruption retains its identity and preexisting cause; additional cleanup failures are explicitly chained, using a `BaseExceptionGroup` when necessary.
 Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translated into ordinary host execution failures.
