@@ -7,7 +7,8 @@ from typing import Any
 import pytest
 
 import nighthawk as nh
-from examples.embedded_execution import PreservingExecutor, RecordingHandler, RequestObserver, deterministic_model
+from examples.embedded_execution import PreservingExecutor, RecordingHandler, RequestObserver, block, deterministic_model
+from nighthawk.runtime.scoping import _current_task_references
 from tests.support.executors import StubExecutor
 
 
@@ -168,3 +169,75 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
         assert nh.get_step_executor() is executor
     selection = handler.calls[0].model_selection
     assert selection is not None and selection.configuration is replacement
+
+
+def test_concurrent_model_selection_and_actual_cancellation_restore_each_context() -> None:
+    async def execute() -> None:
+        first, second, third = (deterministic_model(name) for name in ("A", "B", "C"))
+        observer = RequestObserver(threshold=1000)
+        handler = RecordingHandler()
+        executor = PreservingExecutor(
+            nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=first)),
+            {"allowed:B": second, "allowed:C": third},
+            observer,
+        )
+        child_entered, sibling_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        selected: list[object] = []
+
+        @nh.natural_function
+        def inherited_prefix() -> None:
+            active = nh.get_step_executor()
+            assert isinstance(active, PreservingExecutor)
+            assert _current_task_references()["policy"] is observer
+            selected.append(active.executor.configuration.model)
+            block()
+
+        @nh.natural_function(model="allowed:B")
+        async def child() -> None:
+            inherited_prefix()
+            child_entered.set()
+            try:
+                await release.wait()
+            finally:
+                inherited_prefix()
+
+        alias = child
+
+        async def invoke_child() -> None:
+            try:
+                await alias()
+            finally:
+                assert nh.get_step_executor() is executor
+                assert nh.get_function_call() is None
+
+        async def sibling() -> None:
+            with nh.scope(model="allowed:C"):
+                inherited_prefix()
+                sibling_entered.set()
+                await release.wait()
+                inherited_prefix()
+            assert nh.get_step_executor() is executor
+
+        with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer], task_references={"policy": observer}):
+            child_task, sibling_task = asyncio.create_task(invoke_child()), asyncio.create_task(sibling())
+            try:
+                await child_entered.wait()
+                await sibling_entered.wait()
+                assert nh.get_step_executor() is executor
+                child_task.cancel("cancel selected child")
+                with pytest.raises(asyncio.CancelledError, match="cancel selected child"):
+                    await child_task
+                assert not sibling_task.done()
+            finally:
+                release.set()
+                await asyncio.gather(child_task, sibling_task, return_exceptions=True)
+            sibling_task.result()
+            inherited_prefix()
+            assert nh.get_step_executor() is executor
+        assert selected == [second, third, second, third, first]
+        assert [record.configured_model for record in observer.records] == ["B", "C", "B", "C", "A"]
+        assert observer.observed_tokens == 300
+        assert len({record.request_id for record in observer.records}) == 5
+        assert all(record.call_id and record.step_execution_id for record in observer.records)
+
+    asyncio.run(execute())

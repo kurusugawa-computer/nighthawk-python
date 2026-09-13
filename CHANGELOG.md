@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native model batches also order argument validation before each corresponding body, preventing later validators from running ahead of an earlier rejection. A scoped Pydantic AI 2.37 compatibility adapter preserves its completion strategies; the dependency range is bounded to that minor series.
 - Coding-agent callbacks use the request's event loop and captured scope; process and transport failures preserve their originating exceptions.
 - Interrupted asynchronous notifications and synchronous bridge shutdown wait for actual owned cleanup completion. `interruption_delivery_timeout` requests notification cancellation but no longer bounds total cleanup time, including handlers that suppress cancellation.
+- Bridge startup interruption joins already launched workers, and asynchronous generator shutdown failures remain inspectable in the propagated exception chain.
 - Rejected synchronous DSL returns preserve borrowed application coroutines; only Core-created unstarted await wrappers are disposed.
 
 ### Removed

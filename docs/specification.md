@@ -983,6 +983,8 @@ On StepCompleted delivery failure, completed assignments remain visible and the 
 An interrupted asynchronous notification receives a shielded attempt until `StepLifecycle.interruption_delivery_timeout`, which requests cancellation.
 Core then waits until the notification and its cancellation cleanup actually finish.
 The synchronous bridge propagates caller interruption cooperatively and joins worker processing, notifications, asynchronous generators, and owned loop shutdown before returning or raising.
+This includes interruption while `Thread.start()` waits for an already launched worker to initialize.
+Asynchronous generator shutdown errors are propagated or chained to the original interruption, including when asyncio reports them through its loop exception handler.
 A cancellation-resistant handler can delay completion indefinitely; neither timeout nor thread status proves completion.
 Repeated caller interruptions do not abandon cleanup or repeatedly cancel the same finalizer.
 An asynchronous caller likewise waits for owned notifications, while retaining ownership of its loop and unrelated tasks.

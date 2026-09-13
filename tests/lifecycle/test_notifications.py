@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import faulthandler
+import subprocess
+import sys
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -203,6 +207,24 @@ def test_sync_bridge_reports_a_foreign_event_loop_resource() -> None:
 @pytest.mark.parametrize("inside_event_loop", [False, True])
 @pytest.mark.parametrize("operation_notification", [False, True])
 def test_interrupted_sync_notification_joins_cleanup_before_return(inside_event_loop: bool, operation_notification: bool) -> None:
+    _run_completion_scenario("synchronous", str(inside_event_loop), str(operation_notification))
+
+
+def _run_completion_scenario(*arguments: str) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "tests.lifecycle.test_notifications", *arguments],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Task was destroyed" not in result.stderr
+    assert "was never awaited" not in result.stderr
+    assert "Exception in thread" not in result.stderr
+
+
+def _exercise_interrupted_sync_notification(inside_event_loop: bool, operation_notification: bool) -> None:
     original = asyncio.CancelledError("original interruption")
     notifications: list[StepFinished | OperationFinished] = []
     cleanup_tasks: list[asyncio.Task[object]] = []
@@ -284,6 +306,10 @@ def test_interrupted_sync_notification_joins_cleanup_before_return(inside_event_
 
 @pytest.mark.parametrize("boundary", ["started", "finished", "operation"])
 def test_repeated_async_cancellation_joins_owned_notification(boundary: str) -> None:
+    _run_completion_scenario("asynchronous", boundary)
+
+
+def _exercise_repeated_async_cancellation(boundary: str) -> None:
     async def execute() -> None:
         entered, cleanup, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
         effects: list[str] = []
@@ -335,3 +361,14 @@ def test_repeated_async_cancellation_joins_owned_notification(boundary: str) -> 
             assert len(original) == 1
 
     asyncio.run(execute())
+
+
+if __name__ == "__main__":
+    faulthandler.dump_traceback_later(10)
+    try:
+        if sys.argv[1] == "synchronous":
+            _exercise_interrupted_sync_notification(sys.argv[2] == "True", sys.argv[3] == "True")
+        else:
+            _exercise_repeated_async_cancellation(sys.argv[2])
+    finally:
+        faulthandler.cancel_dump_traceback_later()

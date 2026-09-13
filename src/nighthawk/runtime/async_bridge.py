@@ -41,11 +41,28 @@ async def _shutdown_loop_work() -> None:
         outcomes = await asyncio.gather(*pending, return_exceptions=True)
         failures.extend(outcome for outcome in outcomes if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError))
     loop = asyncio.get_running_loop()
-    for shutdown in (loop.shutdown_asyncgens, loop.shutdown_default_executor):
-        try:
-            await shutdown()
-        except BaseException as exception:
+    previous_handler = loop.get_exception_handler()
+
+    def record_shutdown_error(loop: asyncio.AbstractEventLoop, error_name_to_value: dict[str, Any]) -> None:
+        exception = error_name_to_value.get("exception")
+        if isinstance(exception, BaseException):
             failures.append(exception)
+        elif previous_handler is not None:
+            previous_handler(loop, error_name_to_value)
+        else:
+            loop.default_exception_handler(error_name_to_value)
+
+    # shutdown_asyncgens reports finalizer errors to the loop instead of raising.
+    # Retain those errors in the bridge outcome, alongside task/executor failures.
+    loop.set_exception_handler(record_shutdown_error)
+    try:
+        for shutdown in (loop.shutdown_asyncgens, loop.shutdown_default_executor):
+            try:
+                await shutdown()
+            except BaseException as exception:
+                failures.append(exception)
+    finally:
+        loop.set_exception_handler(previous_handler)
     if failures:
         raise BaseExceptionGroup("Errors shutting down bridge-owned work", failures)
 
@@ -130,11 +147,22 @@ def run_coroutine_synchronously(coroutine_call: Callable[[], Coroutine[Any, Any,
                 state.completed.set()
 
         thread = threading.Thread(target=worker, name="nighthawk-sync-bridge")
-        thread.start()
         primary: BaseException | None = None
+        try:
+            thread.start()
+        except BaseException as exception:
+            # CPython publishes the native handle before Python bootstrap sets
+            # Thread.ident. start() can be interrupted while waiting for bootstrap.
+            # The handle was renamed in 3.14; do not infer completion from it.
+            handle = getattr(thread, "_os_thread_handle", getattr(thread, "_handle", None))
+            if thread.ident is None and not getattr(handle, "ident", 0):
+                raise
+            primary = exception
+            state.request_cancellation()
         while not state.completed.is_set():
             try:
-                thread.join(0.05)
+                if thread.ident is not None:
+                    thread.join(0.05)
                 if not state.completed.is_set():
                     state.completed.wait(0.01)
             except BaseException as exception:
