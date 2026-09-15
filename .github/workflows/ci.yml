@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
 
       # setup-uv publishes no floating major tag since v8, so pin an exact release.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.13"
           # Same dependency set and cache key as "test (3.13)". Only that job
@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       # Sole writer of the per-Python-version dependency cache.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -78,7 +78,7 @@ jobs:
 
       # "uv build" only resolves the build backend, so a cache entry would add
       # no measurable benefit while colliding with the docs workflow key.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: false
 
