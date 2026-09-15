@@ -59,7 +59,7 @@ See the **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/qu
 
 Hosts can admit whole function calls, select models without losing scoped controls, and observe block outcomes and model usage.
 See [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) for usage and [execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) for the guarantees.
-The [embedded execution example](examples/embedded_execution.py) runs without credentials.
+The [runtime configuration guide](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/#whole-function-admission) includes executable host-integration examples that run without credentials.
 
 ## Documentation
 

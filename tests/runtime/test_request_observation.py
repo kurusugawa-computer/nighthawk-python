@@ -9,7 +9,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
-from examples.embedded_execution import PreservingExecutor, RecordingHandler, RequestObserver, RequestRefusedError, block, child, deterministic_model
+from tests.support.host_controls import PreservingExecutor, RecordingHandler, RequestObserver, RequestRefusedError, block, child, deterministic_model
 
 
 def test_nested_model_changes_account_once_before_next_admission() -> None:

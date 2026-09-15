@@ -7,9 +7,9 @@ from typing import Any
 import pytest
 
 import nighthawk as nh
-from examples.embedded_execution import PreservingExecutor, RecordingHandler, RequestObserver, block, deterministic_model
 from nighthawk.runtime.scoping import _current_task_references
 from tests.support.executors import StubExecutor
+from tests.support.host_controls import PreservingExecutor, RecordingHandler, RequestObserver, block, deterministic_model
 
 
 def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytest.MonkeyPatch) -> None:

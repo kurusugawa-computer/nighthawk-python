@@ -21,6 +21,9 @@ Choose a test owner by the behavior that would break, including when a test call
 Keep a helper beside its sole consumer; move it to `support/` when several test modules need it.
 Do not import another `test_*.py` module for helpers.
 Use `conftest.py` for fixtures that pytest injects, and let pytest own collection and execution.
+User-facing example code lives in docs and is executed by extraction tests in `tests/docs/`.
+Runtime test fixtures live in `tests/support/`; they must not import the published examples.
+Set `NIGHTHAWK_DISTRIBUTION_PYTHON` to a fresh environment's Python executable when running `tests/docs/test_runtime_examples.py` to verify the installed wheel with those same documented examples.
 
 Retain failure cases that enforce current boundaries, such as rejected effects, invalid outputs, scope isolation, and cancellation.
 Remove checks whose only purpose is to remember deleted APIs, obsolete paths, exact documentation prose, or behavior already covered by the same owner.

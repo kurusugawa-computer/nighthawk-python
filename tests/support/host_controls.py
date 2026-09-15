@@ -1,11 +1,9 @@
-"""Core-only host integration; run directly or from an installed wheel."""
+"""Host-policy fixtures for runtime and provider integration tests."""
 
 from __future__ import annotations
 
-import asyncio
 import threading
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from dataclasses import dataclass
 from typing import Literal
 
@@ -18,7 +16,6 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepFinished, StepLifecycle
 from nighthawk.runtime import StepCandidate, StepRequest
 
 
@@ -39,13 +36,13 @@ class RequestObservation:
 
 
 class RequestObserver(AbstractCapability[nh.StepContext]):
-    """Example approximate policy; one record owner, separate from UsageMeter.
+    """Test accounting policy with records separate from UsageMeter.
 
-    Pydantic AI collapses absent usage to zeros. Treat an all-zero total as
-    unknown conservatively; an adapter with stronger evidence may distinguish it.
+    Pydantic AI collapses absent usage to zeros.
+    Treat an all-zero total as unknown conservatively.
     """
 
-    def __init__(self, threshold: int = 100, host_unit: str = "example") -> None:
+    def __init__(self, threshold: int = 100, host_unit: str = "test") -> None:
         super().__init__()
         self.threshold = threshold
         self.host_unit = host_unit
@@ -168,90 +165,3 @@ async def child() -> None:
     """natural
     Complete this child block without changing anything.
     """
-
-
-async def demonstrate_cleanup() -> bool:
-    entered, cleanup, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
-    completed: list[str] = []
-
-    async def notification(event: StepFinished) -> None:
-        entered.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            cleanup.set()
-            await release.wait()
-            completed.append("notification")
-
-    @nh.natural_function
-    async def interrupted() -> None:
-        """natural
-        Complete this block without changing anything.
-        """
-
-    with nh.scope(lifecycle=StepLifecycle(on_step_finished=notification)):
-        task = asyncio.create_task(interrupted())
-        try:
-            await entered.wait()
-            task.cancel()
-            await cleanup.wait()
-            assert not task.done()
-        finally:
-            release.set()
-        with suppress(asyncio.CancelledError):
-            await task
-    assert completed == ["notification"]
-    return True
-
-
-def main() -> None:
-    model_name_to_model = {"allowed:A": deterministic_model("A"), "allowed:B": deterministic_model("B")}
-    handler = RecordingHandler()
-    observer = RequestObserver(threshold=10_000)
-    executor = PreservingExecutor(
-        nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=model_name_to_model["allowed:A"])),
-        model_name_to_model,
-        observer,
-    )
-    effects: list[str] = []
-
-    @nh.natural_function(model="allowed:B")
-    def refused() -> None:
-        effects.append("entered")
-
-    with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer]):
-        handler.refuse = True
-        with suppress(PermissionError):
-            refused()
-        handler.refuse = False
-        assert not effects
-        print(f"refused_body_effects={len(effects)}")
-        block()
-        asyncio.run(child())
-        block()
-        models = [record.configured_model for record in observer.records]
-        assert models == ["A", "B", "A"]
-        print("models=" + ",".join(models))
-        completed = asyncio.run(demonstrate_cleanup())
-
-    budget = RequestObserver()
-    executor = PreservingExecutor(executor.executor, model_name_to_model, budget)
-    with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[budget]):
-        block()
-        asyncio.run(child())
-        try:
-            block()
-        except nh.ExecutionError as exception:
-            assert isinstance(exception.__cause__, RequestRefusedError)
-        else:
-            raise AssertionError("Third request was not refused")
-    assert budget.observed_tokens == 120
-    assert [record.status for record in budget.records] == ["succeeded", "succeeded", "refused"]
-    assert all(record.call_id and record.step_execution_id for record in budget.records)
-    print(f"observed_tokens={budget.observed_tokens}")
-    print("next_request_refused=True")
-    print(f"returned_after_notification_cleanup={completed}")
-
-
-if __name__ == "__main__":
-    main()

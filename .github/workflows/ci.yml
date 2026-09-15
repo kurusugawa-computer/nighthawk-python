@@ -76,14 +76,22 @@ jobs:
         with:
           persist-credentials: false
 
-      # "uv build" only resolves the build backend, so a cache entry would add
-      # no measurable benefit while colliding with the docs workflow key.
+      # Keep packaging and its fresh installation check independent of the
+      # source test job's dependency cache.
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: false
 
       - name: Build sdist and wheel
         run: uv build
+
+      - name: Verify documented examples against the installed wheel
+        run: |
+          uv sync --all-groups
+          uv venv "$RUNNER_TEMP/nighthawk-distribution"
+          uv pip install --python "$RUNNER_TEMP/nighthawk-distribution/bin/python" dist/*.whl
+          NIGHTHAWK_DISTRIBUTION_PYTHON="$RUNNER_TEMP/nighthawk-distribution/bin/python" \
+            uv run pytest -q tests/docs/test_runtime_examples.py
 
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v6

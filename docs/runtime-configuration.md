@@ -349,6 +349,98 @@ Selection is applied before the Python body, and parent settings are restored be
 The same meter, capabilities, oversight, lifecycle, task references, and call handler survive model-only selection.
 Explicit replacement, clearing hooks, or starting another run remains application-controlled.
 
+### Preserve host model policy
+
+A host wrapper must return another wrapper when resolving a model selection.
+Returning the underlying executor would discard the host's policy for subsequent selections.
+This complete example permits two model objects and exercises both synchronous and asynchronous execution.
+`FunctionModel` simulates responses without credentials; it verifies routing rather than judgment quality.
+Save the block as `model_selection.py` and run it with Python after installing Nighthawk.
+
+<!-- runnable-example:model_selection -->
+```py
+from __future__ import annotations
+
+import asyncio
+
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+import nighthawk as nh
+from nighthawk.runtime import StepCandidate, StepRequest
+
+
+class AllowedModels:
+    def __init__(self, executor: nh.AgentStepExecutor, model_name_to_model: dict[str, FunctionModel]) -> None:
+        self.executor = executor
+        self.model_name_to_model = model_name_to_model
+
+    def resolve_model_selection(self, selection: nh.ModelSelection) -> AllowedModels:
+        configuration = selection.apply(self.executor.configuration)
+        model = configuration.model
+        if isinstance(model, str):
+            if model not in self.model_name_to_model:
+                raise PermissionError("Model is not allowed")
+            configuration = configuration.model_copy(update={"model": self.model_name_to_model[model]})
+        elif not any(model is allowed for allowed in self.model_name_to_model.values()):
+            raise PermissionError("Borrowed model is not allowed")
+        executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+        return AllowedModels(executor, self.model_name_to_model)
+
+    def run_step(self, *, request: StepRequest) -> StepCandidate:
+        return self.executor.run_step(request=request)
+
+    async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+        return await self.executor.run_step_async(request=request)
+
+
+requested_models: list[str] = []
+
+
+def simulated_model(name: str) -> FunctionModel:
+    async def respond(messages: list[ModelMessage], information: AgentInfo) -> ModelResponse:
+        requested_models.append(name)
+        return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}})])
+
+    return FunctionModel(respond, model_name=name)
+
+
+@nh.natural_function
+def work() -> None:
+    """natural
+    Complete this simulated task.
+    """
+
+
+@nh.natural_function(model="allowed:B")
+async def child() -> None:
+    """natural
+    Complete this simulated child task.
+    """
+
+
+model_name_to_model = {"allowed:A": simulated_model("A"), "allowed:B": simulated_model("B")}
+executor = AllowedModels(
+    nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=model_name_to_model["allowed:A"])),
+    model_name_to_model,
+)
+with nh.run(executor):
+    work()
+    asyncio.run(child())
+    assert nh.get_step_executor() is executor
+    work()
+    try:
+        with nh.scope(model="unapproved:model"):
+            raise AssertionError("Unapproved model should have been refused")
+    except PermissionError:
+        pass
+    assert nh.get_step_executor() is executor
+
+assert requested_models == ["A", "B", "A"]
+print("models=A,B,A; unapproved_model_refused=True")
+```
+<!-- /runnable-example:model_selection -->
+
 ### Whole-function admission
 
 A host installs `nh.function_call_scope(handler)` independently of an executor run.
@@ -360,7 +452,90 @@ A handler can establish `nh.run(executor)` before proceeding; no run is required
 Function completion includes Python `finally` processing and explicitly joined children.
 Generators are unsupported at this boundary.
 For context timing, exact definition lookup, and coroutine ownership, see [execution boundaries](specification.md#embedded-execution-boundaries).
-The [embedded execution example](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/examples/embedded_execution.py) demonstrates synchronous and asynchronous handlers without credentials.
+
+This complete example refuses an invocation before body effects or model resolution, then accepts synchronous and asynchronous judgments.
+The host records a successful function completion only after the continuation returns.
+`ScriptedExecutor` supplies fixed summaries so the example needs no provider credentials.
+Save the block as `function_admission.py` and run it with Python.
+
+<!-- runnable-example:function_admission -->
+```py
+import asyncio
+from collections.abc import Awaitable, Callable
+
+import nighthawk as nh
+from nighthawk.testing import ScriptedExecutor, pass_response
+
+
+class Admission:
+    def __init__(self) -> None:
+        self.allowed = False
+        self.completed_calls: list[str] = []
+
+    def check(self) -> None:
+        if not self.allowed:
+            raise PermissionError("Host refused invocation")
+
+    def invoke(self, call: nh.FunctionCall, proceed: Callable[[], object]) -> object:
+        self.check()
+        result = proceed()
+        self.completed_calls.append(call.call_id)
+        return result
+
+    async def invoke_async(self, call: nh.FunctionCall, proceed: Callable[[], Awaitable[object]]) -> object:
+        self.check()
+        result = await proceed()
+        self.completed_calls.append(call.call_id)
+        return result
+
+
+body_effects: list[str] = []
+
+
+@nh.natural_function(model="unconfigured:model")
+def refused_work() -> None:
+    body_effects.append("refused body")
+
+
+@nh.natural_function
+def summarize(text: str) -> str:
+    summary: str = ""
+    """natural
+    Summarize <text> in <:summary>.
+    """
+    return summary
+
+
+@nh.natural_function
+async def summarize_async(text: str) -> str:
+    summary: str = ""
+    """natural
+    Summarize <text> in <:summary>.
+    """
+    return summary
+
+
+admission = Admission()
+with nh.function_call_scope(admission):
+    try:
+        refused_work()  # Refusal needs no run and precedes model resolution.
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("Invocation should have been refused")
+    assert body_effects == []
+    assert admission.completed_calls == []
+
+    admission.allowed = True
+    executor = ScriptedExecutor(responses=[pass_response(summary="First"), pass_response(summary="Second")])
+    with nh.run(executor):
+        assert summarize("First document") == "First"
+        assert asyncio.run(summarize_async("Second document")) == "Second"
+
+assert len(set(admission.completed_calls)) == 2
+print("refused_body_effects=0; completed_calls=2")
+```
+<!-- /runnable-example:function_admission -->
 
 ### Request usage and admission
 
@@ -373,12 +548,157 @@ Pydantic AI wrapping hooks can observe `BaseException`, including cancellation; 
 SDK retries, HTTP attempts, and coding-agent internal requests may be hidden within one capability-visible request.
 Backend-specific facilities are needed for stricter observation; Core does not infer missing requests or usage.
 
+The following complete example focuses on admission within one unfinished block.
+Its host accumulator counts only usage reported by completed requests; it does not estimate unknown usage or maintain a durable request ledger.
+Failures can consume unreported tokens, and a lock around the check and accounting does not reserve tokens for concurrent requests.
+For durable records, apply the correlation and outcome rules above in a host-owned capability.
+
+`FunctionModel` simulates repeated tool requests at 60 tokens each.
+The host admits two requests, observes 120 tokens, and refuses the third even though the containing block has not finished.
+Save this block as `request_budget.py` and run it with Python; no credentials are required.
+
+<!-- runnable-example:request_budget -->
+```py
+import threading
+
+from pydantic_ai import RunContext
+from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.capabilities.abstract import WrapModelRequestHandler
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
+from pydantic_ai.models import ModelRequestContext
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.usage import RequestUsage
+
+import nighthawk as nh
+
+
+class RequestBudgetExceededError(RuntimeError):
+    pass
+
+
+class RequestBudget(AbstractCapability[nh.StepContext]):
+    def __init__(self, threshold: int) -> None:
+        super().__init__()
+        self.threshold = threshold
+        self.observed_tokens = 0
+        self.lock = threading.Lock()
+
+    # Keep the dependency's keyword-compatible parameter name.
+    async def wrap_model_request(
+        self, ctx: RunContext[nh.StepContext], *, request_context: ModelRequestContext, handler: WrapModelRequestHandler
+    ) -> ModelResponse:
+        with self.lock:
+            if self.observed_tokens >= self.threshold:
+                raise RequestBudgetExceededError("Observed request budget reached")
+        response = await handler(request_context)
+        with self.lock:
+            self.observed_tokens += response.usage.total_tokens
+        return response
+
+
+request_count = 0
+
+
+async def simulated_response(messages: list[ModelMessage], information: AgentInfo) -> ModelResponse:
+    global request_count
+    request_count += 1
+    # Ask for another tool operation so this block needs another model request.
+    return ModelResponse(
+        parts=[ToolCallPart("nh_eval", {"expression": "1"}, str(request_count))],
+        usage=RequestUsage(input_tokens=50, output_tokens=10),
+    )
+
+
+@nh.natural_function
+def investigate() -> None:
+    """natural
+    Investigate until the task is complete.
+    """
+
+
+budget = RequestBudget(threshold=100)
+executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(model=FunctionModel(simulated_response)),
+)
+with nh.run(executor), nh.scope(capabilities=[budget]):
+    try:
+        investigate()
+    except nh.ExecutionError as exception:
+        assert isinstance(exception.__cause__, RequestBudgetExceededError)
+    else:
+        raise AssertionError("Third request should have been refused")
+    # The unfinished agent run never returned an aggregate to this meter.
+    assert nh.get_usage_meter().total_tokens == 0
+
+assert request_count == 2
+assert budget.observed_tokens == 120
+print("observed_tokens=120; next_request_refused=True; aggregate_tokens=0")
+```
+<!-- /runnable-example:request_budget -->
+
 ### Completion and interruption
 
 `StepLifecycle.interruption_delivery_timeout` requests notification cancellation.
 Core joins owned notification and synchronous-bridge cleanup before returning or propagating interruption; resistant cleanup can wait indefinitely.
 The host owns detached work, event loops supplied to async calls, and durable records.
 See [interruption and delivery](specification.md#104-terminal-delivery-and-host-ledgers) for exception ordering and cleanup guarantees.
+
+This complete example holds notification cleanup open until the host explicitly releases it.
+The cancelled function remains unfinished while that cleanup is pending.
+Save the block as `notification_cleanup.py` and run it with Python; its executor uses a fixed response without credentials.
+Automated checks should run the file in a subprocess with an independent timeout so a cleanup regression cannot hang the test runner.
+
+<!-- runnable-example:notification_cleanup -->
+```py
+import asyncio
+from contextlib import suppress
+
+import nighthawk as nh
+from nighthawk.lifecycle import StepFinished, StepLifecycle
+from nighthawk.testing import ScriptedExecutor, pass_response
+
+
+@nh.natural_function
+async def work() -> None:
+    """natural
+    Complete this simulated task.
+    """
+
+
+async def demonstrate_cleanup() -> None:
+    entered = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    completed: list[str] = []
+
+    async def record_finished(event: StepFinished) -> None:
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleanup_started.set()
+            await release_cleanup.wait()
+            completed.append("notification")
+
+    executor = ScriptedExecutor(responses=[pass_response()])
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=record_finished)):
+        task = asyncio.create_task(work())
+        try:
+            await entered.wait()
+            task.cancel()
+            await cleanup_started.wait()
+            assert not task.done()
+        finally:
+            release_cleanup.set()
+            with suppress(asyncio.CancelledError):
+                await task
+    assert completed == ["notification"]
+
+
+asyncio.run(demonstrate_cleanup())
+print("returned_after_notification_cleanup=True")
+```
+<!-- /runnable-example:notification_cleanup -->
 
 ## Next steps
 

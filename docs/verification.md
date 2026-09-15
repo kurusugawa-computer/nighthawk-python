@@ -213,22 +213,42 @@ Use [lifecycle recording](runtime-configuration.md#record-completed-executions) 
 
 ## Embedded invocation and completion verification
 
-Run the deterministic example with `uv run python examples/embedded_execution.py`.
-It needs no provider credentials and asserts synchronous/asynchronous invocation, refusal before effects, model restoration, request accounting, and notification cleanup completion.
-Expected output is:
+The runtime configuration guide contains complete, independently executable examples for:
 
-```text
-refused_body_effects=0
-models=A,B,A
-observed_tokens=120
-next_request_refused=True
-returned_after_notification_cleanup=True
+- [Whole-function admission](runtime-configuration.md#whole-function-admission): refusal before body effects or model resolution, followed by accepted synchronous and asynchronous calls.
+- [Preserving host model policy](runtime-configuration.md#preserve-host-model-policy): model selection retains its wrapper and restores the parent executor.
+- [Request usage and admission](runtime-configuration.md#request-usage-and-admission): a host accumulator refuses a request within an unfinished block, independently of aggregate metering.
+- [Completion and interruption](runtime-configuration.md#completion-and-interruption): a cancelled function waits for owned notification cleanup.
+
+These examples use scripted or simulated model responses and need no credentials.
+`tests/docs/test_runtime_examples.py` extracts the marked code blocks directly from the guide, writes real Python files for Natural source inspection, and executes each in a subprocess with a 30-second timeout.
+Assertions in the published code check the contract; the tests also verify the reported result.
+Run them with:
+
+```sh
+uv run pytest -q tests/docs/test_runtime_examples.py
 ```
 
 Test cancellation with a controlled cleanup release and an independent process timeout, so regressions cannot hang the suite.
-Verify refusal before effects, nested model restoration, and request accounting independently of real-provider responses.
-
-For distribution validation, build a wheel, install it in a fresh environment outside the source tree, copy the example there, and run the environment's Python with `-I` and no `PYTHONPATH`.
-Verify `nighthawk.__file__` points to that environment's installed package.
-A source-tree test alone is not installed-distribution evidence.
+The runtime and lifecycle suites cover additional failure and concurrency cases using test-owned fixtures in `tests/support/`.
 Real-provider tests remain opt-in supplementary evidence; they cannot establish race or cleanup guarantees.
+
+### Validate an installed distribution
+
+Use the same extracted examples to check a wheel in a fresh environment outside the source tree.
+From the repository root, run:
+
+```sh
+validation_directory=$(mktemp -d)
+uv build --wheel --out-dir "$validation_directory/dist"
+uv venv "$validation_directory/environment"
+uv pip install --python "$validation_directory/environment/bin/python" "$validation_directory"/dist/*.whl
+NIGHTHAWK_DISTRIBUTION_PYTHON="$validation_directory/environment/bin/python" \
+    uv run pytest -q tests/docs/test_runtime_examples.py
+```
+
+The test runner extracts code from the documentation, while the fresh environment executes it with `python -I` from a temporary directory.
+It verifies that `nighthawk.__file__` belongs to that environment rather than an editable source checkout.
+The child processes need only the wheel and its declared dependencies; they do not import the repository's test helpers.
+CI runs this check after building the distribution.
+A source-tree test alone is not installed-distribution evidence.

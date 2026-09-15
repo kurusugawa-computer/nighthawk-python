@@ -87,7 +87,7 @@ def test_provided_tools_smoke():
 
 @pytest.mark.asyncio
 async def test_embedded_selection_and_request_observation():
-    from examples.embedded_execution import RecordingHandler, RequestObserver
+    from tests.support.host_controls import RecordingHandler, RequestObserver
 
     requires_openai_integration()
     observer = RequestObserver(threshold=100_000)
