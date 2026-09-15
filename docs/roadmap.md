@@ -2,6 +2,35 @@
 
 These are exploratory directions.
 The [specification](specification.md) defines supported behavior; Python owns orchestration, and hosts own isolation and durable records.
+The [philosophy](philosophy.md) guides design decisions, and [design drivers](design-drivers.md) record the application needs behind them.
+
+## Composition and application evidence
+
+### Semantic checks composed with execution hooks
+
+Develop small examples that combine Natural findings, deterministic checks, and an application policy at an execution boundary.
+Start with existing function composition and oversight hooks.
+Investigate nested Natural checks, inherited policy, unintended hook recursion, rejection, and checker failures before proposing new runtime primitives.
+Distinguish applying a check from establishing the correctness of its judgment.
+
+### Evidence from representative applications
+
+Use the [Markdown knowledge-management scenario](design-drivers.md#markdown-knowledge-management) to identify concrete composition gaps.
+Keep its detailed design, knowledge collection, and operational rules in application-owned sources.
+Bring back small examples, findings, and contract requirements, with an explicit verification status.
+Compare proposed abstractions with research, business, and simulator-backed workflows to assess generality.
+Evaluation and simulation systems remain connected through application functions and libraries.
+
+### Human and agent authorship
+
+Evaluate whether signatures, descriptions, context, results, and failure reports let humans and agents compose and revise programs correctly.
+Assess representative tasks and errors rather than readability alone.
+
+### Development tooling as an application
+
+Explore semantic checks for Core documentation and development workflows using Nighthawk functions.
+Assess false positives and missed violations before adopting them in the development process.
+Treat development automation and public library features as separate decisions.
 
 ## Prompt and context
 

@@ -9,9 +9,10 @@
 <img src="https://github.com/kurusugawa-computer/nighthawk-python/raw/main/docs/assets/nighthawk_logo-128x128.png" alt="nighthawk-logo" width="128px" margin="10px"></img>
 </div>
 
-Nighthawk is a Python library where Python controls flow and LLMs or coding agents reason within constrained Natural blocks.
+Nighthawk is a Python library that makes natural-language judgment composable with ordinary Python functions.
 
-Use Natural blocks for interpretation, classification, and other judgments; keep computation, control flow, and recovery in Python.
+Use Natural blocks for interpretation, classification, and other judgments; combine actions, constraints, and verification through Python functions and existing libraries.
+Python owns the surrounding control flow, state, and recovery.
 The same typed boundaries support provider-backed LLM calls and coding-agent executions.
 
 ## Installation
@@ -68,7 +69,7 @@ The [runtime configuration guide](https://kurusugawa-computer.github.io/nighthaw
 - [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) and [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- Compose, test, and debug workflows.
 - [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) and [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- Runtime contracts and public interfaces.
 - [For coding agents](https://kurusugawa-computer.github.io/nighthawk-python/for-coding-agents/) -- A compact operational guide.
-- [Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) -- Design rationale.
+- [Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) and [Design drivers](https://kurusugawa-computer.github.io/nighthawk-python/design-drivers/) -- Principles, application needs, and Core responsibility.
 
 ## Development & Contributing
 

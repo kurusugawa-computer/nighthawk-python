@@ -10,6 +10,10 @@ Nighthawk embeds Natural blocks in ordinary Python functions.
 Each block invokes an LLM or coding agent with current Python values and returns through an explicit contract.
 Python owns the surrounding control flow, state, and recovery.
 
+Compose Natural and ordinary Python functions for actions, constraints, evaluation, and feedback using existing libraries where they fit.
+Humans and agents should be able to understand the functions' intent, inputs, outputs, effects, and failures.
+When contributing to Nighthawk Core, use [Design drivers](design-drivers.md) to separate general execution needs from application-specific rules and development tooling.
+
 Before implementing a feature, identify what requires interpretation and what can be guaranteed by explicit rules:
 
 | Design question | Nighthawk approach |

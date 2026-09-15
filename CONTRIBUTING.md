@@ -47,6 +47,13 @@ uv run pytest -q       # quiet output
 
 Test ownership and helper conventions are documented in [tests/README.md](tests/README.md).
 
+### Design and application evidence
+
+Use [Philosophy](docs/philosophy.md) for design principles and [Specification](docs/specification.md) for supported runtime contracts.
+[Design drivers](docs/design-drivers.md) defines which application information belongs in this workspace and how to distinguish conceptual scenarios from verified behavior.
+When proposing Core changes, show the application composition that exposes the general execution need.
+Nighthawk-based development checks are an application of the library; adopting a local check does not make it a public feature or a requirement for library users.
+
 ### Integration tests
 
 The full setup command installs the OpenAI provider development dependency.

@@ -35,6 +35,13 @@ A Python 3.13+ library embedding a "Natural" DSL inside Python functions, execut
 
 Natural DSL sources and included markdown are trusted, repository-managed assets. Do not wire untrusted user input into Natural blocks or template preprocessing.
 
+### Design references
+
+- Read [Philosophy](docs/philosophy.md) when making architectural decisions about function composition, Python integration, human/agent authorship, or Core responsibility.
+- Read [Design drivers](docs/design-drivers.md) when using application requirements to justify Core changes or deciding which information belongs in this workspace.
+- Use [Specification](docs/specification.md) for supported behavior and [Roadmap](docs/roadmap.md) for exploratory directions; application scenarios do not establish runtime guarantees.
+- Treat Nighthawk-based development tooling as an application; its presence here does not make it a public library feature.
+
 ### Repository layout
 
 - `src/nighthawk/`: Library package.

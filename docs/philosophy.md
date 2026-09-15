@@ -1,126 +1,154 @@
 # Philosophy
 
-Nighthawk is built around one constraint: Python owns the control flow, and the LLM works inside explicit typed boundaries.
+Nighthawk makes natural-language judgment composable with ordinary Python functions.
+Developers express intent and judgment criteria in Natural blocks, then combine them with computation, state, actions, constraints, and verification through Python functions and existing libraries.
+The aim is to expand the work that programs can carry out autonomously while keeping their results and effects understandable and assessable.
 
-The host decides when reasoning happens, how context is presented, and how results and failures are handled.
-Natural blocks supply judgment using Python values and inherited task context.
-This division supports small classifications and autonomous agent tasks within the same execution model.
+This philosophy guides future design.
+The [specification](specification.md) defines supported behavior; [design drivers](design-drivers.md) connect application needs to Core design questions, and the [roadmap](roadmap.md) records exploratory work.
+
+## Function composition as the foundation
+
+Natural functions participate in ordinary Python calls.
+A function can retrieve information, interpret it, propose an action, inspect a proposal, simulate consequences, request approval, apply a change, or evaluate the result.
+Natural supplies the judgments that depend on meaning and context; Python supplies explicit procedures and integrates the libraries appropriate to the application.
+
+Actions, constraints, and evaluators are all candidates for composition.
+For example, a Natural function can assess a proposed change against written rules, return findings as Python values, and let a Python function decide whether to accept it or request revision.
+A hook can invoke that composition at the relevant execution boundary.
+The application defines the rules and the consequences of a finding.
+
+Start with functions and existing libraries when designing a new capability.
+Introduce a Core primitive when that composition exposes a general execution requirement that ordinary application code cannot adequately implement.
+Harness engineering is an application of this foundation: assembling intent, capabilities, constraints, environments, and feedback into an executable program.
+Business workflows, research, knowledge management, and equipment control can use the same foundation with different domain libraries.
+Code generation is optional.
+
+Composition requires understandable behavior as well as compatible types.
+Execution order, shared state, effects, failures, and completion determine whether two functions can be combined appropriately.
+Retrying an effectful function can duplicate an operation; changing the order of validation and execution can change what is permitted.
+These consequences must remain visible to the developer.
+
+## Python structure and delegated judgment
+
+Python owns the control flow and defines the execution structure: calls, state, permitted control results, validation, concurrency, and recovery.
+Natural can interpret evidence, choose helpers, investigate a problem, and select an allowed result within that structure.
+The host decides where judgment is needed and which conditions surround it.
+
+This supports both predetermined procedures and work whose next action depends on a model's judgment.
+A single Natural block may carry out a small classification or delegate a substantial investigation to a coding agent.
+Choose boundaries where inputs, authority, acceptance conditions, or recovery policy need to be understood separately.
+The application composes judgment, action, observation, and continuation conditions to establish the desired autonomy.
+
+Natural functions also compose with Python concurrency, queues, and service calls.
+The host coordinates communication and merging, including any shared mutations.
+Filesystem and process isolation belong to the host or backend.
+
+## Humans and agents as authors
+
+Humans and AI agents should be able to read, write, review, and improve Nighthawk programs and their supporting knowledge.
+Use meaningful function names, signatures, type annotations, and descriptions so both can understand the available operations and their intent.
+Make execution results and failure reasons useful to the next reader or caller.
+
+Natural source and Python code can be maintained alongside trusted knowledge, task procedures, and evaluation criteria.
+Applications choose their storage and authoring conventions.
+For example, a Markdown knowledge system can organize knowledge and operating rules together while explicitly distinguishing reference material from executable instructions.
+Nighthawk's [knowledge-management design driver](design-drivers.md#markdown-knowledge-management) explores this application without prescribing its document format.
+
+## Constraints and feedback
+
+Each mechanism contributes a different kind of assurance:
+
+| Mechanism | Contribution | Limit |
+|---|---|---|
+| Natural-language instruction | Communicates intent, context, and judgment criteria | Compliance depends on interpretation and execution. |
+| Python check or admission hook | Applies a condition at a defined execution boundary | Coverage depends on which operations pass through that boundary. |
+| Type validation | Validates the values accepted at the boundary | A valid value can still represent an incorrect judgment. |
+| Test or evaluator | Assesses observed behavior against selected criteria | Evidence is limited by the cases and the evaluator's accuracy. |
+| Simulator | Provides an environment for trials and consequence assessment | Conclusions depend on how well it represents the relevant real conditions. |
+
+A semantic linter can return findings that a Python hook uses to gate an operation.
+Applying that decision consistently does not establish that the semantic judgment is correct.
+Applications choose the evaluator, treatment of uncertainty, and acceptance policy.
+
+Feedback is part of the work: propose, inspect or try, observe, then revise, accept, or stop under application-defined conditions.
+Prefer observable results and effects to an agent's assertion that a task is complete.
+Preserve evidence relating the evaluated proposal to the action actually applied.
+Evaluators and simulators can be ordinary functions or external services connected through Python; Core need not implement each evaluation system.
+
+Evaluate the composition against the application's needs.
+Deterministic tests verify runtime and host behavior; real-model evaluations assess judgment quality.
+Track semantic success and incorrect or duplicate effects before optimizing cost, latency, or call count.
+Reassess model-specific guidance and orchestration as capabilities change.
+See [Verification](verification.md).
+
+## A minimal, balanced Core
+
+Core provides the execution semantics needed to combine Natural and Python reliably.
+Its responsibilities include value transfer, type and control-result validation, state and failure behavior, completion, and the intervention and observation boundaries needed for composition.
+Domain-specific actions, policies, and environments belong in application libraries and hosts.
+
+| Layer | Responsibility |
+|---|---|
+| Nighthawk Core | Natural execution, environments, value transfer, runtime contracts, and execution hooks. |
+| Reusable libraries | Composable behaviors such as resilience, evaluation, approval, retrieval, and proposal checks. |
+| Application and environment | Domain rules, concrete operations, durable state, permissions, isolation, simulation, and recovery policy. |
+
+These are responsibility boundaries, not a requirement that each layer be a separate distribution.
+Nighthawk already includes resilience function transformers; application libraries can supply further compositions.
+
+Evaluate a proposed Core capability against four criteria:
+
+1. It serves distinct applications through a common execution need.
+2. Ordinary functions or external libraries cannot adequately provide the required behavior.
+3. Its meaning and guarantee can be explained clearly.
+4. Applications that do not use it incur little conceptual or configuration burden.
+
+Minimality concerns the total burden on users, adapters, and maintainers as well as the size of Core.
+Provide usable connection points and verified examples for responsibilities assigned to the host.
+The [workspace information policy](design-drivers.md#workspace-information-policy) keeps application evidence available without making application-specific rules part of Core.
 
 ## Execution model
 
-Nighthawk embeds Natural blocks inside ordinary Python functions. Each block has a boundary:
+Nighthawk embeds Natural blocks inside ordinary Python functions:
 
 - Read bindings (`<name>`) identify required values and prioritize their presentation; they are not an access allowlist.
-- Write bindings (`<:name>`) pass results back out.
-- Type annotations on write bindings guide what the LLM should produce.
-- Pydantic validates committed write bindings at step finalization.
+- Write bindings (`<:name>`) declare output slots, with annotations defining their value contracts.
+- Pydantic validates committed output bindings at step finalization.
 - Binding functions let the LLM call Python functions during execution.
+- Python syntax and deny frontmatter bound the permitted control results.
 
-Python controls sequencing: loops, conditionals, error handling, retries, fallback, logging, and merge logic. Each Natural block executes with a fresh prompt and no implicit message history carried across blocks.
+For example, Natural can interpret mixed representations of numbers and call a Python helper to calculate their average.
+Python performs the arithmetic, and the output annotation validates the returned value as a `float`.
+The [Quickstart](quickstart.md) provides a complete example.
 
-```py
-def python_average(numbers: list[float]) -> float:
-    return sum(numbers) / len(numbers)
+Each block starts a fresh model interaction with trusted Natural text, Python values, inherited working state, and scoped configuration.
+Model transcripts are not implicitly carried across blocks.
+Inherited context reduces argument plumbing but introduces contextual dependencies; prefer explicit parameters for essential inputs and inheritance for intentionally shared task policy.
+Shared objects retain their identity and can carry mutations between calls.
 
+Binding functions expose compact Python signatures and execute in the host process.
+MCP connects cross-process capabilities; CLI tools connect existing commands.
+Choose the interface that fits the operation and its validation needs.
+[Coding agent backends](coding-agent-backends.md) provide autonomous execution through the same output boundary, with backend-specific capabilities and visibility.
 
-@nh.natural_function
-def calculate_average(numbers: list[object]) -> float:
-    result: float = 0.0
-    """natural
-    Map each element of <numbers> to the number it represents,
-    then compute <:result> by calling <python_average> with the mapped list.
-    """
-    return result
-
-
-calculate_average([1, "2", "three", "cuatro", "五"])  # 3.0
-```
-
-Binding functions appear as compact Python signatures that guide composition.
-Pydantic validates output bindings at finalization: a `Literal["positive", "negative", "neutral"]` result must belong to that set, though validation cannot establish the judgment's factual accuracy.
-
-[Coding agent backends](coding-agent-backends.md) apply the same output boundary to an autonomous execution that can inspect files, run commands, and invoke skills.
-Each block receives a fresh prompt built from trusted Natural text, Python values, inherited working state, and scoped configuration.
-Shared objects can carry mutations between calls; model transcripts are not inherited.
-
-## Design landscape
-
-Nighthawk sits between two common approaches: orchestration frameworks and literate-programming-style harnesses.
-
-### Orchestration frameworks
-
-Frameworks such as LangGraph, CrewAI, and AutoGen put orchestration into a graph or agent runtime. The graph runtime executes developer-defined routing; in agentic configurations, the LLM may participate in tool choice or routing. Contracts are enforced through framework-managed schema, guardrails, routing conditions, and graph state.
-
-This is a good fit when multi-agent coordination is the core product, when conversation history is central, or when the application wants a dedicated graph runtime.
-
-### Literate-programming-style harnesses
-
-Agent skills, instruction files, and similar systems express orchestration in natural language with embedded code snippets for strict procedures. They are useful for teaching an agent how to operate inside a project, but their state boundaries are usually conventional rather than typed.
-
-A prompt can ask an agent to store a result, but the surrounding application still needs an explicit contract for receiving and validating it.
-Nighthawk expresses that transfer with typed output bindings.
-
-### Nighthawk
-
-Nighthawk keeps orchestration in Python. State lives in Python variables and crosses block boundaries through bindings. Contracts are expressed through Python types and enforced through runtime validation, structured outcomes, deny frontmatter, and explicit block boundaries.
-
-| | Orchestration frameworks | Literate harnesses | Nighthawk |
-|---|---|---|---|
-| Control | Graph or agent runtime | Natural language instructions | Python control flow |
-| State | Graph state, message history | Prompt narrative | Python values and declared output bindings |
-| Cross-step context | Often implicit | Often implicit | Python values, inherited working state, scoped task injection |
-| Debugging | Framework-specific tooling | Prompt inspection | Python debugger, pytest, tracing |
-| Constraint model | Guardrails, schemas, routing conditions | Natural language conventions | Type validation, deny frontmatter, structured outcomes, scoped oversight |
-
-Contextual inheritance reduces argument plumbing but makes some dependencies implicit.
-Prefer explicit parameters for essential inputs and inheritance for intentionally shared task policy.
-Joined children inherit parent associations; mutable objects retain their shared identity.
-
-## Design consequences
-
-Reliability depends on the contract around a judgment as well as the model and prompt: what context is available, what outputs are accepted, and how failures recover.
-Whether a particular design works is an empirical question for the application's [tests](verification.md).
-
-### Resilience as composable functions
-
-Retry, fallback, voting, timeout, budget, and circuit-breaker policies compose as ordinary Python function transformers.
-The host chooses the retry boundary, exception handling, logging, and recovery policy.
-See [Patterns](patterns.md#resilience-patterns) for examples.
-
-### Scoped execution contexts
-
-Configuration follows Python control flow through context variables.
-Hosts can admit whole function calls, select child models through preserving executor wrappers, and observe block or request outcomes at the appropriate boundary.
-Core restores context and joins owned work; the application owns approval, accounting, and recovery.
-See [Runtime configuration](runtime-configuration.md).
-
-### Tool exposure efficiency
-
-Python-local helpers need only a signature in the prompt and execute in the host process.
-MCP suits cross-process or cross-language integrations; CLI tools suit capabilities already exposed as commands.
-Choose the interface that matches the operation and its validation needs.
-
-| Interface | Best fit | Composition | Boundary |
-|---|---|---|---|
-| Binding function | Python-local helper | Python values and calls | Python execution with validated writeback |
-| MCP | Cross-process capability | Protocol messages | Tool schemas and backend policy |
-| CLI | Existing command-line tool | Shell arguments and output | Process I/O and operating-system permissions |
-
-### Multi-agent coordination without a framework
-
-Natural functions compose with ordinary Python concurrency, queues, or service calls.
-The host coordinates communication and merging; each block has its own working assignments.
-Shared mutations require application coordination, while filesystem and process isolation belong to the host or backend.
-See the [carry pattern](patterns.md#the-carry-pattern) for deliberate shared state.
+[Scoped configuration](runtime-configuration.md) follows Python control flow.
+Hosts can admit whole function calls, select models through preserving executor wrappers, inspect operations and resolved results, and observe available execution outcomes.
+[Resilience functions](patterns.md#resilience-patterns) compose retry, fallback, voting, timeout, budget, and circuit-breaker policies with explicit effect and recovery decisions.
 
 ## Trust and safety boundaries
 
 Natural source, imported markdown, and prompt fragments define executable program structure and must be trusted, repository-managed assets.
 Pass user input as binding values rather than interpolating it into that structure.
+An application's use of Markdown for both knowledge and rules must preserve this distinction.
 
 Typed bindings validate name writeback; they do not sandbox arbitrary instructions or make a block transactional.
 Helper calls, object mutations, validators, and external operations can have effects before finalization.
 The host owns approval, durable records, compensation, and retry decisions.
+
+Scoped hooks are configurable and can be cleared; backend-internal operations may not be visible through Nighthawk's boundaries.
+Applications requiring non-bypassable controls must establish them through their host and execution environment.
+Core does not promise comprehensive mediation of arbitrary agent behavior.
 
 Core waits for its owned work, including cancellation cleanup, before reporting completion.
 That wait may be indefinite; it neither rolls back effects nor joins detached application work.
@@ -128,20 +156,17 @@ Coding-agent permissions and operating-system isolation govern what the backend 
 
 ## Tradeoffs
 
-The boundary-centric design has real costs:
-
-- **Python lock-in.** Binding functions, type annotations, scopes, and resilience transformers are Python constructs. Nighthawk does not offer a language-neutral orchestration protocol.
-- **Per-invocation cost.** Every Natural block invocation calls an LLM or launches an agent execution. Deterministic work should stay in Python.
-- **Manual orchestration burden.** Branching, retry policy, merge logic, recovery, and cancellation remain user-code responsibilities rather than graph-runtime responsibilities.
-- **Integration tests are essential.** Mock tests verify Python logic around Natural blocks. Real LLM behavior requires integration tests against the provider and model you will use. See [Verification](verification.md).
-- **API design discipline.** Binding functions are only as useful as their names, signatures, type annotations, and docstring intent.
-- **Backend-dependent isolation.** Nighthawk validates what crosses back into Python, but backend sandboxes control what an autonomous agent may do while executing.
+- **Python commitment.** Functions, annotations, scopes, and composition use Python and its ecosystem; Nighthawk offers no language-neutral orchestration protocol.
+- **Inference cost.** Each production Natural block invocation delegates judgment to an LLM or agent execution; keep explicit computation in Python.
+- **Composition discipline.** Shared state, ordering, retries, partial effects, and recovery require deliberate application design.
+- **Empirical reliability.** Runtime validation establishes only its stated contracts; judgment quality needs representative model evaluations.
+- **Backend differences.** Common output contracts do not imply identical permissions, internal request visibility, or capabilities.
 
 ## Why evaluate every time
 
-Interpretation and judgment depend on the particular input and context.
-Compiling a Natural block once into deterministic Python would freeze those decisions and still require validation of the generated logic.
-If explicit rules can determine the answer, write Python directly.
+In the current execution model, Natural judgments run for each invocation using the particular input and context.
+Natural prose is interpreted work rather than generated deterministic Python source.
+When explicit rules determine the answer, implement those rules directly in Python.
 
-Per-invocation evaluation lets a model or coding agent respond to the current data and environment.
-Nighthawk constrains that work with typed outputs and Python-owned control flow; [verification](verification.md) establishes whether the resulting judgments meet the application's needs.
+Per-invocation evaluation lets judgment respond to current data and environment.
+Its value and cost belong in the application's evaluations; the [specification](specification.md) defines the supported execution behavior.

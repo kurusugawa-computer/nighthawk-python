@@ -4,9 +4,10 @@
 <img src="assets/nighthawk_logo-128x128.png" alt="logo" width="128px">
 </div>
 
-Nighthawk is a Python library where Python controls flow and LLMs or coding agents reason within constrained Natural blocks.
+Nighthawk is a Python library that makes natural-language judgment composable with ordinary Python functions.
 
-Use Natural blocks for interpretation, classification, and other judgments; keep computation, control flow, and recovery in Python.
+Use Natural blocks for interpretation, classification, and other judgments; combine actions, constraints, and verification through Python functions and existing libraries.
+Python owns the surrounding control flow, state, and recovery.
 The same typed boundaries support provider-backed LLM calls and coding-agent executions.
 
 ```py
@@ -62,7 +63,8 @@ See [Philosophy](philosophy.md) for the design rationale.
 
 ## Background and project
 
-- **[Philosophy](philosophy.md)** -- Design rationale: execution model, design landscape, boundary-first consequences, trust and safety boundaries, tradeoffs, and runtime evaluation rationale.
+- **[Philosophy](philosophy.md)** -- Function composition, delegated judgment, human and agent authorship, constraints, and Core responsibility.
+- **[Design drivers](design-drivers.md)** -- Representative application needs, workspace information ownership, and development tooling as an application.
 - **[Roadmap](roadmap.md)** -- Future directions and open questions.
 
 ## Origins

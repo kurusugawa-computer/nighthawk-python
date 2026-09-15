@@ -79,6 +79,7 @@ nav:
       - For coding agents: for-coding-agents.md
   - Background:
       - Philosophy: philosophy.md
+      - Design drivers: design-drivers.md
   - Project:
       - Roadmap: roadmap.md
 
