@@ -329,14 +329,14 @@ wheels = [
 
 [[package]]
 name = "headson"
-version = "0.17.0"
+version = "0.17.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/57/ec/616ebc11ee5e1e67ad3bd53849a49da960d0081e265f6c3ed824206f5d6a/headson-0.17.0.tar.gz", hash = "sha256:b9ffbbb4d112b296c16d3ec8983815c65f67ec0461aa0e33b3508ec6d3ab308c", size = 3737982, upload-time = "2026-04-26T20:46:28.864Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/a8/5b60b040533d6b4f016d2e491c76d65eef8440b2ba6571dee97299b0b8b4/headson-0.17.1.tar.gz", hash = "sha256:5e797bc4ebc98b084403ed78199fa15835af617517556b2fa4577d5496664dae", size = 3781245, upload-time = "2026-09-06T23:39:01.472Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/5c/296c220eaac9800a5bf36c9ed9d0d04c304e0e84a37c5bd5dd6f7431bfe7/headson-0.17.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:aa12bef367c9ace526c6e3fba9a5bda7825f1d3499da38496a760e31c0a95751", size = 1485711, upload-time = "2026-04-26T20:46:27.078Z" },
-    { url = "https://files.pythonhosted.org/packages/11/a3/395d9d3fb87a74f0320b3b33cc9e897fe44d8ff8ed4123de0884adf03337/headson-0.17.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:17d0d78ee4f750d094e0c342d5aee127a5c63f8210e7ed3f38530eb8207ecc77", size = 1593876, upload-time = "2026-04-26T20:47:01.7Z" },
-    { url = "https://files.pythonhosted.org/packages/b0/05/fca67dbf98b21b7edb879b46456b9e922942813676c1a864fa9a63c8f228/headson-0.17.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8e982af60c5597eabdfeedc28b0bd5bc1fae20eb0c26643e5f26a9e622a474dd", size = 1662948, upload-time = "2026-04-26T20:47:29.278Z" },
-    { url = "https://files.pythonhosted.org/packages/8f/14/b7425e6eecdabf61e3846a4ed7c978dff31956470152bcc52fa726967752/headson-0.17.0-cp310-abi3-win_amd64.whl", hash = "sha256:9bef72f9bd1e68eb48134c9aed4af79089ad40bb63906d2edc922ac22486fb78", size = 1518143, upload-time = "2026-04-26T20:50:01.257Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/cb/1e4246ba8a67105c27d21faecb44620e4bc45ad27eb8aba25eb5eac386e1/headson-0.17.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:f5206278f6381f17044ebfff91224eacab398ed0f754a7841187e205d27cdbec", size = 1527163, upload-time = "2026-09-06T23:39:00.138Z" },
+    { url = "https://files.pythonhosted.org/packages/51/e8/c598ae2556b1cc9bce5d4a3f07911239ed466d450e86c9305897018cc13d/headson-0.17.1-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bf2662e6971fc2ae06301c1718d898fa25f02fe5dc2af282554a3eb8d6805859", size = 1645122, upload-time = "2026-09-06T23:39:14.455Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/67/f9eaf771e6619753b830d3af08e274bbf6b477fb6b874ffed9c3dd543a0f/headson-0.17.1-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:76142568e67eb198390bfbe55e59de2bf1dadb80cf38f44449bd7c85f99ca163", size = 1723381, upload-time = "2026-09-06T23:41:15.203Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/f5/cd73ac76ad630cc1f02d0647ce0b02f4eb85f9320dbdc836f36fa54ac273/headson-0.17.1-cp310-abi3-win_amd64.whl", hash = "sha256:5c14d54563235320a13e0316f306ffac974d90726963512be2c1ef4f6248c1f1", size = 1574218, upload-time = "2026-09-06T23:42:43.334Z" },
 ]
 
 [[package]]
