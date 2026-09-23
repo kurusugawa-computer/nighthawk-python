@@ -85,6 +85,19 @@ The application owns retrieval choices, document conventions, storage, domain ru
 Use distinct scenarios to test whether an apparent Core requirement is general.
 Each application retains its own evaluators, operational rules, and environment; sharing function composition does not establish equivalent correctness or isolation guarantees.
 
+## Hosts selecting bindings at invocation time
+
+**Status:** Supported by the [explicit embedded-step contract](specification.md#explicit-embedded-steps), with deterministic coverage in `tests/runtime/test_embedded.py` and executable [integration examples](embedded-execution.md).
+
+A host can select different trusted Natural programs, read/write names, and Python output contracts at each invocation.
+For example, one call summarizes `observations` into a `summary: str`, while another selects from `candidates` into an application-defined `Selection` value.
+Passing a dictionary to a fixed Natural function does not by itself declare each dynamic key as a Core binding.
+Saving a returned result after that function completes also places save failures outside the Natural step's terminal boundary.
+
+The general requirement is explicit execution-environment selection and host writeback within the existing step lifecycle.
+Core supplies those boundaries and shared inference/validation rules; hosts own trusted-source selection, storage, partial-effect recovery, and domain policy.
+An ordinary Natural function remains the preferred composition when its fixed signature and completion boundary are sufficient.
+
 ## Using Nighthawk to develop Nighthawk
 
 Treat development tooling in this workspace as another application.

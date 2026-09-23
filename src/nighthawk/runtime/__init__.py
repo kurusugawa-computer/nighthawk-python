@@ -4,8 +4,11 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .annotations import MISSING_ANNOTATION
     from .assignment import AssignmentResult, assign_tool, assign_tool_async
+    from .bindings import BindingValidationError, infer_binding_types, validate_output_bindings
     from .context import ContextBuilder, ContextRequest, DefaultContextBuilder
+    from .embedded import BindingWriter, execute_step, execute_step_async
     from .environment import StepEnvironment
     from .expression import eval_expression, eval_expression_async
     from .inspection import inspect_value
@@ -14,6 +17,13 @@ if TYPE_CHECKING:
     from .step_result import Break, Continue, Pass, Raise, Return
 
 _name_to_module = {
+    "MISSING_ANNOTATION": "annotations",
+    "BindingValidationError": "bindings",
+    "infer_binding_types": "bindings",
+    "validate_output_bindings": "bindings",
+    "BindingWriter": "embedded",
+    "execute_step": "embedded",
+    "execute_step_async": "embedded",
     "ContextBuilder": "context",
     "ContextRequest": "context",
     "DefaultContextBuilder": "context",
@@ -37,6 +47,13 @@ _name_to_module = {
 }
 
 __all__ = [
+    "MISSING_ANNOTATION",
+    "BindingValidationError",
+    "infer_binding_types",
+    "validate_output_bindings",
+    "BindingWriter",
+    "execute_step",
+    "execute_step_async",
     "ContextBuilder",
     "ContextRequest",
     "DefaultContextBuilder",

@@ -130,6 +130,11 @@ class StepEnvironment:
     def _is_runtime_name(self, name: str) -> bool:
         return name in self._runtime_name_set
 
+    @property
+    def binding_name_to_type(self) -> Mapping[str, object]:
+        """The contracts selected at step entry, independent of working assignments."""
+        return MappingProxyType(self._binding_name_to_type)
+
     def has_python_name(self, name: str) -> bool:
         return not self._is_runtime_name(name) and (
             name in self._local_name_set

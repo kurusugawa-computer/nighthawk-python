@@ -3,8 +3,57 @@ from pydantic_ai import RunContext
 from pydantic_ai.capabilities import Instrumentation
 
 import nighthawk as nh
+from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
+from nighthawk.runtime import Pass, execute_step, execute_step_async
 from nighthawk.runtime.step_context import StepContext
 from tests.integration.skip_helpers import requires_openai_integration
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None:
+    requires_openai_integration()
+    events: list[StepFinished] = []
+    saved_name_to_value: dict[str, object] = {}
+    calls: list[tuple[int, int]] = []
+
+    def calculate(first: int, second: int) -> int:
+        calls.append((first, second))
+        return first + second * 8
+
+    def finished(event: StepFinished) -> None:
+        assert saved_name_to_value == {"result": 17}
+        events.append(event)
+
+    executor = nh.AgentStepExecutor.from_configuration(
+        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna", model_settings={"openai_reasoning_effort": "low"})
+    )
+    program = "---\ndeny: [return, raise]\n---\nCall <calculate> with <first> and <second>. Assign its result to <:result>."
+    name_to_value = {"calculate": calculate, "first": 1, "second": 2, "result": 0, "OutputType": int}
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
+        if asynchronous:
+            outcome = await execute_step_async(
+                program,
+                name_to_value=name_to_value,
+                input_binding_names=("calculate", "first", "second"),
+                output_binding_names=("result",),
+                binding_name_to_type={"result": "OutputType"},
+                write_binding=saved_name_to_value.__setitem__,
+            )
+        else:
+            outcome = execute_step(
+                program,
+                name_to_value=name_to_value,
+                input_binding_names=("calculate", "first", "second"),
+                output_binding_names=("result",),
+                binding_name_to_type={"result": "OutputType"},
+                write_binding=saved_name_to_value.__setitem__,
+            )
+    assert outcome == Pass()
+    assert (1, 2) in calls
+    assert name_to_value["result"] == 0
+    assert len(events) == 1 and isinstance(events[0], StepCompleted)
+    assert events[0].assigned_binding_name_to_value == saved_name_to_value
 
 
 @pytest.mark.asyncio

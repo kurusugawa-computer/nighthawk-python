@@ -5,7 +5,7 @@ import typing
 from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from contextlib import ExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from types import FrameType
+from types import FrameType, SimpleNamespace
 from typing import TypeAliasType, TypedDict, cast
 
 from opentelemetry.trace import Span, Status, StatusCode
@@ -25,6 +25,7 @@ from ..oversight import (
 )
 from .annotations import MISSING_ANNOTATION, SourceAnnotation, module_annotations, resolve_annotation
 from .async_bridge import run_coroutine_synchronously
+from .bindings import BindingValidationError, infer_binding_types, validate_output_bindings
 from .description import annotation_arguments, describe_callable, exact_type
 from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
@@ -75,22 +76,6 @@ def _compute_allowed_step_kinds(is_in_loop: bool, denied_step_kinds: tuple[str, 
     if is_in_loop:
         base_allowed_kinds.extend(["break", "continue"])
     return tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
-
-
-def _infer_binding_types_from_initial_values(
-    binding_name_to_type: dict[str, object],
-    step_locals: dict[str, object],
-) -> None:
-    for name, declared_type in binding_name_to_type.items():
-        if declared_type is not MISSING_ANNOTATION:
-            continue
-        binding_name_to_type[name] = object
-        if name not in step_locals:
-            continue
-        initial_value = step_locals[name]
-        inferred_type = type(initial_value)
-        if inferred_type is not object and inferred_type is not type(None):
-            binding_name_to_type[name] = inferred_type
 
 
 def _discover_type_alias_reference_names(
@@ -233,8 +218,8 @@ class Runner:
         self.context_stack = ExitStack()
 
     @contextmanager
-    def _execution_scope(self, caller_frame: FrameType) -> Iterator[tuple[ExecutionReference, Span, StepLifecycle | None]]:
-        with step_execution_reference_scope(source_location=_build_source_location(caller_frame=caller_frame)) as execution_reference:
+    def _execution_scope(self, source_location: str) -> Iterator[tuple[ExecutionReference, Span, StepLifecycle | None]]:
+        with step_execution_reference_scope(source_location=source_location) as execution_reference:
             lifecycle = get_lifecycle()
             with (
                 span(
@@ -335,8 +320,10 @@ class Runner:
             raise original_exception
 
     @contextmanager
-    def execution(self, *, caller_frame: FrameType) -> Iterator[Runner]:
-        with self._execution_scope(caller_frame) as (execution_reference, step_span, lifecycle):
+    def execution(self, *, caller_frame: FrameType | None = None, source_location: str = "<embedded>:0") -> Iterator[Runner]:
+        if caller_frame is not None:
+            source_location = _build_source_location(caller_frame=caller_frame)
+        with self._execution_scope(source_location) as (execution_reference, step_span, lifecycle):
             original_exception: BaseException | None = None
             try:
                 self.failure_stage = "started_delivery"
@@ -362,8 +349,10 @@ class Runner:
                         )
 
     @asynccontextmanager
-    async def execution_async(self, *, caller_frame: FrameType) -> AsyncIterator[Runner]:
-        with self._execution_scope(caller_frame) as (execution_reference, step_span, lifecycle):
+    async def execution_async(self, *, caller_frame: FrameType | None = None, source_location: str = "<embedded>:0") -> AsyncIterator[Runner]:
+        if caller_frame is not None:
+            source_location = _build_source_location(caller_frame=caller_frame)
+        with self._execution_scope(source_location) as (execution_reference, step_span, lifecycle):
             original_exception: BaseException | None = None
             try:
                 self.failure_stage = "started_delivery"
@@ -407,28 +396,15 @@ class Runner:
         TypeAdapter(resolved)
         return resolved
 
-    def _prepare_step_execution(
+    def _prepare_python_environment(
         self,
-        natural_program: str,
-        input_binding_names: list[str],
+        caller_frame: FrameType,
         output_binding_names: list[str],
         binding_name_to_type: dict[str, object],
-        is_in_loop: bool,
-        *,
-        caller_frame: FrameType,
-    ) -> _StepPreparation:
+        scoped_task_name_to_value: Mapping[str, object],
+    ) -> tuple[StepEnvironment, dict[str, object]]:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
-
-        processed_without_frontmatter, denied_step_kinds = _split_frontmatter(natural_program)
-        processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
-
-        self.processed_natural_program = processed_without_frontmatter
-        allowed_step_kinds = _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
-        self.allowed_step_kinds = allowed_step_kinds
-
-        step_globals = _build_step_globals(python_globals)
-        scoped_task_name_to_value = _current_task_references()
         step_locals = {name: value for name, value in python_locals.items() if name not in self.runtime_name_set}
         parent_stack = get_step_context_stack()
         parent_name_to_value = parent_stack[-1].environment.snapshot_working_state() if parent_stack else {}
@@ -458,7 +434,7 @@ class Runner:
                 annotation = self._resolve_annotation(annotation, caller_frame)
             binding_name_to_type[name] = annotation
 
-        _infer_binding_types_from_initial_values(binding_name_to_type, step_locals)
+        binding_name_to_type = infer_binding_types(binding_name_to_type, step_locals)
         environment = StepEnvironment(
             python_name_to_value=python_locals,
             python_globals=python_globals,
@@ -471,8 +447,89 @@ class Runner:
             binding_name_to_type=binding_name_to_type,
             runtime_name_set=self.runtime_name_set,
         )
-        self.input_binding_name_to_value = {name: environment.resolve(name) for name in input_binding_names}
+        return environment, step_locals
 
+    @staticmethod
+    def _resolve_environment_annotation(annotation: object, environment: StepEnvironment) -> object:
+        if annotation is MISSING_ANNOTATION:
+            return object
+        annotation_name_to_value = environment.expression_namespace()
+        if isinstance(annotation, SourceAnnotation):
+            resolved = resolve_annotation(annotation, python_globals=annotation_name_to_value, python_locals=annotation_name_to_value)
+        else:
+            holder = SimpleNamespace(__annotations__={"value": annotation})
+            resolved = typing.get_type_hints(holder, globalns=annotation_name_to_value, localns=annotation_name_to_value, include_extras=True)[
+                "value"
+            ]
+        TypeAdapter(resolved)
+        return resolved
+
+    def _prepare_explicit_environment(
+        self,
+        name_to_value: Mapping[str, object],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        scoped_task_name_to_value: Mapping[str, object],
+    ) -> tuple[StepEnvironment, dict[str, object]]:
+        step_locals = dict(name_to_value)
+        binding_name_to_annotation = {name: annotation for name, annotation in binding_name_to_type.items() if annotation is not MISSING_ANNOTATION}
+        environment = StepEnvironment(
+            python_name_to_value=step_locals,
+            python_globals={},
+            task_name_to_value=scoped_task_name_to_value,
+            output_name_set=frozenset(output_binding_names),
+        )
+        selected_name_to_type = {
+            name: self._resolve_environment_annotation(binding_name_to_type[name], environment)
+            if name in binding_name_to_type and binding_name_to_type[name] is not MISSING_ANNOTATION
+            else MISSING_ANNOTATION
+            for name in output_binding_names
+        }
+        selected_name_to_type = infer_binding_types(selected_name_to_type, step_locals)
+        environment = StepEnvironment(
+            python_name_to_value=step_locals,
+            python_globals={},
+            task_name_to_value=scoped_task_name_to_value,
+            output_name_set=frozenset(output_binding_names),
+            binding_name_to_annotation=binding_name_to_annotation,
+            binding_name_to_type=selected_name_to_type,
+        )
+        return environment, step_locals
+
+    def _prepare_step_execution(
+        self,
+        natural_program: str,
+        input_binding_names: list[str],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        is_in_loop: bool,
+        *,
+        caller_frame: FrameType | None,
+        name_to_value: Mapping[str, object] | None,
+    ) -> _StepPreparation:
+        processed_without_frontmatter, denied_step_kinds = _split_frontmatter(natural_program)
+        processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
+        self.processed_natural_program = processed_without_frontmatter
+        allowed_step_kinds = _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
+        self.allowed_step_kinds = allowed_step_kinds
+        scoped_task_name_to_value = _current_task_references()
+        if name_to_value is None:
+            assert caller_frame is not None
+            environment, step_locals = self._prepare_python_environment(
+                caller_frame, output_binding_names, binding_name_to_type, scoped_task_name_to_value
+            )
+            step_globals = _build_step_globals(caller_frame.f_globals)
+            self.input_binding_name_to_value = {name: environment.resolve(name) for name in input_binding_names}
+        else:
+            environment, step_locals = self._prepare_explicit_environment(
+                name_to_value, output_binding_names, binding_name_to_type, scoped_task_name_to_value
+            )
+            step_globals = _build_step_globals({})
+            for name in input_binding_names:
+                if name not in step_locals:
+                    raise NameError(f"Read binding {name!r} is absent from the explicit namespace", name=name)
+            self.input_binding_name_to_value = {name: step_locals[name] for name in input_binding_names}
+        binding_name_to_type = dict(environment.binding_name_to_type)
         tool_result_rendering_policy = getattr(self.step_executor, "tool_result_rendering_policy", None)
         if tool_result_rendering_policy is not None and not isinstance(tool_result_rendering_policy, ToolResultRenderingPolicy):
             raise ExecutionError("Step executor tool_result_rendering_policy must be ToolResultRenderingPolicy when provided")
@@ -524,23 +581,13 @@ class Runner:
         preparation: _StepPreparation,
         bindings: dict[str, object],
     ) -> dict[str, object]:
-        undeclared = bindings.keys() - set(preparation.output_binding_names)
-        if undeclared:
-            raise ExecutionError(f"Undeclared output binding names: {sorted(undeclared)}")
-        validated_binding_name_to_value = dict(bindings)
-        for binding_name in preparation.output_binding_names:
-            if binding_name not in validated_binding_name_to_value:
-                continue
-
-            if binding_name not in preparation.binding_name_to_type:
-                continue
-            expected_type = preparation.binding_name_to_type[binding_name]
-
-            self.failure_description = f"Output binding '{binding_name}' failed validation"
-            validated_binding_name_to_value[binding_name] = TypeAdapter(expected_type).validate_python(validated_binding_name_to_value[binding_name])
-            self.failure_description = None
-
-        return validated_binding_name_to_value
+        self.failure_description = None
+        try:
+            return validate_output_bindings(bindings, preparation.binding_name_to_type, preparation.output_binding_names)
+        except BindingValidationError as exception:
+            self.failure_description = f"Output binding '{exception.binding_name}' failed validation"
+            # Preserve the ordinary lifecycle's original validator exception.
+            raise exception.original_exception from None
 
     def _validate_bindings_for_outcome(
         self,
@@ -693,7 +740,8 @@ class Runner:
         output_binding_names: list[str],
         binding_name_to_type: dict[str, object],
         is_in_loop: bool,
-        caller_frame: FrameType,
+        caller_frame: FrameType | None,
+        name_to_value: Mapping[str, object] | None,
     ) -> _StepPreparation:
         preparation = self._prepare_step_execution(
             natural_program,
@@ -702,6 +750,7 @@ class Runner:
             binding_name_to_type,
             is_in_loop,
             caller_frame=caller_frame,
+            name_to_value=name_to_value,
         )
         self.preparation = preparation
         self.context_stack.enter_context(step_context_scope(preparation.step_context))
@@ -759,13 +808,20 @@ class Runner:
         is_in_loop: bool,
         *,
         caller_frame: FrameType | None = None,
+        name_to_value: Mapping[str, object] | None = None,
     ) -> StepEnvelope:
-        if caller_frame is None:
+        if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
-        preparation = self._prepare(natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame)
+        preparation = self._prepare(
+            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value
+        )
         self.failure_stage = "preparation"
-        return_annotation = self._resolve_annotation(return_annotation, caller_frame)
+        if name_to_value is None:
+            assert caller_frame is not None
+            return_annotation = self._resolve_annotation(return_annotation, caller_frame)
+        else:
+            return_annotation = self._resolve_environment_annotation(return_annotation, preparation.step_context.environment)
         self.failure_stage = "executor"
         # Keep synchronous executors on the caller thread, even inside a running event loop.
         if isinstance(self.step_executor, SyncStepExecutor):
@@ -793,12 +849,19 @@ class Runner:
         is_in_loop: bool,
         *,
         caller_frame: FrameType | None = None,
+        name_to_value: Mapping[str, object] | None = None,
     ) -> StepEnvelope:
-        if caller_frame is None:
+        if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
-        preparation = self._prepare(natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame)
+        preparation = self._prepare(
+            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value
+        )
         self.failure_stage = "preparation"
-        return_annotation = self._resolve_annotation(return_annotation, caller_frame)
+        if name_to_value is None:
+            assert caller_frame is not None
+            return_annotation = self._resolve_annotation(return_annotation, caller_frame)
+        else:
+            return_annotation = self._resolve_environment_annotation(return_annotation, preparation.step_context.environment)
         self.failure_stage = "executor"
         return await self._execute_async(preparation, output_binding_names, return_annotation, allow_awaitable_return=True)

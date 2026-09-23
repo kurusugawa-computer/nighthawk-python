@@ -1208,6 +1208,46 @@ The contracts above own these semantics; this table collects review cases for im
 | Model returns an expression with effects | The common engine evaluates it once; validation, approval, and rewrite do not replay it. |
 
 
+## Explicit embedded steps
+
+`nighthawk.runtime.execute_step` and `execute_step_async` execute one trusted Natural program using an explicit `name_to_value` mapping, host-supplied read and ordered write declarations, output annotations, and a required `write_binding(name, value)` callback.
+They require an active run and use its configured executor and the ordinary preparation, operation, validation, commit-inspection, and lifecycle machinery.
+The program is a body without the `natural` sentinel; deny frontmatter is supported.
+Declarations are authoritative host metadata; these entry points do not parse bindings from text, expand includes, or interpolate source.
+The [embedded execution guide](embedded-execution.md) provides complete examples and the public API contract.
+
+The mapping is shallow-snapshotted during preparation, including when it is empty.
+Declared reads must be present in that mapping; builtins, task references, caller frames, and parent working state cannot supply a missing declared read.
+Effective expression lookup uses tracked step assignments, explicit Python names, builtins, then scoped task references.
+Prompt context, discovery, evaluation, type references, and model-selected exception expressions use that same environment, without caller locals, globals, closure cells, or parent working-state fallback.
+Called Python functions retain their own globals and closures.
+Called Natural functions establish their own lexical environment and retain the ordinary parent working-state inheritance rules.
+Explicit environment selection does not change scoped execution configuration or establish an isolation boundary.
+
+Output and return annotations, including string and nested forward references, resolve during preparation in the selected environment.
+Missing output annotations use the inference rules in Section 7; explicit `object`, `Any`, and `None` keep their meanings.
+The ordinary output-selection rules in Section 10.2 remain in effect, including initialized outputs, Raise discarding pending values, and replacement rewrites.
+No initialized value is recorded as assigned merely because it exists or was selected for validation.
+
+Writeback calls the host writer sequentially in declaration order after commit inspection.
+Core awaits an awaitable writer result and records the assignment only after normal completion.
+The supplied namespace is not automatically updated.
+A writer must apply the selected value before normal return; partial effects from a writer that raises remain the host's responsibility.
+Previously completed writes survive subsequent failure or cancellation and appear in the same step's terminal record.
+The normal terminal-delivery contract, including single delivery attempt, interruption classification, and preservation of writes on notification failure, applies.
+After successful terminal delivery, the entry point returns Pass/Return/Break/Continue for host dispatch; a final Raise propagates its prepared exception.
+The optional `source_location` supplies a program label, defaulting to `<embedded>:0`, without selecting a Python frame.
+
+`infer_binding_types` and `validate_output_bindings`, exported from `nighthawk.runtime`, are the same binding-processing functions used by ordinary blocks.
+Both return new mappings and leave their input mappings unchanged.
+The public `MISSING_ANNOTATION` marker distinguishes an existing unannotated declaration from explicit Python types.
+Inference processes only supplied declarations and uses runtime container types without inferring type arguments.
+Independent validation accepts resolved annotations, rejects undeclared candidates before any individual validation, and visits supplied candidates in declaration iteration order.
+Missing annotations skip individual validation; explicit None does not.
+Independent validation neither supplements initial values nor assigns or records outputs.
+It raises `BindingValidationError` with the binding name and original validation exception; ordinary step failures retain that original exception and binding-specific diagnostics.
+Neither helper promises deep copies or rollback of validator effects.
+
 ## Embedded execution boundaries
 
 Python owns task decomposition, execution units, approval policy, and recovery.

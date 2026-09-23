@@ -190,6 +190,29 @@
         - FailureStage
         - StepDeliveryError
 
+## Embedded steps and binding processing
+
+See [Embedded execution](embedded-execution.md) for executable synchronous and asynchronous examples.
+
+::: nighthawk.runtime.embedded
+    options:
+      members:
+        - execute_step
+        - execute_step_async
+        - BindingWriter
+
+::: nighthawk.runtime.bindings
+    options:
+      members:
+        - infer_binding_types
+        - validate_output_bindings
+        - BindingValidationError
+
+::: nighthawk.runtime.annotations
+    options:
+      members:
+        - MISSING_ANNOTATION
+
 ## Runtime executor boundary
 
 ::: nighthawk.runtime.step_executor
