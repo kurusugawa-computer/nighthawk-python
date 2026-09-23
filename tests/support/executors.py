@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from pydantic import TypeAdapter
@@ -75,3 +76,14 @@ class StubExecutor:
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
         outcome, bindings = self._parse_response(request)
         return await resolve_model_candidate(request, outcome, bindings)
+
+
+@dataclass
+class InspectingExecutor:
+    handler: Callable[[StepRequest], StepCandidate]
+
+    def run_step(self, *, request: StepRequest) -> StepCandidate:
+        return self.handler(request)
+
+    async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+        return self.handler(request)

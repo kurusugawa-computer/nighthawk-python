@@ -132,7 +132,7 @@ class TestFallbackSync:
             return f"backup:{x}"
 
         composed = fallback(primary, backup)
-        assert not hasattr(composed, "__signature__")
+        assert inspect.signature(composed) == inspect.signature(primary)
 
     def test_merged_return_type_with_three_functions(self) -> None:
         def a(x: str) -> str:
@@ -170,7 +170,7 @@ class TestFallbackSync:
             return 42
 
         composed = fallback(annotated, unannotated)
-        assert not hasattr(composed, "__signature__")
+        assert inspect.signature(composed) == inspect.signature(annotated)
 
 
 # ---------------------------------------------------------------------------

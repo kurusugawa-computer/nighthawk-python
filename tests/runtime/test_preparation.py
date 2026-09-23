@@ -1,17 +1,55 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
 import pytest
-from pydantic import AfterValidator, Field
+from pydantic import Field
 
 import nighthawk as nh
+from nighthawk.errors import ExecutionError
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import StepCandidate, StepRequest
-from nighthawk.runtime.async_bridge import run_coroutine_synchronously
-from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.step_contract import PassStepOutcome, RaiseStepOutcome
+from nighthawk.runtime import StepDefinition
+from nighthawk.runtime.step_result import StepResult
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
+
+
+@pytest.mark.parametrize("name", ["len", "injected", "caller_value"])
+@pytest.mark.asyncio
+async def test_missing_reads_do_not_fall_back(execute: Callable[..., Awaitable[StepResult]], name: str) -> None:
+    caller_value = 99
+    executor = ScriptedExecutor([])
+    events: list[StepFinished] = []
+    with (
+        nh.run(executor),
+        nh.scope(task_references={"injected": 42}, lifecycle=StepLifecycle(events.append)),
+        pytest.raises(nh.ExecutionError) as caught,
+    ):
+        await execute(StepDefinition("Read required input.", input_binding_names=(name,)), name_to_value={}, write_binding=lambda name, value: None)
+    assert caller_value == 99
+    assert executor.calls == []
+    assert len(events) == 1 and isinstance(events[0], StepFailed)
+    assert events[0].failure_stage == "preparation"
+    assert isinstance(events[0].original_exception, NameError)
+    assert events[0].original_exception.name == name
+    assert caught.value.__cause__ is events[0].original_exception
+
+
+@pytest.mark.asyncio
+async def test_type_contracts_do_not_use_caller_types(execute: Callable[..., Awaitable[StepResult]]) -> None:
+    CallerOnlyType = int  # noqa: N806
+    executor = ScriptedExecutor([])
+    with nh.run(executor), pytest.raises(nh.ExecutionError, match="CallerOnlyType"):
+        await execute(
+            StepDefinition("write output", output_binding_names=("result",), binding_name_to_type={"result": "CallerOnlyType"}),
+            name_to_value={},
+            write_binding=lambda name, value: None,
+        )
+    assert CallerOnlyType is int
+    assert executor.calls == []
+
 
 _global_contract_result: Annotated[int, Field(ge=0, le=10)] = 0
 
@@ -103,21 +141,6 @@ def test_compound_annotation_is_static_and_preserves_metadata() -> None:
         assert workflow() == 7
 
 
-def test_compound_annotation_rejects_out_of_range_value() -> None:
-    @nh.natural_function
-    def workflow() -> int:
-        if True:
-            result: Annotated[int, Field(ge=0, le=10)] = 0
-        """natural
-        <:result>
-        {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
-        """
-        return result
-
-    with nh.run(StubExecutor()), pytest.raises(nh.ExecutionError, match="less than or equal to 10"):
-        workflow()
-
-
 def test_ambiguous_annotations_fail_preparation_before_executor() -> None:
     @nh.natural_function
     def workflow(condition: bool) -> object:
@@ -186,34 +209,6 @@ def test_nested_scope_annotations_do_not_override_output_contract() -> None:
         assert workflow() == 7
 
 
-def test_initialized_output_is_validated_without_executor_assignment() -> None:
-    @nh.natural_function
-    def workflow() -> str:
-        result: Annotated[str, AfterValidator(str.strip)] = " draft "
-        """natural
-        <:result>
-        {"step_outcome": {"kind": "pass"}, "bindings": {}}
-        """
-        return result
-
-    with nh.run(StubExecutor()):
-        assert workflow() == "draft"
-
-
-def test_invalid_initialized_output_fails_without_executor_assignment() -> None:
-    @nh.natural_function
-    def workflow() -> int:
-        result: Annotated[int, Field(ge=0)] = -1
-        """natural
-        <:result>
-        {"step_outcome": {"kind": "pass"}, "bindings": {}}
-        """
-        return result
-
-    with nh.run(StubExecutor()), pytest.raises(nh.ExecutionError, match="greater than or equal to 0"):
-        workflow()
-
-
 def test_explicit_none_output_is_a_contract() -> None:
     @nh.natural_function
     def workflow() -> None:
@@ -228,18 +223,102 @@ def test_explicit_none_output_is_a_contract() -> None:
         workflow()
 
 
-@pytest.mark.parametrize("raising", [False, True])
-def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None:
-    class Executor:
-        def run_step(self, *, request: StepRequest) -> StepCandidate:
-            outcome = RaiseStepOutcome(kind="raise", raise_message="failed") if raising else PassStepOutcome(kind="pass")
-            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, {"undeclared": 1}))
+def test_frontmatter_deny_return_recognizes_leading_blank_lines():
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
 
-    @nh.natural_function
-    def workflow() -> None:
-        """natural
-        Finish.
-        """
+        @nh.natural_function
+        def f() -> int:
+            result = 0
+            """natural
 
-    with nh.run(Executor()), pytest.raises(nh.ExecutionError, match="Undeclared output"):
-        workflow()
+            ---
+            deny:
+              - return
+            ---
+            <:result>
+            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
+            """
+            return result
+
+        with pytest.raises(ExecutionError, match="not allowed"):
+            f()
+
+
+def test_frontmatter_deny_return_allows_bindings():
+    nh.StepExecutorConfiguration()
+    with nh.run(StubExecutor()):
+
+        @nh.natural_function
+        def f(x: int):
+            computed_result = x + 1
+            envelope_json_text = json.dumps(
+                {
+                    "step_outcome": {"kind": "pass"},
+                    "bindings": {"result": computed_result},
+                }
+            )
+
+            f"""natural
+            ---
+            deny:
+              - return
+            ---
+            <:result>
+            {envelope_json_text}
+            """
+            _ = x
+            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+
+        assert f(10) == 11
+
+
+def test_scope_task_references_are_merged_into_step_context() -> None:
+    from nighthawk.testing import CallbackExecutor, pass_response
+
+    observed_task_reference_name_set: set[str] = set()
+
+    def search_repository(query: str) -> list[str]:
+        _ = query
+        return ["hit"]
+
+    def handler(call):  # type: ignore[no-untyped-def]
+        observed_task_reference_name_set.update(call.task_name_to_value.keys())
+        return pass_response()
+
+    executor = CallbackExecutor(handler)
+
+    with nh.run(executor), nh.scope(task_references={"search_repository": search_repository}):
+
+        @nh.natural_function
+        def f() -> None:
+            """natural
+            Execute one step.
+            """
+
+        f()
+
+    assert "search_repository" in observed_task_reference_name_set
+    assert "SHADOWED_NUMBER" not in observed_task_reference_name_set
+
+
+def test_unannotated_binding_type_inferred_from_initial_value():
+    """binding_name_to_type should reflect the inferred type for unannotated write bindings."""
+    from nighthawk.testing import ScriptedExecutor, pass_response
+
+    executor = ScriptedExecutor(responses=[pass_response(result="hello")])
+    with nh.run(executor):
+
+        @nh.natural_function
+        def f() -> str:
+            result = ""
+            """natural
+            <:result>
+            This is a docstring Natural block.
+            """
+
+            return result
+
+        assert f() == "hello"
+
+    assert executor.calls[0].binding_name_to_type["result"] is str

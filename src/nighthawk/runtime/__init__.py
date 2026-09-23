@@ -4,20 +4,31 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .annotations import MISSING_ANNOTATION
     from .assignment import AssignmentResult, assign_tool, assign_tool_async
-    from .bindings import BindingValidationError, infer_binding_types, validate_output_bindings
+    from .bindings import (
+        MISSING_ANNOTATION,
+        BindingDeclarationError,
+        BindingError,
+        BindingValidationError,
+        infer_binding_types,
+        validate_output_bindings,
+    )
     from .context import ContextBuilder, ContextRequest, DefaultContextBuilder
     from .embedded import BindingWriter, execute_step, execute_step_async
     from .environment import StepEnvironment
     from .expression import eval_expression, eval_expression_async
     from .inspection import inspect_value
     from .operation_contract import OperationError, OperationFinished, OperationRequest
+    from .step_definition import StepDefinition
     from .step_request import StepCandidate, StepRequest
-    from .step_result import Break, Continue, Pass, Raise, Return
+    from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 _name_to_module = {
-    "MISSING_ANNOTATION": "annotations",
+    "StepResult": "step_result",
+    "StepDefinition": "step_definition",
+    "BindingDeclarationError": "bindings",
+    "BindingError": "bindings",
+    "MISSING_ANNOTATION": "bindings",
     "BindingValidationError": "bindings",
     "infer_binding_types": "bindings",
     "validate_output_bindings": "bindings",
@@ -47,6 +58,10 @@ _name_to_module = {
 }
 
 __all__ = [
+    "StepResult",
+    "StepDefinition",
+    "BindingDeclarationError",
+    "BindingError",
     "MISSING_ANNOTATION",
     "BindingValidationError",
     "infer_binding_types",

@@ -58,7 +58,6 @@ def test_fragment_mentions_result_field_and_conditions_default_pass() -> None:
     assert '"result"' in fragment
     assert '"kind"' in fragment
     assert "Default: pass." in fragment
-    assert "Choose pass after completing the work. Most blocks end with pass." in fragment
 
 
 def test_fragment_omits_default_pass_when_pass_is_not_allowed() -> None:

@@ -4,6 +4,10 @@ Use `nighthawk.runtime.execute_step` or `execute_step_async` when a Python host 
 For a fixed operation, prefer an ordinary `@nh.natural_function` with meaningful parameters and a return annotation.
 The embedded entry points serve hosts whose dynamic declarations must participate in Core validation and whose binding writes must complete inside the same step lifecycle.
 
+Create a `StepDefinition` for the trusted program and its declarations, then call `execute_step(definition, *, name_to_value, write_binding)` or await `execute_step_async` with the same arguments.
+The definition is immutable and reusable across invocations; it contains no execution state, namespace, or writer.
+Each invocation resolves annotations and infers missing contracts in its own environment.
+
 Both entry points use the active `nh.run()` and `nh.scope()` configuration, the ordinary executor, commit inspection, and terminal notifications.
 They return a resolved `Pass`, `Return`, `Break`, or `Continue` after writeback and terminal delivery.
 The host interprets that control result; a final `Raise` instead propagates its constructed exception after terminal delivery.
@@ -15,7 +19,11 @@ Setting `is_in_loop=True` permits `Break` and `Continue`; deny frontmatter can f
 Core snapshots its name-to-object associations during preparation; objects retain their identity and remain live.
 Core does not automatically save outputs into that mapping.
 
-The host supplies the program body without the `natural` sentinel, separate `input_binding_names` and ordered `output_binding_names`, and an optional `binding_name_to_type` mapping.
+The host supplies `StepDefinition` with the program body without the `natural` sentinel, separate `input_binding_names` and ordered `output_binding_names`, and an optional `binding_name_to_type` mapping.
+Declarations must be ordered sequences of unique ASCII Python identifiers, excluding keywords.
+A name may be declared for both reading and writing.
+Definitions copy the declaration sequences and type mapping, preserving annotation object identity.
+Malformed declarations and types for undeclared outputs raise `BindingDeclarationError` at construction, before any execution lifecycle starts.
 These declarations are authoritative; the entry point does not extract declarations, expand includes, or interpolate Python expressions into source.
 Hosts that compile trusted sources supply the resulting text and matching declarations.
 Natural text and type expressions are trusted program structure; user requests and retrieved material belong in binding values.
@@ -77,9 +85,8 @@ The host explicitly saves into its mapping, and terminal delivery observes the s
 ```py
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, execute_step
+from nighthawk.runtime import Pass, StepDefinition, execute_step
 from nighthawk.testing import ScriptedExecutor, pass_response
-
 
 name_to_value = {
     "observations": ["The trial passed."],
@@ -93,17 +100,16 @@ def finished(event: StepFinished) -> None:
     events.append(event)
 
 
+definition = StepDefinition(
+    "Summarize <observations> in <:summary>.",
+    input_binding_names=("observations",),
+    output_binding_names=("summary",),
+    binding_name_to_type={"summary": str},
+    source_location="trusted_summary:1",
+)
 executor = ScriptedExecutor([pass_response(summary="The trial passed.")])
 with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
-    outcome = execute_step(
-        "Summarize <observations> in <:summary>.",
-        name_to_value=name_to_value,
-        input_binding_names=("observations",),
-        output_binding_names=("summary",),
-        binding_name_to_type={"summary": str},
-        write_binding=name_to_value.__setitem__,
-        source_location="trusted_summary:1",
-    )
+    outcome = execute_step(definition, name_to_value=name_to_value, write_binding=name_to_value.__setitem__)
 
 assert outcome == Pass()
 assert len(events) == 1 and isinstance(events[0], StepCompleted)
@@ -126,7 +132,7 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, execute_step_async
+from nighthawk.runtime import Pass, StepDefinition, execute_step_async
 from nighthawk.testing import ScriptedExecutor, pass_response
 
 
@@ -146,17 +152,16 @@ async def main() -> None:
         assert saved_name_to_value == {"selected": Selection(label="alpha")}
         events.append(event)
 
+    definition = StepDefinition(
+        "Choose a label from <candidates> and write <:selected>.",
+        input_binding_names=("candidates",),
+        output_binding_names=("selected",),
+        binding_name_to_type={"selected": "Selection"},
+        source_location="trusted_selection:1",
+    )
     executor = ScriptedExecutor([pass_response(selected={"label": "alpha"})])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
-        outcome = await execute_step_async(
-            "Choose a label from <candidates> and write <:selected>.",
-            name_to_value={"candidates": ["alpha", "beta"], "Selection": Selection},
-            input_binding_names=("candidates",),
-            output_binding_names=("selected",),
-            binding_name_to_type={"selected": "Selection"},
-            write_binding=write,
-            source_location="trusted_selection:1",
-        )
+        outcome = await execute_step_async(definition, name_to_value={"candidates": ["alpha", "beta"], "Selection": Selection}, write_binding=write)
     assert outcome == Pass()
     assert len(events) == 1 and isinstance(events[0], StepCompleted)
     assert events[0].assigned_binding_name_to_value == saved_name_to_value
@@ -181,9 +186,12 @@ Container inference uses the runtime container class without inspecting contents
 It rejects undeclared output names before invoking any validator.
 Missing contracts and `MISSING_ANNOTATION` skip individual validation; explicit `None` is validated.
 Supply resolved Python annotations to this helper; environment-dependent type resolution belongs to step preparation.
-Validation follows declaration iteration order, so use an ordered sequence when validators have effects or the first failure matters.
+Validation requires an ordered sequence of unique binding names and follows that order.
+Malformed declarations, undeclared candidates, and annotations for undeclared outputs raise `BindingDeclarationError` before invoking validators.
 Missing candidates are not supplemented, and neither input mappings nor storage destinations receive converted values.
 
+`BindingError` derives from `NighthawkError` and is the base for `BindingDeclarationError` and `BindingValidationError`.
+`BindingDeclarationError.binding_names` identifies offending names when available.
 `BindingValidationError.binding_name` identifies a failed value, and `original_exception` and `__cause__` retain the original validator failure.
 The ordinary step lifecycle continues to expose the original validator exception in `StepFailed.original_exception`, with binding-specific diagnostics in `ExecutionError`.
 Validation calls retain no failure state between invocations.

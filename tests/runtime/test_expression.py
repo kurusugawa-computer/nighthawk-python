@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from nighthawk.runtime import OperationError, eval_expression
+from nighthawk.runtime import OperationError, eval_expression, eval_expression_async
 from tests.support.contexts import new_context as context_for
 
 
@@ -135,3 +135,27 @@ def test_nested_awaitable_remains_application_value_after_one_dsl_await() -> Non
         assert asyncio.run(retained) == 3
     finally:
         retained.close()
+
+
+@pytest.mark.asyncio
+async def test_eval_expression_async_supports_top_level_await() -> None:
+    async def calculate(a: int, b: int) -> int:
+        return a + b * 8
+
+    step_context = context_for()
+    step_context.record_assignment("calculate", calculate)
+
+    result = await eval_expression_async(step_context, "await calculate(1, 2)")
+    assert result == 17
+
+
+@pytest.mark.asyncio
+async def test_eval_expression_async_awaits_returned_awaitable_implicitly() -> None:
+    async def calculate(a: int, b: int) -> int:
+        return a + b * 8
+
+    step_context = context_for()
+    step_context.record_assignment("calculate", calculate)
+
+    result = await eval_expression_async(step_context, "calculate(1, 2)")
+    assert result == 17

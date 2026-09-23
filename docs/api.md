@@ -194,6 +194,11 @@
 
 See [Embedded execution](embedded-execution.md) for executable synchronous and asynchronous examples.
 
+::: nighthawk.runtime.step_definition
+    options:
+      members:
+        - StepDefinition
+
 ::: nighthawk.runtime.embedded
     options:
       members:
@@ -206,11 +211,9 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
       members:
         - infer_binding_types
         - validate_output_bindings
+        - BindingError
+        - BindingDeclarationError
         - BindingValidationError
-
-::: nighthawk.runtime.annotations
-    options:
-      members:
         - MISSING_ANNOTATION
 
 ## Runtime executor boundary

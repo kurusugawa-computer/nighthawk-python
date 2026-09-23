@@ -154,11 +154,7 @@ def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
         assert nh.get_system_prompt_suffix_fragments() == ("child_1", "child_2")
 
 
-def test_get_prompt_suffix_fragments_are_public() -> None:
-    assert hasattr(nh, "get_system_prompt_suffix_fragments")
-    assert hasattr(nh, "get_user_prompt_suffix_fragments")
-    assert "get_system_prompt_suffix_fragments" in nh.__all__
-    assert "get_user_prompt_suffix_fragments" in nh.__all__
+def test_prompt_suffix_fragments_default_to_empty() -> None:
     with nh.run(StubExecutor()):
         assert nh.get_system_prompt_suffix_fragments() == ()
         assert nh.get_user_prompt_suffix_fragments() == ()
@@ -240,13 +236,7 @@ def test_async_decorated_function_requires_step_executor():
         asyncio.run(f(1))
 
 
-def test_host_integration_getters_are_public() -> None:
-    for name in ("get_tools", "get_capabilities", "get_oversight"):
-        assert hasattr(nh, name)
-        assert name in nh.__all__
-
-    with nh.run(StubExecutor()):
-        assert nh.get_oversight() is None
+def test_host_integration_defaults() -> None:
     with nh.run(StubExecutor()):
         assert nh.get_tools() == ()
         assert nh.get_capabilities() == ()

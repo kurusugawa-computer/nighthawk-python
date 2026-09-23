@@ -4,7 +4,7 @@ from pydantic_ai.capabilities import Instrumentation
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, execute_step, execute_step_async
+from nighthawk.runtime import Pass, StepDefinition, execute_step, execute_step_async
 from nighthawk.runtime.step_context import StepContext
 from tests.integration.skip_helpers import requires_openai_integration
 
@@ -30,23 +30,23 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
     )
     program = "---\ndeny: [return, raise]\n---\nCall <calculate> with <first> and <second>. Assign its result to <:result>."
     name_to_value = {"calculate": calculate, "first": 1, "second": 2, "result": 0, "OutputType": int}
+    definition = StepDefinition(
+        program,
+        input_binding_names=("calculate", "first", "second"),
+        output_binding_names=("result",),
+        binding_name_to_type={"result": "OutputType"},
+    )
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
         if asynchronous:
             outcome = await execute_step_async(
-                program,
+                definition,
                 name_to_value=name_to_value,
-                input_binding_names=("calculate", "first", "second"),
-                output_binding_names=("result",),
-                binding_name_to_type={"result": "OutputType"},
                 write_binding=saved_name_to_value.__setitem__,
             )
         else:
             outcome = execute_step(
-                program,
+                definition,
                 name_to_value=name_to_value,
-                input_binding_names=("calculate", "first", "second"),
-                output_binding_names=("result",),
-                binding_name_to_type={"result": "OutputType"},
                 write_binding=saved_name_to_value.__setitem__,
             )
     assert outcome == Pass()

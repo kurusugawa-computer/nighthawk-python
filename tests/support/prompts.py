@@ -7,8 +7,8 @@ from collections.abc import Iterable
 from pydantic_ai.messages import BinaryContent, CachePoint, FileUrl, ImageUrl, TextContent, UploadedFile, UserContent
 
 import nighthawk as nh
+from nighthawk.runtime.description import discover_type_alias_reference_names
 from nighthawk.runtime.prompt import build_user_prompt
-from nighthawk.runtime.runner import _discover_type_alias_reference_names
 from nighthawk.runtime.step_context import StepContext
 
 _DEFAULT_EXECUTOR_CONFIGURATION = nh.StepExecutorConfiguration()
@@ -38,7 +38,7 @@ def build_step_context(
     python_locals: dict[str, object],
     input_binding_names: Iterable[str] = (),
 ) -> StepContext:
-    type_alias_reference_names = _discover_type_alias_reference_names(
+    type_alias_reference_names = discover_type_alias_reference_names(
         step_locals=python_locals,
         step_globals=python_globals,
         input_binding_names=input_binding_names,

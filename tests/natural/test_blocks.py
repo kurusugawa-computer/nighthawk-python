@@ -1,5 +1,8 @@
 import textwrap
 
+import pytest
+
+from nighthawk.errors import NaturalParseError
 from nighthawk.natural.blocks import find_natural_blocks, is_natural_sentinel
 
 
@@ -133,3 +136,17 @@ def test_natural_inline_parentheses_do_not_matter():
     assert blocks[0].kind == "inline"
     assert blocks[0].output_bindings == ("y",)
     assert blocks[0].text.splitlines()[0] == "Make <:y> be 1."
+
+
+@pytest.mark.parametrize("marker", ["<return>", "<:class>"])
+def test_binding_keywords_are_rejected(marker: str) -> None:
+    from nighthawk.natural.blocks import extract_bindings
+
+    with pytest.raises(NaturalParseError, match="Invalid binding name"):
+        extract_bindings(marker)
+
+
+def test_repeated_markers_share_one_ordered_declaration() -> None:
+    from nighthawk.natural.blocks import extract_bindings
+
+    assert extract_bindings("<second> <first> <second> <:result> <:result>") == (("second", "first"), ("result",))

@@ -9,8 +9,7 @@ import pytest
 from pydantic import BaseModel, field_serializer
 
 from nighthawk.runtime import inspect_value
-from nighthawk.runtime.description import describe_callable, describe_public_members
-from nighthawk.runtime.runner import _discover_type_alias_reference_names
+from nighthawk.runtime.description import describe_callable, describe_public_members, discover_type_alias_reference_names
 from tests.support.prompts import build_step_context, build_user_prompt_text
 
 
@@ -201,7 +200,7 @@ def test_lazy_type_alias_is_discovered_without_evaluating_its_body() -> None:
     def action() -> list[Alias]:
         return []
 
-    discovered = _discover_type_alias_reference_names(step_locals={"action": action}, step_globals={"Alias": Alias}, input_binding_names=())
+    discovered = discover_type_alias_reference_names(step_locals={"action": action}, step_globals={"Alias": Alias}, input_binding_names=())
     assert discovered == frozenset({"Alias"})
     context = build_step_context(python_globals={"Alias": Alias}, python_locals={"action": action})
     prompt = build_user_prompt_text(processed_natural_program="Describe <Alias>.", step_context=context)

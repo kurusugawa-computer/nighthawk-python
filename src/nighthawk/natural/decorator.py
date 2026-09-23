@@ -18,7 +18,8 @@ from ..composition import UNSET, UnsetType
 from ..configuration import StepExecutorConfiguration, _model_selection
 from ..errors import NighthawkError
 from ..function_call import _invoke, _invoke_async
-from ..runtime.annotations import MISSING_ANNOTATION, SourceAnnotation
+from ..runtime.annotations import SourceAnnotation
+from ..runtime.bindings import MISSING_ANNOTATION
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope

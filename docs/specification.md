@@ -1210,7 +1210,12 @@ The contracts above own these semantics; this table collects review cases for im
 
 ## Explicit embedded steps
 
-`nighthawk.runtime.execute_step` and `execute_step_async` execute one trusted Natural program using an explicit `name_to_value` mapping, host-supplied read and ordered write declarations, output annotations, and a required `write_binding(name, value)` callback.
+`nighthawk.runtime.StepDefinition` holds a trusted Natural program, read and ordered write declarations, output and return annotations, loop context, and source location.
+Definitions are immutable and copy their declaration sequences and annotation mapping, retaining annotation object identity.
+Declarations must be ordered sequences of unique ASCII Python identifiers, excluding keywords; read and write declarations may overlap.
+Malformed declarations or annotations for undeclared outputs raise `BindingDeclarationError` at construction, outside any execution lifecycle.
+`execute_step(definition, *, name_to_value, write_binding)` and its asynchronous counterpart execute one invocation using the explicit namespace and required `write_binding(name, value)` callback.
+Definitions retain no invocation state and may be reused with different namespaces, initial values, types, and writers; annotation resolution and inference occur on every invocation.
 They require an active run and use its configured executor and the ordinary preparation, operation, validation, commit-inspection, and lifecycle machinery.
 The program is a body without the `natural` sentinel; deny frontmatter is supported.
 Declarations are authoritative host metadata; these entry points do not parse bindings from text, expand includes, or interpolate source.
@@ -1242,10 +1247,14 @@ The optional `source_location` supplies a program label, defaulting to `<embedde
 Both return new mappings and leave their input mappings unchanged.
 The public `MISSING_ANNOTATION` marker distinguishes an existing unannotated declaration from explicit Python types.
 Inference processes only supplied declarations and uses runtime container types without inferring type arguments.
-Independent validation accepts resolved annotations, rejects undeclared candidates before any individual validation, and visits supplied candidates in declaration iteration order.
+Independent validation accepts resolved annotations and an ordered sequence of unique binding names.
+It rejects invalid declarations, undeclared candidates, and annotations for undeclared outputs with `BindingDeclarationError` before individual validation.
+It visits supplied candidates in declaration order.
 Missing annotations skip individual validation; explicit None does not.
 Independent validation neither supplements initial values nor assigns or records outputs.
-It raises `BindingValidationError` with the binding name and original validation exception; ordinary step failures retain that original exception and binding-specific diagnostics.
+Value validation raises `BindingValidationError` with the binding name and original validation exception; ordinary step failures retain that original exception and binding-specific diagnostics.
+`BindingDeclarationError` and `BindingValidationError` derive from `BindingError`, which derives from `NighthawkError`.
+Independent binding helpers do not produce execution lifecycle records or raise `ExecutionError`.
 Neither helper promises deep copies or rollback of validator effects.
 
 ## Embedded execution boundaries

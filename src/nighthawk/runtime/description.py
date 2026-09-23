@@ -13,10 +13,11 @@ import sys
 import tokenize
 import types
 import typing
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeAliasType
 
 from .annotations import SourceAnnotation
 
@@ -423,3 +424,59 @@ def describe_public_members(value: object) -> PublicMembers:
                 continue
             field_name_to_value[name] = attribute
     return PublicMembers(method_name_to_value, field_name_to_value, tuple(omitted_names))
+
+
+def discover_type_alias_reference_names(
+    *,
+    step_locals: dict[str, object],
+    step_globals: dict[str, object],
+    input_binding_names: Iterable[str],
+) -> frozenset[str]:
+    discovered_names: set[str] = set()
+    seen: set[int] = set()
+
+    def _collect(annotation: object) -> None:
+        if exact_type(annotation, TypeAliasType):
+            name = annotation.__name__
+            if name in step_globals and name not in step_locals:
+                discovered_names.add(name)
+            return
+
+        if exact_type(annotation, str):
+            import ast
+
+            if len(annotation) > 4_096:
+                return
+            try:
+                expression = ast.parse(annotation, mode="eval")
+            except SyntaxError:
+                return
+            for node in ast.walk(expression):
+                if isinstance(node, ast.Name) and exact_type(step_globals.get(node.id), TypeAliasType) and node.id not in step_locals:
+                    discovered_names.add(node.id)
+            return
+
+        annotation_id = id(annotation)
+        if annotation_id in seen:
+            return
+        seen.add(annotation_id)
+
+        for arg in annotation_arguments(annotation):
+            _collect(arg)
+
+    def _scan_callable(value: object) -> None:
+        for annotation in describe_callable(value).annotations:
+            _collect(annotation)
+
+    for value in step_locals.values():
+        if callable(value):
+            _scan_callable(value)
+
+    step_locals_keys = step_locals.keys()
+    for name in input_binding_names:
+        if name not in step_locals_keys and name in step_globals:
+            value = step_globals[name]
+            if callable(value):
+                _scan_callable(value)
+
+    return frozenset(discovered_names)

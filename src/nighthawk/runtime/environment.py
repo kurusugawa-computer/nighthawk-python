@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import CellType, MappingProxyType
 from typing import Literal
 
-from .annotations import MISSING_ANNOTATION
+from .bindings import MISSING_ANNOTATION
 from .description import annotation_text
 from .discovery import DiscoveryResult, page_names
 

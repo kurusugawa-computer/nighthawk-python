@@ -5,7 +5,7 @@ Choose a test owner by the behavior that would break, including when a test call
 
 | Path | Owner and scope |
 | --- | --- |
-| `test_composition.py`, `test_configuration.py`, `test_json_renderer.py`, `test_testing.py` | Corresponding top-level library modules. |
+| `test_composition.py`, `test_configuration.py`, `test_function_call.py`, `test_json_renderer.py`, `test_testing.py` | Corresponding top-level library modules. |
 | `natural/` | Source extraction, transformation, lexical bindings, decorators, and Python introspection. |
 | `runtime/` | Run and scope configuration, context and prompt construction, discovery, executor requests, validation, operations, usage, tracing, and composed Python workflows. |
 | `oversight/` | Host inspection, rejection, and validated rewrites of step commits and return expressions. |
@@ -17,6 +17,21 @@ Choose a test owner by the behavior that would break, including when a test call
 | `evals/model_tools/` | Deterministic checks of the evaluation workspace prototype, study treatments, and semantic oracles. |
 | `integration/` | Opt-in tests using real providers or coding agent executables. |
 | `support/` | Shared executors, contexts, prompt helpers, tool fixtures, and backend stubs; never collected as tests. |
+
+Within `runtime/`, use these owners:
+
+- `test_bindings.py`: independent declaration, inference, and value validation contracts.
+- `test_step_definition.py`: immutable reusable declarations and per-invocation contract selection.
+- `test_preparation.py`: namespace and annotation acquisition before executor admission, including failure diagnostics.
+- `test_embedded.py`: explicit host entry points, environment selection, Python composition, and writer adaptation.
+- `test_runner.py`: executing and finalizing steps, output selection, and Python control results.
+- `test_description.py`: best-effort metadata discovery without evaluating application annotations.
+- `test_expression.py`: expression evaluation and awaitable handling, independent of tool projection.
+
+Commit inspection belongs in `oversight/`, including embedded output replacement and rejection.
+Assignment failure, cancellation, and terminal delivery belong in `lifecycle/`, including host writers.
+Test pure binding rules once in their owner and keep entry-point tests focused on their integration.
+Asynchronous API tests await directly; the shared `execute` fixture adapts only the synchronous entry to the async test harness.
 
 Keep a helper beside its sole consumer; move it to `support/` when several test modules need it.
 Do not import another `test_*.py` module for helpers.

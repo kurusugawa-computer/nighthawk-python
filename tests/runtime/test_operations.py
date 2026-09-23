@@ -318,3 +318,18 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
         asyncio.run(workflow())
     assert len(terminal) == 1 and isinstance(terminal[0], StepFailed)
     assert terminal[0].assigned_binding_name_to_value == {}
+
+
+def test_request_freezes_arguments_mapping_but_preserves_values() -> None:
+    values = [1]
+    tool_call = nh.runtime.OperationRequest(
+        execution_reference=nh.ExecutionReference("run", "scope", "step"),
+        operation_id="operation",
+        kind="native_tool",
+        tool_name="lookup",
+        argument_name_to_value={"values": values},
+    )
+    assert tool_call.argument_name_to_value["values"] is values
+
+    with pytest.raises(TypeError):
+        tool_call.argument_name_to_value["values"] = []  # type: ignore[index]

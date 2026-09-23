@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Immutable `StepDefinition` declarations and synchronous/asynchronous embedded step execution use explicit host namespaces and keep validated writeback inside the ordinary lifecycle boundary.
+- Shared binding inference and ordered validation expose `MISSING_ANNOTATION` and structured binding errors through `nighthawk.runtime`.
+
 - Exact Natural definition lookup, optional whole-function call handlers, inert function model declarations, and preserving executor model resolution.
 
 - `StepEnvironment` separates Python lexical bindings, inherited working state, scoped task references, and tracked step assignments, with source-qualified lookup and progressing discovery.

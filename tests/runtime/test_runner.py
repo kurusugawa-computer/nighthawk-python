@@ -1,17 +1,16 @@
 import asyncio
-import json
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
 import pytest
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.step_contract import ReturnStepOutcome
+from nighthawk.runtime.step_contract import PassStepOutcome, RaiseStepOutcome, ReturnStepOutcome
 from tests.support.executors import StubExecutor
 
 GLOBAL_NUMBER = 7
@@ -457,56 +456,6 @@ def test_frontmatter_deny_return_rejects_return_step():
             f()
 
 
-def test_frontmatter_deny_return_recognizes_leading_blank_lines():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
-
-        @nh.natural_function
-        def f() -> int:
-            result = 0
-            """natural
-
-            ---
-            deny:
-              - return
-            ---
-            <:result>
-            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
-            """
-            return result
-
-        with pytest.raises(ExecutionError, match="not allowed"):
-            f()
-
-
-def test_frontmatter_deny_return_allows_bindings():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
-
-        @nh.natural_function
-        def f(x: int):
-            computed_result = x + 1
-            envelope_json_text = json.dumps(
-                {
-                    "step_outcome": {"kind": "pass"},
-                    "bindings": {"result": computed_result},
-                }
-            )
-
-            f"""natural
-            ---
-            deny:
-              - return
-            ---
-            <:result>
-            {envelope_json_text}
-            """
-            _ = x
-            return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
-
-        assert f(10) == 11
-
-
 def test_natural_function_rejects_step_executor_configuration_updates_for_non_agent_step_executor() -> None:
     with nh.run(StubExecutor()):
 
@@ -519,52 +468,61 @@ def test_natural_function_rejects_step_executor_configuration_updates_for_non_ag
             f()
 
 
-def test_scope_task_references_are_merged_into_step_context() -> None:
-    from nighthawk.testing import CallbackExecutor, pass_response
+def test_compound_annotation_rejects_out_of_range_value() -> None:
+    @nh.natural_function
+    def workflow() -> int:
+        if True:
+            result: Annotated[int, Field(ge=0, le=10)] = 0
+        """natural
+        <:result>
+        {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
+        """
+        return result
 
-    observed_task_reference_name_set: set[str] = set()
-
-    def search_repository(query: str) -> list[str]:
-        _ = query
-        return ["hit"]
-
-    def handler(call):  # type: ignore[no-untyped-def]
-        observed_task_reference_name_set.update(call.task_name_to_value.keys())
-        return pass_response()
-
-    executor = CallbackExecutor(handler)
-
-    with nh.run(executor), nh.scope(task_references={"search_repository": search_repository}):
-
-        @nh.natural_function
-        def f() -> None:
-            """natural
-            Execute one step.
-            """
-
-        f()
-
-    assert "search_repository" in observed_task_reference_name_set
-    assert "SHADOWED_NUMBER" not in observed_task_reference_name_set
+    with nh.run(StubExecutor()), pytest.raises(nh.ExecutionError, match="less than or equal to 10"):
+        workflow()
 
 
-def test_unannotated_binding_type_inferred_from_initial_value():
-    """binding_name_to_type should reflect the inferred type for unannotated write bindings."""
-    from nighthawk.testing import ScriptedExecutor, pass_response
+def test_initialized_output_is_validated_without_executor_assignment() -> None:
+    @nh.natural_function
+    def workflow() -> str:
+        result: Annotated[str, AfterValidator(str.strip)] = " draft "
+        """natural
+        <:result>
+        {"step_outcome": {"kind": "pass"}, "bindings": {}}
+        """
+        return result
 
-    executor = ScriptedExecutor(responses=[pass_response(result="hello")])
-    with nh.run(executor):
+    with nh.run(StubExecutor()):
+        assert workflow() == "draft"
 
-        @nh.natural_function
-        def f() -> str:
-            result = ""
-            """natural
-            <:result>
-            This is a docstring Natural block.
-            """
 
-            return result
+def test_invalid_initialized_output_fails_without_executor_assignment() -> None:
+    @nh.natural_function
+    def workflow() -> int:
+        result: Annotated[int, Field(ge=0)] = -1
+        """natural
+        <:result>
+        {"step_outcome": {"kind": "pass"}, "bindings": {}}
+        """
+        return result
 
-        assert f() == "hello"
+    with nh.run(StubExecutor()), pytest.raises(nh.ExecutionError, match="greater than or equal to 0"):
+        workflow()
 
-    assert executor.calls[0].binding_name_to_type["result"] is str
+
+@pytest.mark.parametrize("raising", [False, True])
+def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None:
+    class Executor:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            outcome = RaiseStepOutcome(kind="raise", raise_message="failed") if raising else PassStepOutcome(kind="pass")
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, {"undeclared": 1}))
+
+    @nh.natural_function
+    def workflow() -> None:
+        """natural
+        Finish.
+        """
+
+    with nh.run(Executor()), pytest.raises(nh.ExecutionError, match="Undeclared output"):
+        workflow()

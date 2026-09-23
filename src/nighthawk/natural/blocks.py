@@ -9,8 +9,8 @@ from typing import Any, Literal
 import yaml
 
 from ..errors import NaturalParseError
+from ..runtime.bindings import BindingDeclarationError, normalize_binding_names
 
-_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _BINDING_PATTERN = re.compile(r"<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
 
 
@@ -40,24 +40,15 @@ def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     for match in _BINDING_PATTERN.finditer(program):
         is_output = match.group(1) == ":"
         name = match.group(2)
-        if not _IDENTIFIER_PATTERN.match(name):
-            raise NaturalParseError(f"Invalid binding name: {name!r}")
         if is_output:
             outputs.append(name)
         else:
             inputs.append(name)
 
-    def deduplicate(names: list[str]) -> tuple[str, ...]:
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for name in names:
-            if name in seen:
-                continue
-            seen.add(name)
-            ordered.append(name)
-        return tuple(ordered)
-
-    return deduplicate(inputs), deduplicate(outputs)
+    try:
+        return normalize_binding_names(tuple(dict.fromkeys(inputs))), normalize_binding_names(tuple(dict.fromkeys(outputs)))
+    except BindingDeclarationError as exception:
+        raise NaturalParseError(str(exception)) from exception
 
 
 _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER = "\x00"

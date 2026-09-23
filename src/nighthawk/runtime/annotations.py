@@ -7,12 +7,9 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Literal, Unpack, get_args, get_origin, get_type_hints
 
+from pydantic import TypeAdapter
 
-class MissingAnnotation:
-    """Distinguish an absent annotation from explicit object, Any, or None."""
-
-
-MISSING_ANNOTATION = MissingAnnotation()
+from .bindings import MISSING_ANNOTATION
 
 
 @dataclass(frozen=True)
@@ -60,3 +57,16 @@ def resolve_annotation(
     if annotation.parameter_kind == "positional":
         return tuple[resolved, ...]
     return dict[str, resolved]
+
+
+def resolve_contract(annotation: object, *, python_globals: dict[str, object], python_locals: dict[str, object]) -> object:
+    """Resolve a contract in its selected namespace before executor admission."""
+    if annotation is MISSING_ANNOTATION:
+        return object
+    if isinstance(annotation, SourceAnnotation):
+        resolved = resolve_annotation(annotation, python_globals=python_globals, python_locals=python_locals)
+    else:
+        holder = SimpleNamespace(__annotations__={"value": annotation})
+        resolved = get_type_hints(holder, globalns=python_globals, localns=python_locals, include_extras=True)["value"]
+    TypeAdapter(resolved)
+    return resolved

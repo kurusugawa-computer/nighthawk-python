@@ -14,6 +14,7 @@ from nighthawk.oversight import Accept, Oversight, Reject
 from nighthawk.runtime import OperationRequest
 from nighthawk.runtime.step_contract import ReturnStepOutcome
 from nighthawk.testing import ScriptedExecutor, StepResponse
+from tests.support.executors import StubExecutor
 
 
 def approve_name_expression(request: OperationRequest) -> Accept | Reject:
@@ -161,3 +162,38 @@ def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
     assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.oversight.Return)
     assert event.outcome.value == 4
     assert event.assigned_binding_name_to_value == {"value": 9}
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("decision", [nh.oversight.Accept(), nh.oversight.Rewrite(binding_name_to_value={"result": 99})])
+def test_return_expression_runs_once_and_keeps_resolved_value(asynchronous: bool, decision: nh.oversight.StepCommitDecision) -> None:
+    calls: list[str] = []
+
+    def calculate() -> int:
+        calls.append("calculated")
+        return 12
+
+    async def calculate_async() -> int:
+        return calculate()
+
+    @nh.natural_function
+    def synchronous() -> int:
+        nonlocal calculate
+        """natural
+        <calculate> <:result>
+        {"step_outcome": {"kind": "return", "return_expression": "calculate() + result"}, "bindings": {"result": 1}}
+        """
+        return 0
+
+    @nh.natural_function
+    async def asynchronous_function() -> int:
+        nonlocal calculate_async
+        """natural
+        <calculate_async> <:result>
+        {"step_outcome": {"kind": "return", "return_expression": "(await calculate_async()) + result"}, "bindings": {"result": 1}}
+        """
+        return 0
+
+    with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: decision)):
+        assert (asyncio.run(asynchronous_function()) if asynchronous else synchronous()) == 13
+    assert calls == ["calculated"]
