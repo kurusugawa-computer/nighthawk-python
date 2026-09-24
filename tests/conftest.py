@@ -26,7 +26,6 @@ def step_span_exporter() -> Generator[InMemorySpanExporter]:
 
 @pytest.fixture(params=[False, True], ids=["synchronous", "asynchronous"])
 def execute(request: pytest.FixtureRequest) -> Callable[..., Awaitable[StepResult]]:
-    """Exercise both public entries while awaiting asynchronous execution directly."""
     if request.param:
         return execute_step_async
 

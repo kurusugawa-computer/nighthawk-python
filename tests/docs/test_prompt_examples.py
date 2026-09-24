@@ -1,19 +1,3 @@
-"""Verify that prompt examples in docs match build_user_prompt output.
-
-Each example in the docs is wrapped in HTML comment markers:
-    <!-- prompt-example:NAME -->
-    ```text
-    ...prompt text...
-    ```
-    <!-- /prompt-example:NAME -->
-
-Prompt-example anchors live in natural-blocks.md by default.
-Exception: carry-pattern lives in patterns.md (cross-block composition).
-
-This test file defines the inputs for each named example, calls
-build_user_prompt, and asserts the output matches the documented text.
-"""
-
 import builtins
 import re
 from pathlib import Path
@@ -33,7 +17,6 @@ _NATURAL_BLOCKS_PATH = _DOCS_DIR / "natural-blocks.md"
 _PATTERNS_PATH = _DOCS_DIR / "patterns.md"
 _DEFAULT_CONFIGURATION = StepExecutorConfiguration()
 
-# Map example names to the file that owns them.
 _EXAMPLE_NAME_TO_PATH: dict[str, Path] = {
     "basic-binding": _NATURAL_BLOCKS_PATH,
     "fstring-injection": _NATURAL_BLOCKS_PATH,
@@ -44,7 +27,6 @@ _EXAMPLE_NAME_TO_PATH: dict[str, Path] = {
 
 
 def _extract_prompt_example(name: str) -> str:
-    """Extract the prompt text for a named example from its canonical file."""
     file_path = _EXAMPLE_NAME_TO_PATH.get(name)
     if file_path is None:
         pytest.fail(f"prompt-example:{name} has no file mapping in _EXAMPLE_NAME_TO_PATH")

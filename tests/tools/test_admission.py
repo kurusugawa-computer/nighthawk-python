@@ -1,5 +1,3 @@
-"""Native argument failures retain their admission identity and Python origin."""
-
 from __future__ import annotations
 
 import asyncio

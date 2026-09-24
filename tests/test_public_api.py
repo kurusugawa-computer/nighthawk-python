@@ -1,5 +1,3 @@
-"""Public exports resolve through their advertised module facades."""
-
 import pytest
 
 import nighthawk

@@ -1,5 +1,3 @@
-"""Execute the published README example with deterministic model responses."""
-
 import re
 import runpy
 from pathlib import Path

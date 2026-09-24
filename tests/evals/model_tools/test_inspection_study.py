@@ -1,5 +1,3 @@
-"""Validate the controlled study against production operations and semantic oracles."""
-
 from __future__ import annotations
 
 import asyncio

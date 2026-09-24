@@ -18,7 +18,6 @@ from tests.support.executors import StubExecutor
 
 
 def approve_name_expression(request: OperationRequest) -> Accept | Reject:
-    """Example host policy; return validation and commit approval remain necessary."""
     assert request.kind == "return" and request.expression is not None
     try:
         expression = ast.parse(request.expression, mode="eval").body

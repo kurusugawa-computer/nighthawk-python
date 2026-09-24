@@ -40,18 +40,11 @@ def _find_finished_event(run_span_exporter: InMemorySpanExporter, *, event_name:
     raise AssertionError(f"Event not found: {event_name}")
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _make_function_that_records_usage(
     *,
     input_tokens: int = 0,
     output_tokens: int = 0,
 ) -> ...:
-    """Create a sync function that records usage to the current meter."""
-
     def fn(text: str) -> str:
         meter = get_usage_meter()
         if meter is not None:
@@ -66,8 +59,6 @@ def _make_async_function_that_records_usage(
     input_tokens: int = 0,
     output_tokens: int = 0,
 ) -> ...:
-    """Create an async function that records usage to the current meter."""
-
     async def fn(text: str) -> str:
         meter = get_usage_meter()
         if meter is not None:
@@ -75,11 +66,6 @@ def _make_async_function_that_records_usage(
         return f"result:{text}"
 
     return fn
-
-
-# ---------------------------------------------------------------------------
-# Pre-check tests
-# ---------------------------------------------------------------------------
 
 
 class TestBudgetPreCheck:
@@ -121,11 +107,6 @@ class TestBudgetPreCheck:
             assert exception_info.value.limit_kind == "tokens"
 
 
-# ---------------------------------------------------------------------------
-# Post-check tests
-# ---------------------------------------------------------------------------
-
-
 class TestBudgetPostCheck:
     def test_raises_when_tokens_per_call_exceeded(self) -> None:
         fn = _make_function_that_records_usage(input_tokens=100, output_tokens=100)
@@ -163,14 +144,8 @@ class TestBudgetPostCheck:
             assert result == "result:hello"
 
 
-# ---------------------------------------------------------------------------
-# Combined limits
-# ---------------------------------------------------------------------------
-
-
 class TestBudgetCombined:
     def test_tokens_per_call_checked_before_cumulative(self) -> None:
-        """When both limits are violated, tokens_per_call is reported first."""
         fn = _make_function_that_records_usage(input_tokens=100, output_tokens=100)
         budgeted = budget(tokens=50, tokens_per_call=50)(fn)
 
@@ -193,11 +168,6 @@ class TestBudgetCombined:
                 budgeted("x")
 
             assert exception_info.value.limit_kind == "tokens"
-
-
-# ---------------------------------------------------------------------------
-# Async tests
-# ---------------------------------------------------------------------------
 
 
 class TestBudgetAsync:
@@ -234,11 +204,6 @@ class TestBudgetAsync:
             assert result == "result:hello"
 
 
-# ---------------------------------------------------------------------------
-# No run context
-# ---------------------------------------------------------------------------
-
-
 class TestBudgetNoRunContext:
     def test_no_enforcement_without_run_context(self) -> None:
         def function(value: str) -> str:
@@ -255,11 +220,6 @@ class TestBudgetNoRunContext:
             return f"result:{value}"
 
         assert asyncio.run(budget(tokens=0)(function)("hello")) == "result:hello"
-
-
-# ---------------------------------------------------------------------------
-# Error attributes
-# ---------------------------------------------------------------------------
 
 
 class TestBudgetExceededErrorAttributes:
@@ -306,11 +266,6 @@ class TestBudgetExceededErrorAttributes:
             budgeted("x")
 
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-
 class TestBudgetLogging:
     def test_logs_warning_on_budget_exceeded(self, caplog: pytest.LogCaptureFixture) -> None:
         fn = _make_function_that_records_usage(input_tokens=100, output_tokens=100)
@@ -320,11 +275,6 @@ class TestBudgetLogging:
             budgeted("x")
 
         assert any("Budget exceeded" in record.message for record in caplog.records)
-
-
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
 
 
 class TestBudgetValidation:
@@ -339,11 +289,6 @@ class TestBudgetValidation:
     def test_raises_value_error_when_cost_per_call_without_cost_function(self) -> None:
         with pytest.raises(ValueError, match="cost_function"):
             budget(cost_per_call=1.0)
-
-
-# ---------------------------------------------------------------------------
-# Metadata preservation
-# ---------------------------------------------------------------------------
 
 
 class TestBudgetMetadata:
@@ -363,13 +308,7 @@ class TestBudgetMetadata:
         assert wrapped.__doc__ == "Classify text."
 
 
-# ---------------------------------------------------------------------------
-# Cost function tests (Phase 3)
-# ---------------------------------------------------------------------------
-
-
 def _dollar_per_thousand_tokens(usage: RunUsage) -> float:
-    """Simple cost function: $0.01 per 1000 tokens."""
     return usage.total_tokens * 0.01 / 1000
 
 

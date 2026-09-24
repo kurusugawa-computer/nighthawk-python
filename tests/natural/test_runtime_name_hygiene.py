@@ -1,5 +1,3 @@
-"""Instrumentation owns generated bindings, never an application name prefix."""
-
 from __future__ import annotations
 
 import asyncio

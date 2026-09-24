@@ -22,12 +22,7 @@ _SOLID_COLOR_PNG_SIZE = 16
 
 
 def _build_solid_color_png(*, red: int, green: int, blue: int, size: int = _SOLID_COLOR_PNG_SIZE) -> bytes:
-    """Build a ``size`` by ``size`` PNG filled with one RGB color.
-
-    A single pixel is too small for vision models to classify reliably (both
-    ``gpt-5.4-mini`` and ``gpt-5.4`` misjudged 1x1 images returned from a tool),
-    so the default is a 16x16 square.
-    """
+    """Vision models misclassify single-pixel images returned from a tool."""
     import struct
     import zlib
 

@@ -54,11 +54,6 @@ def _timeout_event_list(run_span: ReadableSpan) -> list[tuple[str, dict[str, obj
     return timeout_event_list
 
 
-# ---------------------------------------------------------------------------
-# Tracing
-# ---------------------------------------------------------------------------
-
-
 class TestTimeoutTracing:
     def test_sync_timeout_emits_event(self, run_span_exporter: InMemorySpanExporter) -> None:
         @timeout(seconds=0.01)
@@ -100,11 +95,6 @@ class TestTimeoutTracing:
         run_span = _get_finished_run_spans(run_span_exporter)[0]
         timeout_event_list = _timeout_event_list(run_span)
         assert timeout_event_list == []
-
-
-# ---------------------------------------------------------------------------
-# Decorator form — sync
-# ---------------------------------------------------------------------------
 
 
 class TestTimeoutDecoratorSync:
@@ -149,11 +139,6 @@ class TestTimeoutDecoratorSync:
             failing()
 
 
-# ---------------------------------------------------------------------------
-# Decorator form — async
-# ---------------------------------------------------------------------------
-
-
 class TestTimeoutDecoratorAsync:
     def test_async_completes_within_timeout(self) -> None:
         @timeout(seconds=5)
@@ -181,11 +166,6 @@ class TestTimeoutDecoratorAsync:
         assert wrapped.__doc__ == "Async doc."
 
 
-# ---------------------------------------------------------------------------
-# Async context manager form
-# ---------------------------------------------------------------------------
-
-
 class TestTimeoutAsyncContextManager:
     def test_async_with_completes(self) -> None:
         async def run() -> str:
@@ -202,11 +182,6 @@ class TestTimeoutAsyncContextManager:
 
         with pytest.raises(TimeoutError):
             asyncio.run(run())
-
-
-# ---------------------------------------------------------------------------
-# Sync context manager — not supported
-# ---------------------------------------------------------------------------
 
 
 class TestTimeoutSyncContextManager:

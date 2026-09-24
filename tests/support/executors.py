@@ -15,19 +15,6 @@ from nighthawk.runtime.step_contract import StepOutcome
 
 @dataclass(frozen=True)
 class StubExecutor:
-    """Test-only executor that parses a step envelope from the Natural program.
-
-    This is intentionally not part of the library's public API.
-
-    Contract:
-
-    - Find the first '{' in the Natural program text.
-    - Parse the substring starting there as a JSON object.
-    - Expect an envelope with keys: 'step_outcome' and 'bindings'.
-    - Validate 'step_outcome' against `StepOutcome`.
-    - Return bindings filtered to only names in the provided binding list.
-    """
-
     def _parse_response(self, request: StepRequest) -> tuple[StepOutcome, dict[str, object]]:
         processed_natural_program = request.processed_natural_program
         step_context = request.step_context

@@ -1,5 +1,3 @@
-"""Host-policy fixtures for runtime and provider integration tests."""
-
 from __future__ import annotations
 
 import threading
@@ -36,11 +34,7 @@ class RequestObservation:
 
 
 class RequestObserver(AbstractCapability[nh.StepContext]):
-    """Test accounting policy with records separate from UsageMeter.
-
-    Pydantic AI collapses absent usage to zeros.
-    Treat an all-zero total as unknown conservatively.
-    """
+    """Pydantic AI collapses absent usage to zeros, so an all-zero total counts as unknown."""
 
     def __init__(self, threshold: int = 100, host_unit: str = "test") -> None:
         super().__init__()
@@ -115,8 +109,6 @@ class RecordingHandler:
 
 
 class PreservingExecutor:
-    """An application wrapper that resolves allowed models without losing itself."""
-
     def __init__(self, executor: nh.AgentStepExecutor, model_name_to_model: dict[str, FunctionModel], observer: RequestObserver) -> None:
         self.executor = executor
         self.model_name_to_model = model_name_to_model

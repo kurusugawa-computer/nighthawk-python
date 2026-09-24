@@ -5,18 +5,6 @@ from pathlib import Path
 
 
 def _write_executable_codex_stub(*, directory: Path) -> Path:
-    """Write a test-only Codex CLI stub executable.
-
-    NOTE: This is a contract test stub, not a real codex-cli integration.
-
-    The stub emulates the minimal behavior needed by CodexModel:
-    - Reads stdin (prompt text)
-    - Extracts MCP server URL and enabled tool allowlist from --config arguments
-    - Connects to the MCP server via Streamable HTTP
-    - Calls nh_eval("1 + 1")
-    - Emits JSONL events to stdout (thread.started, item.completed, turn.completed)
-    """
-
     stub_path = directory / "codex-cli-stub"
 
     stub_code = (

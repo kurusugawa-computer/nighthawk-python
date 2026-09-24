@@ -1,5 +1,3 @@
-"""Execute the coding-agent guide's published application and contract tests."""
-
 import re
 import runpy
 import sys

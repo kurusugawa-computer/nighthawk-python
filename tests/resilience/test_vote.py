@@ -6,10 +6,6 @@ import pytest
 
 from nighthawk.resilience import plurality, vote
 
-# ---------------------------------------------------------------------------
-# plurality function
-# ---------------------------------------------------------------------------
-
 
 class TestPlurality:
     def test_simple_majority(self) -> None:
@@ -30,11 +26,6 @@ class TestPlurality:
             plurality([])
 
 
-# ---------------------------------------------------------------------------
-# vote — sync
-# ---------------------------------------------------------------------------
-
-
 class TestVoteSync:
     def test_majority_wins(self) -> None:
         call_count = 0
@@ -42,7 +33,6 @@ class TestVoteSync:
         def classify(text: str) -> str:
             nonlocal call_count
             call_count += 1
-            # Returns "a" twice and "b" once
             return "a" if call_count != 2 else "b"
 
         result = vote(count=3)(classify)("hello")
@@ -66,7 +56,6 @@ class TestVoteSync:
                 raise ValueError("transient")
             return "ok"
 
-        # count=3, min_success defaults to ceil(3/2)=2; 2 successes >= 2
         result = vote(count=3)(sometimes_fail)("hello")
         assert result == "ok"
 
@@ -80,7 +69,6 @@ class TestVoteSync:
                 raise ValueError(f"fail #{call_count}")
             return "ok"
 
-        # count=3, min_success=2; only 1 success < 2
         with pytest.raises(ValueError, match="fail #2"):
             vote(count=3)(mostly_fail)("hello")
 
@@ -116,7 +104,6 @@ class TestVoteSync:
                 raise ValueError("fail")
             return "ok"
 
-        # Only need 1 success
         result = vote(count=3, min_success=1)(mostly_fail)("hello")
         assert result == "ok"
 
@@ -140,11 +127,6 @@ class TestVoteSync:
         wrapped = vote(count=3)(my_function)
         assert wrapped.__name__ == "my_function"
         assert wrapped.__doc__ == "My doc."
-
-
-# ---------------------------------------------------------------------------
-# vote — async
-# ---------------------------------------------------------------------------
 
 
 class TestVoteAsync:

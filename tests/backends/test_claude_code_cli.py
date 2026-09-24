@@ -11,8 +11,6 @@ from nighthawk.backends.claude_code_cli import (
     _parse_claude_code_json_output,
 )
 
-# --- _parse_claude_code_json_output tests ---
-
 
 def test_parse_json_output_extracts_result_text() -> None:
     output = json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "hello", "usage": {}, "modelUsage": {}})
@@ -82,9 +80,6 @@ def test_parse_json_output_raises_on_invalid_json() -> None:
 def test_parse_json_output_raises_on_non_object() -> None:
     with pytest.raises(UnexpectedModelBehavior, match="non-object JSON"):
         _parse_claude_code_json_output('"just a string"')
-
-
-# --- ClaudeCodeCliModelSettings validation tests ---
 
 
 def test_settings_defaults() -> None:

@@ -240,14 +240,6 @@ def test_mcp_boundary_claude_code_returns_rich_image_content() -> None:
 
 
 def test_mcp_boundary_low_level_mcp_server_projects_image_url_to_text_content() -> None:
-    """FileUrl subclasses project to TextContent on the MCP transport.
-
-    The text shape (``<image>`` placeholder + ``Image URL: ...`` line) mirrors
-    the text-projected backend path so the model sees consistent framing across
-    transports. Multimodal-capable providers that bypass MCP send the URL
-    natively via ``ToolReturnPart.files`` and are not covered here.
-    """
-
     async def tool_handler(arguments: dict[str, object]) -> ToolHandlerResult:
         assert arguments == {"x": 1}
         return _test_tool_handler_result(
@@ -273,8 +265,6 @@ def test_mcp_boundary_low_level_mcp_server_projects_image_url_to_text_content() 
 
 
 def test_mcp_boundary_claude_code_projects_audio_url_to_text_content() -> None:
-    """AudioUrl projects to TextContent on claude-code-sdk tool responses."""
-
     async def tool_handler(arguments: dict[str, object]) -> ToolHandlerResult:
         assert arguments == {"x": 1}
         return _test_tool_handler_result(
@@ -476,16 +466,6 @@ def test_mcp_boundary_replaces_uploaded_file_with_text_fallback() -> None:
 
 
 def test_mcp_boundary_projects_non_image_audio_binary_to_text_content() -> None:
-    """Non-image / non-audio ``BinaryContent`` projects to a TextContent fallback.
-
-    The MCP transport used to embed these blobs as an ``EmbeddedResource`` with
-    a synthetic ``nighthawk://`` URI, which required a ``cast(Any, ...)`` to
-    bypass MCP's ``AnyUrl`` validator and offered no resolvable value to the
-    consumer. Non-image / non-audio blobs now project to text, mirroring the
-    text-projected backend path. The text body carries the caller-supplied
-    identifier and media type verbatim so no URI-safety escaping is required.
-    """
-
     async def tool_handler(arguments: dict[str, object]) -> ToolHandlerResult:
         assert arguments == {"x": 1}
         return _test_tool_handler_result(

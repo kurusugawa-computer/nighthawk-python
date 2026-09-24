@@ -1,5 +1,3 @@
-"""Exercise Python-controlled workflows across Natural execution boundaries."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -14,8 +12,6 @@ def helper(query: str) -> list[str]:
 
 
 class TestExecutorSelectionPatterns:
-    """The guide's per-block executor selection patterns execute correctly."""
-
     def test_can_mix_fast_and_deep_executors_in_one_run(self) -> None:
         fast_executor = ScriptedExecutor(responses=[pass_response(label="bug")])
         deep_executor = ScriptedExecutor(responses=[pass_response(report="detailed analysis")])
@@ -58,8 +54,6 @@ class TestExecutorSelectionPatterns:
 
 
 class TestStateBoundaryPatterns:
-    """The guide's state boundary rules match executable behavior."""
-
     def test_read_binding_mutation_is_visible_through_shared_reference(self) -> None:
         def handler(call):
             carry = call.step_locals["carry"]
@@ -106,8 +100,6 @@ class TestStateBoundaryPatterns:
 
 
 class TestControlFlowPatterns:
-    """The guide's recommended deny pattern remains executable."""
-
     def test_post_block_logic_pattern_allows_python_validation(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response(summary="concise summary")])
 

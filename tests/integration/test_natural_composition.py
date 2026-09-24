@@ -1,9 +1,4 @@
-"""Real model coverage of the practical and mechanical Ideal State examples.
-
-These synthetic documents and claims contain no external or private data.
-The oracles accept different expressions and score choices while checking actual
-Natural child invocations, inherited state, returned values, and joined lifetimes.
-"""
+"""Synthetic documents and claims contain no external or private data."""
 
 from __future__ import annotations
 

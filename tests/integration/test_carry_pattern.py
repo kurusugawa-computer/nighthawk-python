@@ -1,11 +1,8 @@
-"""Integration tests for the carry pattern: cross-block context continuity via user-managed objects."""
-
 import nighthawk as nh
 from tests.integration.skip_helpers import requires_openai_integration
 
 
 def test_carry_continuity_across_blocks():
-    """Carry list carries context from step 1 into step 2 via in-place mutation."""
     openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -48,7 +45,6 @@ def test_carry_continuity_across_blocks():
 
 
 def test_carry_branching():
-    """Branching a carry creates independent continuations."""
     openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(
@@ -93,7 +89,6 @@ def test_carry_branching():
         seed_result = seed_step(carry)
         assert seed_result == 100
 
-        # Branch: copy the carry at this point
         carry_a = carry.copy()
         carry_b = carry.copy()
 
@@ -103,14 +98,12 @@ def test_carry_branching():
         result_b = branch_multiply(carry_b)
         assert result_b == 200
 
-        # Carries diverged
         assert carry_a != carry_b
         assert len(carry_a) >= 2
         assert len(carry_b) >= 2
 
 
 def test_carry_with_fstring_injection():
-    """f-string inline block injects carry content directly into the Natural program text."""
     openai_responses_model_settings_class = requires_openai_integration()
 
     step_executor = nh.AgentStepExecutor.from_configuration(

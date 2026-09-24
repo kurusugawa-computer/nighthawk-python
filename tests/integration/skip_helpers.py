@@ -1,5 +1,3 @@
-"""Shared skip helpers for integration tests."""
-
 import os
 
 import pytest

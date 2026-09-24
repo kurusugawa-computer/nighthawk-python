@@ -1,5 +1,3 @@
-"""Discovery control strings must survive ordinary Python result composition."""
-
 from __future__ import annotations
 
 import asyncio

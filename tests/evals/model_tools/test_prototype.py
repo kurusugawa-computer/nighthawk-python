@@ -1,5 +1,3 @@
-"""Check experimental mechanics before interpreting model comparisons."""
-
 import asyncio
 
 import pytest

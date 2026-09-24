@@ -1,5 +1,3 @@
-"""Tests for nighthawk.testing utilities."""
-
 from __future__ import annotations
 
 import pytest
@@ -18,8 +16,6 @@ from nighthawk.testing import (
     return_response,
 )
 
-# ── Helpers ──
-
 
 def _module_level_helper(query: str) -> list[str]:
     """Fetch items matching the query."""
@@ -30,9 +26,6 @@ class ReviewVerdict(BaseModel):
     approved: bool
     reason: str
     risk_level: str
-
-
-# ── ScriptedExecutor tests ──
 
 
 class TestScriptedExecutorPassOutcome:
@@ -296,9 +289,6 @@ class TestScriptedExecutorBindingFiltering:
             f()
 
 
-# ── CallbackExecutor tests ──
-
-
 class TestCallbackExecutor:
     def test_delegates_to_handler(self) -> None:
         def handler(call: StepCall) -> StepResponse:
@@ -361,9 +351,6 @@ class TestCallbackExecutor:
         assert len(executor.calls) == 2
 
 
-# ── Convenience factory tests ──
-
-
 class TestConvenienceFactories:
     def test_pass_response_creates_pass_outcome(self) -> None:
         response = pass_response(x=1, y="two")
@@ -397,12 +384,8 @@ class TestConvenienceFactories:
         assert response.bindings == {}
 
 
-# ── Carry pattern mock tests (P-TEST-002) ──
-
-
 class TestCarryPatternMock:
     def test_carry_visible_in_step_locals_across_steps(self) -> None:
-        """Carry list appears in step_locals for consecutive Natural block calls."""
         executor = ScriptedExecutor(
             responses=[
                 pass_response(result=10),
@@ -437,7 +420,6 @@ class TestCarryPatternMock:
         assert executor.calls[1].step_locals["carry"] == ["seed"]
 
     def test_carry_branching_produces_independent_copies(self) -> None:
-        """copy() on carry creates independent continuations visible in separate calls."""
         executor = ScriptedExecutor(
             responses=[
                 pass_response(result=105),
@@ -468,8 +450,6 @@ class TestCarryPatternMock:
         assert executor.calls[1].step_locals["carry"] == ["original"]
 
     def test_carry_mutation_via_callback(self) -> None:
-        """CallbackExecutor can simulate in-place carry mutation."""
-
         def handler(call: StepCall) -> StepResponse:
             carry = call.step_locals.get("carry")
             if isinstance(carry, list):
@@ -496,12 +476,8 @@ class TestCarryPatternMock:
         assert carry == ["step_1", "step_2"]
 
 
-# ── Pydantic write binding mock tests (P-TEST-003) ──
-
-
 class TestPydanticReturnTypeCoercion:
     def test_dict_coerced_to_pydantic_model_on_return(self) -> None:
-        """A dict returned via return_response is coerced to the Pydantic return type."""
         executor = ScriptedExecutor(
             responses=[
                 return_response("verdict", verdict={"approved": False, "reason": "uses eval()", "risk_level": "high"}),
@@ -524,12 +500,8 @@ class TestPydanticReturnTypeCoercion:
         assert result.risk_level == "high"
 
 
-# ── f-string Natural block mock tests (P-TEST-006) ──
-
-
 class TestFStringNaturalBlock:
     def test_fstring_injection_resolved_before_executor(self) -> None:
-        """f-string expressions are evaluated before the Natural program reaches the executor."""
         received_programs: list[str] = []
 
         def handler(call: StepCall) -> StepResponse:

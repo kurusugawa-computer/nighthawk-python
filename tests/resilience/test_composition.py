@@ -20,10 +20,6 @@ from nighthawk.resilience import (
 from nighthawk.runtime.scoping import get_usage_meter
 from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
 
-# ---------------------------------------------------------------------------
-# Composition tests
-# ---------------------------------------------------------------------------
-
 
 class TestRetryWithVote:
     def test_retry_wraps_vote(self) -> None:
@@ -33,15 +29,12 @@ class TestRetryWithVote:
             nonlocal call_count
             call_count += 1
             if call_count <= 3:
-                # First vote round: all fail
                 raise ValueError("fail")
             return "ok"
 
-        # vote(count=3) fails on first round (all 3 fail), retrying catches it
         composed = retrying(attempts=2, on=ValueError, wait=wait_none())(vote(count=3, min_success=1)(classify))
         result = composed("hello")
         assert result == "ok"
-        # First round: 3 calls all fail; second round: 3 calls all succeed
         assert call_count == 6
 
 
@@ -68,8 +61,8 @@ class TestFallbackWithRetry:
         )
         result = composed("hello")
         assert result == "backup_ok"
-        assert primary_count == 2  # retried once
-        assert backup_count == 2  # retried once
+        assert primary_count == 2
+        assert backup_count == 2
 
 
 class TestTimeoutWithRetry:
@@ -106,19 +99,16 @@ class TestCircuitBreakerWithFallback:
 
         composed = fallback(primary, backup, on=(ValueError, CircuitOpenError))
 
-        # First two calls: primary fails (opens circuit)
         assert composed("a") == "backup"
         assert composed("b") == "backup"
         assert primary.state.value == "open"
 
-        # Third call: circuit open, CircuitOpenError caught by fallback
         assert composed("c") == "backup"
-        assert primary_count == 2  # Not called when circuit is open
+        assert primary_count == 2
 
 
 class TestFullComposition:
     def test_full_stack(self) -> None:
-        """fallback(retrying(vote(f1)), retrying(f2), default=x)"""
         primary_count = 0
         backup_count = 0
 
@@ -211,13 +201,7 @@ class TestCompositionWithNaturalFunction:
         with nh.run(executor):
             result = composed("hello")
 
-        # primary fails twice (retrying exhausted), backup gets 3rd response
         assert result == "classified"
-
-
-# ---------------------------------------------------------------------------
-# Budget composition tests
-# ---------------------------------------------------------------------------
 
 
 class TestBudgetWithRetry:
@@ -237,11 +221,6 @@ class TestBudgetWithRetry:
         with nh.run(ScriptedExecutor()), pytest.raises(BudgetExceededError):
             composed("x")
 
-        # First call uses 80 tokens (under 100), raises ValueError, retrying catches it.
-        # Second call: pre-check sees 80 >= 100? No, 80 < 100. Call runs, now 160 > 100, raises BudgetExceededError.
-        # retrying catches BudgetExceededError (it's in on=).
-        # Third call: pre-check sees 160 >= 100, raises BudgetExceededError.
-        # retrying catches again. Fourth call: same. Fifth call: same. Exhausted.
         assert call_count == 2
 
 

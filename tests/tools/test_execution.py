@@ -326,16 +326,7 @@ _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
 
 def test_provider_backed_tool_return_preserves_mixed_list_order_via_content_items() -> None:
-    """Pin provider-backed ordering for mixed text/multimodal tool returns (spec §8.3).
-
-    Provider-backed Pydantic AI models (OpenAI / Anthropic at the time of
-    writing) iterate ``ToolReturnPart.content_items(mode='str')`` directly
-    when building the next request. That iteration preserves the original
-    list order (pydantic_ai/messages.py, ToolReturnPart.content_items). The
-    Nighthawk short-circuit in ``resolve_tool_return_segments`` covers the
-    MCP path; this regression test covers the provider-backed path that goes
-    through Pydantic AI's ``ToolReturnPart`` directly.
-    """
+    """Provider-backed models read ``ToolReturnPart.content_items``; ``resolve_tool_return_segments`` short-circuits only the MCP path."""
     image = BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png", identifier="img-1")
     normalized = _normalize_tool_success(["caption", image, "tail"])
 

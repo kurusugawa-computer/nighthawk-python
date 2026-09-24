@@ -38,9 +38,6 @@ def _get_tool_function(name: str):  # type: ignore[no-untyped-def]
     raise ValueError(f"Tool {name!r} not found")
 
 
-# -- nh_eval --
-
-
 def test_nh_eval_awaits_async_expression() -> None:
     async def calculate(a: int, b: int) -> int:
         return a + b * 8
@@ -75,9 +72,6 @@ def test_nh_eval_supports_top_level_await() -> None:
     nh_eval = _get_tool_function("nh_eval")
     result = asyncio.run(nh_eval(run_context, expression="await fetch('abc')"))
     assert result == "value-abc"
-
-
-# -- nh_assign --
 
 
 def test_nh_assign_awaits_async_expression() -> None:

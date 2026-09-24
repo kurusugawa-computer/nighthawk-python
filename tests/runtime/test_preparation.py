@@ -303,7 +303,6 @@ def test_scope_task_references_are_merged_into_step_context() -> None:
 
 
 def test_unannotated_binding_type_inferred_from_initial_value():
-    """binding_name_to_type should reflect the inferred type for unannotated write bindings."""
     from nighthawk.testing import ScriptedExecutor, pass_response
 
     executor = ScriptedExecutor(responses=[pass_response(result="hello")])

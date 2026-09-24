@@ -34,14 +34,7 @@ def _get_finished_run_spans(run_span_exporter: InMemorySpanExporter) -> list[Rea
     return [span_data for span_data in run_span_exporter.get_finished_spans() if span_data.name == "nighthawk.run"]
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _counting_function(counter: list[int], *, fail_times: int = 0, error_type: type[Exception] = nh.ExecutionError) -> ...:
-    """Return a sync function that fails *fail_times* then succeeds."""
-
     def function() -> str:
         counter.append(1)
         if len(counter) <= fail_times:
@@ -52,8 +45,6 @@ def _counting_function(counter: list[int], *, fail_times: int = 0, error_type: t
 
 
 def _async_counting_function(counter: list[int], *, fail_times: int = 0) -> ...:
-    """Return an async function that fails *fail_times* then succeeds."""
-
     async def function() -> str:
         counter.append(1)
         if len(counter) <= fail_times:
@@ -61,11 +52,6 @@ def _async_counting_function(counter: list[int], *, fail_times: int = 0) -> ...:
         return "ok"
 
     return function
-
-
-# ---------------------------------------------------------------------------
-# Decorator form — sync
-# ---------------------------------------------------------------------------
 
 
 class TestRetryingDecoratorSync:
@@ -177,11 +163,6 @@ class TestRetryingDecoratorSync:
         assert exhausted_events[0].attributes["nighthawk.resilience.retry.attempt_number"] == 2
 
 
-# ---------------------------------------------------------------------------
-# Decorator form — async
-# ---------------------------------------------------------------------------
-
-
 class TestRetryingDecoratorAsync:
     def test_retries_async_function(self) -> None:
         counter: list[int] = []
@@ -204,11 +185,6 @@ class TestRetryingDecoratorAsync:
         wrapped = retrying(attempts=3)(my_async_function)
         assert wrapped.__name__ == "my_async_function"
         assert wrapped.__doc__ == "Async docstring."
-
-
-# ---------------------------------------------------------------------------
-# Iterator form
-# ---------------------------------------------------------------------------
 
 
 class TestRetryingIteratorSync:
@@ -244,11 +220,6 @@ class TestRetryingIteratorAsync:
 
         asyncio.run(run())
         assert len(counter) == 3
-
-
-# ---------------------------------------------------------------------------
-# Integration with @natural_function
-# ---------------------------------------------------------------------------
 
 
 class TestRetryingWithNaturalFunction:

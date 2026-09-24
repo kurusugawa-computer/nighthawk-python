@@ -1,5 +1,3 @@
-"""Operation failures must cross model capabilities without retries or replacement."""
-
 from __future__ import annotations
 
 import asyncio

@@ -45,11 +45,6 @@ def _require_event_attribute(event: object, key: str) -> object:
     return attributes[key]
 
 
-# ---------------------------------------------------------------------------
-# Sync
-# ---------------------------------------------------------------------------
-
-
 class TestCircuitBreakerTracing:
     def test_emits_circuit_opened_event(self, run_span_exporter: InMemorySpanExporter) -> None:
         @circuit_breaker(fail_threshold=2, on=ValueError)
@@ -66,11 +61,6 @@ class TestCircuitBreakerTracing:
         assert len(event_list) == 1
         assert _require_event_attribute(event_list[0], "nighthawk.resilience.circuit.failure_count") == 2
         assert _require_event_attribute(event_list[0], "nighthawk.resilience.circuit.exception_type") == "ValueError"
-
-
-# ---------------------------------------------------------------------------
-# Sync
-# ---------------------------------------------------------------------------
 
 
 class TestCircuitBreakerSync:
@@ -98,7 +88,6 @@ class TestCircuitBreakerSync:
         assert failing.state == CircuitState.OPEN
         with pytest.raises(CircuitOpenError):
             failing()
-        # The function was NOT called on the 4th attempt (circuit open)
         assert call_count == 3
 
     def test_rejects_calls_when_open(self) -> None:
@@ -106,7 +95,6 @@ class TestCircuitBreakerSync:
         def failing() -> str:
             raise ValueError("boom")
 
-        # Open the circuit
         for _ in range(2):
             with pytest.raises(ValueError):
                 failing()
@@ -124,14 +112,12 @@ class TestCircuitBreakerSync:
         def failing() -> str:
             raise ValueError("boom")
 
-        # Open the circuit
         for _ in range(2):
             with pytest.raises(ValueError):
                 failing()
 
         assert failing.state == CircuitState.OPEN
 
-        # Wait for reset timeout
         time.sleep(0.15)
         assert failing.state == CircuitState.HALF_OPEN
 
@@ -146,16 +132,13 @@ class TestCircuitBreakerSync:
                 raise ValueError("fail")
             return "ok"
 
-        # Open the circuit
         for _ in range(2):
             with pytest.raises(ValueError):
                 sometimes_fail()
         assert sometimes_fail.state == CircuitState.OPEN
 
-        # Wait for half-open
         time.sleep(0.15)
 
-        # Probe succeeds -> closes circuit
         assert sometimes_fail() == "ok"
         assert sometimes_fail.state == CircuitState.CLOSED
 
@@ -164,16 +147,13 @@ class TestCircuitBreakerSync:
         def always_fail() -> str:
             raise ValueError("fail")
 
-        # Open the circuit
         for _ in range(2):
             with pytest.raises(ValueError):
                 always_fail()
         assert always_fail.state == CircuitState.OPEN
 
-        # Wait for half-open
         time.sleep(0.15)
 
-        # Probe fails -> reopens
         with pytest.raises(ValueError):
             always_fail()
         assert always_fail.state == CircuitState.OPEN
@@ -204,7 +184,6 @@ class TestCircuitBreakerSync:
             with pytest.raises(TypeError):
                 raise_type_error()
 
-        # TypeError is not in `on`, so circuit stays closed
         assert raise_type_error.state == CircuitState.CLOSED
         assert call_count == 5
 
@@ -228,8 +207,6 @@ class TestCircuitBreakerSync:
                 raise ValueError("fail")
             return "ok"
 
-        # call 1: ok (count reset), call 2: fail (count=1),
-        # call 3: ok (count reset), call 4: fail (count=1)
         assert intermittent() == "ok"
         with pytest.raises(ValueError):
             intermittent()
@@ -237,13 +214,7 @@ class TestCircuitBreakerSync:
         with pytest.raises(ValueError):
             intermittent()
 
-        # Circuit should still be closed (never reached threshold)
         assert intermittent.state == CircuitState.CLOSED
-
-
-# ---------------------------------------------------------------------------
-# Async
-# ---------------------------------------------------------------------------
 
 
 class TestCircuitBreakerAsync:

@@ -7,10 +7,6 @@ import pytest
 
 from nighthawk.resilience import fallback
 
-# ---------------------------------------------------------------------------
-# Sync
-# ---------------------------------------------------------------------------
-
 
 class TestFallbackSync:
     def test_returns_first_successful_result(self) -> None:
@@ -68,7 +64,6 @@ class TestFallbackSync:
         def backup(x: str) -> str:
             return "backup"
 
-        # Only catch ValueError; TypeError would propagate immediately
         composed = fallback(primary, backup, on=ValueError)
         assert composed("a") == "backup"
 
@@ -171,11 +166,6 @@ class TestFallbackSync:
 
         composed = fallback(annotated, unannotated)
         assert inspect.signature(composed) == inspect.signature(annotated)
-
-
-# ---------------------------------------------------------------------------
-# Async
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackAsync:

@@ -7,10 +7,6 @@ import nighthawk as nh
 from nighthawk.runtime.scoping import UsageMeter, get_usage_meter
 from tests.support.executors import StubExecutor
 
-# ---------------------------------------------------------------------------
-# UsageMeter unit tests
-# ---------------------------------------------------------------------------
-
 
 class TestUsageMeterRecord:
     def test_record_accumulates_correctly(self) -> None:
@@ -45,11 +41,6 @@ class TestUsageMeterRecord:
         assert meter.total_tokens == 0
 
 
-# ---------------------------------------------------------------------------
-# Context variable integration tests
-# ---------------------------------------------------------------------------
-
-
 class TestUsageMeterContextVariable:
     def test_returns_none_outside_run(self) -> None:
         with pytest.raises(nh.NighthawkError):
@@ -82,14 +73,7 @@ class TestUsageMeterContextVariable:
             assert outer_meter.total_tokens == 150
 
 
-# ---------------------------------------------------------------------------
-# Host-installed meters on run() and scope()
-# ---------------------------------------------------------------------------
-
-
 class _UsageAgent:
-    """Fake agent whose run_sync returns a pass outcome with fixed usage."""
-
     def run_sync(self, *args: object, **kwargs: object) -> object:  # noqa: ARG002
         class Result:
             output = {"result": {"kind": "pass"}}

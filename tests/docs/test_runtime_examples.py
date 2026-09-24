@@ -1,9 +1,3 @@
-"""Run published host-integration examples against source or an installed wheel.
-
-Set NIGHTHAWK_DISTRIBUTION_PYTHON to a fresh environment's Python executable
-when checking a built distribution instead of the current test environment.
-"""
-
 import json
 import os
 import re
