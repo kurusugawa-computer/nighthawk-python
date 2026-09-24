@@ -1,11 +1,7 @@
-"""Tool-return segmentation: split a successful payload into text + ordered user content.
+"""Keep mixed text and media ``list``/``tuple`` tool returns in their original order.
 
-This is the Nighthawk-side correction layer over Pydantic AI's
-``ToolReturnPart.model_response_str_and_user_content``. The Pydantic AI helper
-groups multimodal items into a trailing block and does not preserve the
-original top-level adjacency that spec §8.3 requires for mixed text/media
-``list`` / ``tuple`` payloads. This module short-circuits those payloads so
-ordering survives, and falls back to Pydantic AI for everything else.
+Pydantic AI's ``ToolReturnPart.model_response_str_and_user_content`` moves multimodal items to a trailing block.
+This module short-circuits those payloads and delegates every other shape to Pydantic AI.
 """
 
 from __future__ import annotations
@@ -20,26 +16,11 @@ from ..runtime.discovery import contains_discovery_result
 
 
 class ToolReturnSegments(NamedTuple):
-    """Backend-neutral split of a successful tool-return payload.
-
-    Semantically corresponds to the ``(response_text, user_content)`` split
-    returned by Pydantic AI's
-    :meth:`pydantic_ai.messages.ToolReturnPart.model_response_str_and_user_content`,
-    with the additional Nighthawk guarantee that the top-level ordering of a
-    mixed text/multimodal ``list`` / ``tuple`` payload is preserved (see
-    spec §8.3). The field name ``ordered_user_content`` reflects that
-    ordering guarantee.
-
-    Use :meth:`is_empty_success` at backend transports to detect Pydantic AI's
-    empty-success case (spec §8.3: keep the transport empty rather than
-    falling back to the projected preview).
-    """
-
     response_text: str
     ordered_user_content: tuple[UserContent, ...]
 
     def is_empty_success(self) -> bool:
-        """Return True when the successful split carries no text and no user content."""
+        """Transports keep an empty success empty instead of falling back to the projected preview."""
         return self.response_text == "" and not self.ordered_user_content
 
 
@@ -48,18 +29,6 @@ def resolve_tool_return_segments(
     tool_name: str,
     payload: object,
 ) -> ToolReturnSegments:
-    """Return the backend-neutral segmentation for a successful tool-return payload.
-
-    Ordered multimodal ``list``/``tuple`` payloads are returned verbatim with an
-    empty textual prefix. All other shapes are delegated to Pydantic AI's
-    ``ToolReturnPart.model_response_str_and_user_content``.
-    """
-    # Spec §8.3 requires top-level text/media adjacency to survive on mixed
-    # ``list[UserContent]`` payloads. Pydantic AI's
-    # ``model_response_str_and_user_content()`` reorders multimodal items to a
-    # trailing block, so we short-circuit here. Revisit if a future Pydantic AI
-    # release preserves adjacency natively. Both halves of this contract are
-    # pinned by ``tests/tools/test_tool_boundary.py``.
     if contains_discovery_result(payload):
         import tiktoken
 
@@ -71,6 +40,7 @@ def resolve_tool_return_segments(
         )
         assert projected is not None
         payload = projected.value
+    # Revisit if a future Pydantic AI release preserves adjacency natively.
     ordered_user_content_tuple = try_project_ordered_user_content_sequence(payload)
     if ordered_user_content_tuple is not None:
         return ToolReturnSegments(response_text="", ordered_user_content=ordered_user_content_tuple)

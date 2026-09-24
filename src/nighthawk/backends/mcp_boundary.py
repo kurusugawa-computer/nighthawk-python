@@ -85,10 +85,8 @@ def _tool_outcome_to_mcp_content_list(
             if content_item.is_audio:
                 content_block_list.append(mcp_types.AudioContent(type="audio", data=content_item.base64, mime_type=content_item.media_type))
                 continue
-            # Non-image / non-audio blobs project to text per spec §8.3:
-            # MCP's rich transport only has first-class slots for image and
-            # audio media, and Nighthawk intentionally does NOT wrap other
-            # blobs in an ``EmbeddedResource`` with a synthetic URI scheme.
+            # MCP has first-class slots only for image and audio media.
+            # Other blobs project to text rather than an ``EmbeddedResource`` with a synthetic URI scheme.
             content_block_list.append(
                 mcp_types.TextContent(
                     type="text",

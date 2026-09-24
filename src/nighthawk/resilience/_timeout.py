@@ -49,33 +49,11 @@ def _wrap_with_timeout[**P, R](function: Callable[P, R], *, seconds: float) -> C
 
 
 class _TimeoutHandle:
-    """Timeout handle usable as decorator factory or async context manager.
-
-    Decorator form (sync and async)::
-
-        timed_function = timeout(seconds=30)(my_function)
-
-    Async context manager form::
-
-        async with timeout(seconds=30):
-            await slow_operation()
-
-    The sync context manager form is not supported because Python cannot
-    interrupt a running thread from the same thread. Use the decorator
-    form instead.
-
-    For sync functions wrapped via the decorator form, the function runs in a background thread.
-    Timeout does not stop it; executor shutdown waits for the worker before the error reaches the caller.
-    Caller context variables are not copied into that worker.
-    Async cancellation is cooperative and may wait indefinitely for cleanup.
-    """
-
     def __init__(self, *, seconds: float) -> None:
         self._seconds = seconds
         self._async_timeout: asyncio.Timeout | None = None
 
     def __call__[**P, R](self, function: Callable[P, R]) -> Callable[P, R]:
-        """Wrap *function* with a timeout (decorator factory form)."""
         return _wrap_with_timeout(function, seconds=self._seconds)
 
     async def __aenter__(self) -> None:

@@ -58,15 +58,11 @@ class _OperationFailureGuard(AbstractCapability[StepContext]):
 
 @runtime_checkable
 class AsyncExecutionAgent(Protocol):
-    """Protocol for agents that provide async step execution via ``run``."""
-
     async def run(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 @runtime_checkable
 class SyncExecutionAgent(Protocol):
-    """Protocol for agents that provide sync step execution via ``run_sync``."""
-
     def run_sync(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
@@ -273,7 +269,6 @@ class AgentStepExecutor:
         step_context: StepContext,
         allowed_step_kinds: tuple[StepKind, ...],
     ) -> tuple[object, str]:
-        """Build the structured output type and system prompt fragment for a step."""
         unknown_kinds = set(allowed_step_kinds).difference(STEP_KINDS)
         if unknown_kinds:
             raise ExecutionError(f"Internal error: allowed_step_kinds contains unknown kinds: {tuple(sorted(unknown_kinds))}")
@@ -316,7 +311,6 @@ class AgentStepExecutor:
         self,
         result: Any,
     ) -> StepOutcome:
-        """Parse the agent result into a StepOutcome."""
         try:
             raw_output = result.output
             if isinstance(raw_output, StepFinalResult):

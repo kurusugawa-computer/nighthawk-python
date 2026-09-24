@@ -28,17 +28,7 @@ _TOOL_RETURN_CONTENT_ADAPTER: TypeAdapter[object] = TypeAdapter(ToolReturnConten
 
 
 def _normalize_tool_return_item(item: object) -> object:
-    """Normalize a single tool return value for ToolOutcome payload.
-
-    Multimodal content is passed through for native transport. TextContent is
-    collapsed to text, and other UserContent markers (``str`` / ``CachePoint``)
-    are preserved as-is. Raw bytes are not meaningful JSON tool-return content,
-    so they use Nighthawk's JSON preview sentinel. For other scalar values,
-    Pydantic AI's ``ToolReturnContent`` adapter helps with JSON-mode
-    normalization; values it cannot serialize fall back to
-    :func:`to_jsonable_value`. Unexpected exceptions propagate so that
-    programming mistakes are not silently swallowed.
-    """
+    """Multimodal items pass through for native transport; raw bytes are not meaningful JSON and use the preview sentinel."""
     if type(item) is DiscoveryResult:
         return item
     if contains_discovery_result(item):
@@ -94,14 +84,7 @@ def _build_standard_tool_return_value(*, tool_outcome: ToolOutcome) -> object:
 
 
 async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> ToolOutcome:
-    """Execute a tool call and normalize the outcome to a ToolOutcome.
-
-    Control-flow exceptions are re-raised unchanged.
-
-    This covers exceptions raised by the tool body itself. Exceptions from
-    the Pydantic AI toolset plumbing layer (outside this function) are
-    handled separately in ``tool_bridge.execute_tool_call``.
-    """
+    """Exceptions from Pydantic AI toolset plumbing are handled in ``tool_bridge.execute_tool_call``."""
 
     try:
         value = await tool_call()

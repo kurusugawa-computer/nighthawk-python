@@ -30,21 +30,14 @@ from .step_context import _MISSING, StepContext, resolve_name_in_step_context
 type ReferenceAndValue = tuple[str, object]
 type PromptContentTuple = tuple[UserContent, ...]
 
-# Fixed internal budgeting heuristic per spec §8.2.2; not a provider-side estimate.
+# Fixed internal budgeting heuristic; not a provider-side estimate.
 _MULTIMODAL_BINDING_TOKEN_COST = 64
 _UNBOUND = object()
 
 
 @dataclass(frozen=True)
 class _PromptRenderContext:
-    """Stable rendering invariants for one Natural block prompt pass.
-
-    Bundles the per-step rendering configuration that flows unchanged through
-    section / reference / object-capability rendering. Per-section values such
-    as the callable-signature disambiguation map are *not* included here: they
-    are computed inside :func:`_render_reference_and_value_list_section` and
-    passed alongside this context to the deeper renderers.
-    """
+    """Stable rendering invariants for one Natural block prompt pass."""
 
     context_limits: StepContextLimits
     token_encoding: tiktoken.Encoding
@@ -200,8 +193,7 @@ def _count_prompt_line_tokens(
     prompt_line: tuple[UserContent, ...],
     token_encoding: tiktoken.Encoding,
 ) -> int:
-    # Spec §8.2.2: line-level token counting includes the newline separator.
-    # The fixed +1 charge here represents that line-separator budget.
+    # Line-level token counting charges one token for the newline separator.
     total_tokens = 1
     for content in prompt_line:
         if isinstance(content, str):
@@ -268,12 +260,8 @@ def _render_object_capability_lines(
             break
         field_reference = f"{reference}.{field_name}"
         if field_reference in render_context.explicit_dotted_reference_path_set and try_project_user_prompt_value(field_value) is not None:
-            # Explicit dotted multimodal reference (e.g. <holder.photo>) is rendered as its
-            # own top-level line outside this object block (spec §8.2.2). Skip inline
-            # rendering here to avoid duplication, but still consume one object_max_fields
-            # slot so truncation math stays stable regardless of hoisting.
-            # Explicit dotted leaves have presentation priority, but still
-            # consume the configured member and section budgets.
+            # Explicit dotted multimodal references (e.g. <holder.photo>) render as their own top-level line.
+            # Skip them here but consume one member slot so truncation stays stable regardless of hoisting.
             shown_field_count += 1
             continue
         lines.append(
@@ -417,8 +405,7 @@ def _render_reference_and_value_list_section(
                 "nighthawk.prompt_context.max_tokens": section_max_tokens,
                 "nighthawk.prompt_context.dropped_multimodal": dropped_multimodal,
             }
-            # Spec §8.2.2: token truncation can drop explicit dotted multimodal
-            # leaves because section ordering and budgets remain authoritative.
+            # Token truncation can drop explicit dotted multimodal leaves; section ordering and budgets remain authoritative.
             try:
                 execution_reference = get_execution_reference()
                 log_attributes[RUN_ID] = execution_reference.run_id

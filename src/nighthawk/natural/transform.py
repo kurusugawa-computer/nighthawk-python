@@ -331,9 +331,6 @@ def build_runtime_call_and_assignments(
     bindings_name = runtime_names.allocate("__nh_bindings__")
     runner_name = runtime_names.allocate("__nighthawk_runner__")
     outcome_name = runtime_names.allocate("__nh_step_outcome__")
-    # Build the runner method call (the only part requiring hand-built AST
-    # because natural_program_expression, binding_types_dict_expression, and
-    # return_annotation are dynamic AST nodes from the source).
     method_name = "run_step_async" if is_async_function else "run_step"
     call_expression = ast.Call(
         func=ast.Attribute(
@@ -353,12 +350,9 @@ def build_runtime_call_and_assignments(
     )
     envelope_value: ast.expr = ast.Await(value=call_expression) if is_async_function else call_expression
 
-    # Parse template for the common envelope-unpacking structure.
     statements: list[ast.stmt] = ast.parse(f'{envelope_name} = None\n{bindings_name} = {envelope_name}["bindings"]\n').body
-    # Replace the None placeholder with the actual call expression.
     statements[0].value = envelope_value  # type: ignore[attr-defined]
 
-    # Add binding commit assignments (dynamic per output binding).
     for name in output_binding_names:
         statements.extend(
             ast.parse(
@@ -376,7 +370,6 @@ def build_runtime_call_and_assignments(
     guarded.body = statements
     statements = [guarded]
 
-    # Add outcome extraction and dispatch.
     statements.extend(ast.parse(f'{outcome_name} = {envelope_name}["outcome"]').body)
 
     outcome_source = f'if {outcome_name} is not None:\n    if {outcome_name}.kind == "return":\n        return {outcome_name}.value\n'

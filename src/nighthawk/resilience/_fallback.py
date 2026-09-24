@@ -20,7 +20,6 @@ _MISSING = _Sentinel.MISSING
 
 
 def _get_resolved_return_annotation(function: Callable[..., Any]) -> Any:
-    """Return the resolved return-type annotation for *function*, or ``inspect.Parameter.empty``."""
     target = function.func if isinstance(function, functools.partial) else function
     try:
         hints = typing.get_type_hints(target)
@@ -43,7 +42,6 @@ def _maybe_set_merged_return_signature(
     first_function: Callable[..., Any],
     functions: tuple[Callable[..., Any], ...],
 ) -> None:
-    """Set ``__signature__`` on *wrapper* if return types in *functions* differ."""
     return_annotations: list[Any] = []
     for function in functions:
         annotation = _get_resolved_return_annotation(function)

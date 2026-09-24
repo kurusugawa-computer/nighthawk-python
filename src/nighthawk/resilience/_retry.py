@@ -202,25 +202,6 @@ def _wrap_with_retry[**P, R](
 
 
 class _RetryingHandle:
-    """Retry handle usable as decorator factory or tenacity iterator.
-
-    Decorator form::
-
-        resilient_function = retrying(attempts=3)(my_function)
-
-    Iterator form (sync)::
-
-        for attempt in retrying(attempts=3):
-            with attempt:
-                result = my_function()
-
-    Async iterator form::
-
-        async for attempt in retrying(attempts=3):
-            with attempt:
-                result = await my_function()
-    """
-
     def __init__(
         self,
         *,
@@ -237,7 +218,6 @@ class _RetryingHandle:
         self._retry_if = retry_if
 
     def __call__[**P, R](self, function: Callable[P, R]) -> Callable[P, R]:
-        """Wrap *function* with retry logic (decorator factory form)."""
         return _wrap_with_retry(
             function,
             attempts=self._attempts,
@@ -248,7 +228,6 @@ class _RetryingHandle:
         )
 
     def __iter__(self) -> Iterator[Any]:
-        """Sync iterator form: ``for attempt in retrying(...)``."""
         return iter(
             _build_retrying(
                 attempts=self._attempts,
@@ -260,7 +239,6 @@ class _RetryingHandle:
         )
 
     def __aiter__(self) -> AsyncIterator[Any]:
-        """Async iterator form: ``async for attempt in retrying(...)``."""
         return _build_async_retrying(
             attempts=self._attempts,
             on=self._on,

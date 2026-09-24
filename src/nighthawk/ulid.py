@@ -7,7 +7,6 @@ _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
 def generate_ulid() -> str:
-    """Generate a ULID string (timestamp-based, sortable, 26 chars, Crockford Base32)."""
     timestamp_ms = int(time.time() * 1000)
     random_int = int.from_bytes(os.urandom(10))
     chars: list[str] = []

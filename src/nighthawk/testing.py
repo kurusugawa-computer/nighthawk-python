@@ -198,9 +198,6 @@ class CallbackExecutor:
         return await resolve_model_candidate(request, response.outcome, response.bindings)
 
 
-# ── Convenience response factories ──
-
-
 def pass_response(**bindings: object) -> StepResponse:
     """Create a response with pass outcome and optional binding values."""
     return StepResponse(bindings=bindings)

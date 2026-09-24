@@ -42,15 +42,12 @@ class RaiseStepOutcome(BaseModel):
     raise_error_type: str | None = None
 
 
-# This union is used for host-side parsing after unwrapping the StepFinalResult envelope.
-
 type StepOutcome = Annotated[
     PassStepOutcome | ReturnStepOutcome | BreakStepOutcome | ContinueStepOutcome | RaiseStepOutcome,
     Field(discriminator="kind"),
 ]
 
 
-# NOTE: StepFinalResult is an envelope that wraps StepOutcome for LLM structured output.
 # OpenAI / Codex structured outputs require the root JSON schema to be a single object (no anyOf at root level).
 # StepOutcome is a discriminated union whose JSON schema produces anyOf at root, which is rejected by these providers.
 # By placing the union inside a ``result`` field, the anyOf moves to a nested level where it is accepted.

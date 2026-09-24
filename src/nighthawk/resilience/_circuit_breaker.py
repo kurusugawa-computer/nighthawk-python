@@ -32,8 +32,6 @@ class CircuitOpenError(Exception):
 
 
 class _CircuitBreakerState:
-    """Thread-safe circuit breaker state machine."""
-
     def __init__(
         self,
         *,
@@ -62,25 +60,21 @@ class _CircuitBreakerState:
         return self._state
 
     def before_call(self) -> None:
-        """Check if call is allowed. Raises :class:`CircuitOpenError` if not."""
         with self._lock:
             effective = self._effective_state()
             if effective == CircuitState.OPEN:
                 assert self._last_failure_time is not None
                 remaining = self._reset_timeout - (time.monotonic() - self._last_failure_time)
                 raise CircuitOpenError(self._reset_timeout, max(0.0, remaining))
-            # HALF_OPEN or CLOSED: allow the call.
             if effective == CircuitState.HALF_OPEN:
                 self._state = CircuitState.HALF_OPEN
 
     def after_success(self) -> None:
-        """Record a successful call. Resets the circuit to CLOSED."""
         with self._lock:
             self._failure_count = 0
             self._state = CircuitState.CLOSED
 
     def after_failure(self, exception: BaseException) -> None:
-        """Record a failed call. May transition to OPEN."""
         if not isinstance(exception, self._on):
             return
         with self._lock:
@@ -102,7 +96,6 @@ class _CircuitBreakerState:
                 )
 
     def reset(self) -> None:
-        """Manually reset the circuit breaker to CLOSED."""
         with self._lock:
             self._failure_count = 0
             self._state = CircuitState.CLOSED
@@ -110,8 +103,6 @@ class _CircuitBreakerState:
 
 
 class _CircuitBreakerWrapper[**P, R]:
-    """Callable wrapper providing ``.state`` and ``.reset()`` attributes."""
-
     __name__: str
     __doc__: str | None
     __wrapped__: Callable[P, R]
@@ -128,11 +119,9 @@ class _CircuitBreakerWrapper[**P, R]:
 
     @property
     def state(self) -> CircuitState:
-        """Current circuit state."""
         return self._breaker_state.state
 
     def reset(self) -> None:
-        """Manually reset the circuit breaker to CLOSED."""
         self._breaker_state.reset()
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:

@@ -1,10 +1,3 @@
-"""Embedded MCP tool server for provider backends.
-
-Starts a Streamable HTTP MCP server in a background thread, exposing
-Nighthawk tools to CLI-based backends (e.g. Codex) that consume tools
-via an MCP endpoint.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -31,8 +24,6 @@ from .tool_bridge import get_current_step_run_context_required
 
 
 class McpServer:
-    """In-process MCP tool server backed by Nighthawk tool handlers."""
-
     def __init__(
         self,
         *,

@@ -21,7 +21,6 @@ from .step_executor import StepExecutor
 def _split_frontmatter(
     processed_natural_program: str,
 ) -> tuple[str, tuple[str, ...]]:
-    """Parse frontmatter, validate deny directives, and return stripped program + denied kinds."""
     try:
         program_without_frontmatter, frontmatter = parse_frontmatter(processed_natural_program)
     except NaturalParseError as e:
@@ -51,8 +50,6 @@ def _build_step_globals(
 
 @dataclass(frozen=True)
 class PreparedStep:
-    """Result of preparing a Natural block for execution."""
-
     processed_program: str
     allowed_step_kinds: tuple[StepKind, ...]
     step_context: StepContext

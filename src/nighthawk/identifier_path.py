@@ -1,20 +1,8 @@
-"""Shared identifier path parsing and validation.
-
-An identifier path is a dot-separated sequence of ASCII Python identifiers
-where no segment starts with ``__`` (dunder).  Examples: ``result``,
-``model.name``, ``config.db.host``.
-"""
-
 from __future__ import annotations
 
 
 def parse_identifier_path(path: str) -> tuple[str, ...] | None:
-    """Parse a dot-separated identifier path.
-
-    Returns a tuple of path segments on success, or ``None`` if the path is
-    empty, contains empty segments, non-ASCII characters, non-identifier
-    segments, or dunder-prefixed segments.
-    """
+    """Return the segments of a dotted ASCII identifier path, or ``None`` when any segment is invalid or dunder-prefixed."""
     if not path:
         return None
 

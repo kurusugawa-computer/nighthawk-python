@@ -21,9 +21,7 @@ _SENTINEL_FUNCTION = "<function>"
 _SENTINEL_EXCEPTION = "<exception>"
 
 _MINIMUM_OUTPUT = "{}"
-# Approximate token count for _MINIMUM_OUTPUT. The actual count is 1 token for
-# most encodings, but varies by encoding. This constant is a fixed lower bound
-# used for budget arithmetic; the real token count is always recomputed when needed.
+# Fixed lower bound for budget arithmetic; the real count varies by encoding and is recomputed when needed.
 _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT = 1
 
 
@@ -101,21 +99,9 @@ def render_json_text(
     encoding: tiktoken.Encoding,
     style: JsonRendererStyle,
 ) -> tuple[str, int]:
-    """Render a JSON-like Python value to JSON-family text under a token budget.
+    """Render *value* as compact JSON summarized by headson within *max_tokens*, returning the text and its token count.
 
-    The value is converted into a JSONable value (JSON-compatible Python types plus sentinel strings for cycles and non-serializable values), then rendered to compact JSON. That compact JSON is summarized with headson under a byte budget chosen to
-    maximize output token count while staying within the caller-provided token budget.
-
-    Minimum-output rule: This function may return "{}" even if it exceeds the token budget.
-
-    Args:
-        value: The Python value to render.
-        max_tokens: The maximum number of tokens allowed in the output.
-        encoding: The tiktoken encoding to use for token counting.
-        style: The headson rendering style to use.
-
-    Returns:
-        A tuple of (rendered text, token count of rendered text).
+    The minimum output ``{}`` may exceed the budget.
     """
 
     if max_tokens < _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT:
@@ -222,8 +208,7 @@ def _namedtuple_to_jsonable(value: object, *, active_object_id_set: set[int]) ->
 
 
 def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set: set[int]) -> JsonableValue:
-    # Entries: (sort_key, display_key, raw_value). Sort by the compact JSON
-    # rendering of the key so that ordering is stable regardless of special chars.
+    # Sort by the compact JSON rendering of each key so ordering is stable regardless of special characters.
     keyed_entries: list[tuple[str, str, object]] = []
     for key, item_value in value.items():
         if isinstance(key, str):

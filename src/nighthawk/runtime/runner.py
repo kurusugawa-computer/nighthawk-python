@@ -49,8 +49,6 @@ from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
 class StepEnvelope(TypedDict):
-    """Envelope returned by Runner.run_step / run_step_async."""
-
     outcome: StepResult
     input_bindings: dict[str, object]
     bindings: dict[str, object]

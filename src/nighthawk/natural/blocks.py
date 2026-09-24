@@ -81,7 +81,6 @@ def _joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_pl
 
 
 def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string: ast.JoinedStr) -> None:
-    """Validate that no binding marker spans a formatted value boundary."""
     boundary_marked_text = _joined_string_scan_text(
         joined_string,
         formatted_value_placeholder=_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
@@ -101,8 +100,6 @@ def _extract_program_and_bindings_from_joined_string(joined_string: ast.JoinedSt
 
 
 def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
-    """Parse function source text and return Natural blocks (docstring + inline)."""
-
     try:
         module = ast.parse(func_source)
     except SyntaxError as e:
@@ -178,12 +175,6 @@ _FRONTMATTER_STEP_KINDS = ("pass", "return", "break", "continue", "raise")
 
 
 def validate_frontmatter_deny(frontmatter: dict[str, object]) -> tuple[str, ...]:
-    """Validate a parsed frontmatter mapping and return the denied step kinds.
-
-    Raises:
-        NaturalParseError: If the frontmatter contains unknown keys, unknown
-            step kind names, or has an invalid ``deny`` structure.
-    """
     if not frontmatter:
         return ()
 
@@ -214,19 +205,6 @@ def validate_frontmatter_deny(frontmatter: dict[str, object]) -> tuple[str, ...]
 
 
 def parse_frontmatter(processed_natural_program: str) -> tuple[str, dict[str, Any]]:
-    """Parse and strip YAML frontmatter from a Natural program.
-
-    Frontmatter is recognized when the first non-blank line is ``---`` and a
-    matching closing ``---`` line follows.  The YAML content between the
-    delimiters must be a mapping.
-
-    Returns:
-        A tuple of (program_text_without_frontmatter, parsed_mapping).
-        When no frontmatter is present the mapping is empty.
-
-    Raises:
-        NaturalParseError: If the frontmatter is syntactically invalid.
-    """
     lines = processed_natural_program.splitlines(keepends=True)
     if not lines:
         return processed_natural_program, {}

@@ -1,9 +1,3 @@
-"""Bridge between Nighthawk tools and provider backends.
-
-Provides tool handler construction and tool execution for backends that
-expose Nighthawk tools through Pydantic AI FunctionToolset.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -146,7 +140,6 @@ async def execute_tool_call(
     run_context: RunContext[StepContext],
     tool_call_id: str,
 ) -> ToolHandlerResult:
-    """Execute a single tool call and build model/trace observations."""
     with set_current_run_context(run_context):
         if run_context.deps.operation_failure is not None:
             raise run_context.deps.operation_failure
@@ -258,7 +251,6 @@ async def prepare_allowed_tools(
     configured_allowed_tool_names: tuple[str, ...] | None,
     visible_tools: list[Any],
 ) -> tuple[dict[str, Any], dict[str, ToolHandler], tuple[str, ...]]:
-    """Build tool definitions, handlers, and allowed names for a backend request."""
     tool_name_to_handler = await build_tool_name_to_handler(
         model_request_parameters=model_request_parameters,
         visible_tools=visible_tools,

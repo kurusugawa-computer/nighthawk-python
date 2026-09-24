@@ -328,13 +328,6 @@ def _wrap_with_budget[**P, R](
 
 
 class _BudgetHandle:
-    """Budget handle usable as a decorator factory.
-
-    Decorator form (sync and async)::
-
-        budgeted_function = budget(tokens=10000)(my_function)
-    """
-
     def __init__(
         self,
         *,
@@ -353,7 +346,6 @@ class _BudgetHandle:
         self._estimate_usage = estimate_usage
 
     def __call__[**P, R](self, function: Callable[P, R]) -> Callable[P, R]:
-        """Wrap *function* with budget enforcement."""
         return _wrap_with_budget(
             function,
             tokens=self._tokens,

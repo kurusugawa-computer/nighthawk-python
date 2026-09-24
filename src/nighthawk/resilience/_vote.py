@@ -34,7 +34,6 @@ def plurality(results: list[Any]) -> Any:
         counter: Counter[Any] = Counter(results)
         return counter.most_common(1)[0][0]
     except TypeError:
-        # Unhashable results: fall back to equality comparison.
         best_result = results[0]
         best_count = 0
         for candidate in results:

@@ -1,10 +1,4 @@
-"""Backend-private text-fallback formatting for multimodal content.
-
-Used by both the text-projected coding-agent backends (``text_projection``)
-and the MCP tool-return transport (``mcp_boundary``) to emit a consistent
-``<image>``/``<file>`` placeholder line followed by descriptive metadata when
-multimodal content cannot be carried natively by the transport.
-"""
+"""Text fallback lines shared by text-projected backends and the MCP tool-return transport."""
 
 from __future__ import annotations
 
@@ -20,7 +14,6 @@ from pydantic_ai.messages import (
 
 
 def is_image_content(*, content: object) -> bool:
-    """Return True when *content* represents image media."""
     if isinstance(content, ImageUrl):
         return True
     if isinstance(content, BinaryContent):
@@ -32,13 +25,7 @@ def is_image_content(*, content: object) -> bool:
 
 
 def _safe_file_url_media_type(*, content: FileUrl) -> str | None:
-    """Return ``content.media_type`` for a FileUrl, or ``None`` when unresolvable.
-
-    ``FileUrl.media_type`` is a pydantic-ai property that may raise
-    ``ValueError`` when the MIME type cannot be inferred from the URL and no
-    explicit ``media_type`` was supplied (for example ``VideoUrl`` pointing at
-    a YouTube-like URL with no extension).
-    """
+    """``FileUrl.media_type`` raises ``ValueError`` when neither the URL nor the caller supplies a media type."""
     try:
         return content.media_type
     except ValueError:
@@ -46,14 +33,6 @@ def _safe_file_url_media_type(*, content: FileUrl) -> str | None:
 
 
 def format_file_url_as_text_lines(*, content: FileUrl) -> list[str]:
-    """Format ``FileUrl`` metadata lines for transports that need a text fallback.
-
-    Returns only the descriptive metadata lines (the ``"... URL: <url>"`` line
-    plus an optional ``"Media type: ..."`` line). The ``<image>`` / ``<file>``
-    placeholder is emitted by :func:`format_file_url_with_placeholder`; this
-    helper is exported separately for tests and for callers that already know
-    which placeholder to use.
-    """
     if isinstance(content, ImageUrl):
         label = "Image"
         include_media_type = False
@@ -83,18 +62,9 @@ def format_unresolvable_content_text(
     content: UploadedFile | BinaryContent,
     transport_label: str,
 ) -> str:
-    """Build the fallback metadata text for content the transport cannot resolve.
+    """Tool-return path only.
 
-    Used only on the tool-return path. Spec §8.3 requires the rest of a
-    successful tool-return payload to be preserved and only the unresolvable
-    item replaced with explanatory text. Coding-agent user-prompt admission
-    rejects ``UploadedFile`` outright at the backend boundary instead (see
-    ``backends/base.py``), so this helper is not reused there.
-
-    ``BinaryContent`` reaches this helper only on transports that cannot carry
-    embedded bytes natively (today: MCP, for non-image/non-audio blobs).
-    Text-projected backends stage the bytes to a local file rather than fall
-    back to this metadata text.
+    Coding-agent user-prompt admission rejects ``UploadedFile`` earlier, and text-projected backends stage ``BinaryContent`` as files.
     """
     if isinstance(content, UploadedFile):
         return f"UploadedFile: provider={content.provider_name}, file_id={content.file_id} (not resolvable by {transport_label})"
@@ -102,7 +72,6 @@ def format_unresolvable_content_text(
 
 
 def format_file_url_with_placeholder(*, content: FileUrl) -> list[str]:
-    """Format ``FileUrl`` text-fallback lines including the ``<image>``/``<file>`` placeholder."""
     placeholder = "<image>" if isinstance(content, ImageUrl) else "<file>"
     return [placeholder, *format_file_url_as_text_lines(content=content)]
 
@@ -112,13 +81,7 @@ def format_uploaded_file_with_placeholder(
     content: UploadedFile,
     transport_label: str,
 ) -> list[str]:
-    """Format ``UploadedFile`` fallback lines including placeholder.
-
-    Used by text-projected backends (coding-agent backends) that cannot resolve
-    provider-owned file references but still want to surface the failure as
-    inline content. The MCP transport intentionally bypasses this helper and
-    emits only the bare fallback text without a placeholder.
-    """
+    """For text-projected backends; the MCP transport intentionally emits the fallback text without a placeholder."""
     placeholder = "<image>" if is_image_content(content=content) else "<file>"
     metadata_line_list = [format_unresolvable_content_text(content=content, transport_label=transport_label)]
     if content.media_type is not None:
@@ -131,11 +94,6 @@ def format_unresolvable_binary_content_with_placeholder(
     content: BinaryContent,
     transport_label: str,
 ) -> list[str]:
-    """Format unresolvable ``BinaryContent`` fallback lines including placeholder.
-
-    Used on transports that cannot carry embedded bytes natively (today: MCP,
-    for non-image/non-audio blobs). Text-projected backends stage the bytes to
-    a local file instead and do not use this helper.
-    """
+    """For transports that cannot carry embedded bytes; text-projected backends stage them as files instead."""
     placeholder = "<image>" if is_image_content(content=content) else "<file>"
     return [placeholder, format_unresolvable_content_text(content=content, transport_label=transport_label)]

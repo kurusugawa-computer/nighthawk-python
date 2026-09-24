@@ -1,12 +1,6 @@
-"""Text projection for backends that must talk to a CLI text channel.
+"""Project request parts into CLI prompt text and staged files.
 
-Converts a ``RequestPromptPartList`` (user-prompt tuples plus tool-return parts)
-into a single prompt string and, when needed, a staged temporary directory that
-holds ``BinaryContent`` bytes as local files.
-
-Backend-specific concerns (transport selection, CLI option assembly) live in
-the individual backend modules. This module must not grow into a general
-projection layer.
+Backend-specific concerns stay in the backend modules; this module must not grow into a general projection layer.
 """
 
 from __future__ import annotations
@@ -46,7 +40,6 @@ class TextProjectedRequest:
     temporary_directory: tempfile.TemporaryDirectory[str] | None
 
     def cleanup(self) -> None:
-        """Clean up the temporary directory, if any, suppressing all exceptions."""
         if self.temporary_directory is not None:
             with contextlib.suppress(Exception):
                 self.temporary_directory.cleanup()
@@ -106,22 +99,6 @@ def _sanitize_projected_file_stem(*, identifier: str) -> str:
 
 
 class _TextProjectionStager:
-    """Owns the staging temporary directory for a single projection pass.
-
-    Per-pass orchestration responsibilities bundled here:
-
-    - Lazy lifetime of the staging temporary directory: created on the first
-      call to :meth:`stage_binary` and kept alive across the rest of the
-      projection so that adjacent ``BinaryContent`` items share one directory.
-    - Per-pass file-name collision avoidance via
-      :meth:`_build_unique_projected_file_path`, so two ``BinaryContent`` items
-      that share an identifier within one step do not clobber each other.
-    - Coordination of stem sanitization
-      (:func:`_sanitize_projected_file_stem`) and extension selection
-      (:func:`_guess_file_extension` plus the deterministic
-      ``_KNOWN_MEDIA_TYPE_TO_EXTENSION`` map) at staging time.
-    """
-
     def __init__(self, *, staging_root_directory: Path | None) -> None:
         self._staging_root_directory = staging_root_directory
         self._temporary_directory: tempfile.TemporaryDirectory[str] | None = None

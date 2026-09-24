@@ -35,7 +35,6 @@ DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
 
 
 def resolve_tool_result_rendering_policy(policy: ToolResultRenderingPolicy | None) -> ToolResultRenderingPolicy:
-    """Return *policy* when set, else :data:`DEFAULT_TOOL_RESULT_RENDERING_POLICY`."""
     if policy is None:
         return DEFAULT_TOOL_RESULT_RENDERING_POLICY
     return policy
@@ -161,12 +160,6 @@ def get_step_context() -> StepContext:
 
 
 def resolve_name_in_step_context(step_context: StepContext, name: str) -> object:
-    """Resolve a name from step locals, step globals, or builtins.
-
-    Returns the resolved value, or ``_MISSING`` if the name cannot be found.
-    Callers must compare the result with ``value is _MISSING`` to detect
-    absent names (since the resolved value itself may be ``None``).
-    """
     try:
         return step_context.environment.resolve(name)
     except UnboundLocalError:

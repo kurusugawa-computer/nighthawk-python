@@ -38,20 +38,7 @@ type RequestPromptPartList = list[RequestPromptPart]
 
 
 def _validate_coding_agent_user_prompt_content_item(*, item: UserContent, backend_label: str) -> None:
-    """Enforce the coding-agent-backend user-prompt admission policy.
-
-    This layers two checks:
-
-    1. Structural check (policy-free): reject anything outside the Pydantic AI
-       ``UserContent`` union (``str | TextContent | CachePoint | <multimodal>``).
-    2. Admission policy (coding-agent-specific): reject ``UploadedFile`` even
-       though it is a legal ``UserContent`` member, because coding-agent
-       backends cannot resolve provider-owned file references.
-
-    Only backends subclassing :class:`BackendModelBase` (the coding-agent
-    backends) route through this helper; provider-backed executors send
-    ``UserContent`` natively and bypass this path.
-    """
+    """Reject non-``UserContent`` items and ``UploadedFile``, whose provider-owned references coding-agent backends cannot resolve."""
     if isinstance(item, UploadedFile):
         raise UserError(
             f"{backend_label} does not support UploadedFile user prompt content; provider-owned uploaded files cannot be resolved by this backend"

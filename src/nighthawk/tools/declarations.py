@@ -105,6 +105,5 @@ def get_scoped_tools() -> tuple[Tool[StepContext], ...]:
 
 
 def get_visible_tools() -> list[Tool[StepContext]]:
-    """Return built-in tools followed by the tools declared for the current scope."""
     ensure_builtin_tools_registered()
     return [*_builtin_tool_name_to_tool.values(), *get_scoped_tools()]

@@ -57,7 +57,6 @@ def _build_transformed_factory_module(
     name_to_value: dict[str, object],
     runtime_names: _RuntimeNames,
 ) -> ast.Module:
-    """Build a factory-function module that captures enclosing-scope values via closure."""
     transformed_function_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
     for node in transformed_module.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:

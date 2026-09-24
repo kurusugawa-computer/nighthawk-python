@@ -34,35 +34,21 @@ type ToolHandlerResultKind = Literal["tool_result", "retry_prompt", "boundary_fa
 
 
 class ToolResultObservation(TypedDict):
-    """Successful or recoverable tool execution wrapped for backend transport.
-
-    Carries the canonical ``ToolOutcome`` so multimodal-capable transports can
-    emit native content blocks. Text previews and trace payloads are derived
-    lazily by backend boundaries that need them.
-    """
+    """Carries the canonical ``ToolOutcome``; backend boundaries derive text previews and trace payloads lazily."""
 
     kind: Literal["tool_result"]
     tool_outcome: ToolOutcome
 
 
 class RetryPromptObservation(TypedDict):
-    """Retry prompt produced when tool argument validation failed."""
-
     kind: Literal["retry_prompt"]
     retry_text: str
 
 
 class BoundaryFailureObservation(TypedDict):
-    """Failure raised by the tool-handler invocation boundary itself.
+    """A failure of Nighthawk's tool-handler invocation boundary, distinct from a recoverable ``tool_result`` error.
 
-    This observation is reserved for failures in the wrapper/boundary path that
-    calls the tool handler. It is intentionally separate from ``tool_result``
-    failures: ``boundary_failure`` means Nighthawk's invocation boundary failed,
-    while ``tool_result`` with an error means the selected tool body or toolset
-    plumbing produced a recoverable outcome for the model. Rich projection
-    failures that happen later while converting a successful ``ToolOutcome`` to
-    backend-specific content stay on the normal ``tool_result`` path and fall
-    back to preview rendering there.
+    Projection failures after a successful ``ToolOutcome`` stay on the ``tool_result`` path and fall back to the preview.
     """
 
     kind: Literal["boundary_failure"]
@@ -157,15 +143,7 @@ def render_tool_result_json_text(
     encoding: tiktoken.Encoding,
     style: JsonRendererStyle,
 ) -> str:
-    """Render a tool result envelope as compact JSON text.
-
-    Both ``value`` and ``error`` are individually previewed under their own
-    token budgets via ``render_json_text``, then assembled into a
-    ``{"value": ..., "error": ...}`` envelope using f-string interpolation.
-    The sub-values are already valid JSON fragments produced by
-    ``render_json_text`` / ``json.dumps``, so the f-string concatenation
-    is structurally safe.
-    """
+    """The sub-values are valid JSON fragments, so assembling them with an f-string is structurally safe."""
     if error is None:
         error_text = "null"
         error_token_count = 0
