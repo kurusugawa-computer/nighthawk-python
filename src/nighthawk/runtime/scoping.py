@@ -344,15 +344,6 @@ def run(
 
     Yields:
         None
-
-    Example:
-        ```python
-        executor = AgentStepExecutor.from_configuration(
-            configuration=StepExecutorConfiguration(model="openai:gpt-5.6-terra"),
-        )
-        with nighthawk.run(executor):
-            result = my_natural_function()
-        ```
     """
     execution_reference = ExecutionReference(
         run_id=run_id or generate_ulid(),

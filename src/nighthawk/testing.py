@@ -97,19 +97,6 @@ class ScriptedExecutor:
 
     Responses are consumed in order. Once exhausted, ``default_response`` is
     used for subsequent calls.
-
-    Example::
-
-        from nighthawk.testing import ScriptedExecutor, pass_response
-
-        executor = ScriptedExecutor(responses=[
-            pass_response(result="hello world"),
-        ])
-        with nh.run(executor):
-            output = summarize("some text")
-
-        assert output == "hello world"
-        assert "result" in executor.calls[0].binding_names
     """
 
     def __init__(
@@ -154,19 +141,6 @@ class CallbackExecutor:
 
     Use when response logic depends on the Natural block input (e.g.,
     routing different binding values based on the program text).
-
-    Example::
-
-        from nighthawk.testing import CallbackExecutor, StepCall, pass_response
-
-        def handler(call: StepCall) -> StepResponse:
-            if "urgent" in call.natural_program:
-                return pass_response(priority="high")
-            return pass_response(priority="normal")
-
-        executor = CallbackExecutor(handler)
-        with nh.run(executor):
-            result = classify(ticket)
     """
 
     def __init__(self, handler: Callable[[StepCall], StepResponse]) -> None:

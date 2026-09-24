@@ -141,16 +141,6 @@ def natural_function(
             Omission or UNSET inherits the active executor configuration.
         step_executor_configuration: Inert full configuration replacement.
             Cannot be combined with model; the function scope restores its parent.
-
-    Example:
-        ```python
-        @nighthawk.natural_function
-        def summarize(text: str) -> str:
-            '''natural
-            Summarize <text> in one sentence and assign it to <:result>.
-            '''
-            return result
-        ```
     """
     selection = _model_selection(model, step_executor_configuration)
     if func is None:

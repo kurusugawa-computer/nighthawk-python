@@ -120,11 +120,6 @@ def fallback(
 
     Returns:
         A composed function that tries alternatives in order.
-
-    Example::
-
-        safe_classify = fallback(classify_gpt4, classify_mini, default="unknown")
-        result = safe_classify(text)
     """
     if not functions:
         raise ValueError("fallback() requires at least one function")

@@ -66,11 +66,6 @@ def vote(
 
     Returns:
         decorator (Callable): A decorator that wraps a function with voting logic.
-
-    Example::
-
-        voting_classify = vote(count=3)(classify)
-        label = voting_classify(text)
     """
     if count < 1:
         raise ValueError("vote count must be at least 1")

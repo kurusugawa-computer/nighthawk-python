@@ -392,13 +392,6 @@ def budget(
 
     Raises:
         ValueError: If no limit is specified, or if *cost*/*cost_per_call* is set without *cost_function*.
-
-    Example::
-
-        from nighthawk.resilience import budget
-
-        safe_classify = budget(tokens=50_000)(classify)
-        result = safe_classify(text)
     """
     has_token_limit = tokens is not None or tokens_per_call is not None
     has_cost_limit = cost is not None or cost_per_call is not None

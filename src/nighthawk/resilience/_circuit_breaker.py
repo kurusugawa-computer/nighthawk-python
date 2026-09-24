@@ -180,15 +180,6 @@ def circuit_breaker(
 
     Returns:
         decorator (Callable): A decorator that wraps a function with circuit breaker logic.
-
-    Example::
-
-        @circuit_breaker(fail_threshold=3, reset_timeout=30)
-        def call_api(request):
-            ...
-
-        call_api.state       # CircuitState.CLOSED
-        call_api.reset()     # manually reset
     """
     breaker_state = _CircuitBreakerState(
         fail_threshold=fail_threshold,
