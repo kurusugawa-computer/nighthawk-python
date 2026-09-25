@@ -144,15 +144,10 @@ Use [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-
 
 ### Scope
 
-Write docstrings only for public API members exported via `__all__` in `src/nighthawk/__init__.py`, plus public classes and functions in these modules:
+This guide covers the public API: the objects rendered by `docs/api.md`.
 
-- `nighthawk.errors`
-- `nighthawk.configuration`
-- `nighthawk.backends.claude_code_sdk`
-- `nighthawk.backends.claude_code_cli`
-- `nighthawk.backends.codex`
-
-Do not write docstrings for names prefixed with `_` (module-private).
+Other docstrings, including those for names prefixed with `_`, are written only for facts the code does not convey and stay compact.
+See `.claude/rules/python.md` for the rules that apply to all comments and docstrings.
 
 ### Structure
 
@@ -167,7 +162,8 @@ Required. Use imperative mood ("Return ...", "Start ...", "Register ..."). Keep 
 | `Args` | One or more parameters exist. Do not repeat type information already present in annotations. |
 | `Returns` / `Yields` | Return value is not `None`, or carries meaning that is not obvious from the type alone. |
 | `Raises` | The function raises exceptions that callers are expected to catch. |
-| `Example` | Required for decorators (`natural_function`, `tool`) and context managers (`run`, `scope`). Optional for everything else. |
+
+Do not add an `Example` section; examples live in `docs/`.
 
 #### Classes
 
@@ -210,19 +206,7 @@ def run(
         run_id: Optional identifier for the run. If not provided, a ULID is
             generated automatically.
 
-    Yields:
-        None
-
     Raises:
         RuntimeError: If called while another run is already active.
-
-    Example:
-        ```python
-        executor = AgentStepExecutor.from_configuration(
-            configuration=StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
-        )
-        with nighthawk.run(executor):
-            result = my_natural_function()
-        ```
     """
 ```

@@ -14,4 +14,12 @@ paths:
 - Use `opentelemetry.trace` spans at run/scope/step/tool boundaries and `logging.getLogger("nighthawk")` for diagnostics. Do not import `logfire` in `src/`.
 - Use PEP 695 `type` statements for new type aliases.
 - Ask before adding a new `src/` subpackage for a single module.
-- Follow `CONTRIBUTING.md` § Docstring Guide for docstring scope and format.
+
+## Comments and docstrings
+
+Follow `.claude/rules/python.md`. Additionally:
+
+- Public API means the objects rendered by `docs/api.md`. Follow `CONTRIBUTING.md` "Docstring Guide" for their format.
+- Keep examples in `docs/`, not in docstrings.
+- Write an internal docstring only for a fact the code does not convey; otherwise omit it.
+- Write a module docstring only when it states a responsibility boundary that the module name does not convey.
