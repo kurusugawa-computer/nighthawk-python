@@ -222,11 +222,9 @@ Pages in the Getting started, Patterns & verification, and Configuration nav gro
 - `prompt-example` anchors live in `natural-blocks.md` by default (`basic-binding`, `fstring-injection`, `local-function-signature`, `global-function-reference`). Exception: `carry-pattern` lives in `patterns.md` (cross-block composition). Test file: `tests/docs/test_prompt_examples.py`.
 - `for-coding-agents.md` operational examples and core doctrine are guarded by `tests/docs/test_coding_agent_examples.py`. Update the tests when changing executable guidance or non-negotiable rules.
 - When a docs change invalidates an existing test, first decide whether the docs or the test is the canonical truth for that claim, then update both sides to match.
-- Docs architecture regression tests (`tests/docs/test_docs_architecture.py`):
-  - Fail on stale references to deleted/renamed docs (`guide.md`, `design.md`, `providers.md`).
-  - Guard the canonical example relationship between `index.md` and `README.md` via fenced-code-block extraction + normalized exact match.
-  - Guard selected canonical-owner expectations where drift is likely.
-  - Automate `mkdocs.yml` nav entries vs `docs/` file existence as a pytest case.
-  - Guard that obsolete canonical pages do not remain published accidentally alongside their replacements.
+- `tests/docs/test_integrity.py` checks the shared README/index example, navigation targets, and explicit API member inventories.
+- `tests/docs/test_links.py` builds the published site and checks internal links and anchors against rendered HTML, including absolute links to this documentation site.
+- `tests/docs/test_runtime_examples.py` executes marked examples from runtime configuration, embedded execution, and verification, including against the installed wheel.
+- Test current links and executable claims; do not maintain lists of obsolete API names, document paths, or exact governance prose.
 - `mkdocs build` must succeed without `--strict`. Warnings are acceptable.
 - All internal relative links must resolve.

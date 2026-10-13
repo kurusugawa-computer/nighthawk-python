@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Breaking: deterministic test responses use resolved `StepResult` values. Replace `return_response("'bug'")` with `return_response("bug")`, `return_response("result", result=42)` with `return_response(42, result=42)`, and `raise_response("failed", error_type="ValueError")` with `raise_response("failed", error_type=ValueError)`. Direct `StepResponse` construction uses `Return(value)`, `Raise(message, error_type)`, `Pass()`, `Break()`, or `Continue()` from `nighthawk.runtime`; strings are never evaluated as expressions.
+
 - `task_references` replaces `implicit_references`. Injection remains separate from Python module globals.
 - Executors accept one `StepRequest` and return a resolved `StepCandidate`. Finalization validates all initialized declared outputs, rejects undeclared proposals, and independently validates return values. An initial `Raise` discards pending writes.
 - Commit rewrites validate supplied replacements once without repeating inspection or expression effects; supplied output mappings replace the full selected mapping.
@@ -33,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integrated Natural execution contracts into the specification and usage guides, with practical parent/child examples and explicit validation, inheritance, and host-delivery boundaries. The README and landing-page example now demonstrate typed output validation.
 
 ### Fixed
+
+- `run()` and `scope()` reject invalid executor objects before changing the active execution context.
+- Tool-return content projection receives an explicit rendering policy; MCP discovery content respects the caller's selected policy.
+- Verification guidance captures actual model request messages instead of claiming full-prompt DEBUG logging. Published internal links and anchors are checked against the rendered MkDocs site.
 
 - Source instrumentation retains defaults, live closure cells and globals, Python unbound-name behavior, and application names that resemble generated helpers.
 - Variadic output bindings validate their tuple or dictionary elements, preserving `Annotated` constraints and unpacked collection contracts.

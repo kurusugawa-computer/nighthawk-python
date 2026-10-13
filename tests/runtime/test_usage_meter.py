@@ -15,11 +15,6 @@ class TestUsageMeterRecord:
         meter.record(RunUsage(input_tokens=20, output_tokens=15))
         assert meter.total_tokens == 50
 
-    def test_total_tokens_reflects_input_plus_output(self) -> None:
-        meter = UsageMeter()
-        meter.record(RunUsage(input_tokens=100, output_tokens=50))
-        assert meter.total_tokens == 150
-
     def test_snapshot_returns_independent_copy(self) -> None:
         meter = UsageMeter()
         meter.record(RunUsage(input_tokens=10, output_tokens=5))
@@ -42,7 +37,7 @@ class TestUsageMeterRecord:
 
 
 class TestUsageMeterContextVariable:
-    def test_returns_none_outside_run(self) -> None:
+    def test_requires_active_run(self) -> None:
         with pytest.raises(nh.NighthawkError):
             get_usage_meter()
 

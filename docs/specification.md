@@ -805,6 +805,7 @@ Working directory selection for provider backends is configured via `ModelSettin
 API:
 
 - `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | UnsetType = UNSET)`
+    - Validates the synchronous or asynchronous executor protocol before installing context; invalid executors raise `TypeError` and leave any parent context intact.
     - Replaces the current context step executor with the provided step executor.
     - Installs `usage_meter` as the run-level meter when given; omission or `UNSET` creates a fresh `UsageMeter`; `None` is invalid.
     - Resets scoped tools, capabilities, and task references to empty, oversight and lifecycle to `None`, and context construction to `DefaultContextBuilder` for the run.
@@ -821,6 +822,7 @@ API:
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
     - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
     - `context_builder` replaces prompt construction; omission or `UNSET` inherits. See Section 8.2.4.
+    - Explicit executor replacements use the same protocol validation as `run()`; invalid executors raise `TypeError` before context installation.
     - Executor replacement precedes model selection. Selection delegates to the active `ConfigurableStepExecutor`; direct `AgentStepExecutor` resolution respects managed/external ownership.
     - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
     - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.

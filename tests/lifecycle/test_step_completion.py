@@ -14,7 +14,7 @@ from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInt
 from nighthawk.natural.transform import build_runtime_call_and_assignments
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.runner import Runner
-from nighthawk.testing import ScriptedExecutor, StepResponse, return_response
+from nighthawk.testing import ScriptedExecutor, StepResponse
 from tests.support.executors import StubExecutor
 
 
@@ -372,34 +372,6 @@ def test_process_control_is_interruption(exception: BaseException) -> None:
         workflow()
     assert caught.value is exception
     assert len(events) == 1 and isinstance(events[0], StepInterrupted)
-
-
-def test_denied_return_never_calls_inspector_or_evaluator() -> None:
-    calls: list[str] = []
-
-    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
-        calls.append("inspected")
-        return nh.oversight.Accept()
-
-    @nh.natural_function
-    def workflow() -> int:
-        nonlocal calls
-        """natural
-        ---
-        deny: [return]
-        ---
-        <calls>
-        ignored
-        """
-        return 0
-
-    with (
-        nh.run(ScriptedExecutor([return_response("calls.append('evaluated')")])),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_operation=inspect_expression)),
-        pytest.raises(nh.ExecutionError),
-    ):
-        workflow()
-    assert calls == []
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

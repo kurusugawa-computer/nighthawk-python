@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from collections import namedtuple
 from contextlib import nullcontext
 from typing import Any
 
 import anyio
 import pytest
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai._run_context import set_current_run_context
 from pydantic_ai.messages import (
     AudioUrl,
@@ -20,15 +21,19 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets.function import FunctionToolset
+from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
-from nighthawk.runtime.step_context import StepContext
+from nighthawk.runtime import StepEnvironment
+from nighthawk.runtime.step_context import StepContext, ToolResultRenderingPolicy
 from nighthawk.tools.contracts import (
     ToolBoundaryError,
     ToolOutcome,
 )
 from nighthawk.tools.execution import ToolResultWrapperToolset, _normalize_tool_success
+from nighthawk.tools.provided import build_provided_tool_definitions
 from tests.support.executors import StubExecutor
+from tests.support.prompts import build_step_context
 from tests.support.tools import _new_run_context, _new_step_context
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
@@ -347,3 +352,28 @@ def test_tool_success_preserves_multimodal_items_in_list_subclass() -> None:
     assert normalized["payload"] == ["caption", image, "tail"]
     tool_return_part = ToolReturnPart(tool_name="sample_tool", content=normalized["payload"])
     assert tool_return_part.content_items(mode="str") == ["caption", image, "tail"]
+
+
+def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None:
+    context = build_step_context(python_globals={}, python_locals={})
+    context.environment = StepEnvironment(
+        python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)}
+    )
+    context.tool_result_rendering_policy = ToolResultRenderingPolicy("o200k_base", 128, "default")
+
+    async def execute() -> None:
+        run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
+        toolset = ToolResultWrapperToolset(FunctionToolset([definition.tool for definition in build_provided_tool_definitions()]))
+        tool_name_to_tool = await toolset.get_tools(run_context)
+        result: Any = await toolset.call_tool(
+            "nh_eval",
+            {"expression": f"{context.environment.runtime_reference}.environment.discover(source='task')"},
+            run_context,
+            tool_name_to_tool["nh_eval"],
+        )
+        assert result["metadata_omitted"] is True
+        namespace = context.environment.expression_namespace()
+        assert eval(result["continuation"], namespace, namespace)["names"][0]["name"] == "capability_01"
+        assert eval(result["references"][0], namespace, namespace) is context.environment.task_name_to_value["capability_00"]
+
+    asyncio.run(execute())

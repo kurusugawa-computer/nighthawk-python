@@ -32,6 +32,7 @@ from ._text_fallback import (
     is_image_content,
 )
 from .base import RequestPromptPartList
+from .tool_bridge import resolve_current_tool_result_rendering_policy
 
 
 @dataclass
@@ -207,6 +208,7 @@ def _project_tool_return_part_to_text(
     segments = resolve_tool_return_segments(
         tool_name=tool_return_part.tool_name,
         payload=tool_return_part.content,
+        rendering_policy=resolve_current_tool_result_rendering_policy(),
     )
     if segments.is_empty_success():
         return f"Tool return from {tool_return_part.tool_name}:"

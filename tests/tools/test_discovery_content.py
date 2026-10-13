@@ -13,7 +13,6 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
-from nighthawk.backends.tool_bridge import set_current_run_context
 from nighthawk.runtime import StepEnvironment, inspect_value
 from nighthawk.runtime.step_context import ToolResultRenderingPolicy
 from nighthawk.tools._tool_return_content import resolve_tool_return_segments
@@ -155,8 +154,9 @@ def test_provider_and_content_boundary_preserve_nested_discovery_and_native_medi
         assert_continuation(result["discovery"][0], context.environment)
         value = [{"discovery": context.environment.discover(source="task")}, payload]
         normalized = _normalize_tool_success(value)["payload"]
-        with set_current_run_context(run_context):
-            segments = resolve_tool_return_segments(tool_name="nh_eval", payload=normalized)
+        segments = resolve_tool_return_segments(
+            tool_name="nh_eval", payload=normalized, rendering_policy=ToolResultRenderingPolicy("o200k_base", 512, "default")
+        )
         observed = json.loads(segments.response_text)
         # Pydantic AI encodes each non-media item as a JSON string when files
         # are extracted into the trailing user content.

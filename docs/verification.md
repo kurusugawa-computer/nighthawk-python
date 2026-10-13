@@ -40,10 +40,15 @@ def test_classify_returns_scripted_label():
 | Factory | Outcome | Use case |
 |---|---|---|
 | `pass_response(**bindings)` | pass | Normal completion with binding values |
-| `raise_response(message, *, error_type=None)` | raise | Test error handling paths |
-| `return_response(expression, **bindings)` | return | Early return from Natural function |
+| `raise_response(message, *, error_type=Exception)` | raise | Test error handling paths |
+| `return_response(value, /, **bindings)` | return | Early return from Natural function |
 | `break_response()` | break | Exit enclosing loop |
 | `continue_response()` | continue | Skip to next iteration |
+
+Responses carry resolved Python values: `return_response("bug")` returns the literal string `"bug"`, and `return_response(None)` returns `None`.
+`raise_response("failed", error_type=ValueError)` accepts an exception class; it does not look up a name in the Natural environment.
+For direct response construction, use `StepResponse(outcome=nh.runtime.Return(value))` or the other resolved outcomes from `nighthawk.runtime`.
+Output bindings and the return value pass through the ordinary, independent runtime validation and commit inspection.
 
 **Testing error handling.** Use `raise_response` to verify that your code handles LLM failures gracefully:
 
@@ -54,7 +59,7 @@ from nighthawk.testing import raise_response
 def test_fallback_on_error():
     executor = ScriptedExecutor(
         responses=[
-            raise_response("cannot interpret input", error_type="ValueError"),
+            raise_response("cannot interpret input", error_type=ValueError),
         ]
     )
     with nh.run(executor):
@@ -69,7 +74,11 @@ def test_fallback_on_error():
 For a pipeline, supply one response per block in execution order.
 `default_response` supplies the response used after the explicit sequence is exhausted.
 
-**Verifying binding wiring.** Use recorded calls to check that the right data is visible to the LLM:
+**Verifying binding wiring.** Recorded calls contain shallow snapshots whose values retain application object identity.
+`step_globals` selects module globals named by read bindings, scoped task references, or discovered type aliases, excluding names already present in locals.
+`task_name_to_value` and `parent_name_to_value` record those environment layers separately.
+These records show the execution inputs; rendered prompt budgets and context builders determine what the model actually sees.
+Use [prompt observation](#inspecting-the-assembled-prompt) to inspect the assembled presentation.
 
 ```py
 def test_helper_is_discoverable():
@@ -78,8 +87,8 @@ def test_helper_is_discoverable():
         analyze(query="test")
 
     call = executor.calls[0]
-    assert "helper" in call.step_globals  # binding function visible in GLOBALS
-    assert "query" in call.step_locals  # parameter visible in LOCALS
+    assert "helper" in call.step_globals  # referenced module helper
+    assert "query" in call.step_locals  # parameter available in the environment
     assert "result" in call.binding_names  # write binding registered
 ```
 
@@ -137,16 +146,61 @@ Keep representative failures as regression inputs and use `pytest -x -k test_nam
 
 ## Inspecting the assembled prompt
 
-Enable `DEBUG` logging on the `nighthawk` logger to see the full prompt sent to the LLM:
+Observe the assembled request at the model boundary to inspect its actual system and user messages.
+Nighthawk's diagnostic logger reports events such as context truncation; it does not emit the full prompt.
+This complete example uses a local `FunctionModel`, so it needs no credentials and performs no model API calls.
+It captures the messages after prompt construction and supplies a fixed completion.
 
+<!-- runnable-example:prompt_observation -->
 ```py
-import logging
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, SystemPromptPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger("nighthawk").setLevel(logging.DEBUG)
+import nighthawk as nh
+
+
+captured_prompt_parts: list[str] = []
+
+
+def format_label(text: str) -> str:
+    """Normalize a label for display."""
+    return text.strip().title()
+
+
+async def observe_request(messages: list[ModelMessage], information: AgentInfo) -> ModelResponse:
+    for message in messages:
+        if isinstance(message, ModelRequest):
+            for part in message.parts:
+                if isinstance(part, (SystemPromptPart, UserPromptPart)) and isinstance(part.content, str):
+                    captured_prompt_parts.append(part.content)
+    return ModelResponse(parts=[ToolCallPart("final_result", {"result": {"kind": "pass"}})])
+
+
+@nh.natural_function
+def inspect_label(text: str) -> None:
+    """natural
+    Read <text> and inspect the signature of <format_label>.
+    """
+
+
+executor = nh.AgentStepExecutor.from_configuration(
+    configuration=nh.StepExecutorConfiguration(model=FunctionModel(observe_request)),
+)
+with nh.run(executor):
+    inspect_label("sample label")
+
+prompt_text = "\n\n".join(captured_prompt_parts)
+assert all(f"<<<NH:{section}>>>" in prompt_text for section in ("PROGRAM", "LOCALS", "GLOBALS"))
+locals_text = prompt_text.split("<<<NH:LOCALS>>>", 1)[1].split("<<<NH:END_LOCALS>>>", 1)[0]
+globals_text = prompt_text.split("<<<NH:GLOBALS>>>", 1)[1].split("<<<NH:END_GLOBALS>>>", 1)[0]
+assert "sample label" in locals_text and "format_label:" in globals_text
+print("prompt_sections=PROGRAM,LOCALS,GLOBALS; helper_visible=True")
 ```
+<!-- /runnable-example:prompt_observation -->
 
-The log output includes the rendered PROGRAM, LOCALS, and GLOBALS sections, making it easy to verify that bindings and context appear as expected.
+Inspect `prompt_text`, or print it, to see the captured text.
+Multimodal message parts also need their native content inspected; this text-only example does not project images or files.
+For observation during real execution, use a scoped Pydantic AI capability as in [request observations](runtime-configuration.md#request-usage-and-admission).
 
 ## Diagnosing `<snipped>` markers
 

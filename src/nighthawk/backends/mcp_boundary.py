@@ -53,6 +53,7 @@ def _tool_outcome_to_mcp_content_list(
     *,
     tool_name: str,
     tool_outcome: ToolOutcome,
+    rendering_policy: ToolResultRenderingPolicy,
 ) -> list[object]:
     from mcp import types as mcp_types
 
@@ -61,6 +62,7 @@ def _tool_outcome_to_mcp_content_list(
     segments = resolve_tool_return_segments(
         tool_name=tool_name,
         payload=tool_outcome["payload"],
+        rendering_policy=rendering_policy,
     )
     if segments.is_empty_success():
         return []
@@ -178,6 +180,7 @@ def tool_handler_result_to_low_level_mcp_content(
         return _tool_outcome_to_mcp_content_list(
             tool_name=tool_name,
             tool_outcome=tool_outcome,
+            rendering_policy=effective_rendering_policy,
         )
     except Exception as exception:
         _record_mcp_projection_fallback(tool_name=tool_name, exception=exception)

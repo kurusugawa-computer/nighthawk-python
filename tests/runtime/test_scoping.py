@@ -9,6 +9,38 @@ from nighthawk.runtime.step_executor import AgentStepExecutor
 from tests.support.executors import StubExecutor
 
 
+@pytest.mark.parametrize("entry", ["run", "scope"])
+@pytest.mark.parametrize("invalid", [None, object(), 7])
+def test_invalid_executor_leaves_parent_context_intact(entry: str, invalid: object) -> None:
+    executor = StubExecutor()
+    with nh.run(executor), nh.scope(task_references={"marker": executor}):
+        reference = nh.get_execution_reference()
+        meter = nh.get_usage_meter()
+        with pytest.raises(TypeError, match="step executor protocol"), getattr(nh, entry)(step_executor=invalid):
+            pytest.fail("Invalid executor entered its context")
+        assert nh.get_step_executor() is executor
+        assert nh.get_execution_reference() is reference
+        assert nh.get_usage_meter() is meter
+        assert _current_task_references() == {"marker": executor}
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_run_and_scope_accept_each_executor_protocol(asynchronous: bool) -> None:
+    class Synchronous:
+        def run_step(self, *, request: nh.runtime.StepRequest) -> nh.runtime.StepCandidate:
+            return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
+
+    class Asynchronous:
+        async def run_step_async(self, *, request: nh.runtime.StepRequest) -> nh.runtime.StepCandidate:
+            return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
+
+    executor = Asynchronous() if asynchronous else Synchronous()
+    with nh.run(executor):
+        assert nh.get_step_executor() is executor
+        with nh.scope(step_executor=executor):
+            assert nh.get_step_executor() is executor
+
+
 def test_step_executor_replace_and_getter():
     step_executor = StubExecutor()
 

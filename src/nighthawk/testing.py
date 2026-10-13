@@ -9,20 +9,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from .runtime.async_bridge import run_coroutine_synchronously
 from .runtime.execution_reference import ExecutionReference
-from .runtime.model_candidate import resolve_model_candidate
 from .runtime.step_context import StepContext
-from .runtime.step_contract import (
-    BreakStepOutcome,
-    ContinueStepOutcome,
-    PassStepOutcome,
-    RaiseStepOutcome,
-    ReturnStepOutcome,
-    StepKind,
-    StepOutcome,
-)
+from .runtime.step_contract import StepKind
 from .runtime.step_request import StepCandidate, StepRequest
+from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
 @dataclass
@@ -38,7 +29,9 @@ class StepCall:
         allowed_step_kinds: Outcome kinds allowed for this step, determined by syntactic context and deny frontmatter.
         step_locals: Snapshot of step-local variables at the time of execution.
             Contains function parameters and local variables.
-        step_globals: Snapshot of referenced module-level names. Filtered to only names that appear as read bindings (``<name>``) and resolve from globals rather than locals.
+        step_globals: Shallow snapshot of module globals selected by read bindings,
+            task reference names, or discovered type aliases, excluding local names.
+            This selection is not the complete rendered prompt or an access allowlist.
     """
 
     execution_reference: ExecutionReference
@@ -58,11 +51,11 @@ class StepResponse:
 
     Attributes:
         bindings: Proposed output values. Undeclared names fail finalization.
-        outcome: The step outcome. Defaults to ``PassStepOutcome``.
+        outcome: Resolved Python control result. Strings are values, never expressions.
     """
 
     bindings: dict[str, object] = field(default_factory=dict)
-    outcome: StepOutcome = field(default_factory=lambda: PassStepOutcome(kind="pass"))
+    outcome: StepResult = field(default_factory=Pass)
 
 
 def _build_step_call(
@@ -86,10 +79,6 @@ def _build_step_call(
         task_name_to_value=dict(step_context.environment.task_name_to_value),
         parent_name_to_value=dict(step_context.environment.parent_name_to_value),
     )
-
-
-def _apply_response(response: StepResponse, request: StepRequest) -> StepCandidate:
-    return run_coroutine_synchronously(lambda: resolve_model_candidate(request, response.outcome, response.bindings))
 
 
 class ScriptedExecutor:
@@ -120,20 +109,14 @@ class ScriptedExecutor:
         self.calls.append(call)
         index = len(self.calls) - 1
         response = self.responses[index] if index < len(self.responses) else self.default_response
-        return _apply_response(response, request)
+        return StepCandidate(outcome=response.outcome, binding_name_to_value=response.bindings)
 
     async def run_step_async(
         self,
         *,
         request: StepRequest,
     ) -> StepCandidate:
-        call = _build_step_call(
-            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
-        )
-        self.calls.append(call)
-        index = len(self.calls) - 1
-        response = self.responses[index] if index < len(self.responses) else self.default_response
-        return await resolve_model_candidate(request, response.outcome, response.bindings)
+        return self.run_step(request=request)
 
 
 class CallbackExecutor:
@@ -157,19 +140,14 @@ class CallbackExecutor:
         )
         self.calls.append(call)
         response = self.handler(call)
-        return _apply_response(response, request)
+        return StepCandidate(outcome=response.outcome, binding_name_to_value=response.bindings)
 
     async def run_step_async(
         self,
         *,
         request: StepRequest,
     ) -> StepCandidate:
-        call = _build_step_call(
-            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
-        )
-        self.calls.append(call)
-        response = self.handler(call)
-        return await resolve_model_candidate(request, response.outcome, response.bindings)
+        return self.run_step(request=request)
 
 
 def pass_response(**bindings: object) -> StepResponse:
@@ -177,37 +155,34 @@ def pass_response(**bindings: object) -> StepResponse:
     return StepResponse(bindings=bindings)
 
 
-def raise_response(message: str, *, error_type: str | None = None) -> StepResponse:
-    """Create a response with raise outcome."""
-    return StepResponse(
-        outcome=RaiseStepOutcome(
-            kind="raise",
-            raise_message=message,
-            raise_error_type=error_type,
-        ),
-    )
+def raise_response(message: str, *, error_type: type[BaseException] = Exception) -> StepResponse:
+    """Request an exception constructed after commit inspection.
 
+    Args:
+        message: Message passed to the exception constructor.
+        error_type: Resolved exception class, independent of the Natural namespace.
 
-def return_response(expression: str, **bindings: object) -> StepResponse:
-    """Create a response with return outcome.
-
-    The ``expression`` is a Python expression evaluated against
-    step locals and globals (e.g. ``"result"`` or ``"len(items)"``).
+    Raises:
+        TypeError: If the message or exception class is invalid.
     """
-    return StepResponse(
-        bindings=bindings,
-        outcome=ReturnStepOutcome(
-            kind="return",
-            return_expression=expression,
-        ),
-    )
+    return StepResponse(outcome=Raise(message, error_type))
+
+
+def return_response(value: object, /, **bindings: object) -> StepResponse:
+    """Return a Python value subject to the Natural function's return contract.
+
+    Args:
+        value: Resolved value; strings are returned literally without evaluation.
+        **bindings: Proposed output values, independently validated at finalization.
+    """
+    return StepResponse(bindings=bindings, outcome=Return(value))
 
 
 def break_response() -> StepResponse:
     """Create a response with break outcome (exit enclosing loop)."""
-    return StepResponse(outcome=BreakStepOutcome(kind="break"))
+    return StepResponse(outcome=Break())
 
 
 def continue_response() -> StepResponse:
     """Create a response with continue outcome (skip to next iteration)."""
-    return StepResponse(outcome=ContinueStepOutcome(kind="continue"))
+    return StepResponse(outcome=Continue())

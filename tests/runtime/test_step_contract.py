@@ -12,8 +12,6 @@ def test_fragment_omits_raise_when_not_allowed() -> None:
     assert "kind: pass | return. Default: pass." in fragment
 
     assert "raise" not in fragment
-    assert "raise_message" not in fragment
-    assert "raise_error_type" not in fragment
 
 
 def test_fragment_includes_raise_without_raise_error_type_enum_when_no_bindings() -> None:

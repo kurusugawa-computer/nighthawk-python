@@ -323,6 +323,13 @@ def _resolve_model_selection(step_executor: StepExecutor, selection: ModelSelect
     return resolved
 
 
+def _validate_step_executor(step_executor: object) -> None:
+    from .step_executor import AsyncStepExecutor, SyncStepExecutor
+
+    if not isinstance(step_executor, (AsyncStepExecutor, SyncStepExecutor)):
+        raise TypeError("step_executor must implement the step executor protocol")
+
+
 @contextmanager
 def run(
     step_executor: StepExecutor,
@@ -344,7 +351,11 @@ def run(
 
     Yields:
         None
+
+    Raises:
+        TypeError: If the executor does not implement either execution protocol or the usage meter is invalid.
     """
+    _validate_step_executor(step_executor)
     execution_reference = ExecutionReference(
         run_id=run_id or generate_ulid(),
         scope_id=generate_ulid(),
@@ -427,14 +438,13 @@ def scope(
     from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
     from .context import ContextBuilder
-    from .step_executor import AsyncStepExecutor, SyncStepExecutor
 
     current_step_executor = get_step_executor()
     if not isinstance(context_builder, (UnsetType, ContextBuilder)):
         raise TypeError("context_builder must implement ContextBuilder or be UNSET")
     current_execution_reference = get_execution_reference()
-    if not isinstance(step_executor, (UnsetType, AsyncStepExecutor, SyncStepExecutor)):
-        raise TypeError("step_executor must implement the step executor protocol or be UNSET")
+    if not isinstance(step_executor, UnsetType):
+        _validate_step_executor(step_executor)
     if not isinstance(step_executor_configuration, (UnsetType, StepExecutorConfiguration)):
         raise TypeError("step_executor_configuration must be StepExecutorConfiguration or UNSET")
     if not isinstance(usage_meter, (UnsetType, UsageMeter)):

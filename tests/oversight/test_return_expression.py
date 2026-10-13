@@ -13,8 +13,7 @@ from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
 from nighthawk.oversight import Accept, Oversight, Reject
 from nighthawk.runtime import OperationRequest
 from nighthawk.runtime.step_contract import ReturnStepOutcome
-from nighthawk.testing import ScriptedExecutor, StepResponse
-from tests.support.executors import StubExecutor
+from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
 def approve_name_expression(request: OperationRequest) -> Accept | Reject:
@@ -53,7 +52,7 @@ def test_host_policy_can_limit_return_expression_syntax(expression: str, accepte
         """
         return value + previous
 
-    executor = ScriptedExecutor([StepResponse(bindings={"value": 4}, outcome=ReturnStepOutcome(kind="return", return_expression=expression))])
+    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression=expression), {"value": 4})
     with nh.run(executor), nh.scope(oversight=Oversight(inspect_operation=approve_name_expression)):
         if accepted:
             assert workflow() == (7 if expression == "previous" else 4)
@@ -82,7 +81,7 @@ def test_name_only_policy_does_not_skip_return_validation() -> None:
         """
         return value
 
-    executor = ScriptedExecutor([StepResponse(bindings={"value": 1}, outcome=ReturnStepOutcome(kind="return", return_expression="value"))])
+    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": 1})
     with (
         nh.run(executor),
         nh.scope(
@@ -123,7 +122,7 @@ def test_a_bare_name_can_still_trigger_await(reject_awaitable: bool) -> None:
             return Reject("Host disallows awaiting this expression")
         return approve_name_expression(request)
 
-    executor = ScriptedExecutor([StepResponse(bindings={"value": Pending()}, outcome=ReturnStepOutcome(kind="return", return_expression="value"))])
+    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": Pending()})
     with nh.run(executor), nh.scope(oversight=Oversight(inspect_operation=inspect_expression)):
         if reject_awaitable:
             with pytest.raises(nh.oversight.OversightRejectedError):
@@ -145,7 +144,7 @@ def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
         """
         return value
 
-    executor = ScriptedExecutor([StepResponse(bindings={"value": 4}, outcome=ReturnStepOutcome(kind="return", return_expression="value"))])
+    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": 4})
     with (
         nh.run(executor),
         nh.scope(

@@ -9,6 +9,7 @@ import pytest
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _EXAMPLE_NAME_TO_OUTPUT = {
+    "prompt_observation": "prompt_sections=PROGRAM,LOCALS,GLOBALS; helper_visible=True",
     "embedded_sync": "summary_saved=True; terminal_after_save=True",
     "embedded_async": "selected_type=Selection; terminal_after_save=True",
     "function_admission": "refused_body_effects=0; completed_calls=2",
@@ -48,7 +49,9 @@ def example_python(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture
 def example_name_to_path(tmp_path: Path) -> dict[str, Path]:
-    document = "\n".join((_REPOSITORY_ROOT / "docs" / name).read_text() for name in ("runtime-configuration.md", "embedded-execution.md"))
+    document = "\n".join(
+        (_REPOSITORY_ROOT / "docs" / name).read_text() for name in ("runtime-configuration.md", "embedded-execution.md", "verification.md")
+    )
     examples = re.findall(
         r"<!-- runnable-example:([a-z_]+) -->\s*```py\n(.*?)```\s*<!-- /runnable-example:\1 -->",
         document,

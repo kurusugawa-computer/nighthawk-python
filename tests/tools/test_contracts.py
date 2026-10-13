@@ -6,6 +6,7 @@ import pytest
 import tiktoken
 
 from nighthawk.json_renderer import JsonRendererStyle
+from nighthawk.runtime import StepEnvironment
 from nighthawk.tools import contracts
 from nighthawk.tools.contracts import (
     BoundaryFailureObservation,
@@ -200,3 +201,30 @@ def test_tool_result_budget_allocation_is_90_10_and_uses_leftover(monkeypatch: p
             "style": _style,
         }
     ]
+
+
+@pytest.mark.parametrize("budget", [128, 512, 2_000])
+def test_text_projection_preserves_usable_discovery_continuation_under_budget(budget: int) -> None:
+    environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
+    page = environment.discover(source="task")
+    encoding = tiktoken.get_encoding("o200k_base")
+    rendered = render_tool_result_json_text(value=page, error=None, max_tokens=budget, encoding=encoding, style="default")
+    observed = json.loads(rendered)["value"]
+    assert len(encoding.encode(json.dumps(observed, separators=(",", ":")))) <= budget
+    namespace = environment.expression_namespace()
+    next_page = eval(observed["continuation"], namespace, namespace)
+    references = observed.get("references") or [entry["reference"] for entry in observed["names"]]
+    for i, reference in enumerate(references):
+        assert eval(reference, namespace, namespace) is environment.task_name_to_value[f"capability_{i:02}"]
+    assert next_page["names"][0]["name"] == f"capability_{len(references):02}"
+
+
+def test_insufficient_discovery_budget_returns_recovery_instead_of_a_broken_cursor() -> None:
+    environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
+    rendered = render_tool_result_json_text(
+        value=environment.discover(source="task"), error=None, max_tokens=64, encoding=tiktoken.get_encoding("o200k_base"), style="default"
+    )
+    observed = json.loads(rendered)["value"]
+    assert "response budget" in observed["error"]
+    assert "Python slices" in observed["recovery"]
+    assert "next_cursor" not in observed and "continuation" not in observed

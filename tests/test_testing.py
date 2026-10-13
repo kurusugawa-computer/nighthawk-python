@@ -146,7 +146,7 @@ class TestScriptedExecutorRaiseOutcome:
     def test_raises_custom_error_type(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                raise_response("bad input", error_type="ValueError"),
+                raise_response("bad input", error_type=ValueError),
             ]
         )
 
@@ -217,7 +217,7 @@ class TestScriptedExecutorReturnOutcome:
     def test_early_return(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                return_response("result", result="early"),
+                return_response("early", result="early"),
             ]
         )
 
@@ -232,6 +232,40 @@ class TestScriptedExecutorReturnOutcome:
 
         with nh.run(executor):
             assert f() == "early"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("callback", [False, True])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("value", ["effects.append('evaluated')", None, object()])
+async def test_resolved_return_preserves_values_without_expression_effects(callback: bool, asynchronous: bool, value: object) -> None:
+    effects: list[str] = []
+    response = return_response(value, value="independent output")
+    executor = CallbackExecutor(lambda call: response) if callback else ScriptedExecutor([response])
+
+    @nh.natural_function
+    def synchronous() -> object:
+        nonlocal effects
+        """natural
+        Read <effects> and set <:value>.
+        Return a result.
+        """
+        raise AssertionError("Expected an early return")
+
+    @nh.natural_function
+    async def asynchronous_function() -> object:
+        nonlocal effects
+        """natural
+        Read <effects> and set <:value>.
+        Return a result.
+        """
+        raise AssertionError("Expected an early return")
+
+    with nh.run(executor):
+        result = await asynchronous_function() if asynchronous else synchronous()
+    assert result is value
+    assert effects == []
+    assert len(executor.calls) == 1
 
 
 class TestScriptedExecutorAllowedStepKinds:
@@ -358,19 +392,19 @@ class TestConvenienceFactories:
         assert response.bindings == {"x": 1, "y": "two"}
 
     def test_raise_response_creates_raise_outcome(self) -> None:
-        response = raise_response("boom", error_type="ValueError")
+        response = raise_response("boom", error_type=ValueError)
         assert response.outcome.kind == "raise"
-        assert response.outcome.raise_message == "boom"  # type: ignore[union-attr]
-        assert response.outcome.raise_error_type == "ValueError"  # type: ignore[union-attr]
+        assert response.outcome.message == "boom"  # type: ignore[union-attr]
+        assert response.outcome.error_type is ValueError  # type: ignore[union-attr]
 
     def test_raise_response_without_error_type(self) -> None:
         response = raise_response("fail")
-        assert response.outcome.raise_error_type is None  # type: ignore[union-attr]
+        assert response.outcome.error_type is Exception  # type: ignore[union-attr]
 
     def test_return_response_creates_return_outcome(self) -> None:
-        response = return_response("result", result=42)
+        response = return_response(42, result=42)
         assert response.outcome.kind == "return"
-        assert response.outcome.return_expression == "result"  # type: ignore[union-attr]
+        assert response.outcome.value == 42  # type: ignore[union-attr]
         assert response.bindings == {"result": 42}
 
     def test_break_response_creates_break_outcome(self) -> None:
@@ -480,17 +514,16 @@ class TestPydanticReturnTypeCoercion:
     def test_dict_coerced_to_pydantic_model_on_return(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                return_response("verdict", verdict={"approved": False, "reason": "uses eval()", "risk_level": "high"}),
+                return_response({"approved": False, "reason": "uses eval()", "risk_level": "high"}),
             ]
         )
 
         @nh.natural_function
         def judge_review(review_data: str) -> ReviewVerdict:
-            verdict: ReviewVerdict
             """natural
-            Analyze <review_data> and produce a structured <:verdict>.
+            Analyze <review_data> and return a structured verdict.
             """
-            return verdict  # noqa: F821  # pyright: ignore[reportUnboundVariable]
+            raise AssertionError("The scripted response returns early")
 
         with nh.run(executor):
             result = judge_review("code uses eval()")

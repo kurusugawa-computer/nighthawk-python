@@ -12,7 +12,7 @@ Python owns the surrounding control flow, state, and recovery.
 
 Compose Natural and ordinary Python functions for actions, constraints, evaluation, and feedback using existing libraries where they fit.
 Humans and agents should be able to understand the functions' intent, inputs, outputs, effects, and failures.
-When contributing to Nighthawk Core, use [Design drivers](design-drivers.md) to separate general execution needs from application-specific rules and development tooling.
+When contributing to Nighthawk Core, use [Design drivers](https://kurusugawa-computer.github.io/nighthawk-python/design-drivers/) to separate general execution needs from application-specific rules and development tooling.
 
 Before implementing a feature, identify what requires interpretation and what can be guaranteed by explicit rules:
 
@@ -214,7 +214,7 @@ def test_quote_batch_rejects_invalid_model_output():
 Use `CallbackExecutor` when scripted responses need to depend on inputs.
 Add checks for the relevant application effects, branches, and failure paths as the design grows.
 To test control outcomes, import `return_response` and `raise_response` from `nighthawk.testing`.
-`return_response("'bug'")` requests an early return using a Python expression, and `raise_response("failed", error_type="ValueError")` requests an application exception.
+`return_response("bug")` returns a literal Python value, and `raise_response("failed", error_type=ValueError)` requests an application exception using its resolved class.
 For a block that denies those outcomes, assert `nh.ExecutionError` and verify that dependent work did not run.
 Also test `pass_response()` without assignments when retaining an initial value could conceal a missing result.
 

@@ -163,6 +163,17 @@
 ## Testing
 
 ::: nighthawk.testing
+    options:
+      members:
+        - StepCall
+        - StepResponse
+        - ScriptedExecutor
+        - CallbackExecutor
+        - pass_response
+        - return_response
+        - raise_response
+        - break_response
+        - continue_response
 
 ::: nighthawk.oversight
     options:

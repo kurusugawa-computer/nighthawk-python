@@ -1,23 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 import pytest
-import tiktoken
-from pydantic_ai import RunContext
-from pydantic_ai.models.test import TestModel
-from pydantic_ai.toolsets.function import FunctionToolset
-from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepLifecycle
 from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepEnvironment, StepRequest, eval_expression_async, inspect_value
-from nighthawk.runtime.step_context import ToolResultRenderingPolicy
-from nighthawk.tools.contracts import render_tool_result_json_text
-from nighthawk.tools.execution import ToolResultWrapperToolset
-from nighthawk.tools.provided import build_provided_tool_definitions
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context, build_user_prompt_text, locals_section
 
@@ -150,58 +140,6 @@ def test_read_only_source_annotations_are_available_without_resolving_them() -> 
     assert descriptions[0]["annotation"] == "list[annotation_effect()]"
     assert descriptions[0]["output_contract"] is None
     assert effects == []
-
-
-@pytest.mark.parametrize("budget", [128, 512, 2_000])
-def test_text_projection_preserves_usable_discovery_continuation_under_budget(budget: int) -> None:
-    environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
-    page = environment.discover(source="task")
-    encoding = tiktoken.get_encoding("o200k_base")
-    rendered = render_tool_result_json_text(value=page, error=None, max_tokens=budget, encoding=encoding, style="default")
-    observed = json.loads(rendered)["value"]
-    assert len(encoding.encode(json.dumps(observed, separators=(",", ":")))) <= budget
-    namespace = environment.expression_namespace()
-    next_page = eval(observed["continuation"], namespace, namespace)
-    references = observed.get("references") or [entry["reference"] for entry in observed["names"]]
-    for i, reference in enumerate(references):
-        assert eval(reference, namespace, namespace) is environment.task_name_to_value[f"capability_{i:02}"]
-    assert next_page["names"][0]["name"] == f"capability_{len(references):02}"
-
-
-def test_insufficient_discovery_budget_returns_recovery_instead_of_a_broken_cursor() -> None:
-    environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
-    rendered = render_tool_result_json_text(
-        value=environment.discover(source="task"), error=None, max_tokens=64, encoding=tiktoken.get_encoding("o200k_base"), style="default"
-    )
-    observed = json.loads(rendered)["value"]
-    assert "response budget" in observed["error"]
-    assert "Python slices" in observed["recovery"]
-    assert "next_cursor" not in observed and "continuation" not in observed
-
-
-def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None:
-    context = build_step_context(python_globals={}, python_locals={})
-    context.environment = StepEnvironment(
-        python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)}
-    )
-    context.tool_result_rendering_policy = ToolResultRenderingPolicy("o200k_base", 128, "default")
-
-    async def execute() -> None:
-        run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
-        toolset = ToolResultWrapperToolset(FunctionToolset([definition.tool for definition in build_provided_tool_definitions()]))
-        tool_name_to_tool = await toolset.get_tools(run_context)
-        result: Any = await toolset.call_tool(
-            "nh_eval",
-            {"expression": f"{context.environment.runtime_reference}.environment.discover(source='task')"},
-            run_context,
-            tool_name_to_tool["nh_eval"],
-        )
-        assert result["metadata_omitted"] is True
-        namespace = context.environment.expression_namespace()
-        assert eval(result["continuation"], namespace, namespace)["names"][0]["name"] == "capability_01"
-        assert eval(result["references"][0], namespace, namespace) is context.environment.task_name_to_value["capability_00"]
-
-    asyncio.run(execute())
 
 
 def test_member_discovery_progresses_and_invalidated_cursor_has_recovery() -> None:

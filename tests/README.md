@@ -24,19 +24,28 @@ Within `runtime/`, use these owners:
 - `test_step_definition.py`: immutable reusable declarations and per-invocation contract selection.
 - `test_preparation.py`: namespace and annotation acquisition before executor admission, including failure diagnostics.
 - `test_embedded.py`: explicit host entry points, environment selection, Python composition, and writer adaptation.
-- `test_runner.py`: executing and finalizing steps, output selection, and Python control results.
+- `test_runner.py`: executing and finalizing resolved steps, output selection, and Python control results.
+- `test_model_candidate.py`: resolving model-facing return and exception expressions, including admission before evaluation.
+- `test_discovery.py`: live references, name and member discovery, and environment presentation.
 - `test_description.py`: best-effort metadata discovery without evaluating application annotations.
 - `test_expression.py`: expression evaluation and awaitable handling, independent of tool projection.
 
 Commit inspection belongs in `oversight/`, including embedded output replacement and rejection.
 Assignment failure, cancellation, and terminal delivery belong in `lifecycle/`, including host writers.
 Test pure binding rules once in their owner and keep entry-point tests focused on their integration.
+Tool-result rendering and response budgets belong in `tools/test_contracts.py`; nested discovery content belongs in `tools/test_discovery_content.py`.
+Provider toolset execution belongs in `tools/test_execution.py`, and pure JSON projection belongs in `test_json_renderer.py`.
+Backend process termination and reaping belong in `backends/test_process_management.py`; callback transport belongs in `backends/test_tool_transport.py`.
+Use `nighthawk.testing` for resolved Python values and exception classes.
+Use `ModelResponseExecutor` from `support/executors.py` when a test must exercise model-facing expression resolution, including operation inspection or notification ordering.
+`StubExecutor` is reserved for tests that consume an envelope embedded in Natural text.
 Asynchronous API tests await directly; the shared `execute` fixture adapts only the synchronous entry to the async test harness.
 
 Keep a helper beside its sole consumer; move it to `support/` when several test modules need it.
 Do not import another `test_*.py` module for helpers.
 Use `conftest.py` for fixtures that pytest injects, and let pytest own collection and execution.
 User-facing example code lives in docs and is executed by extraction tests in `tests/docs/`.
+`docs/test_links.py` builds the site and verifies internal links and anchors in rendered HTML, using MkDocs' actual Markdown and API rendering.
 Runtime test fixtures live in `tests/support/`; they must not import the published examples.
 Set `NIGHTHAWK_DISTRIBUTION_PYTHON` to a fresh environment's Python executable when running `tests/docs/test_runtime_examples.py` to verify the installed wheel with those same documented examples.
 

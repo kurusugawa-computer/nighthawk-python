@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import TypeAdapter
 
@@ -74,3 +74,15 @@ class InspectingExecutor:
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
         return self.handler(request)
+
+
+@dataclass
+class ModelResponseExecutor:
+    outcome: StepOutcome
+    binding_name_to_value: dict[str, object] = field(default_factory=dict)
+
+    def run_step(self, *, request: StepRequest) -> StepCandidate:
+        return run_coroutine_synchronously(lambda: self.run_step_async(request=request))
+
+    async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+        return await resolve_model_candidate(request, self.outcome, self.binding_name_to_value)

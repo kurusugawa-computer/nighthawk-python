@@ -11,8 +11,8 @@ import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
 from nighthawk.runtime import Pass, Return, StepCandidate, StepDefinition, StepRequest, eval_expression, execute_step
 from nighthawk.runtime.step_result import StepResult
-from nighthawk.testing import ScriptedExecutor, StepResponse, pass_response
-from tests.support.executors import InspectingExecutor
+from nighthawk.testing import ScriptedExecutor, pass_response
+from tests.support.executors import InspectingExecutor, ModelResponseExecutor
 
 
 @pytest.mark.asyncio
@@ -166,8 +166,8 @@ async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[...,
 async def test_exception_expression_resolves_explicit_type(execute: Callable[..., Awaitable[StepResult]]) -> None:
     from nighthawk.runtime.step_contract import RaiseStepOutcome
 
-    response = StepResponse(outcome=RaiseStepOutcome(kind="raise", raise_message="expected", raise_error_type="SelectedError"))
-    with nh.run(ScriptedExecutor([response])), pytest.raises(LookupError, match="expected"):
+    executor = ModelResponseExecutor(RaiseStepOutcome(kind="raise", raise_message="expected", raise_error_type="SelectedError"))
+    with nh.run(executor), pytest.raises(LookupError, match="expected"):
         await execute(StepDefinition("raise"), name_to_value={"SelectedError": LookupError}, write_binding=lambda name, value: None)
 
 

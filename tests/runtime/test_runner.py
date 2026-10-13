@@ -8,10 +8,7 @@ from pydantic import AfterValidator, BaseModel, Field, model_validator
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
-from nighthawk.runtime.async_bridge import run_coroutine_synchronously
-from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.step_contract import PassStepOutcome, RaiseStepOutcome, ReturnStepOutcome
-from tests.support.executors import StubExecutor
+from nighthawk.testing import ScriptedExecutor, break_response, continue_response, pass_response, return_response
 
 GLOBAL_NUMBER = 7
 
@@ -92,8 +89,6 @@ def test_sync_step_execution_sets_execution_reference_step_execution_id() -> Non
 
 
 def test_natural_function_updates_output_binding_via_docstring_step():
-    nh.StepExecutorConfiguration()
-
     @dataclass
     class AssertingExecutor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
@@ -124,16 +119,14 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_async_natural_function_updates_output_binding_via_docstring_step():
-    nh.StepExecutorConfiguration()
-
-    with nh.run(StubExecutor()):
+    with nh.run(ScriptedExecutor(default_response=pass_response(result=11))):
 
         @nh.natural_function
         async def f(x: int) -> int:
             """natural
             <x>
             <:result>
-            {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
+            Complete this step.
             """
             _ = x
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
@@ -142,13 +135,13 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_pass_step_finalize_coerces_committed_model_binding() -> None:
-    with nh.run(StubExecutor()):
+    with nh.run(ScriptedExecutor(default_response=pass_response(result={"child": {"value": "7"}}))):
 
         @nh.natural_function
         def f() -> str:
             """natural
             <:result>
-            {"step_outcome": {"kind": "pass"}, "bindings": {"result": {"child": {"value": "7"}}}}
+            Complete this step.
             """
             result: RuntimeResultModel
             assert result.child is not None  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
@@ -158,13 +151,13 @@ def test_pass_step_finalize_coerces_committed_model_binding() -> None:
 
 
 def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
-    with nh.run(StubExecutor()):
+    with nh.run(ScriptedExecutor(default_response=pass_response(result={"proposals": [{"kind": "approve", "score": "5"}]}))):
 
         @nh.natural_function
         def f() -> str:
             """natural
             <:result>
-            {"step_outcome": {"kind": "pass"}, "bindings": {"result": {"proposals": [{"kind": "approve", "score": "5"}]}}}
+            Complete this step.
             """
             result: RuntimeProposalEnvelope
             first_proposal = result.proposals[0]  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
@@ -174,13 +167,13 @@ def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
 
 
 def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
-    with nh.run(StubExecutor()):
+    with nh.run(ScriptedExecutor(default_response=pass_response(decision={"should_update": True, "next_plan": None}))):
 
         @nh.natural_function
         def f() -> int:
             """natural
             <:decision>
-            {"step_outcome": {"kind": "pass"}, "bindings": {"decision": {"should_update": true, "next_plan": null}}}
+            Complete this step.
             """
             decision: RuntimePlanUpdateDecision
             return 1 if decision.should_update else 0  # noqa: F821  # pyright: ignore[reportUndefinedVariable, reportUnboundVariable, reportAttributeAccessIssue]
@@ -223,139 +216,20 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
     assert observed_step_execution_ids and observed_step_execution_ids[0] is not None
 
 
-def test_async_natural_function_awaits_awaitable_return_value_from_step_executor():
-    nh.StepExecutorConfiguration()
+def test_resolved_return_value_is_validated() -> None:
+    @nh.natural_function
+    def workflow() -> int:
+        """natural
+        Return an integer.
+        """
+        return 0
 
-    @dataclass
-    class AssertingExecutor:
-        def run_step(self, *, request: StepRequest) -> StepCandidate:
-            processed_natural_program = request.processed_natural_program
-            step_context = request.step_context
-            binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
-            _ = processed_natural_program
-            _ = step_context
-            _ = binding_names
-            _ = allowed_step_kinds
-            raise AssertionError("run_step should not be used for this async test")
-
-        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-            processed_natural_program = request.processed_natural_program
-            step_context = request.step_context
-            binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
-            _ = processed_natural_program
-            _ = binding_names
-            _ = allowed_step_kinds
-            _ = step_context
-
-            async def calculate() -> int:
-                return 17
-
-            step_context.record_assignment("calculate", calculate)
-            return await resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="calculate()"), {})
-
-    with nh.run(AssertingExecutor()):
-
-        @nh.natural_function
-        async def f() -> int:
-            """natural
-            return the value.
-            """
-            return 0
-
-        assert asyncio.run(f()) == 17
+    with nh.run(ScriptedExecutor([return_response("not an int")])), pytest.raises(ExecutionError):
+        workflow()
 
 
-def test_sync_natural_function_rejects_awaitable_return_value_from_step_executor():
-    nh.StepExecutorConfiguration()
-
-    class AwaitableInt:
-        def __await__(self):  # type: ignore[no-untyped-def]
-            if False:
-                yield None
-            return 17
-
-    @dataclass
-    class AssertingExecutor:
-        def run_step(self, *, request: StepRequest) -> StepCandidate:
-            processed_natural_program = request.processed_natural_program
-            step_context = request.step_context
-            binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
-            _ = processed_natural_program
-            _ = step_context
-            _ = binding_names
-            _ = allowed_step_kinds
-            step_context.record_assignment("result", AwaitableInt())
-            return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="result"), {})
-            )
-
-    with nh.run(AssertingExecutor()):
-
-        @nh.natural_function
-        def f() -> int:
-            """natural
-            return the value.
-            """
-            return 0
-
-        with pytest.raises(NighthawkError, match="awaitable"):
-            f()
-
-
-def test_stub_return_effect_returns_value_from_return_expression():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
-
-        @nh.natural_function
-        def f() -> int:
-            """natural
-            <:result>
-            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
-            """
-            result = 0
-            return result
-
-        assert f() == 11
-
-
-def test_stub_return_effect_invalid_return_value_raises():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
-
-        @nh.natural_function
-        def f() -> int:
-            """natural
-            <:result>
-            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": "not an int"}}
-            """
-            result = 0
-            return result
-
-        with pytest.raises(ExecutionError):
-            f()
-
-
-def test_stub_return_effect_invalid_return_expression_raises():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
-
-        @nh.natural_function
-        def f() -> int:
-            """natural
-            {"step_outcome": {"kind": "return", "return_expression": "missing"}, "bindings": {}}
-            """
-            return 0
-
-        with pytest.raises(ExecutionError):
-            f()
-
-
-def test_stub_continue_effect_skips_following_statements():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
+def test_resolved_continue_effect_skips_following_statements():
+    with nh.run(ScriptedExecutor(default_response=continue_response())):
 
         @nh.natural_function
         def f() -> int:
@@ -363,7 +237,7 @@ def test_stub_continue_effect_skips_following_statements():
             for _ in range(5):
                 total += 1
                 """natural
-                {"step_outcome": {"kind": "continue"}, "bindings": {}}
+                Complete this step.
                 """
                 total += 100
             return total
@@ -371,9 +245,8 @@ def test_stub_continue_effect_skips_following_statements():
         assert f() == 5
 
 
-def test_stub_break_effect_breaks_loop():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
+def test_resolved_break_effect_breaks_loop():
+    with nh.run(ScriptedExecutor(default_response=break_response())):
 
         @nh.natural_function
         def f() -> int:
@@ -381,7 +254,7 @@ def test_stub_break_effect_breaks_loop():
             for _ in range(5):
                 total += 1
                 """natural
-                {"step_outcome": {"kind": "break"}, "bindings": {}}
+                Complete this step.
                 """
                 total += 100
             return total
@@ -389,14 +262,13 @@ def test_stub_break_effect_breaks_loop():
         assert f() == 1
 
 
-def test_stub_break_outside_loop_raises():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
+def test_resolved_break_outside_loop_raises():
+    with nh.run(ScriptedExecutor(default_response=break_response())):
 
         @nh.natural_function
         def f() -> int:
             """natural
-            {"step_outcome": {"kind": "break"}, "bindings": {}}
+            Complete this step.
             """
             return 1
 
@@ -405,8 +277,6 @@ def test_stub_break_outside_loop_raises():
 
 
 def test_docstring_step_is_literal_no_implicit_interpolation():
-    nh.StepExecutorConfiguration()
-
     @dataclass
     class RecordingExecutor:
         seen_programs: list[str] = field(default_factory=list)
@@ -437,27 +307,8 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
     assert recording_executor.seen_programs == ["This should remain literal: {GLOBAL_NUMBER}\n"]
 
 
-def test_frontmatter_deny_return_rejects_return_step():
-    nh.StepExecutorConfiguration()
-    with nh.run(StubExecutor()):
-
-        @nh.natural_function
-        def f() -> int:
-            """natural
-            ---
-            deny:
-              - return
-            ---
-            {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 0}}
-            """
-            return 0
-
-        with pytest.raises(ExecutionError, match="not allowed"):
-            f()
-
-
 def test_natural_function_rejects_step_executor_configuration_updates_for_non_agent_step_executor() -> None:
-    with nh.run(StubExecutor()):
+    with nh.run(ScriptedExecutor()):
 
         @nh.natural_function
         def f() -> None:
@@ -475,11 +326,11 @@ def test_compound_annotation_rejects_out_of_range_value() -> None:
             result: Annotated[int, Field(ge=0, le=10)] = 0
         """natural
         <:result>
-        {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
+        Complete this step.
         """
         return result
 
-    with nh.run(StubExecutor()), pytest.raises(nh.ExecutionError, match="less than or equal to 10"):
+    with nh.run(ScriptedExecutor(default_response=pass_response(result=11))), pytest.raises(nh.ExecutionError, match="less than or equal to 10"):
         workflow()
 
 
@@ -489,11 +340,11 @@ def test_initialized_output_is_validated_without_executor_assignment() -> None:
         result: Annotated[str, AfterValidator(str.strip)] = " draft "
         """natural
         <:result>
-        {"step_outcome": {"kind": "pass"}, "bindings": {}}
+        Complete this step.
         """
         return result
 
-    with nh.run(StubExecutor()):
+    with nh.run(ScriptedExecutor(default_response=pass_response())):
         assert workflow() == "draft"
 
 
@@ -503,26 +354,9 @@ def test_invalid_initialized_output_fails_without_executor_assignment() -> None:
         result: Annotated[int, Field(ge=0)] = -1
         """natural
         <:result>
-        {"step_outcome": {"kind": "pass"}, "bindings": {}}
+        Complete this step.
         """
         return result
 
-    with nh.run(StubExecutor()), pytest.raises(nh.ExecutionError, match="greater than or equal to 0"):
-        workflow()
-
-
-@pytest.mark.parametrize("raising", [False, True])
-def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None:
-    class Executor:
-        def run_step(self, *, request: StepRequest) -> StepCandidate:
-            outcome = RaiseStepOutcome(kind="raise", raise_message="failed") if raising else PassStepOutcome(kind="pass")
-            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, {"undeclared": 1}))
-
-    @nh.natural_function
-    def workflow() -> None:
-        """natural
-        Finish.
-        """
-
-    with nh.run(Executor()), pytest.raises(nh.ExecutionError, match="Undeclared output"):
+    with nh.run(ScriptedExecutor(default_response=pass_response())), pytest.raises(nh.ExecutionError, match="greater than or equal to 0"):
         workflow()

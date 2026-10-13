@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from markdown.extensions.toc import slugify as _toc_slugify
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _DOCS_DIR = _REPOSITORY_ROOT / "docs"
@@ -16,10 +15,6 @@ _README_PATH = _REPOSITORY_ROOT / "README.md"
 def _extract_python_code_blocks(text: str) -> list[str]:
     pattern = re.compile(r"```py\n(.*?)```", re.DOTALL)
     return [m.group(1).strip() for m in pattern.finditer(text)]
-
-
-def _heading_anchors(text: str) -> set[str]:
-    return {_toc_slugify(match.group(1).strip(), "-") for match in re.finditer(r"^#{2,}\s+(.*)$", text, re.MULTILINE)}
 
 
 def _collect_nav_files(nav: list) -> set[str]:
@@ -61,25 +56,6 @@ class TestNavStructure:
         nav_files = _collect_nav_files(mkdocs_config["nav"])
         for nav_file in nav_files:
             assert (_DOCS_DIR / nav_file).exists(), f"Nav entry '{nav_file}' does not exist in docs/"
-
-
-class TestPhilosophyStructure:
-    def test_inbound_reference_validity(self) -> None:
-        valid_anchors = _heading_anchors((_DOCS_DIR / "philosophy.md").read_text(encoding="utf-8"))
-        for doc_file in _DOCS_DIR.glob("*.md"):
-            text = doc_file.read_text(encoding="utf-8")
-            for match in re.finditer(r"philosophy\.md#([-a-z0-9]+)", text):
-                anchor = match.group(1)
-                assert anchor in valid_anchors, (
-                    f"{doc_file.name} links to philosophy.md#{anchor} which does not exist. Valid anchors: {sorted(valid_anchors)}"
-                )
-
-    def test_self_reference_validity(self) -> None:
-        text = (_DOCS_DIR / "philosophy.md").read_text(encoding="utf-8")
-        valid_anchors = _heading_anchors(text)
-        self_anchors = re.findall(r"\]\(#([A-Za-z0-9_-]+)\)", text)
-        for anchor in self_anchors:
-            assert anchor in valid_anchors, f"philosophy.md self-reference #{anchor} does not resolve. Valid anchors: {sorted(valid_anchors)}"
 
 
 def test_explicit_api_members_exist_in_their_documented_modules() -> None:

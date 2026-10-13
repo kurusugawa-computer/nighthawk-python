@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import anyio
@@ -25,14 +26,39 @@ from pydantic_ai.usage import RunUsage
 from nighthawk.backends import mcp_boundary as mcp_boundary_module
 from nighthawk.backends.mcp_boundary import call_tool_for_claude_code_sdk, call_tool_for_low_level_mcp_server
 from nighthawk.backends.mcp_server import mcp_server_if_needed
-from nighthawk.runtime.step_context import ToolResultRenderingPolicy
+from nighthawk.runtime import StepEnvironment
+from nighthawk.runtime.step_context import ToolResultRenderingPolicy, step_context_scope
 from nighthawk.tools.contracts import (
     ToolHandlerResult,
     ToolOutcome,
 )
+from tests.support.contexts import new_context
 from tests.support.tools import _test_tool_handler_result
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.parametrize("budget", [64, 128, 512])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_discovery_content_uses_selected_rendering_policy(budget: int, explicit: bool) -> None:
+    context = new_context()
+    context.tool_result_rendering_policy = ToolResultRenderingPolicy("o200k_base", 2_000 if explicit else budget, "default")
+    environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
+    with step_context_scope(context):
+        content = mcp_boundary_module.tool_handler_result_to_low_level_mcp_content(
+            tool_name="discovery",
+            tool_handler_result=_test_tool_handler_result(payload=environment.discover(source="task")),
+            rendering_policy=ToolResultRenderingPolicy("o200k_base", budget, "default") if explicit else None,
+        )
+    assert len(content) == 1 and isinstance(content[0], TextContent)
+    observed = json.loads(content[0].text)
+    assert len(tiktoken.get_encoding("o200k_base").encode(json.dumps(observed, separators=(",", ":")))) <= budget
+    if budget == 64:
+        assert "recovery" in observed
+    else:
+        namespace = environment.expression_namespace()
+        next_page = eval(observed["continuation"], namespace, namespace)
+        assert next_page["names"]
 
 
 def test_mcp_boundary_low_level_mcp_server_returns_text_content_and_propagates_otel_context() -> None:
@@ -511,7 +537,7 @@ def test_mcp_boundary_low_level_mcp_server_falls_back_to_preview_when_rich_proje
         def set_attribute(self, name: str, value: object) -> None:
             self.attribute_name_to_value[name] = value
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -553,7 +579,7 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
 
     captured: dict[str, object] = {}
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -608,7 +634,7 @@ def test_mcp_boundary_claude_code_falls_back_to_preview_when_rich_projection_rai
         assert arguments == {"x": 1}
         return _test_tool_handler_result(payload=2)
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -636,7 +662,7 @@ def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
 
     captured: dict[str, object] = {}
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")

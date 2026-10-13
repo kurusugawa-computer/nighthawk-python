@@ -13,6 +13,7 @@ from pydantic_ai.messages import ToolReturnPart, UserContent
 from ..json_renderer import project_discovery_value
 from ..runtime._user_content import try_project_ordered_user_content_sequence
 from ..runtime.discovery import contains_discovery_result
+from ..runtime.step_context import ToolResultRenderingPolicy
 
 
 class ToolReturnSegments(NamedTuple):
@@ -28,15 +29,15 @@ def resolve_tool_return_segments(
     *,
     tool_name: str,
     payload: object,
+    rendering_policy: ToolResultRenderingPolicy,
 ) -> ToolReturnSegments:
     if contains_discovery_result(payload):
         import tiktoken
 
-        from ..backends.tool_bridge import resolve_current_tool_result_rendering_policy
-
-        policy = resolve_current_tool_result_rendering_policy()
         projected = project_discovery_value(
-            payload, max_tokens=policy.tool_result_max_tokens, encoding=tiktoken.get_encoding(policy.tokenizer_encoding_name)
+            payload,
+            max_tokens=rendering_policy.tool_result_max_tokens,
+            encoding=tiktoken.get_encoding(rendering_policy.tokenizer_encoding_name),
         )
         assert projected is not None
         payload = projected.value
