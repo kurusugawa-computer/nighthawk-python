@@ -8,6 +8,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.runtime.scoping import _current_task_references
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 from tests.support.host_controls import PreservingExecutor, RecordingHandler, RequestObserver, block, deterministic_model
 
@@ -241,3 +242,15 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
         assert all(record.call_id and record.step_execution_id for record in observer.records)
 
     asyncio.run(execute())
+
+
+def test_function_scope_requires_a_model_selection_resolver() -> None:
+    with nh.run(ScriptedExecutor()):
+
+        @nh.natural_function
+        def f() -> None:
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")):
+                pass
+
+        with pytest.raises(nh.NighthawkError, match="ConfigurableStepExecutor"):
+            f()

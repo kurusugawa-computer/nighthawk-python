@@ -69,12 +69,12 @@ def test_tool_instance_keeps_custom_name_and_description() -> None:
         assert tool.description == "Custom description."
 
 
-def test_inherit_mode_appends_tools_from_outer_scopes() -> None:
+def test_extend_appends_tools_from_outer_scopes() -> None:
     with nh.run(StubExecutor()), nh.scope(tools=[greet]), nh.scope(tools=nh.Extend([read_step_execution_id])):
         assert [tool.name for tool in nh.get_tools()] == ["greet", "read_step_execution_id"]
 
 
-def test_replace_mode_hides_outer_tools() -> None:
+def test_sequence_replaces_tools_and_unset_inherits() -> None:
     with nh.run(StubExecutor()), nh.scope(tools=[greet]):
         with nh.scope(tools=[read_step_execution_id]):
             assert [tool.name for tool in nh.get_tools()] == ["read_step_execution_id"]
@@ -86,7 +86,7 @@ def test_replace_mode_hides_outer_tools() -> None:
         assert [tool.name for tool in nh.get_tools()] == ["greet"]
 
 
-def test_duplicate_tool_name_raises_in_inherit_mode() -> None:
+def test_extend_rejects_duplicate_tool_names() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(tools=[greet]),
@@ -121,41 +121,3 @@ def test_invalid_tool_name_raises() -> None:
         nh.scope(tools=[Tool(greet, name="not-valid")]),
     ):
         pass
-
-
-def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
-    class FakeRunResult:
-        def __init__(self, output: object) -> None:
-            self.output = output
-
-    class FakeAgent:
-        def __init__(self) -> None:
-            self.seen_tool_names: list[str] = []
-
-        def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
-
-            _ = (user_prompt, deps, kwargs)
-            assert toolsets is not None
-            self.seen_tool_names.append(",".join(sorted(toolsets[0].tools.keys())))
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
-
-    agent = FakeAgent()
-
-    @nh.natural_function
-    def natural_pass_function() -> None:
-        """natural
-        Do nothing.
-        """
-
-    with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
-        natural_pass_function()
-        with nh.scope(tools=[greet]):
-            natural_pass_function()
-        natural_pass_function()
-
-    assert agent.seen_tool_names == [
-        "nh_assign,nh_eval",
-        "greet,nh_assign,nh_eval",
-        "nh_assign,nh_eval",
-    ]

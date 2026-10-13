@@ -25,6 +25,10 @@ Within `runtime/`, use these owners:
 - `test_preparation.py`: namespace and annotation acquisition before executor admission, including failure diagnostics.
 - `test_embedded.py`: explicit host entry points, environment selection, Python composition, and writer adaptation.
 - `test_runner.py`: executing and finalizing resolved steps, output selection, and Python control results.
+- `test_environment.py`: name resolution, precedence, and live or inherited value views, including application names resembling generated helpers.
+- `test_prompt_values.py`: value presentation in prompt context, including those application names.
+- `test_step_executor.py`: agent adaptation, scoped tool delivery, prompt content, and completed usage forwarding.
+- `test_model_selection.py`: model/configuration resolution, executor policy, and restoration across function and scope boundaries.
 - `test_model_candidate.py`: resolving model-facing return and exception expressions, including admission before evaluation.
 - `test_discovery.py`: live references, name and member discovery, and environment presentation.
 - `test_description.py`: best-effort metadata discovery without evaluating application annotations.
@@ -37,6 +41,7 @@ Tool-result rendering and response budgets belong in `tools/test_contracts.py`; 
 Provider toolset execution belongs in `tools/test_execution.py`, and pure JSON projection belongs in `test_json_renderer.py`.
 Backend process termination and reaping belong in `backends/test_process_management.py`; callback transport belongs in `backends/test_tool_transport.py`.
 Use `nighthawk.testing` for resolved Python values and exception classes.
+`ScriptedExecutor` fails on an unexpected invocation after its responses are exhausted; supply an explicit `default_response` only when repeated responses are intended.
 Use `ModelResponseExecutor` from `support/executors.py` when a test must exercise model-facing expression resolution, including operation inspection or notification ordering.
 `StubExecutor` is reserved for tests that consume an envelope embedded in Natural text.
 Asynchronous API tests await directly; the shared `execute` fixture adapts only the synchronous entry to the async test harness.

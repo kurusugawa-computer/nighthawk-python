@@ -105,7 +105,7 @@ def test_scope_requires_existing_step_executor():
         pass
 
 
-def test_scope_task_references_additive_across_nested_scopes() -> None:
+def test_scope_merge_combines_task_references_and_restores_parent() -> None:
     parent_function = object()
     child_function = object()
 
@@ -123,7 +123,7 @@ def test_scope_task_references_additive_across_nested_scopes() -> None:
         assert _current_task_references() == {}
 
 
-def test_scope_task_references_rejects_conflicting_values_in_inherit_mode() -> None:
+def test_scope_merge_rejects_conflicting_task_references() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(task_references={"shared": object()}),
@@ -141,43 +141,31 @@ def test_scope_task_references_accepts_mapping() -> None:
         assert set(_current_task_references().keys()) == {"one", "two"}
 
 
-def test_scope_replace_mode_unset_keeps_inherited_task_references() -> None:
+def test_scope_unset_inherits_task_references() -> None:
     parent_function = object()
 
     with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}), nh.scope(task_references=nh.UNSET):
         assert _current_task_references() == {"parent": parent_function}
 
 
-def test_scope_replace_mode_explicit_empty_mapping_clears_task_references() -> None:
+def test_scope_empty_mapping_clears_task_references() -> None:
     parent_function = object()
 
     with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}), nh.scope(task_references={}):
         assert _current_task_references() == {}
 
 
-def test_scope_replace_mode_replaces_task_references_mapping() -> None:
-    parent_function = object()
-    replacement_function = object()
-
-    with (
-        nh.run(StubExecutor()),
-        nh.scope(task_references={"parent": parent_function}),
-        nh.scope(task_references={"replacement": replacement_function}),
-    ):
-        assert _current_task_references() == {"replacement": replacement_function}
-
-
-def test_scope_replace_mode_unset_keeps_inherited_prompt_suffix_fragments() -> None:
+def test_scope_unset_inherits_prompt_suffix_fragments() -> None:
     with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(system_prompt_suffix_fragments=nh.UNSET):
         assert nh.get_system_prompt_suffix_fragments() == ("parent",)
 
 
-def test_scope_replace_mode_explicit_empty_prompt_suffix_fragments_clears() -> None:
+def test_scope_empty_sequence_clears_prompt_suffix_fragments() -> None:
     with nh.run(StubExecutor()), nh.scope(system_prompt_suffix_fragments=["parent"]), nh.scope(system_prompt_suffix_fragments=[]):
         assert nh.get_system_prompt_suffix_fragments() == ()
 
 
-def test_scope_replace_mode_replaces_prompt_suffix_fragments() -> None:
+def test_scope_sequence_replaces_prompt_suffix_fragments() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(system_prompt_suffix_fragments=["parent"]),
@@ -199,7 +187,7 @@ def test_ambient_getters_outside_run_raise() -> None:
         nh.get_user_prompt_suffix_fragments()
 
 
-def test_task_references_reflect_nested_replace_scope() -> None:
+def test_scope_mapping_replaces_task_references_and_restores_parent() -> None:
     parent_function = object()
     replacement_function = object()
 
@@ -212,20 +200,7 @@ def test_task_references_reflect_nested_replace_scope() -> None:
         assert _current_task_references() == {"parent": parent_function}
 
 
-def test_task_references_return_snapshot_not_view() -> None:
-    parent_function = object()
-    child_function = object()
-
-    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}):
-        snapshot = _current_task_references()
-
-        with nh.scope(task_references={"child": child_function}):
-            assert dict(snapshot) == {"parent": parent_function}
-
-        assert dict(snapshot) == {"parent": parent_function}
-
-
-def test_scope_replace_mode_unset_keeps_inherited_step_executor() -> None:
+def test_scope_unset_inherits_step_executor() -> None:
     with nh.run(StubExecutor()):
         parent_step_executor = nh.get_step_executor()
         with nh.scope(step_executor=nh.UNSET):
@@ -233,7 +208,7 @@ def test_scope_replace_mode_unset_keeps_inherited_step_executor() -> None:
         assert child_step_executor is parent_step_executor
 
 
-def test_scope_inherit_mode_appends_prompt_suffix_fragments() -> None:
+def test_scope_extend_appends_prompt_suffix_fragments() -> None:
     with (
         nh.run(StubExecutor()),
         nh.scope(system_prompt_suffix_fragments=["parent"]),

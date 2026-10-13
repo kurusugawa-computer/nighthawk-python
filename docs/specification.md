@@ -1052,8 +1052,6 @@ Exception hierarchy:
 - `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception.
     - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, or boundary value validation fails outside the operation pipeline.
     - A DSL Raise defaults to ordinary `Exception`; application operation failures retain their own exception types.
-- `ToolEvaluationError(NighthawkError)`: Exported exception type; current common expression operations use `OperationError` for recoverable runtime failures and propagate application exceptions.
-- `ToolValidationError(NighthawkError)`: Exported exception type; the built-in `nh_assign` implementation does not raise it.
 - `ToolBoundaryError(Exception)`: Internal tool boundary signal with an `ErrorKind` and optional guidance. A failed `nh_assign` value validation raises this signal with `kind="invalid_input"`; the tool wrapper converts it into `ToolOutcome.error` for the model. It is not a `NighthawkError` subclass.
 - `ToolDeclarationError(NighthawkError)`: Invalid tool declaration.
 - `NameConflictError(NighthawkError)`: Distinct declarations claim the same name.

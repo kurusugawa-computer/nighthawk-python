@@ -6,7 +6,7 @@ import pytest
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import nighthawk as nh
-from nighthawk.errors import ExecutionError, NighthawkError
+from nighthawk.errors import ExecutionError
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor, break_response, continue_response, pass_response, return_response
 
@@ -305,18 +305,6 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
         f()
 
     assert recording_executor.seen_programs == ["This should remain literal: {GLOBAL_NUMBER}\n"]
-
-
-def test_natural_function_rejects_step_executor_configuration_updates_for_non_agent_step_executor() -> None:
-    with nh.run(ScriptedExecutor()):
-
-        @nh.natural_function
-        def f() -> None:
-            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")):
-                pass
-
-        with pytest.raises(NighthawkError, match="ConfigurableStepExecutor"):
-            f()
 
 
 def test_compound_annotation_rejects_out_of_range_value() -> None:

@@ -224,3 +224,42 @@ def test_external_agent_rejects_instance_configuration() -> None:
     for construct in (nh.AgentStepExecutor, nh.AgentStepExecutor.from_agent):
         with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
             construct(configuration=configuration, agent=object())  # type: ignore[arg-type]
+
+
+def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
+    def greet(target: str) -> str:
+        return f"hello, {target}"
+
+    class FakeRunResult:
+        def __init__(self, output: object) -> None:
+            self.output = output
+
+    class FakeAgent:
+        def __init__(self) -> None:
+            self.seen_tool_names: list[str] = []
+
+        def run_sync(self, user_prompt, *, deps=None, toolsets=None, **kwargs):  # type: ignore[no-untyped-def]
+            _ = (user_prompt, deps, kwargs)
+            assert toolsets is not None
+            self.seen_tool_names.append(",".join(sorted(toolsets[0].tools.keys())))
+            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+
+    agent = FakeAgent()
+
+    @nh.natural_function
+    def natural_pass_function() -> None:
+        """natural
+        Do nothing.
+        """
+
+    with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
+        natural_pass_function()
+        with nh.scope(tools=[greet]):
+            natural_pass_function()
+        natural_pass_function()
+
+    assert agent.seen_tool_names == [
+        "nh_assign,nh_eval",
+        "greet,nh_assign,nh_eval",
+        "nh_assign,nh_eval",
+    ]

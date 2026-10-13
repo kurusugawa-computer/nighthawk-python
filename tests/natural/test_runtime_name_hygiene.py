@@ -1,63 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from types import CellType
-
-import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepEnvironment, StepRequest, assign_tool_async, eval_expression_async
-from tests.support.prompts import build_step_context, build_user_prompt_text
-
-
-@pytest.mark.parametrize("name", ["__nh_application", "__nighthawk_application", "__nh_execution__"])
-@pytest.mark.parametrize("source", ["local", "global", "cell"])
-def test_application_prefix_keeps_lexical_priority_and_qualified_access(name: str, source: str) -> None:
-    environment = StepEnvironment(
-        python_name_to_value={name: None} if source == "local" else {},
-        python_globals={name: None} if source == "global" else {},
-        python_name_to_cell={name: CellType(None)} if source == "cell" else {},
-        parent_name_to_value={name: 5},
-        task_name_to_value={name: 9},
-        output_name_set=frozenset({name}),
-    )
-    assert environment.resolve(name) is None
-    assert environment.describe(name)["origin"] == "python"
-    assert name in environment.python_name_to_value
-    namespace = environment.expression_namespace()
-    assert eval(environment.reference(name, source="python"), namespace, namespace) is None
-    assert environment.resolve(name, source="task") == 9
-    environment.assign(name, 7)
-    assert environment.resolve(name) == 7
-    assert environment.resolve(name, source="python") is None
-    assert environment.snapshot_working_state()[name] == 7
-
-
-@pytest.mark.parametrize("cell", [False, True])
-def test_unbound_application_prefix_blocks_fallback(cell: bool) -> None:
-    name = "__nh_execution__"
-    environment = StepEnvironment(
-        python_name_to_value={},
-        python_globals={name: 99},
-        local_name_set=frozenset() if cell else frozenset({name}),
-        python_name_to_cell={name: CellType()} if cell else {},
-        parent_name_to_value={name: 5},
-        task_name_to_value={name: 9},
-    )
-    with pytest.raises(UnboundLocalError):
-        environment.resolve(name)
-    assert environment.describe(name)["unbound"] is True
-    assert name not in environment.snapshot_working_state()
-
-
-def test_explicit_application_prefixes_are_presented_in_initial_context() -> None:
-    context = build_step_context(python_globals={"__nh_global": 9}, python_locals={"__nh_local": 7})
-    context.environment = StepEnvironment(
-        python_name_to_value=context.step_locals, python_globals=context.step_globals, task_name_to_value={"__nighthawk_task": 5}
-    )
-    prompt = build_user_prompt_text(processed_natural_program="Read <__nh_local>, <__nh_global>, and <__nighthawk_task>.", step_context=context)
-    for name, value in (("__nh_local", 7), ("__nh_global", 9), ("__nighthawk_task", 5)):
-        assert f"{name}: int = {value}" in prompt
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_tool_async, eval_expression_async
 
 
 def test_every_source_helper_name_can_be_an_application_binding() -> None:

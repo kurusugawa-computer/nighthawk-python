@@ -150,3 +150,43 @@ def test_nested_natural_counter_proof() -> None:
         assert asyncio.run(block_one()) == ["ordinary"] * 4 + ["fifth", "ordinary", "ordinary", "eighth", "ordinary", "ordinary"]
     assert len(parent_execution_id_list) == 1
     assert child_parent_execution_id_list == parent_execution_id_list * 10
+
+
+@pytest.mark.parametrize("name", ["__nh_application", "__nighthawk_application", "__nh_execution__"])
+@pytest.mark.parametrize("source", ["local", "global", "cell"])
+def test_application_prefix_keeps_lexical_priority_and_qualified_access(name: str, source: str) -> None:
+    environment = StepEnvironment(
+        python_name_to_value={name: None} if source == "local" else {},
+        python_globals={name: None} if source == "global" else {},
+        python_name_to_cell={name: CellType(None)} if source == "cell" else {},
+        parent_name_to_value={name: 5},
+        task_name_to_value={name: 9},
+        output_name_set=frozenset({name}),
+    )
+    assert environment.resolve(name) is None
+    assert environment.describe(name)["origin"] == "python"
+    assert name in environment.python_name_to_value
+    namespace = environment.expression_namespace()
+    assert eval(environment.reference(name, source="python"), namespace, namespace) is None
+    assert environment.resolve(name, source="task") == 9
+    environment.assign(name, 7)
+    assert environment.resolve(name) == 7
+    assert environment.resolve(name, source="python") is None
+    assert environment.snapshot_working_state()[name] == 7
+
+
+@pytest.mark.parametrize("cell", [False, True])
+def test_unbound_application_prefix_blocks_fallback(cell: bool) -> None:
+    name = "__nh_execution__"
+    environment = StepEnvironment(
+        python_name_to_value={},
+        python_globals={name: 99},
+        local_name_set=frozenset() if cell else frozenset({name}),
+        python_name_to_cell={name: CellType()} if cell else {},
+        parent_name_to_value={name: 5},
+        task_name_to_value={name: 9},
+    )
+    with pytest.raises(UnboundLocalError):
+        environment.resolve(name)
+    assert environment.describe(name)["unbound"] is True
+    assert name not in environment.snapshot_working_state()

@@ -471,7 +471,7 @@ Design guidelines for structured output models:
 - **Keep models flat.** Nested models add LLM cognitive load. Prefer `approved: bool, reason: str, risk_level: str` over a model-within-a-model hierarchy.
 - **Use descriptive field names.** The LLM sees the model schema; field names are the primary signal for what to produce.
 - **Constrain field types.** Use `Literal["low", "medium", "high"]` instead of `str` where possible. This enables both LLM guidance and host-side validation.
-- **Handle validation failures.** When the LLM produces a value that fails Pydantic validation, Nighthawk raises `ToolValidationError`. Wrap the Natural function call with `retrying` from `nighthawk.resilience` to retry on validation errors, or use `fallback` to fall back to a simpler output type.
+- **Handle validation failures at their boundary.** A recoverable `nh_assign` validation failure is returned to the model as a tool error so it can correct the value. Invalid output bindings at finalization instead raise `ExecutionError`, whose `step_failed.failure_stage` is `"binding_validation"` and whose cause is the original validation exception. See [Error handling](patterns.md#error-handling) for executable examples. Choose retry or fallback only when repeating earlier helper calls, mutations, and other effects is acceptable; validation failure does not roll them back.
 
 ## Designing binding functions
 

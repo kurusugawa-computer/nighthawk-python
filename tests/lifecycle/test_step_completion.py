@@ -477,7 +477,7 @@ def test_distinct_blocks_have_distinct_source_locations() -> None:
         Finish second.
         """
 
-    with nh.run(ScriptedExecutor()), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(ScriptedExecutor([StepResponse(), StepResponse()])), nh.scope(lifecycle=StepLifecycle(events.append)):
         workflow()
     assert len(events) == 2
     assert events[0].execution_reference.source_location != events[1].execution_reference.source_location

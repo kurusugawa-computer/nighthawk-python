@@ -100,15 +100,19 @@ def summarize(text: str) -> str:
 |---|---|---|
 | `pass` | Normal completion -- bindings committed, execution continues | When every execution must produce an explicit control flow outcome |
 | `return` | Function returns the LLM's value; post-block code is skipped | When post-block logic (validation, transformation) must execute |
-| `raise` | Raises `ExecutionError` | When error handling belongs in Python |
+| `raise` | Raises the selected exception type, defaulting to `Exception` | When error handling belongs in Python |
 | `break`/`continue` | Loop control (loops only) | When loop control belongs in Python |
 
 See [Specification Section 8.4](specification.md#84-execution-contract-final-json) for the full frontmatter specification.
 
 ### Error handling
 
-Natural blocks signal errors via the `raise` outcome. Error behavior should be explicit at the correct boundary -- the Natural block raises, and Python catches and handles. Catch errors on the Python side:
+Natural blocks signal domain failures via the `raise` outcome.
+The selected exception reaches Python unchanged; without a selected type, it is an ordinary `Exception`.
+The broad handler below catches that default, but also catches other ordinary exceptions.
+Prefer a specific domain exception when the caller must distinguish an expected refusal from an execution failure, as in the next example.
 
+<!-- error-example:default_raise -->
 ```py
 @nh.natural_function
 def validate(data: str) -> str:
@@ -122,14 +126,16 @@ def validate(data: str) -> str:
 
 try:
     validate("corrupted-input")
-except nh.ExecutionError as e:
-    print(f"Validation failed: {e}")
+except Exception as error:
+    print(f"Validation failed: {error}")
 ```
+<!-- /error-example:default_raise -->
 
 ### Custom exception types
 
 When a Natural block references exception types visible in step locals or globals, those types become available as `raise_error_type` options:
 
+<!-- error-example:custom_raise -->
 ```py
 class InputError(Exception):
     pass
@@ -147,16 +153,45 @@ def strict_validate(data: str) -> str:
 
 try:
     strict_validate("bad")
-except InputError as e:
-    print(f"Input error: {e}")
+except InputError as error:
+    print(f"Input error: {error}")
 ```
+<!-- /error-example:custom_raise -->
 
 ### Error types
 
 Public library errors inherit from `NighthawkError`; ordinary application/helper exceptions and explicit Natural raises retain their own types.
-Expected domain failures that the model should act on can instead be returned as ordinary helper results. The most common exception in application code is `ExecutionError`, raised when a Natural block produces an invalid outcome, a disallowed outcome type, or a validation failure.
+Expected domain failures that the model should act on can instead be returned as ordinary helper results.
+Recoverable tool failures, including invalid values supplied to `nh_assign`, return structured errors to the model rather than ending the block immediately.
+Invalid outcomes and output values rejected during finalization raise `ExecutionError`, carrying the failure stage and original exception.
 
-For the full exception hierarchy (`NaturalParseError`, `ToolEvaluationError`, `ToolValidationError`, `ToolDeclarationError`), see [Specification Section 13](specification.md#13-error-handling).
+Handle only the failure stage for which the application has a recovery policy:
+
+<!-- error-example:output_validation -->
+```py
+@nh.natural_function
+def extract_count(text: str) -> int:
+    count: int = 0
+    """natural
+    Read <text> and set <:count> to the number of items.
+    """
+    return count
+
+
+try:
+    extract_count("several items")
+except nh.ExecutionError as error:
+    failure = error.step_failed
+    if failure is None or failure.failure_stage != "binding_validation":
+        raise
+    print("Output validation failed; review the input before retrying.")
+```
+<!-- /error-example:output_validation -->
+
+The original validation exception remains available as `failure.original_exception` and `error.__cause__`.
+Earlier helper calls and mutations may already have taken effect, so a retry requires an explicit recovery decision.
+Independent `validate_output_bindings()` calls instead raise `BindingValidationError`; see [Embedded execution](embedded-execution.md#reusing-binding-processing).
+For the exception hierarchy, see [Specification Section 13](specification.md#13-error-handling).
 
 ## Async Natural functions
 

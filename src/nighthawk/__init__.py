@@ -14,9 +14,7 @@ from .errors import (
     NaturalParseError,
     NighthawkError,
     ToolDeclarationError,
-    ToolEvaluationError,
     ToolNameConflictError,
-    ToolValidationError,
 )
 from .function_call import FunctionCall, FunctionCallError, FunctionCallHandler, function_call_scope, get_function_call
 from .json_renderer import JsonableValue, to_jsonable_value
@@ -68,9 +66,7 @@ __all__ = [
     "StepExecutor",
     "StepExecutorConfiguration",
     "StepPromptTemplates",
-    "ToolEvaluationError",
     "ToolDeclarationError",
-    "ToolValidationError",
     "UsageMeter",
     "get_capabilities",
     "get_step_context",

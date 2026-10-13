@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
+from nighthawk.runtime import Pass, StepDefinition, StepResult
 from nighthawk.testing import (
     CallbackExecutor,
     ScriptedExecutor,
@@ -86,7 +89,7 @@ class TestScriptedExecutorPassOutcome:
         assert "__name__" not in call.step_globals
 
     def test_default_response_used_when_responses_exhausted(self) -> None:
-        executor = ScriptedExecutor(default_response=pass_response(result="default"))
+        executor = ScriptedExecutor([pass_response(result="first")], default_response=pass_response(result="default"))
 
         @nh.natural_function
         def f() -> str:
@@ -97,10 +100,11 @@ class TestScriptedExecutorPassOutcome:
             return result
 
         with nh.run(executor):
+            assert f() == "first"
             assert f() == "default"
             assert f() == "default"
 
-        assert len(executor.calls) == 2
+        assert len(executor.calls) == 3
 
     def test_multiple_responses_consumed_in_order(self) -> None:
         executor = ScriptedExecutor(
@@ -121,6 +125,30 @@ class TestScriptedExecutorPassOutcome:
         with nh.run(executor):
             assert f() == "first"
             assert f() == "second"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response_count", [0, 1])
+async def test_unexpected_invocation_fails_without_committing_outputs(execute: Callable[..., Awaitable[StepResult]], response_count: int) -> None:
+    executor = ScriptedExecutor([pass_response(value=7) for _ in range(response_count)])
+    definition = StepDefinition("Set <:value>.", output_binding_names=("value",), binding_name_to_type={"value": int})
+    writes: list[tuple[str, object]] = []
+
+    def write_binding(name: str, value: object) -> None:
+        writes.append((name, value))
+
+    with nh.run(executor):
+        for _ in range(response_count):
+            outcome = await execute(definition, name_to_value={}, write_binding=write_binding)
+            assert isinstance(outcome, Pass)
+        with pytest.raises(nh.ExecutionError, match=f"no response for invocation {response_count + 1}") as caught:
+            await execute(definition, name_to_value={}, write_binding=write_binding)
+
+    assert isinstance(caught.value.__cause__, AssertionError)
+    assert caught.value.step_failed is not None
+    assert caught.value.step_failed.failure_stage == "executor"
+    assert len(executor.calls) == response_count + 1
+    assert writes == [("value", 7)] * response_count
 
 
 class TestScriptedExecutorRaiseOutcome:

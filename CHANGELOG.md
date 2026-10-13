@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Breaking: `ScriptedExecutor` records and rejects unexpected invocations after its response sequence is exhausted. Supply an explicit `default_response=pass_response()` or another response when repetition is intended.
+
 - Breaking: deterministic test responses use resolved `StepResult` values. Replace `return_response("'bug'")` with `return_response("bug")`, `return_response("result", result=42)` with `return_response(42, result=42)`, and `raise_response("failed", error_type="ValueError")` with `raise_response("failed", error_type=ValueError)`. Direct `StepResponse` construction uses `Return(value)`, `Raise(message, error_type)`, `Pass()`, `Break()`, or `Continue()` from `nighthawk.runtime`; strings are never evaluated as expressions.
 
 - `task_references` replaces `implicit_references`. Injection remains separate from Python module globals.
@@ -35,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integrated Natural execution contracts into the specification and usage guides, with practical parent/child examples and explicit validation, inheritance, and host-delivery boundaries. The README and landing-page example now demonstrate typed output validation.
 
 ### Fixed
+
+- Error-handling guides distinguish Natural-selected exceptions, recoverable tool errors, and finalization failures. Published handlers are executed against deterministic runtime responses.
+- Tests follow environment, prompt, executor, and model-selection ownership; scope tests use current composition terminology and avoid duplicate replacement checks or fixed instrumentation names.
 
 - `run()` and `scope()` reject invalid executor objects before changing the active execution context.
 - Tool-return content projection receives an explicit rendering policy; MCP discovery content respects the caller's selected policy.
@@ -54,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Unused public `ToolEvaluationError` and `ToolValidationError` classes. Handle finalization failures through `ExecutionError`, independent binding validation through `BindingValidationError`, and application exceptions by their original types; recoverable model tool failures remain structured observations.
 - `scope(implicit_references=...)` and `get_implicit_references()`; use scoped task references and the active step environment.
 - `Oversight.inspect_tool_call`, `Oversight.inspect_return_expression`, and the associated `ToolCall`, `ToolCallDecision`, and `ReturnExpression` types.
 - `Rewrite.return_value`; replace a return through `Rewrite.outcome`.

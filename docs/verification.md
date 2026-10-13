@@ -72,7 +72,9 @@ def test_fallback_on_error():
 ```
 
 For a pipeline, supply one response per block in execution order.
-`default_response` supplies the response used after the explicit sequence is exhausted.
+An invocation beyond the supplied responses fails instead of silently succeeding.
+`ScriptedExecutor` records that invocation and raises `AssertionError`; ordinary runtime execution wraps it in `ExecutionError` with failure stage `"executor"`.
+When repetition is intentional, explicitly supply `default_response=pass_response()` or another response to use after the sequence is exhausted.
 
 **Verifying binding wiring.** Recorded calls contain shallow snapshots whose values retain application object identity.
 `step_globals` selects module globals named by read bindings, scoped task references, or discovered type aliases, excluding names already present in locals.

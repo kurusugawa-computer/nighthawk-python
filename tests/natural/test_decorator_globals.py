@@ -39,12 +39,7 @@ class _GlobalsProbeExecutor:
         self.step_globals_list: list[dict[str, object]] = []
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
-        processed_natural_program = request.processed_natural_program
-        step_context = request.step_context
-        binding_names = list(request.output_binding_names)
-        allowed_step_kinds = request.allowed_step_kinds
-        _ = (processed_natural_program, binding_names, allowed_step_kinds)
-        self.step_globals_list.append(step_context.step_globals)
+        self.step_globals_list.append(request.step_context.step_globals)
         return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
 
@@ -86,12 +81,23 @@ def test_async_natural_function_sees_module_names_defined_after_decoration(probe
     assert probe_executor.step_globals_list[0]["later_helper"] is probe_module.later_helper
 
 
-def test_transformed_function_shares_module_globals_without_pollution(probe_module: ModuleType) -> None:
-    transformed = nh.get_transformed_function(probe_module.uses_later_helper)
-    assert transformed is not probe_module.uses_later_helper
-    assert "__nighthawk_runner__" in transformed.__code__.co_freevars
-    assert transformed.__globals__ is probe_module.__dict__
-    assert "__nh_factory__" not in probe_module.__dict__
-    assert "__nighthawk_runner__" not in probe_module.__dict__
-    assert "__nh_extract_program__" not in probe_module.__dict__
-    assert "__nh_python_cell_scope__" not in probe_module.__dict__
+def test_decoration_and_execution_preserve_module_globals() -> None:
+    def workflow() -> None:
+        """natural
+        Do nothing.
+        """
+
+    module_name_to_value = workflow.__globals__
+    original_name_to_value = dict(module_name_to_value)
+    decorated = nh.natural_function(workflow)
+    transformed = nh.get_transformed_function(decorated)
+    assert transformed.__globals__ is module_name_to_value
+    assert module_name_to_value.keys() == original_name_to_value.keys()
+    assert all(module_name_to_value[name] is value for name, value in original_name_to_value.items())
+
+    executor = _GlobalsProbeExecutor()
+    with nh.run(executor):
+        decorated()
+    assert len(executor.step_globals_list) == 1
+    assert module_name_to_value.keys() == original_name_to_value.keys()
+    assert all(module_name_to_value[name] is value for name, value in original_name_to_value.items())

@@ -258,7 +258,7 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
         Finish.
         """
 
-    executor = ScriptedExecutor()
+    executor = ScriptedExecutor([StepResponse()])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(StepDeliveryError) as caught:
         workflow()
     assert len(attempts) == len(executor.calls) == 1

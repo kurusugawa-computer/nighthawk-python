@@ -27,14 +27,6 @@ class ExecutionError(NighthawkError):
         super().__init__(f"{description}: {message}" if description else message)
 
 
-class ToolEvaluationError(NighthawkError):
-    """Raised when a tool call evaluation fails."""
-
-
-class ToolValidationError(NighthawkError):
-    """Raised when tool input validation fails."""
-
-
 class ToolDeclarationError(NighthawkError):
     """Raised when a tool declaration is invalid."""
 

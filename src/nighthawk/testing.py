@@ -84,8 +84,10 @@ def _build_step_call(
 class ScriptedExecutor:
     """Test executor that returns scripted responses and records calls.
 
-    Responses are consumed in order. Once exhausted, ``default_response`` is
-    used for subsequent calls.
+    Responses are consumed in order.
+    Once exhausted, an explicitly supplied ``default_response`` is used for subsequent calls.
+    Without a default, the unexpected invocation is recorded and raises AssertionError.
+    Ordinary runtime execution wraps that assertion in ExecutionError with failure stage ``executor``.
     """
 
     def __init__(
@@ -95,7 +97,7 @@ class ScriptedExecutor:
         default_response: StepResponse | None = None,
     ) -> None:
         self.responses: list[StepResponse] = list(responses) if responses else []
-        self.default_response: StepResponse = default_response or StepResponse()
+        self.default_response: StepResponse | None = default_response
         self.calls: list[StepCall] = []
 
     def run_step(
@@ -109,6 +111,12 @@ class ScriptedExecutor:
         self.calls.append(call)
         index = len(self.calls) - 1
         response = self.responses[index] if index < len(self.responses) else self.default_response
+        if response is None:
+            raise AssertionError(
+                f"ScriptedExecutor has no response for invocation {index + 1}; "
+                f"{len(self.responses)} responses were supplied. "
+                "Supply another response or an explicit default_response."
+            )
         return StepCandidate(outcome=response.outcome, binding_name_to_value=response.bindings)
 
     async def run_step_async(

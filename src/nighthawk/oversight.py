@@ -81,7 +81,7 @@ class Reject:
 
 @dataclass(frozen=True)
 class Rewrite:
-    """Replace supplied commit fields; UNSET inherits and explicit None is a return.
+    """Replace supplied commit fields; UNSET inherits and Return(None) returns None.
 
     A mapping replaces all writes. Use outcome=Return(value=...) to supply
     a new return value or change another allowed outcome into a return.
