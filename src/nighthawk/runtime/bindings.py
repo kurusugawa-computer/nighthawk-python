@@ -2,8 +2,10 @@
 
 from collections.abc import Iterable, Mapping, Sequence
 from keyword import iskeyword
+from typing import cast
 
 from pydantic import TypeAdapter
+from typing_extensions import TypeForm
 
 from ..errors import NighthawkError
 
@@ -103,7 +105,7 @@ def validate_output_bindings(
         if name not in validated_name_to_value or expected_type is MISSING_ANNOTATION:
             continue
         try:
-            validated_name_to_value[name] = TypeAdapter(expected_type).validate_python(validated_name_to_value[name])
+            validated_name_to_value[name] = TypeAdapter(cast(TypeForm[object], expected_type)).validate_python(validated_name_to_value[name])
         except Exception as exception:
             raise BindingValidationError(name, exception) from exception
     return validated_name_to_value

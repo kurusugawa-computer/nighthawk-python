@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Breaking: deterministic test responses use resolved `StepResult` values. Replace `return_response("'bug'")` with `return_response("bug")`, `return_response("result", result=42)` with `return_response(42, result=42)`, and `raise_response("failed", error_type="ValueError")` with `raise_response("failed", error_type=ValueError)`. Direct `StepResponse` construction uses `Return(value)`, `Raise(message, error_type)`, `Pass()`, `Break()`, or `Continue()` from `nighthawk.runtime`; strings are never evaluated as expressions.
 
+- Refreshed locked dependencies, including Pydantic 2.14.1, OpenAI 3.31.0, MCP 2.3.0, and Logfire 5.2.0.
 - `task_references` replaces `implicit_references`. Injection remains separate from Python module globals.
 - Executors accept one `StepRequest` and return a resolved `StepCandidate`. Finalization validates all initialized declared outputs, rejects undeclared proposals, and independently validates return values. An initial `Raise` discards pending writes.
 - Commit rewrites validate supplied replacements once without repeating inspection or expression effects; supplied output mappings replace the full selected mapping.
@@ -35,9 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Output contracts use supported explicit annotations before initial-value inference; unresolved required annotations fail preparation rather than weakening validation.
 - Lexical support is bounded to source-available functions, live defining-module globals, and existing closure cells, including declared global/nonlocal output writeback. Natural text alone does not capture an otherwise inaccessible outer variable. Parent-state inheritance covers joined child calls; deferred generated expressions and children that outlive their parent have no lifetime guarantee.
 - Integrated Natural execution contracts into the specification and usage guides, with practical parent/child examples and explicit validation, inheritance, and host-delivery boundaries. The README and landing-page example now demonstrate typed output validation.
+- Reframed the philosophy around AI agents building, composing, evaluating, and improving reusable capabilities through Python and Natural, with a compact statement of purpose and Core inclusion criteria.
+- Expanded design drivers with capability construction and reuse scenarios, success conditions, comparisons against ordinary Python and model libraries, and evidence-based decisions about guidance, reusable libraries, simplification, or Core changes.
 
 ### Fixed
 
+- Dynamic annotation validation uses explicit `TypeForm[object]` casts at Pydantic `TypeAdapter` boundaries, restoring type-checking compatibility with Pydantic 2.14 without changing runtime validation. Declared `typing-extensions` as a direct dependency.
 - Error-handling guides distinguish Natural-selected exceptions, recoverable tool errors, and finalization failures. Published handlers are executed against deterministic runtime responses.
 - Tests follow environment, prompt, executor, and model-selection ownership; scope tests use current composition terminology and avoid duplicate replacement checks or fixed instrumentation names.
 
@@ -341,7 +345,8 @@ Invalid initial results fail before oversight; use resilience retries to recover
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.11.0...v0.12.0

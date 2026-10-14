@@ -9,6 +9,7 @@ from typing import TypedDict, cast
 
 from opentelemetry.trace import Span, Status, StatusCode
 from pydantic import TypeAdapter
+from typing_extensions import TypeForm
 
 from ..composition import UnsetType
 from ..errors import ExecutionError, NighthawkError
@@ -267,7 +268,7 @@ class Runner:
 
     def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
         self.failure_description = "Return value validation failed"
-        adapted = TypeAdapter(return_annotation)
+        adapted = TypeAdapter(cast(TypeForm[object], return_annotation))
         validated = adapted.validate_python(value)
         self.failure_description = None
         return validated

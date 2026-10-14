@@ -8,6 +8,7 @@ from types import CodeType
 from typing import Literal, cast
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from typing_extensions import TypeForm
 
 from ..identifier_path import parse_identifier_path
 from .async_bridge import run_coroutine_synchronously
@@ -61,7 +62,7 @@ def assign_value(
         execution.phase = "validation"
         if name in step_context.binding_name_to_type:
             try:
-                value = TypeAdapter(step_context.binding_name_to_type[name]).validate_python(value)
+                value = TypeAdapter(cast(TypeForm[object], step_context.binding_name_to_type[name])).validate_python(value)
             except ValidationError as exception:
                 raise _failure(
                     f"Target {name!r} failed contract {step_context.binding_name_to_type[name]!r}: {exception}",

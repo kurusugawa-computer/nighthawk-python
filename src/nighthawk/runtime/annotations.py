@@ -5,9 +5,10 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Literal, Unpack, get_args, get_origin, get_type_hints
+from typing import Literal, Unpack, cast, get_args, get_origin, get_type_hints
 
 from pydantic import TypeAdapter
+from typing_extensions import TypeForm
 
 from .bindings import MISSING_ANNOTATION
 
@@ -68,5 +69,5 @@ def resolve_contract(annotation: object, *, python_globals: dict[str, object], p
     else:
         holder = SimpleNamespace(__annotations__={"value": annotation})
         resolved = get_type_hints(holder, globalns=python_globals, localns=python_locals, include_extras=True)["value"]
-    TypeAdapter(resolved)
+    TypeAdapter(cast(TypeForm[object], resolved))
     return resolved
