@@ -17,7 +17,7 @@ A **step executor** is the strategy object that executes Natural blocks. Nightha
 Start with a provider-backed executor for bounded judgments.
 Choose a coding agent when a block needs autonomous file or command work, or a custom backend when the application must control step execution itself.
 
-See [Philosophy](philosophy.md) for the full design rationale, including the design landscape and tool exposure tradeoffs.
+See [Philosophy](philosophy.md) for the purpose and composition principles, and [Coding agent backends](coding-agent-backends.md) for backend capabilities and tool exposure.
 
 ## StepExecutorConfiguration basics
 

@@ -412,7 +412,8 @@ Use explicit parameters for essential inputs and independent reuse. Module globa
 Use Natural for interpretation, classification, generation, and other judgments that depend on context.
 Use Python for computation, control flow, I/O, validation, and recovery.
 If explicit rules can determine the answer, write those rules in Python.
-See [Philosophy](philosophy.md#why-evaluate-every-time) for why Natural judgments execute for each input.
+Each Natural invocation evaluates its input and context through a model interaction; Natural prose remains interpreted work (see [Specification](specification.md#1-goals)).
+Revisit the division between Natural and Python using evaluation evidence as requirements and model capabilities change (see [Philosophy](philosophy.md#judgment-guided-by-evidence)).
 
 #### Type boundary placement
 

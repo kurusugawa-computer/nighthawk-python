@@ -660,6 +660,6 @@ For TTL-based caching, use [cachetools](https://cachetools.readthedocs.io/). Pla
 | Use Natural for deterministic computation | Wastes latency/cost, adds non-determinism | Use Python ([Responsibility split](natural-blocks.md#responsibility-split)) |
 | Rely on inference for structured outputs | Initial-value inference captures only the outer runtime type | Annotate `<:name>` bindings when element types or constraints matter |
 | Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding ([Keep locals minimal](natural-blocks.md#keep-locals-minimal)) |
-| Try to "compile" a Natural block into deterministic Python | Judgment tasks cannot be reduced to static code; input space is unbounded | Keep the Natural block; use Python only for deterministic operations ([Philosophy](philosophy.md#why-evaluate-every-time)) |
+| Replace a contextual judgment with rules inferred from a few examples | The rules may fail on inputs or contexts the examples did not cover | Evaluate the proposed rules against representative cases; use Python where explicit rules suffice and retain Natural where interpretation is needed ([Responsibility split](natural-blocks.md#responsibility-split)) |
 | Add resilience logic inside a Natural block | LLM cannot reliably retry itself or manage timeouts | Wrap the Natural function call from Python using `nighthawk.resilience` ([Resilience patterns](#resilience-patterns)) |
 <!-- /common-mistakes-table -->

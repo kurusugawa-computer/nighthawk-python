@@ -63,7 +63,7 @@ See [Philosophy](philosophy.md) for the design rationale.
 
 ## Background and project
 
-- **[Philosophy](philosophy.md)** -- Function composition, delegated judgment, human and agent authorship, constraints, and Core responsibility.
+- **[Philosophy](philosophy.md)** -- Purpose, agent authorship, accumulated capability, Python composition, evaluation, and Core responsibility.
 - **[Design drivers](design-drivers.md)** -- Representative application needs, workspace information ownership, and development tooling as an application.
 - **[Roadmap](roadmap.md)** -- Future directions and open questions.
 

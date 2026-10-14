@@ -21,10 +21,11 @@ Bring back small examples, findings, and contract requirements, with an explicit
 Compare proposed abstractions with research, business, and simulator-backed workflows to assess generality.
 Evaluation and simulation systems remain connected through application functions and libraries.
 
-### Human and agent authorship
+### Agent authorship and accumulated capability
 
-Evaluate whether signatures, descriptions, context, results, and failure reports let humans and agents compose and revise programs correctly.
-Assess representative tasks and errors rather than readability alone.
+Evaluate whether signatures, descriptions, context, results, and failure reports let agents discover, compose, and revise programs correctly.
+Use representative tasks to assess whether capabilities built for one task can be reused and improved for another.
+Compare construction and revision success, assessment of results and effects, and overall complexity with ordinary Python and model libraries.
 
 ### Development tooling as an application
 

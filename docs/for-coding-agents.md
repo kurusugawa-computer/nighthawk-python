@@ -11,7 +11,7 @@ Each block invokes an LLM or coding agent with current Python values and returns
 Python owns the surrounding control flow, state, and recovery.
 
 Compose Natural and ordinary Python functions for actions, constraints, evaluation, and feedback using existing libraries where they fit.
-Humans and agents should be able to understand the functions' intent, inputs, outputs, effects, and failures.
+Design functions so agents can discover them, understand their intent, inputs, outputs, effects, and failures, and reuse and improve them across tasks.
 When contributing to Nighthawk Core, use [Design drivers](https://kurusugawa-computer.github.io/nighthawk-python/design-drivers/) to separate general execution needs from application-specific rules and development tooling.
 
 Before implementing a feature, identify what requires interpretation and what can be guaranteed by explicit rules:
@@ -33,6 +33,7 @@ The host determines which results and effects are acceptable.
 Natural judgments run for each invocation using the current input and context.
 Do not replace an open-ended judgment with Python generated from a few examples merely to avoid model calls.
 When explicit rules really suffice, implement those rules directly in Python.
+Revisit this division using evaluation evidence as requirements and model capabilities change.
 See [Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) for the rationale and tradeoffs.
 
 ## A working template

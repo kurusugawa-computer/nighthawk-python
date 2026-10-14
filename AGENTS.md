@@ -39,7 +39,7 @@ ExecPlans: write under `.agents/execplans/` only on request; follow `.agents/PLA
 
 ### Design references
 
-- Read [Philosophy](docs/philosophy.md) when making architectural decisions about function composition, Python integration, human/agent authorship, or Core responsibility.
+- Read [Philosophy](docs/philosophy.md) when making architectural decisions about function composition, Python integration, agent authorship, accumulated capability, or Core responsibility.
 - Read [Design drivers](docs/design-drivers.md) when using application requirements to justify Core changes or deciding which information belongs in this workspace.
 - Use [Specification](docs/specification.md) for supported behavior and [Roadmap](docs/roadmap.md) for exploratory directions; application scenarios do not establish runtime guarantees.
 - Treat Nighthawk-based development tooling as an application; its presence here does not make it a public library feature.
