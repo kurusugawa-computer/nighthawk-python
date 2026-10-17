@@ -81,7 +81,7 @@ Presentation is a view of accessible state, not its authority or a replacement f
 
 Each Natural block performs one task with declared output bindings and one outcome.
 There is no implicit model message history between blocks.
-Python values, inherited parent working state, and scoped task references supply context to each fresh interaction (see [Patterns: cross-block composition](patterns.md#cross-block-composition)).
+Python lexical values and explicitly scoped task references supply context to each fresh interaction (see [Patterns: cross-block composition](patterns.md#cross-block-composition)).
 
 ## Providing data to a block
 
@@ -401,7 +401,7 @@ Function parameters and working locals are candidates for LOCALS, and explicit m
 
 Keep fewer incidental locals alive when they do not help the judgment. A callable passed through a parameter retains its live callable metadata even when the parameter annotation is `object`, `Any`, or absent. Signature and documentation acquisition are best-effort and do not execute application properties or annotation expressions.
 
-Use explicit parameters for essential inputs and independent reuse. Module globals and task injection can supply shared capabilities; inherited working state supplies deliberately shared parent context. These layers preserve their provenance and remain available beyond the initial presentation budget.
+Use explicit parameters for essential inputs and independent reuse. Module globals and task references can supply shared capabilities and context. Parent working values are not copied into children; select values in ordinary Python and supply them through arguments or `nh.scope(task_references=...)`. These layers preserve their provenance and remain available beyond the initial presentation budget.
 
 **Note:** Nighthawk also accepts native tools through `nh.scope(tools=[...])`, which exposes functions via the model's native tool-calling interface for the duration of the scope. This path is reserved for cases that need native tool calling, such as strict argument schemas or Pydantic AI tool features. Binding functions are preferred for all other uses because they incur no per-definition token overhead beyond a signature line in the prompt context. See [Runtime configuration](runtime-configuration.md#scoped-tools) and [Specification Section 8.3](specification.md#83-tools-available-to-the-llm).
 

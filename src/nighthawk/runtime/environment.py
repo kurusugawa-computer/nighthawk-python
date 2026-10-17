@@ -11,7 +11,7 @@ from .bindings import MISSING_ANNOTATION
 from .description import annotation_text
 from .discovery import DiscoveryResult, page_names
 
-type EnvironmentSource = Literal["effective", "python", "parent", "task", "step"]
+type EnvironmentSource = Literal["effective", "python", "task", "step"]
 
 
 class MissingEnvironmentNameError(NameError):
@@ -88,7 +88,7 @@ class _RuntimeAccess:
 class StepEnvironment:
     """Read-only environment views with a separate, tracked working namespace.
 
-    Parent membership and object associations are captured at entry.
+    Python working associations and scoped task references are captured at entry.
     Application values remain live; the views do not freeze their object graphs.
     """
 
@@ -99,7 +99,6 @@ class StepEnvironment:
         python_globals: dict[str, object],
         local_name_set: frozenset[str] = frozenset(),
         python_name_to_cell: Mapping[str, CellType] | None = None,
-        parent_name_to_value: Mapping[str, object] | None = None,
         task_name_to_value: Mapping[str, object] | None = None,
         output_name_set: frozenset[str] = frozenset(),
         binding_name_to_annotation: Mapping[str, object] | None = None,
@@ -118,7 +117,6 @@ class StepEnvironment:
         self._binding_name_to_annotation = dict(binding_name_to_annotation or {})
         self._binding_name_to_type = dict(binding_name_to_type or {})
         self.python_name_to_value: Mapping[str, object] = _PythonEnvironmentView(self)
-        self.parent_name_to_value = MappingProxyType(dict(parent_name_to_value or {}))
         self.task_name_to_value = MappingProxyType(dict(task_name_to_value or {}))
         self.step_name_to_value = MappingProxyType(self._step_name_to_value)
         known_names = (
@@ -127,7 +125,6 @@ class StepEnvironment:
             | self._python_builtin_name_to_value.keys()
             | self._local_name_set
             | self._python_name_to_cell.keys()
-            | self.parent_name_to_value.keys()
             | self.task_name_to_value.keys()
             | self._runtime_name_set
         )
@@ -176,7 +173,6 @@ class StepEnvironment:
         source_to_name_to_value = {
             "step": self.step_name_to_value,
             "python": self.python_name_to_value,
-            "parent": self.parent_name_to_value,
             "task": self.task_name_to_value,
         }
         if source != "effective" and source not in source_to_name_to_value:
@@ -198,16 +194,22 @@ class StepEnvironment:
         self._step_name_to_value[name] = value
 
     def snapshot_working_state(self) -> dict[str, object]:
-        snapshot = dict(self.parent_name_to_value)
+        """Copy this step's bound working names for explicit application-owned sharing.
+
+        Include Python locals, live cells, and tracked assignments.
+        Exclude module globals, builtins, scoped task references, and runtime names.
+        Referenced objects retain identity; the returned mapping is independent.
+        """
+        name_to_value: dict[str, object] = {}
         for name in self._python_name_to_value.keys() | self._local_name_set | self._python_name_to_cell.keys():
             if self._is_runtime_name(name):
                 continue
             try:
-                snapshot[name] = self._resolve_python(name)
+                name_to_value[name] = self._resolve_python(name)
             except (KeyError, UnboundLocalError):
-                snapshot.pop(name, None)
-        snapshot.update(self.step_name_to_value)
-        return snapshot
+                continue
+        name_to_value.update(self.step_name_to_value)
+        return name_to_value
 
     def expression_namespace(self, overrides: Mapping[str, object] | None = None) -> dict[str, object]:
         return _ExpressionNamespace(self, overrides or {})
@@ -218,18 +220,17 @@ class StepEnvironment:
 
     def discover(self, *, source: EnvironmentSource = "effective", cursor: str | None = None, max_items: int = 8) -> dict[str, object]:
         """List names with provenance, usable references, and progressing pages."""
-        source_to_view = {
+        source_to_name_to_value = {
             "python": self.python_name_to_value,
-            "parent": self.parent_name_to_value,
             "task": self.task_name_to_value,
             "step": self.step_name_to_value,
         }
-        if source != "effective" and source not in source_to_view:
-            return {"error": "Unknown source", "recovery": "Choose effective, python, parent, task, or step."}
+        if source != "effective" and source not in source_to_name_to_value:
+            return {"error": "Unknown source", "recovery": "Choose effective, python, task, or step."}
         names = (
-            tuple(sorted(set().union(*[set(view) for view in source_to_view.values()])))
+            tuple(sorted(set().union(*[set(view) for view in source_to_name_to_value.values()])))
             if source == "effective"
-            else tuple(sorted(source_to_view[source]))
+            else tuple(sorted(source_to_name_to_value[source]))
         )
         page = page_names(names, source=source, cursor=cursor, max_items=max_items)
         if page.error is not None:
@@ -254,7 +255,6 @@ class StepEnvironment:
             for source, view in (
                 ("step", self.step_name_to_value),
                 ("python", self.python_name_to_value),
-                ("parent", self.parent_name_to_value),
                 ("task", self.task_name_to_value),
             )
             if name in view

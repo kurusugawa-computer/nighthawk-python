@@ -55,27 +55,28 @@ async def assess_claim(document: str, claim: str) -> float:
 
 @nh.natural_function
 async def review_claims(document: str, claims: list[str]) -> list[tuple[str, float]]:
-    review_guidance = (  # noqa: F841 - referenced by Natural and inherited by its child.
+    review_guidance = (
         "Review numerical and causal claims only. "
         "Score a directly documented fact from 0.8 to 1.0. "
         "Score an unsupported causal assertion from 0.0 to 0.2. "
         "A before-and-after observation without a control group does not establish causation."
     )
     assessments: list[tuple[str, float]] = []
-    """natural
-    Use <review_guidance> to choose claims from <claims> that need closer review.
-    Call <assess_claim> with <document> and each selected claim exactly once, awaiting each result.
-    Store each selected claim verbatim and its returned score in <:assessments>.
-    Do not assess the excluded claims.
-    """
+    with nh.scope(task_references={"review_guidance": review_guidance}):
+        """natural
+        Use <review_guidance> to choose claims from <claims> that need closer review.
+        Call <assess_claim> with <document> and each selected claim exactly once, awaiting each result.
+        Store each selected claim verbatim and its returned score in <:assessments>.
+        Do not assess the excluded claims.
+        """
     return assessments
 
 
 @nh.natural_function
-async def block_two() -> str:
+async def block_two(i: int) -> str:
     message = ""
     """natural
-    Inspect <i>, the parent's current one-based iteration.
+    Inspect <i>, the explicitly supplied one-based iteration.
     Set <:message> to 'fifth' on iteration 5, 'eighth' on iteration 8,
     and 'ordinary' on every other iteration.
     """
@@ -89,6 +90,7 @@ async def block_one() -> list[str]:
     Call <block_two> ten times in sequence.
     Before each call, use nh_assign to set the temporary name i to the
     current one-based iteration, from 1 through 10.
+    Pass i as the argument to block_two(i).
     Collect the returned strings in <:messages> in call order.
     """
     return messages
@@ -97,12 +99,12 @@ async def block_one() -> list[str]:
 @dataclass
 class CompositionObserver:
     requests: list[ContextRequest] = field(default_factory=list)
-    parent_name_to_value_list: list[dict[str, object]] = field(default_factory=list)
+    task_name_to_value_list: list[dict[str, object]] = field(default_factory=list)
     events: list[StepStarted | StepFinished] = field(default_factory=list)
 
     def build(self, request: ContextRequest) -> Sequence[UserContent]:
         self.requests.append(request)
-        self.parent_name_to_value_list.append(dict(request.environment.parent_name_to_value))
+        self.task_name_to_value_list.append(dict(request.environment.task_name_to_value))
         return DefaultContextBuilder().build(request)
 
     def completed(self) -> list[StepCompleted]:
@@ -174,7 +176,7 @@ async def test_python_iteration_assesses_each_generated_summary_line(executor: n
 
 
 @pytest.mark.asyncio
-async def test_model_selected_children_inherit_review_policy(executor: nh.AgentStepExecutor) -> None:
+async def test_model_selected_children_receive_explicit_review_policy(executor: nh.AgentStepExecutor) -> None:
     document = (
         "Twenty volunteers received an experimental treatment. "
         "Their average symptom score declined afterwards, but there was no control group. "
@@ -216,9 +218,9 @@ async def test_model_selected_children_inherit_review_policy(executor: nh.AgentS
     assert sorted(observed_claims) == sorted(claim_to_confidence)
     parent_request = observer.requests[0]
     policy = parent_request.environment.resolve("review_guidance", source="python")
-    for request, inherited in zip(observer.requests[1:], observer.parent_name_to_value_list[1:], strict=True):
-        assert inherited["review_guidance"] == policy
-        assert request.environment.describe("review_guidance")["origin"] == "parent"
+    for request, shared_name_to_value in zip(observer.requests[1:], observer.task_name_to_value_list[1:], strict=True):
+        assert shared_name_to_value["review_guidance"] == policy
+        assert request.environment.describe("review_guidance")["origin"] == "task"
 
 
 @pytest.mark.asyncio
@@ -240,11 +242,11 @@ async def test_model_materializes_parent_counter_before_ten_real_children(execut
     assert len(completed) == 11
     parent_reference = completed[-1].execution_reference
     assert parent_reference.parent_step_execution_id is None
-    assert [inherited["i"] for inherited in observer.parent_name_to_value_list[1:]] == list(range(1, 11))
+    assert [request.environment.resolve("i", source="python") for request in observer.requests[1:]] == list(range(1, 11))
     for i, (request, event, expected_message) in enumerate(zip(observer.requests[1:], completed[:-1], expected, strict=True), start=1):
         assert event.execution_reference == request.execution_reference
         assert event.execution_reference.parent_step_execution_id == parent_reference.step_execution_id
         assert event.input_binding_name_to_value is not None
         assert event.input_binding_name_to_value["i"] == i
-        assert request.environment.describe("i")["origin"] == "parent"
+        assert request.environment.describe("i")["origin"] == "python"
         assert completed_value(event, "message") == expected_message

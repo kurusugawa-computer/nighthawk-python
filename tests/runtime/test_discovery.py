@@ -31,13 +31,13 @@ def test_runtime_access_preserves_application_inspect_and_reserves_its_own_root(
 
 def test_unbound_inspect_keeps_python_meaning_with_a_usable_runtime_helper() -> None:
     environment = StepEnvironment(
-        python_name_to_value={}, python_globals={}, local_name_set=frozenset({"inspect"}), parent_name_to_value={"inspect": "parent"}
+        python_name_to_value={}, python_globals={}, local_name_set=frozenset({"inspect"}), task_name_to_value={"inspect": "shared"}
     )
     namespace = environment.expression_namespace()
     with pytest.raises(UnboundLocalError):
         eval("inspect", namespace, namespace)
     assert eval(f"{environment.runtime_reference}.inspect(None)", namespace, namespace)["preview"] is None
-    assert eval(environment.reference("inspect", source="parent"), namespace, namespace) == "parent"
+    assert eval(environment.reference("inspect", source="task"), namespace, namespace) == "shared"
 
 
 def test_opaque_names_are_discoverable_and_source_references_resolve_live_bindings() -> None:
@@ -65,7 +65,7 @@ def test_environment_name_pages_progress_and_recover_when_membership_changes() -
     assert third["next_cursor"] is None
     namespace = environment.expression_namespace()
     assert eval(first["continuation"], namespace, namespace) == second
-    invalid = environment.discover(source="parent", cursor=first["next_cursor"])
+    invalid = environment.discover(source="python", cursor=first["next_cursor"])
     assert "without a cursor" in str(invalid["recovery"])
     environment.assign("a", 1)
     environment.assign("b", 2)
@@ -74,17 +74,17 @@ def test_environment_name_pages_progress_and_recover_when_membership_changes() -
     assert "listing changed" in str(environment.discover(source="step", cursor=page["next_cursor"])["error"])
 
 
-def test_default_context_prioritizes_explicit_names_and_shows_parent_provenance() -> None:
+def test_default_context_prioritizes_explicit_names_and_shows_task_provenance() -> None:
     context = build_step_context(python_globals={}, python_locals={"a": 1, "z": 7})
     configuration = nh.StepExecutorConfiguration(context_limits=nh.StepContextLimits(locals_max_items=1))
     prompt = build_user_prompt_text(processed_natural_program="Use <z>.", step_context=context, configuration=configuration)
     assert "z: int = 7" in locals_section(prompt)
     assert "Omitted: a" in prompt
     assert ".environment.discover()" in prompt
-    context.environment = StepEnvironment(python_name_to_value=context.step_locals, python_globals={}, parent_name_to_value={"inherited": 5})
+    context.environment = StepEnvironment(python_name_to_value=context.step_locals, python_globals={}, task_name_to_value={"shared": 5})
     prompt = build_user_prompt_text(processed_natural_program="Review state.", step_context=context)
-    assert "Origin: parent; name: inherited" in prompt
-    assert "inherited: int = 5" in prompt
+    assert "Origin: task; name: shared" in prompt
+    assert "shared: int = 5" in prompt
 
 
 def test_default_context_shows_collision_sources_before_model_lookup() -> None:

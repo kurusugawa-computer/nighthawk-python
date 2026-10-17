@@ -257,7 +257,7 @@ async def classify_batch(texts: list[str]) -> list[str]:
 ```
 
 Each concurrent Natural block has its own step context and no shared model message history.
-Inherited Python objects and host accounting can still be shared; `asyncio.gather` is appropriate when those shared values are safe for concurrent use.
+Explicit Python references and host accounting can still be shared; `asyncio.gather` is appropriate when those shared values are safe for concurrent use.
 Tasks capture their selected context when created, including model selection and function-call handlers; awaiting a task elsewhere does not replace that context.
 
 ### Async and sync interoperability
@@ -274,10 +274,10 @@ You can therefore use async binding functions through tools without changing a s
 ## Cross-block composition
 
 Each Natural block starts a fresh model interaction ([one block, one task](natural-blocks.md#one-block-one-task)).
-Use Python arguments and returned values for essential inputs and results, inherited parent working state for intentionally shared task context, and scoped task references for injected capabilities.
-Joined children inherit materialized parent associations at entry; shared objects remain live, while child name rebinding does not update the parent.
-Children that outlive their parent have no inheritance guarantee.
-The [environment contract](specification.md#813-parent-lifetime-and-expression-lifetime) defines the precise boundaries.
+Use Python arguments and returned values for essential inputs and results, and scoped task references for deliberately shared context and capabilities.
+Children do not receive a parent's working values automatically; explicitly shared objects remain live, while child name rebinding does not update the parent.
+Hosts establish explicit inputs and execution scope for independent work that outlives a parent step.
+The [environment contract](specification.md#813-shared-values-and-expression-lifetime) defines the precise boundaries.
 
 ### Python iteration with Natural judgment
 
@@ -317,7 +317,7 @@ async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
 ### Natural selects follow-up assessments
 
 Here the parent chooses which claims need review.
-The child receives the document and claim explicitly, and inherits the parent's materialized review policy.
+The child receives the document and claim as arguments, and the review policy through an explicit task-reference scope.
 Call these ordinary Natural functions inside `nh.run(executor)`:
 
 ```python
@@ -342,18 +342,19 @@ async def assess_claim(document: str, claim: str) -> float:
 async def review_claims(document: str, claims: list[str]) -> list[tuple[str, float]]:
     review_guidance = "Check quantitative and causal claims against direct evidence."
     assessments: list[tuple[str, float]] = []
-    """natural
-    Use <review_guidance> to choose claims from <claims> that need closer review.
-    Call <assess_claim> with <document> and each selected claim, awaiting each result.
-    Store the selected claims and their returned scores in <:assessments>.
-    """
+    with nh.scope(task_references={"review_guidance": review_guidance}):
+        """natural
+        Use <review_guidance> to choose claims from <claims> that need closer review.
+        Call <assess_claim> with <document> and each selected claim, awaiting each result.
+        Store the selected claims and their returned scores in <:assessments>.
+        """
     return assessments
 ```
 
 The parent step remains active until its chosen calls finish.
-The policy does not need to pass through intermediate helper signatures, but `assess_claim` now has an inherited dependency: calling it independently requires supplying that policy, for example through task injection.
+The policy does not need to pass through intermediate helper signatures, but `assess_claim` has an explicit scoped dependency: calling it independently requires supplying `review_guidance` through task references.
 Prefer an explicit policy parameter when independent reuse matters.
-The [nested execution acceptance example](specification.md#144-nested-execution-acceptance-example) isolates inheritance mechanics separately from this judgment task.
+The [nested execution acceptance example](specification.md#144-nested-execution-acceptance-example) isolates explicit argument passing separately from this judgment task.
 
 ### The carry pattern
 

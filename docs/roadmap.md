@@ -82,7 +82,7 @@ Explore explicit serialization of host data and correlation metadata for multi-p
 
 ### Async bridge ContextVar propagation
 
-Investigate propagating selected context-variable rebindings back from bridge threads while preserving [parent lifetime and shared-value boundaries](specification.md#813-parent-lifetime-and-expression-lifetime).
+Investigate propagating selected context-variable rebindings back from bridge threads while preserving [shared-value and expression-lifetime boundaries](specification.md#813-shared-values-and-expression-lifetime).
 
 ## Implementation hardening
 

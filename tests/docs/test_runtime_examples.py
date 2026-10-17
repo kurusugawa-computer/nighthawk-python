@@ -12,6 +12,8 @@ _EXAMPLE_NAME_TO_OUTPUT = {
     "prompt_observation": "prompt_sections=PROGRAM,LOCALS,GLOBALS; helper_visible=True",
     "embedded_sync": "summary_saved=True; terminal_after_save=True",
     "embedded_async": "selected_type=Selection; terminal_after_save=True",
+    "shared_values_sync": "child_value=6; policy_shared=True; parent_input_visible=False",
+    "shared_values_async": "child_value=6; policy_shared=True; parent_input_visible=False",
     "function_admission": "refused_body_effects=0; completed_calls=2",
     "model_selection": "models=A,B,A; unapproved_model_refused=True",
     "request_budget": "observed_tokens=120; next_request_refused=True; aggregate_tokens=0",

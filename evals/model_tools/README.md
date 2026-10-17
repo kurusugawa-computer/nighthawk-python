@@ -8,6 +8,8 @@ The original/refined/merged surfaces below retain the 2026-09-09 experiment cont
 The production-backed dedicated-tool versus helper comparison is implemented separately in `inspection_study.py`.
 Its [assessment](evidence/20260911-inspection-assessment.md) records 804 model trials and selects the existing evaluation/assignment surface with Python inspection helpers.
 Its [protocol](evidence/20260911-inspection-study-protocol.md) describes controls, limits, source snapshots, and backend differences.
+The current production-backed adapter explicitly supplies historical parent fixture values through task references and publishes working snapshots to the Python child fixture's captured workspace.
+Production no longer has a parent name source; the recorded 2026-09-11 prompts and results describe the runtime used for those trials, not a rerun of the current adapter.
 The [specification](../../docs/specification.md#825-value-inspection-and-name-discovery) owns runtime semantics and the selected inspection/discovery interface.
 In particular, the existing `merged` surface merges evaluation and assignment;
 it provides no evidence about removing the dedicated inspection tool.
@@ -30,18 +32,14 @@ content constant. Keep the assignment interface unchanged; the historical
 comparison. Record unavoidable differences in usage guidance and report them
 rather than attributing every difference to tool count. Vary guidance separately.
 
-Measure semantic success, helper discovery and source-selection failures, invalid
-requests, unnecessary calls, duplicate effects, recovery, model-visible tokens,
-and end-to-end latency. Include helper-name collisions, omitted names/members,
-large and opaque values, nested parent state, validation, completion, and approval
-with partial effects. Distinguish runtime lookup failures from omitted explicitly
-required reads. Success oracles must allow different valid call sequences while
-checking required effects and calls.
+Measure semantic success, helper discovery and source-selection failures, invalid requests, unnecessary calls, duplicate effects, recovery, model-visible tokens, and end-to-end latency.
+Include helper-name collisions, omitted names/members, large and opaque values, explicitly shared nested working values, validation, completion, and approval with partial effects.
+Distinguish runtime lookup failures from omitted explicitly required reads.
+Success oracles must allow different valid call sequences while checking required effects and calls.
 
-Use independent repetitions, varied task formulations, and representative models
-and backends; report sample sizes and uncertainty. A deterministic child fixture
-tests parent-state mechanics and model tool use. Actual Natural parent/child
-composition requires separate integration coverage.
+Use independent repetitions, varied task formulations, and representative models and backends; report sample sizes and uncertainty.
+A deterministic child fixture tests shared-state mechanics and model tool use.
+Actual Natural parent/child composition requires separate integration coverage.
 
 Apply the ratified
 [selection criteria](../../docs/verification.md#interface-evaluation-criteria) when reviewing

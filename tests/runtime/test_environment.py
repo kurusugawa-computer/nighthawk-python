@@ -15,22 +15,19 @@ def test_precedence_and_explicit_source_selection() -> None:
     environment = StepEnvironment(
         python_name_to_value={"i": 99, "present": None},
         python_globals={"global_value": 99},
-        parent_name_to_value={"i": 5, "present": 5, "global_value": 5, "len": 5, "inherited": 5},
-        task_name_to_value={"i": 8, "inherited": 8, "injected": 8},
+        task_name_to_value={"i": 8, "present": 8, "global_value": 8, "len": 8, "injected": 8},
         output_name_set=frozenset({"i"}),
     )
     assert environment.resolve("i") == 99
-    assert environment.resolve("i", source="parent") == 5
     assert environment.resolve("i", source="task") == 8
     assert environment.resolve("present") is None
     assert environment.resolve("global_value") == 99
     assert environment.resolve("len") is len
-    assert environment.resolve("inherited") == 5
     assert environment.resolve("injected") == 8
     environment.assign("i", 100)
     assert environment.resolve("i") == 100
     assert environment.resolve("i", source="python") == 99
-    assert environment.describe("i")["shadowed_sources"] == ["python", "parent", "task"]
+    assert environment.describe("i")["shadowed_sources"] == ["python", "task"]
 
 
 def test_unbound_local_and_cell_stop_fallback() -> None:
@@ -39,7 +36,6 @@ def test_unbound_local_and_cell_stop_fallback() -> None:
         python_globals={"local": 1, "cell": 1},
         local_name_set=frozenset({"local"}),
         python_name_to_cell={"cell": CellType()},
-        parent_name_to_value={"local": 2, "cell": 2},
         task_name_to_value={"local": 3, "cell": 3},
     )
     for name in ("local", "cell"):
@@ -60,7 +56,7 @@ def test_module_and_closure_rebinding_remain_live() -> None:
     assert environment.resolve("cell") == 4
 
 
-def test_parent_snapshot_preserves_associations_and_shares_objects() -> None:
+def test_explicit_working_snapshot_preserves_associations_and_shares_objects() -> None:
     shared: list[int] = []
     parent = StepEnvironment(
         python_name_to_value={"shared": shared, "__nh_execution__": object()},
@@ -69,14 +65,14 @@ def test_parent_snapshot_preserves_associations_and_shares_objects() -> None:
         runtime_name_set=frozenset({"__nh_execution__"}),
     )
     parent.assign("i", 5)
-    child = StepEnvironment(python_name_to_value={}, python_globals={}, parent_name_to_value=parent.snapshot_working_state())
+    child = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value=parent.snapshot_working_state())
     parent.assign("i", 8)
     shared.append(1)
     assert child.resolve("i") == 5
     assert child.resolve("shared") is shared
     assert shared == [1]
     for name in ("global_value", "injected", "len", "__nh_execution__"):
-        assert name not in child.parent_name_to_value
+        assert name not in child.task_name_to_value
     child.assign("i", 9)
     assert child.resolve("i") == 9
     assert parent.resolve("i") == 8
@@ -86,7 +82,6 @@ def test_views_are_shallow_read_only() -> None:
     environment = StepEnvironment(python_name_to_value={"value": 1}, python_globals={})
     for view in (
         environment.python_name_to_value,
-        environment.parent_name_to_value,
         environment.task_name_to_value,
         environment.step_name_to_value,
     ):
@@ -109,12 +104,11 @@ def test_expression_namespace_membership_follows_live_lookup() -> None:
         python_name_to_value={"local": None, "hidden": 1},
         python_globals=python_globals,
         python_name_to_cell={"cell": CellType(2)},
-        parent_name_to_value={"inherited": 3},
         task_name_to_value={"injected": 4},
         runtime_name_set=frozenset({"hidden"}),
     )
     namespace = environment.expression_namespace({"override": None})
-    for name in ("local", "global_value", "cell", "inherited", "injected", "override", "len", "__builtins__", environment.runtime_reference):
+    for name in ("local", "global_value", "cell", "injected", "override", "len", "__builtins__", environment.runtime_reference):
         assert name in namespace
     assert "missing" not in namespace
     assert "hidden" not in namespace
@@ -150,7 +144,7 @@ def test_nested_natural_counter_proof() -> None:
         nonlocal block_two
         messages: list[str] = []
         """natural
-        Call <block_two> ten times, materializing i before each call, and collect <:messages>.
+        Call <block_two> ten times with explicitly shared iteration context and collect <:messages>.
         """
         return messages
 
@@ -168,7 +162,8 @@ def test_nested_natural_counter_proof() -> None:
             parent_execution_id_list.append(context.execution_reference.step_execution_id)
             for i in range(1, 11):
                 await assign_tool_async(context, "i", str(i))
-                messages.append(await eval_expression_async(context, "block_two()"))
+                with nh.scope(task_references={"i": context.environment.resolve("i")}):
+                    messages.append(await eval_expression_async(context, "block_two()"))
             return StepCandidate(outcome=Pass(), binding_name_to_value={"messages": messages})
 
     with nh.run(Executor()):
@@ -184,7 +179,6 @@ def test_application_prefix_keeps_lexical_priority_and_qualified_access(name: st
         python_name_to_value={name: None} if source == "local" else {},
         python_globals={name: None} if source == "global" else {},
         python_name_to_cell={name: CellType(None)} if source == "cell" else {},
-        parent_name_to_value={name: 5},
         task_name_to_value={name: 9},
         output_name_set=frozenset({name}),
     )
@@ -208,7 +202,6 @@ def test_unbound_application_prefix_blocks_fallback(cell: bool) -> None:
         python_globals={name: 99},
         local_name_set=frozenset() if cell else frozenset({name}),
         python_name_to_cell={name: CellType()} if cell else {},
-        parent_name_to_value={name: 5},
         task_name_to_value={name: 9},
     )
     with pytest.raises(UnboundLocalError):

@@ -11,9 +11,10 @@ This document defines Natural syntax, runtime behavior, and host-facing contract
 
 Execute natural-language descriptions of work inside ordinary Python programs, from small classifications to autonomous agent tasks.
 Python owns deterministic procedure, execution points, permitted control results, and declared names receiving validated writes.
-Natural supplies judgment using accessible lexical values, inherited parent working state, and scoped task references.
+Natural supplies judgment using accessible Python lexical values and explicitly scoped task references.
 Read bindings express dependencies and presentation priority, not an access allowlist.
-Essential inputs should normally be explicit parameters; inherited task policy trades less argument plumbing for contextual dependencies.
+Essential inputs should normally be explicit parameters; scoped task references declare shared contextual dependencies.
+Calling a Natural function does not copy its caller's working values into the child's environment.
 
 Ordinary applications need `natural_function`, output contracts, and an executor selected through `run`; `scope` varies configuration and task injection.
 Host approval and lifecycle records are optional integration surfaces, while runtime validation is mandatory for every executor.
@@ -41,7 +42,7 @@ Source instrumentation enters the runtime and dispatches results; Natural prose 
 A block is not a transaction.
 Object mutations, helper calls, validators, and external operations may have effects before finalization; rejection prevents pending name assignments but cannot undo those effects.
 Frozen records and shallow read-only mappings protect structure, not the referenced object graph.
-Each block starts a fresh model interaction; inherited working values do not include a parent's model message transcript.
+Each block starts a fresh model interaction; neither a parent's working values nor its model message transcript are implicitly copied into a child.
 
 ## 3. Hard constraints
 
@@ -195,8 +196,8 @@ The Natural program may contain bindings with angle brackets:
 
 Resolution note:
 
-- Read bindings use the same environment as runtime operations: step assignments, Python lexical names, inherited working state, then scoped task references.
-- An unbound Python local or closure cell blocks fallback to a same-name parent or task value.
+- Read bindings use the same environment as runtime operations: step assignments, Python lexical names, then scoped task references.
+- An unbound Python local or closure cell blocks fallback to a same-name task value.
 - If a read binding is missing or unbound, preparation fails with the original `NameError` or `UnboundLocalError` stored in `StepFailed.original_exception`. Unless terminal delivery supplies a host exception, the caller receives `ExecutionError` chained from that original exception (see [Section 10.4](#104-terminal-delivery-and-host-ledgers)).
 
 Constraints:
@@ -244,22 +245,23 @@ Clarifying note (bindings vs tool targets):
 
 ### 8.1. State layers: python locals and step locals
 
-`StepContext.environment` owns effective lookup and separate read-only views of Python, parent, task, and step bindings.
-Lookup prefers tracked step assignments, then Python locals/cells/globals/builtins, then inherited working state, then scoped task references.
+`StepContext.environment` owns effective lookup and separate read-only views of Python, task, and step bindings.
+Lookup prefers tracked step assignments, then Python locals/cells/globals/builtins, then scoped task references.
 Python locals are captured from the instrumented function at block entry; closure cells and defining module globals remain live.
 Unbound locals and cells retain Python's blocking semantics.
 Unrelated caller frames are not lexical dependencies.
 
-A child captures its parent's materialized working associations, including inherited state, current Python working locals and cells, and tracked assignments.
-It does not inherit the parent's module globals, task configuration as locals, generated runtime bindings, or model transcript.
-The child's own scoped task references remain separately available.
-Parent membership and object associations are snapshots; referenced mutable objects remain shared.
+A child establishes its own Python lexical environment and receives the active scope's explicit task references.
+Parent arguments, locals, cells, and step temporaries are not additional name sources, including through intermediate helpers and further descendants.
+A value passed as an argument, accessible through the child's own Python globals or cells, or deliberately supplied through `task_references` remains available from that source.
+No name or object-identity blacklist is applied.
+This controls implicit name availability, not Python introspection, object access, or security isolation.
 
 `step_locals` holds captured Python working values and tracked assignment bookkeeping; it is not the complete effective environment.
 Use `environment.resolve`, its source views, or the common runtime operations for name lookup.
 Generated assignments write validated, selected `<:name>` values back to the corresponding Python locals, cells, or globals after finalization.
 All initialized declared outputs are considered, even without tracked assignment or mutation marks.
-Every block starts a fresh model interaction by default; Python values and inherited working state carry context between blocks.
+Every block starts a fresh model interaction; Python values and scoped task references carry deliberately shared context between blocks.
 
 #### 8.1.1. Environment views and lookup
 
@@ -268,18 +270,21 @@ All environment views have string keys and shallow read-only structure.
 | Member | Meaning |
 | --- | --- |
 | `python_name_to_value` | Values accessible through the block's Python lexical environment, including enclosing cells, globals, and builtins. |
-| `parent_name_to_value` | A snapshot of inherited parent working state, with the nearest parent taking precedence. |
 | `task_name_to_value` | The resolved mapping injected by the active scope. |
 | `step_name_to_value` | Values explicitly assigned in this step, including pending declared outputs and temporary working names. |
-| `resolve(name, *, source="effective")` | Resolve a name from the effective environment or specifically from `python`, `parent`, `task`, or `step`. |
+| `resolve(name, *, source="effective")` | Resolve a name from the effective environment or specifically from `python`, `task`, or `step`. |
 | `describe(name)` | Describe the effective origin, shadowed alternatives, write eligibility, captured annotation, selected output contract, and usable references without evaluating the value's properties. |
+| `snapshot_working_state()` | Explicitly copy bound Python working locals and cells plus tracked assignments into a new dictionary; exclude module globals, builtins, task references, and runtime names. |
 
-Effective lookup uses tracked step assignments, Python locals, enclosing cells, globals, builtins, nearest inherited parent state, then task references.
+Effective lookup uses tracked step assignments, Python locals, enclosing cells, globals, builtins, then task references.
 A Python binding with value `None` is present; an unbound local or cell blocks fallback with its Python lookup error.
 Absence everywhere raises `NameError`.
-Step temporaries may shadow parent or task names, but an existing Python name can be rebound only as a declared output.
-Select a shadowed value with `environment.resolve(name, source="parent")` or `source="task"`; selection applies to that value reference, not an entire expression's namespace.
+Step temporaries may shadow task names, but an existing Python name can be rebound only as a declared output.
+Select a shadowed value with `environment.resolve(name, source="task")` or `source="python"`; selection applies to that value reference, not an entire expression's namespace.
 Bindings, evaluation, assignment expressions, model-selected return and exception expressions, and discovery share this resolution contract.
+There is no parent environment view or supported `parent` source.
+Ordinary Python helpers can select shared values with `resolve` and return a dictionary for `scope(task_references=...)`.
+An explicit working-state snapshot retains object identity and does not by itself publish anything to another step.
 
 #### 8.1.2. Supported Python source forms
 
@@ -299,15 +304,19 @@ Natural text alone does not establish a Python closure, and arbitrary caller-fra
 Use explicit inputs, a valid `nonlocal` declaration establishing a cell, or task injection for otherwise inaccessible outer values.
 Lexical value access does not imply recovery of an enclosing source annotation; Section 7 bounds annotation acquisition separately.
 
-#### 8.1.3. Parent lifetime and expression lifetime
+#### 8.1.3. Shared values and expression lifetime
 
-Parent inheritance is guaranteed for child calls whose completion the parent waits for, synchronously or with `await`, directly or through a Python helper.
-A helper can run children concurrently if it joins them before returning.
-Each child snapshots associations at its own entry; later parent rebinding does not change that snapshot, while shared-object mutation remains visible.
+Task references are shallow-copied when a scope is entered and captured in each step's environment during preparation.
+Omission or `UNSET` preserves the active scope's references; a mapping replaces them, `{}` clears them, and `Merge` adds references with identity-based conflict checking.
+Python helpers run where the application calls them, not as implicit preparation callbacks.
+Later replacement of a scope or rebinding of a parent's working name does not change an already prepared environment; mutations of explicitly shared objects remain visible.
 Child temporary rebinding does not write back to its parent, and siblings have separate workspaces.
-Cleared task injection cannot reappear as copied parent task configuration; an actual materialized parent temporary remains parent state.
+Cleared task references cannot reappear from materialized parent temporaries or older ancestors.
+Nested scopes restore their enclosing references on normal exit, failure, and cancellation; independent concurrent contexts can select different references.
+An ordinary coroutine uses its execution context, and a Task uses its selected creation context.
 
-Children that outlive their parent step are outside this inheritance guarantee.
+Helpers may join children synchronously or asynchronously, including concurrent children.
+Execution parentage, scoped controls, usage accounting, inspection, and lifecycle remain independent of which values are shared.
 Copied context variables do not extend a finished step's lifetime; hosts establish explicit inputs and execution scope for independent work.
 Supported thread bridges propagate context; separate processes do not inherit live objects through an execution Id.
 
@@ -334,22 +343,22 @@ It identifies the collision-free inspection and environment references, and rele
 
 #### 8.2.2. Locals summary
 
-The locals summary presents current Python working locals, inherited working state, and step assignments.
+The locals summary presents current Python working locals and step assignments.
 Each entry identifies its origin and available declaration annotation or selected output contract.
 These descriptions do not change the live environment or its validation contracts.
 
 Selection:
 
-- Python working locals, parent working names, step assignments, and declared outputs are eligible, including application names starting with `__`.
+- Python working locals, step assignments, and declared outputs are eligible, including application names starting with `__`.
   Other available names remain retrievable through environment discovery.
 - Instrumentation allocates internal names that avoid application bindings and names present in the function source, including Natural text.
-  Only the internal bindings actually used by that transformed function are excluded from its Python environment, initial context, and inherited working state.
+  Only the internal bindings actually used by that transformed function are excluded from its Python environment, initial context, and explicit working-state snapshots.
   Application names are not excluded by a shared prefix; their lexical priority, unbound status, and explicit source references remain intact.
   The separate prohibition on `__` segments in assignment-tool targets still applies (Section 8.3).
 
 Ordering:
 
-- Explicit references and outputs precede other Python working locals, which precede inherited state.
+- Explicit references and outputs precede other Python working locals.
   Ordering within a priority class is lexicographic.
 
 Rendering format:
@@ -480,7 +489,7 @@ Presentation-only annotation spelling is not evaluated and does not weaken prepa
 The default context advertises `environment.runtime_reference`, a generated collision-free Python root.
 Its `.inspect(value)` method uses the same value-description implementation, and `.environment` exposes the current environment.
 Application bindings named `inspect`, including unbound Python locals, retain their meaning.
-The generated root cannot be used as a temporary assignment target and is excluded from inherited working state.
+The generated root cannot be used as a temporary assignment target and is excluded from explicit working-state snapshots.
 
 `StepEnvironment.reference(name, source="effective")` returns an expression that resolves the binding when evaluated.
 `describe` provides origin, shadowed sources, unbound state, write eligibility, annotation spelling, output-contract text, and source-qualified references.
@@ -544,7 +553,7 @@ The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` inj
 Role split with task references:
 
 - `task_references` supplies a distinct `StepEnvironment.task_name_to_value` mapping without modifying Python globals.
-  Effective lookup prefers step writes, then Python names, inherited working state, and task references.
+  Effective lookup prefers step writes, then Python names, then task references.
   Explicit source selection can retrieve a shadowed task value.
 - `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_operation`, and are served to coding-agent backends over MCP.
 - A given callable SHOULD be exposed through one of the two, not both.
@@ -821,6 +830,7 @@ API:
     - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
     - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
+    - Preserve the active step Id and source location inside a nested scope, so a child step remains correlated with the execution that called it.
     - `context_builder` replaces prompt construction; omission or `UNSET` inherits. See Section 8.2.4.
     - Explicit executor replacements use the same protocol validation as `run()`; invalid executors raise `TypeError` before context installation.
     - Executor replacement precedes model selection. Selection delegates to the active `ConfigurableStepExecutor`; direct `AgentStepExecutor` resolution respects managed/external ownership.
@@ -1031,7 +1041,7 @@ Decision:
 
 Nighthawk does not define a built-in persistence or memory model.
 
-If you want a long-lived object, define it yourself and expose it as an ordinary Python value through lexical state or scoped task references. Runtime expressions can read it and `nh_eval` can mutate it in place. Inherited working associations support child execution but do not provide durable persistence.
+If you want a long-lived object, define it yourself and expose it as an ordinary Python value through lexical state or scoped task references. Runtime expressions can read it and `nh_eval` can mutate it in place. Sharing a reference does not provide durable persistence.
 
 ### 12.1. Carry pattern
 
@@ -1124,17 +1134,17 @@ See the [API Reference](api.md#base) for the full protocol definition.
 
 ### 14.4. Nested execution acceptance example
 
-This is a proof example for nested Natural execution and materialized parent state. Its fixed counter and labels isolate the semantics; they are not intended as a useful application by themselves. `block_two` receives its iteration context from the active parent step, not a Python parameter.
+This is a proof example for nested Natural execution with explicit inputs. Its fixed counter and labels isolate the semantics; they are not intended as a useful application by themselves. `block_two` receives its iteration through a Python parameter.
 
 ```python
 import nighthawk as nh
 
 
 @nh.natural_function
-async def block_two() -> str:
+async def block_two(i: int) -> str:
     message = ""
     """natural
-    Inspect <i>, the parent's current one-based iteration.
+    Inspect <i>, the explicitly supplied one-based iteration.
     Set <:message> to 'fifth' on iteration 5, 'eighth' on iteration 8,
     and 'ordinary' on every other iteration.
     """
@@ -1148,22 +1158,23 @@ async def block_one() -> list[str]:
     Call <block_two> ten times in sequence.
     Before each call, use nh_assign to set the temporary name i to the
     current one-based iteration, from 1 through 10.
+    Pass i as the argument to block_two(i).
     Collect the returned strings in <:messages> in call order.
     """
     return messages
 ```
 
-The executor materializes `i` before invoking the child; mentioning a counter in prose does not create runtime state. The fifth and eighth calls inherit 5 and 8. Later parent assignment does not change an already started child's inherited `i`.
+The executor materializes `i` and passes it to the child; mentioning a counter in prose does not create runtime state. The fifth and eighth calls receive 5 and 8. Later parent assignment does not change an already supplied argument.
 
 Call `await block_one()` inside `nh.run(executor)`.
 The expected successful result is four `ordinary` entries, `fifth`, two `ordinary` entries, `eighth`, and two `ordinary` entries.
 Deterministic executor tests establish the environment mechanics; model evaluations measure whether an LLM follows the ten-call instruction.
 The runtime must not claim that type validation of `list[str]` proves the count or contents.
 
-Custom executors materialize parent working names using `assign_tool_async` and call children using `eval_expression_async`, both exported from `nighthawk.runtime`.
+Custom executors materialize working names using `assign_tool_async` and call children with explicit arguments using `eval_expression_async`, both exported from `nighthawk.runtime`.
 Their synchronous counterparts are `assign_tool` and `eval_expression`.
 These entry points include admission, inspection, ordering, workspace updates, and lifecycle delivery; do not mutate environment views or build a second operation policy.
-Directly constructing a `StepCandidate` proposes final values but creates no intermediate operation or inherited temporary state.
+Directly constructing a `StepCandidate` proposes final values but creates no intermediate operation or shared temporary state.
 
 ### 14.5. Behavioral acceptance cases
 
@@ -1171,12 +1182,15 @@ The contracts above own these semantics; this table collects review cases for im
 
 | Scenario | Required result |
 | --- | --- |
-| Child Python parameter `i=99`, parent `i=5`, injected `i=8` | Bare `i` is 99; explicit parent access is 5; explicit task access is 8. |
-| Child module global `i=99`, parent `i=5` | Bare `i` is 99; inherited state does not override module globals. |
+| Child Python parameter `i=99`, parent `i=5`, injected `i=8` | Bare `i` is 99; explicit task access is 8; there is no parent name source. |
+| Child module global `i=99`, parent `i=5` | Bare `i` is 99. |
 | Child Python local `i` is unbound, parent `i=5` | `UnboundLocalError`; no fallback. |
 | Child local `i=None`, parent `i=5` | Resolve `None`. |
-| No lexical `i`, parent `i=5`, injected `i=8` | Resolve 5; if no parent has it, resolve 8. |
-| Inner scope clears task references | Cleared injection cannot reappear through copied parent globals or task values. An actual parent temporary with that name remains parent state. |
+| No lexical `i`, parent `i=5`, injected `i=8` | Resolve 8; without injection, raise `NameError`. |
+| Child declares a read that exists only in the parent | Fail preparation with the original lookup error, without executor admission or output writeback; deliver the ordinary failed-step lifecycle fact. |
+| Inner scope clears task references | Cleared injection cannot reappear from a parent's working names or an older ancestor. |
+| A Python helper selects a parent's value for `task_references` | The child sees that explicit reference with task provenance and the same object identity. |
+| A parent opens a sharing scope before calling a child | The child keeps the parent step and call identities, executor, inspection, and lifecycle relationships. |
 | Visible local `value=7` evaluated as `(lambda: value)()` | Return 7 using the same environment as direct lookup. |
 | Visible local `value=7` evaluated as `list(value + i for i in range(2))` | Return `[7, 8]`; the generator is consumed within one operation. |
 | Existing closure cell is rebound before the Natural call, or an explicit global/nonlocal output is committed | Observe the latest cell value, or update the declared module/cell destination; do not use a captured value copy. |
@@ -1188,9 +1202,9 @@ The contracts above own these semantics; this table collects review cases for im
 | A dotted target is an annotated ordinary object attribute or a model field with assignment validation disabled | Report an unsupported target and recommend a Python helper. Report any earlier right-hand-side effects. |
 | An eligible assignment's helper mutates a list, then its return fails validation | The pending name assignment fails; the list mutation remains. |
 | An admitted dotted assignment has an intermediate getter that fails | The right-hand side has already run once; its effects remain, and no final setter runs. |
-| One model batch assigns the parent temporary `i=5`, then invokes a child with no lexical `i` | Run in that order; the child inherits 5. Awaited approval does not allow the child call to overtake the assignment. |
-| Child assigns a temporary inherited name | Parent name is unchanged; child lookup uses its own working value. |
-| Child mutates an inherited list | Parent observes the same list mutation. |
+| One model batch assigns the parent temporary `i=5`, then invokes `child(i)` | Run in that order; the child receives the argument 5. Awaited approval does not allow the child call to overtake the assignment. |
+| Child assigns a temporary with the same name as a parent's working value | Parent name is unchanged; child lookup uses its own working value. |
+| Child mutates a list shared through an argument or task reference | Parent observes the same list mutation. |
 | Host rejects the final candidate after an earlier approved operation | No pending caller assignments; the earlier operation remains recorded and effective. |
 | Host awaits approval and rejects | Operation body is not invoked; rejection has a correlated record. |
 | Host rewrites the output mapping to `{}` | No caller name assignments; workspace values are not automatically added back. |
@@ -1226,7 +1240,9 @@ Declared reads must be present in that mapping; builtins, task references, calle
 Effective expression lookup uses tracked step assignments, explicit Python names, builtins, then scoped task references.
 Prompt context, discovery, evaluation, type references, and model-selected exception expressions use that same environment, without caller locals, globals, closure cells, or parent working-state fallback.
 Called Python functions retain their own globals and closures.
-Called Natural functions establish their own lexical environment and retain the ordinary parent working-state inheritance rules.
+Called Natural functions establish their own lexical environment and receive the active scope's task references.
+The explicit parent namespace and its later temporaries are not implicit inputs to those functions or their descendants.
+Use arguments or an ordinary Python helper with `scope(task_references=...)` to share selected values.
 Explicit environment selection does not change scoped execution configuration or establish an isolation boundary.
 
 Output and return annotations, including string and nested forward references, resolve during preparation in the selected environment.

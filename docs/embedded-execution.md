@@ -36,7 +36,10 @@ Caller locals, globals, closure cells, and inherited parent working state are no
 Scoped configuration, execution identity, oversight, capabilities, and lifecycle retain their usual inheritance rules.
 
 Called Python functions retain their own closures and globals.
-Nested Natural functions use their own Python frames and the usual parent working-state inheritance; the explicit namespace is not installed as their local environment.
+Nested Natural functions use their own Python frames and the active scope's explicit task references.
+The explicit namespace and later parent temporaries do not become implicit inputs to those functions or their descendants.
+Pass values as arguments, or use a Python helper to select references for `nh.scope(task_references=...)` before calling the child.
+See the [synchronous and asynchronous sharing examples](runtime-configuration.md#selecting-shared-values-with-python).
 This selects an execution environment without isolating Python objects or restricting the authority of called functions.
 
 Omitting an output annotation selects the ordinary initial-value inference rule.

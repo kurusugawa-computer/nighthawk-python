@@ -78,7 +78,8 @@ When repetition is intentional, explicitly supply `default_response=pass_respons
 
 **Verifying binding wiring.** Recorded calls contain shallow snapshots whose values retain application object identity.
 `step_globals` selects module globals named by read bindings, scoped task references, or discovered type aliases, excluding names already present in locals.
-`task_name_to_value` and `parent_name_to_value` record those environment layers separately.
+`task_name_to_value` records explicitly scoped references separately from Python working values.
+Parent working values are not part of a child's recorded or effective environment unless explicitly supplied through an argument or task reference.
 These records show the execution inputs; rendered prompt budgets and context builders determine what the model actually sees.
 Use [prompt observation](#inspecting-the-assembled-prompt) to inspect the assembled presentation.
 

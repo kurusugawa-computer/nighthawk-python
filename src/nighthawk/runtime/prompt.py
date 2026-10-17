@@ -452,12 +452,7 @@ def _collect_explicit_multimodal_reference_and_value_list(
             continue
 
         root_reference = reference_path.split(".", 1)[0]
-        local_names = (
-            step_context.step_locals.keys()
-            | step_context.environment.parent_name_to_value.keys()
-            | step_context.environment.step_name_to_value.keys()
-            | step_context.binding_commit_targets
-        )
+        local_names = step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys() | step_context.binding_commit_targets
         if (root_reference in local_names) != include_locals:
             continue
 
@@ -553,7 +548,6 @@ def _render_globals_section(
     for reference in sorted(references):
         if (
             reference in step_context.step_locals
-            or reference in step_context.environment.parent_name_to_value
             or reference in step_context.environment.step_name_to_value
             or reference in step_context.binding_commit_targets
         ):
@@ -695,10 +689,7 @@ def _build_user_prompt_content(
 
     locals_content = _render_locals_section(
         step_context=step_context,
-        references=step_context.step_locals.keys()
-        | step_context.environment.parent_name_to_value.keys()
-        | step_context.environment.step_name_to_value.keys()
-        | step_context.binding_commit_targets,
+        references=step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys() | step_context.binding_commit_targets,
         explicit_reference_paths=explicit_reference_paths,
         render_context=render_context,
     )
@@ -728,12 +719,7 @@ def _build_user_prompt_content(
         "Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.",
     ]
     relevant_names = (
-        set(references)
-        | step_context.binding_commit_targets
-        | set(step_context.step_locals)
-        | set(environment.parent_name_to_value)
-        | set(environment.task_name_to_value)
-        | {"inspect"}
+        set(references) | step_context.binding_commit_targets | set(step_context.step_locals) | set(environment.task_name_to_value) | {"inspect"}
     )
     collision_names = [
         name

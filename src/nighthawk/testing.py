@@ -42,7 +42,6 @@ class StepCall:
     step_locals: dict[str, object]
     step_globals: dict[str, object]
     task_name_to_value: dict[str, object]
-    parent_name_to_value: dict[str, object]
 
 
 @dataclass
@@ -67,7 +66,7 @@ def _build_step_call(
     referenced_global_names = (
         step_context.read_binding_names | (set(step_context.environment.task_name_to_value) | step_context.type_alias_reference_names)
     ) - step_context.step_locals.keys()
-    filtered_globals = {name: step_context.step_globals[name] for name in referenced_global_names if name in step_context.step_globals}
+    global_name_to_value = {name: step_context.step_globals[name] for name in referenced_global_names if name in step_context.step_globals}
     return StepCall(
         execution_reference=step_context.execution_reference,
         natural_program=processed_natural_program,
@@ -75,9 +74,8 @@ def _build_step_call(
         binding_name_to_type=dict(step_context.binding_name_to_type),
         allowed_step_kinds=allowed_step_kinds,
         step_locals=dict(step_context.step_locals),
-        step_globals=filtered_globals,
+        step_globals=global_name_to_value,
         task_name_to_value=dict(step_context.environment.task_name_to_value),
-        parent_name_to_value=dict(step_context.environment.parent_name_to_value),
     )
 
 

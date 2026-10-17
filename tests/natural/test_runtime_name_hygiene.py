@@ -90,19 +90,19 @@ def test_factory_capture_names_preserve_live_nonlocal_cells() -> None:
     assert __nh_captured_values__ == 9
 
 
-def test_child_inherits_application_binding_even_when_its_own_helper_has_that_name() -> None:
+def test_child_receives_shared_application_binding_even_when_its_own_helper_has_that_name() -> None:
     @nh.natural_function
     async def child() -> int:
         result = 0
         """natural
-        Copy the inherited execution value into <:result>.
+        Copy the shared execution value into <:result>.
         """
         return result
 
     @nh.natural_function
     async def parent() -> int:
         nonlocal child
-        __nh_execution__ = 7  # noqa: F841 - inherited by child.
+        __nh_execution__ = 7  # noqa: F841 - explicitly shared by the executor.
         result = 0
         """natural
         Call <child> and store its result in <:result>.
@@ -112,12 +112,13 @@ def test_child_inherits_application_binding_even_when_its_own_helper_has_that_na
     class Executor:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             context = request.step_context
-            if "inherited" in request.processed_natural_program:
+            if "shared" in request.processed_natural_program:
                 assert context.environment.resolve("__nh_execution__") == 7
-                assert context.environment.describe("__nh_execution__")["origin"] == "parent"
+                assert context.environment.describe("__nh_execution__")["origin"] == "task"
                 await assign_tool_async(context, "result", "__nh_execution__ + 1")
             else:
-                assert await eval_expression_async(context, "child()") == 8
+                with nh.scope(task_references={"__nh_execution__": context.environment.resolve("__nh_execution__")}):
+                    assert await eval_expression_async(context, "child()") == 8
                 assert context.environment.resolve("__nh_execution__") == 7
                 await assign_tool_async(context, "result", "__nh_execution__")
             return StepCandidate(outcome=Pass())

@@ -130,8 +130,8 @@ class TrialState:
 
     def record_operation(self, finished: OperationFinished) -> None:
         self.operations.append(finished)
-        # The historical deterministic child fixture reads materialized state;
-        # all writes and snapshots in this study come from StepEnvironment.
+        # Explicitly publish working values to the fixture's captured workspace.
+        # Its Python helper reads that shared object, not an implicit parent environment.
         self.workspace.step_name_to_value = self.context.environment.snapshot_working_state()
 
     async def inspect_operation(self, request: Any) -> Accept | Reject:
@@ -233,21 +233,23 @@ def make_trial(case: Case) -> TrialState:
             return "consumed"
 
         workspace.python_name_to_value.update(fetch_ticket=fetch_ticket, consume_ticket=consume_ticket)
+    # Adapt historical fixture values to the production explicit-sharing contract.
+    # The original prototype and its recorded experiments retain their own semantics.
+    shared_name_to_value = {**workspace.parent_name_to_value, **workspace.task_name_to_value}
     context = nh.StepContext(
         execution_reference=nh.ExecutionReference("inspection-study", "trial", case.name, "synthetic-request"),
         step_globals={},
         step_locals=dict(workspace.python_name_to_value),
         binding_commit_targets={"result"},
         read_binding_names=frozenset(workspace.python_name_to_value),
-        task_name_to_value=workspace.task_name_to_value,
+        task_name_to_value=shared_name_to_value,
         binding_name_to_type=workspace.output_name_to_type,
     )
     context.environment = StepEnvironment(
         python_name_to_value=workspace.python_name_to_value,
         python_globals={},
         local_name_set=frozenset(workspace.python_name_to_value) | workspace.unbound_names,
-        parent_name_to_value=workspace.parent_name_to_value,
-        task_name_to_value=workspace.task_name_to_value,
+        task_name_to_value=shared_name_to_value,
         output_name_set=frozenset({"result"}),
         binding_name_to_type=workspace.output_name_to_type,
     )
@@ -277,15 +279,12 @@ class StudyContextBuilder:
             "program": request.processed_natural_program,
             "python": visible,
             "unbound_python_names": sorted(self.state.workspace.unbound_names),
-            "parent": dict(environment.parent_name_to_value),
             "task_names": task_names,
             "task_omitted": max(0, len(environment.task_name_to_value) - len(task_names)),
             "outputs": {name: str(value) for name, value in request.binding_name_to_type.items()},
         }
         if self.upfront_collisions:
-            overlapping = (set(python_names) | self.state.workspace.unbound_names) & (
-                environment.parent_name_to_value.keys() | environment.task_name_to_value.keys()
-            )
+            overlapping = (set(python_names) | self.state.workspace.unbound_names) & environment.task_name_to_value.keys()
             presentation["collisions"] = [environment.describe(name) for name in sorted(overlapping)]
         # Avoid leaking the collision treatment through the otherwise identical
         # Python descriptions, which normally include shadowed source metadata.
@@ -297,8 +296,8 @@ class StudyContextBuilder:
         instructions = (
             f"The value inspection helper is {root}.inspect(value, cursor=None, max_items=8). "
             f"The environment API is {root}.environment; use discover(source='task', cursor=None, max_items=8), describe(name, source='effective'), or resolve(name, source='effective'). "
-            "Sources are effective, python, parent, task, and step. Application names, including inspect and unbound locals, retain their Python meaning. "
-            "Step writes precede Python lexical names, then parent state, then task references. Use nh_assign to retain live values; do not copy previews. "
+            "Sources are effective, python, task, and step. Application names, including inspect and unbound locals, retain their Python meaning. "
+            "Step writes precede Python lexical names, then task references. Use nh_assign to retain live values; do not copy previews. "
             "Continue discovery by evaluating its complete continuation expression. Finish with pass unless the program asks for another control result.\n"
         )
         if self.surface == "dedicated":

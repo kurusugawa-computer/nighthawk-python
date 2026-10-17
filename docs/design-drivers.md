@@ -168,6 +168,25 @@ The expected benefit is less custom host integration for dynamic declarations an
 Success requires correct per-invocation value contracts and completion records that reflect writeback failures.
 Compare the effort and complexity of constructing and changing this integration with an ordinary Python implementation providing the same guarantees.
 
+## Explicit sharing across nested Natural calls
+
+**Status:** The name-resolution contract is covered by deterministic tests in `tests/runtime/test_explicit_sharing.py`, with executable synchronous and asynchronous [sharing examples](runtime-configuration.md#selecting-shared-values-with-python).
+The originating evidence is one embedded conversation host's v0.15.0 reproduction; independent application evidence and model-quality improvements remain unevaluated.
+
+The host calls reusable Natural functions from a step containing conversation input and temporary working values.
+Automatically copying those working names into children creates dependencies beyond the child's arguments, Python lexical environment, and deliberately shared references.
+A context builder can omit prompt content but cannot change preparation-time binding resolution or runtime name lookup.
+Requiring host executors to reconstruct Core preparation would move execution complexity into applications.
+
+Core therefore constructs each child's own Python environment and supplies only the active scope's explicit task references as additional names.
+Applications select values using ordinary Python helpers and pass dictionaries through `scope(task_references=...)`; no inheritance mode or environment-construction callback is required.
+Scopes preserve execution parentage and existing management contracts while replacing or clearing shared references.
+This simplifies an existing execution semantic; it does not establish a general object-isolation facility.
+
+The deterministic evidence covers absent parent bindings, preparation failures, real context construction, expression and discovery access, object identity, nested execution, and scoped asynchronous behavior.
+It does not establish that separating names prevents repeated model calls or improves judgments.
+Assess those hypotheses through application evaluations, including independent reuse and the effort needed to declare shared dependencies.
+
 ## Using Nighthawk to develop Nighthawk
 
 **Status:** Conceptual application direction.

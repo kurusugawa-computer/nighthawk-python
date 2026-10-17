@@ -139,10 +139,6 @@ def python_cell_scope(name_to_cell: dict[str, CellType]) -> Iterator[None]:
         _python_lookup_state_var.reset(token)
 
 
-def get_step_context_stack() -> tuple[StepContext, ...]:
-    return _step_context_stack_var.get()
-
-
 def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:
     return _python_lookup_state_var.get().python_cell_scope_stack
 

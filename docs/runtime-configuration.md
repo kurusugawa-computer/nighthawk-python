@@ -62,6 +62,137 @@ with nh.run(step_executor):
 
 Use the [composition rules](#scoped-overrides-with-nhscope) to replace, merge, or clear task references.
 
+### Selecting shared values with Python
+
+Natural calls do not implicitly copy parent arguments, locals, closure values, or step temporaries into the child.
+Use parameters for essential inputs and `task_references` for references intentionally shared throughout a scope.
+A Python helper can select names from `nh.get_step_context().environment` and return an ordinary dictionary.
+The helper runs where it is called; Core does not rerun it during later step preparation.
+
+Omitting `task_references` keeps the enclosing references; supplying a dictionary replaces them, `{}` clears them, and `nh.Merge(...)` adds references with identity-based conflict checking.
+Replacement or clearing affects newly prepared steps, not an already active parent's environment.
+Children and grandchildren see the selected references until another scope replaces them; their own new working values are not automatically shared.
+An explicit dictionary and a dictionary returned by a helper have identical sharing semantics.
+
+The synchronous example starts with an explicit embedded namespace, selects one policy, and calls an existing Natural function.
+Neither the parent's conversation input nor its temporary becomes a child binding.
+The example uses a deterministic executor and needs no model credentials.
+
+<!-- runnable-example:shared_values_sync -->
+```py
+import nighthawk as nh
+from nighthawk.runtime import StepDefinition, StepEnvironment, execute_step
+from nighthawk.testing import CallbackExecutor, StepCall, StepResponse, pass_response
+
+
+@nh.natural_function
+def child(value: int) -> None:
+    """natural
+    Inspect <value> using <policy>.
+    """
+
+
+def select_shared_references(environment: StepEnvironment) -> dict[str, object]:
+    return {"policy": environment.resolve("review_policy")}
+
+
+selected_policy = ["Use direct evidence."]
+
+
+def respond(call: StepCall) -> StepResponse:
+    context = nh.get_step_context()
+    if call.natural_program == "parent":
+        context.record_assignment("parent_temporary", 42)
+        with nh.scope(task_references=select_shared_references(context.environment)):
+            child(6)
+        assert context.environment.resolve("parent_temporary") == 42
+    else:
+        assert context.environment.resolve("value") == 6
+        assert context.environment.resolve("policy") is selected_policy
+        assert context.environment.describe("policy")["origin"] == "task"
+        assert context.environment.describe("conversation_input")["origin"] is None
+        assert context.environment.describe("parent_temporary")["origin"] is None
+    return pass_response()
+
+
+with nh.run(CallbackExecutor(respond)):
+    execute_step(
+        StepDefinition("parent"),
+        name_to_value={"conversation_input": "parent conversation", "review_policy": selected_policy},
+        write_binding=lambda name, value: None,
+    )
+
+print("child_value=6; policy_shared=True; parent_input_visible=False")
+```
+<!-- /runnable-example:shared_values_sync -->
+
+The asynchronous example uses the same selection rule and awaits the child inside the sharing scope.
+An ordinary coroutine uses the context where it runs; a Task uses its selected creation context.
+Scopes restore their references on normal exit, exceptions, and cancellation, and separate concurrent contexts can supply different references.
+
+<!-- runnable-example:shared_values_async -->
+```py
+import asyncio
+
+import nighthawk as nh
+from nighthawk.runtime import Pass, StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step_async
+
+
+@nh.natural_function
+async def child(value: int) -> None:
+    """natural
+    Inspect <value> using <policy>.
+    """
+
+
+def select_shared_references(environment: StepEnvironment) -> dict[str, object]:
+    return {"policy": environment.resolve("review_policy")}
+
+
+selected_policy = ["Use direct evidence."]
+
+
+class Executor:
+    async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+        context = request.step_context
+        if request.processed_natural_program == "parent":
+            context.record_assignment("parent_temporary", 42)
+            with nh.scope(task_references=select_shared_references(context.environment)):
+                await child(6)
+            assert context.environment.resolve("parent_temporary") == 42
+        else:
+            assert context.environment.resolve("value") == 6
+            assert context.environment.resolve("policy") is selected_policy
+            assert context.environment.describe("policy")["origin"] == "task"
+            assert context.environment.describe("conversation_input")["origin"] is None
+            assert context.environment.describe("parent_temporary")["origin"] is None
+        return StepCandidate(outcome=Pass())
+
+
+async def main() -> None:
+    with nh.run(Executor()):
+        await execute_step_async(
+            StepDefinition("parent"),
+            name_to_value={"conversation_input": "parent conversation", "review_policy": selected_policy},
+            write_binding=lambda name, value: None,
+        )
+
+
+asyncio.run(main())
+print("child_value=6; policy_shared=True; parent_input_visible=False")
+```
+<!-- /runnable-example:shared_values_async -->
+
+Select only the references that belong to the child's contract.
+If an application deliberately wants all of a step's bound working names, `environment.snapshot_working_state()` returns a fresh dictionary of Python working locals, live cell values, and tracked assignments, excluding globals, builtins, task references, and runtime names.
+Neither that snapshot nor a selection helper shares anything until the application passes its result to a call or scope.
+Scope mappings are shallow copies; shared objects retain identity and may be mutated through their normal Python interfaces.
+
+This is a name-resolution contract, not a security sandbox.
+The child's own Python globals and real closure cells remain accessible, and explicitly supplied objects can expose other state.
+Parent-step and function-call relationships, executor selection, usage accounting, inspection, and lifecycle remain intact across sharing scopes.
+A call handler may open such a scope around `proceed()` or `await proceed()` without rewriting or redecorating the called functions.
+
 ## Scoped tools
 
 `tools` declares native tools for a scope: callables exposed through the model's native tool-calling interface. Nighthawk has no global tool registry; a tool is visible exactly where a `nh.scope(tools=[...])` makes it visible.

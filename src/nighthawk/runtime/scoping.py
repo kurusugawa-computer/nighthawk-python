@@ -434,6 +434,7 @@ def scope(
     installing context. Executor replacement precedes delegated model selection.
     model replaces only the model; step_executor_configuration replaces all configuration
     fields. Supplying both is invalid. Selection preserves unrelated scoped controls.
+    A new scope retains the active step identity and its source location.
     """
     from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
@@ -457,7 +458,7 @@ def scope(
     selection = _model_selection(model, step_executor_configuration)
     if selection is not None:
         next_step_executor = _resolve_model_selection(next_step_executor, selection)
-    next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid(), step_execution_id=None, source_location=None)
+    next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid())
     next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
     next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight
     next_system_prompt_suffix_fragments = _compose_sequence(_system_prompt_suffix_fragments_var.get(), system_prompt_suffix_fragments)

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Breaking: Natural functions no longer copy parent working values into their environment. Share values through Python arguments, globals, closures, or explicit `scope(task_references=...)`; ordinary Python helpers can select references from the active environment. Removed the `parent` name source and `parent_name_to_value` from `StepEnvironment` and test-call records.
+- Documented explicit working-state snapshots, scoped reference replacement and clearing, and synchronous/asynchronous host sharing examples. Updated composition examples to declare their dependencies.
+
+### Fixed
+
+- Nested configuration and sharing scopes preserve the active step identity so child executions retain their parent-step correlation.
+
 ## [0.15.0]
 
 ### Added

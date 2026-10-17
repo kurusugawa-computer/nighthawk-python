@@ -13,7 +13,7 @@ from .bindings import MISSING_ANNOTATION, infer_binding_types, normalize_binding
 from .description import discover_type_alias_reference_names
 from .environment import StepEnvironment
 from .scoping import _current_task_references, get_execution_reference
-from .step_context import StepContext, ToolResultRenderingPolicy, get_python_cell_scope_stack, get_step_context_stack
+from .step_context import StepContext, ToolResultRenderingPolicy, get_python_cell_scope_stack
 from .step_contract import StepKind
 from .step_executor import StepExecutor
 
@@ -85,8 +85,6 @@ class StepPreparation:
         python_locals = caller_frame.f_locals
         python_globals = caller_frame.f_globals
         step_locals = {name: value for name, value in python_locals.items() if name not in self.runtime_name_set}
-        parent_stack = get_step_context_stack()
-        parent_name_to_value = parent_stack[-1].environment.snapshot_working_state() if parent_stack else {}
         cell_scope_stack = get_python_cell_scope_stack()
         python_name_to_cell = cell_scope_stack[-1] if cell_scope_stack else {}
 
@@ -119,7 +117,6 @@ class StepPreparation:
             python_globals=python_globals,
             local_name_set=frozenset(local_name_set),
             python_name_to_cell=python_name_to_cell,
-            parent_name_to_value=parent_name_to_value,
             task_name_to_value=scoped_task_name_to_value,
             output_name_set=frozenset(output_binding_names),
             binding_name_to_annotation=binding_name_to_annotation,
