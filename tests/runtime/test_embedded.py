@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, ForwardRef
 
 import pytest
 from pydantic import BaseModel
@@ -70,6 +70,35 @@ async def test_empty_namespace_keeps_builtins_and_scoped_references(execute: Cal
 
     with nh.run(InspectingExecutor(inspect)), nh.scope(task_references={"injected": 42}):
         assert await execute(StepDefinition("Inspect the environment."), name_to_value={}, write_binding=lambda name, value: None) == Pass()
+
+
+@pytest.mark.asyncio
+async def test_type_contracts_respect_explicit_and_scoped_names(execute: Callable[..., Awaitable[StepResult]]) -> None:
+    saved_name_to_value: dict[str, object] = {}
+    definition = StepDefinition(
+        "Resolve types in the effective environment.",
+        output_binding_names=("selected", "nested", "shadowed", "scoped"),
+        binding_name_to_type={
+            "selected": "SelectedType",
+            "nested": "list['SelectedType']",
+            "shadowed": "int",
+            "scoped": ForwardRef("ScopedType"),
+        },
+        return_annotation="list['ScopedType']",
+    )
+
+    def inspect(request: StepRequest) -> StepCandidate:
+        assert request.binding_name_to_type == {"selected": int, "nested": list[int], "shadowed": str, "scoped": bytes}
+        assert request.return_annotation == list[bytes]
+        return StepCandidate(
+            outcome=Return(["done"]),
+            binding_name_to_value={"selected": "7", "nested": ["8"], "shadowed": "9", "scoped": "value"},
+        )
+
+    with nh.run(InspectingExecutor(inspect)), nh.scope(task_references={"SelectedType": float, "ScopedType": bytes}):
+        outcome = await execute(definition, name_to_value={"SelectedType": int, "int": str}, write_binding=saved_name_to_value.__setitem__)
+    assert outcome == Return([b"done"])
+    assert saved_name_to_value == {"selected": 7, "nested": [8], "shadowed": "9", "scoped": b"value"}
 
 
 @pytest.mark.asyncio

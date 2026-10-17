@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Embedded step type annotations resolve explicit and scoped names on Python 3.14, including nested forward references and names that shadow builtins.
 - Dynamic annotation validation uses explicit `TypeForm[object]` casts at Pydantic `TypeAdapter` boundaries, restoring type-checking compatibility with Pydantic 2.14 without changing runtime validation. Declared `typing-extensions` as a direct dependency.
 - Error-handling guides distinguish Natural-selected exceptions, recoverable tool errors, and finalization failures. Published handlers are executed against deterministic runtime responses.
 - Tests follow environment, prompt, executor, and model-selection ownership; scope tests use current composition terminology and avoid duplicate replacement checks or fixed instrumentation names.

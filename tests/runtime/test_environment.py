@@ -45,6 +45,8 @@ def test_unbound_local_and_cell_stop_fallback() -> None:
     for name in ("local", "cell"):
         with pytest.raises(UnboundLocalError):
             environment.resolve(name)
+        with pytest.raises(UnboundLocalError):
+            assert name in environment.expression_namespace()
         assert environment.describe(name)["unbound"] is True
 
 
@@ -99,6 +101,29 @@ def test_nested_expression_scopes_use_effective_lookup(expression: str, expected
     environment = StepEnvironment(python_name_to_value={"value": 7}, python_globals={})
     namespace = environment.expression_namespace()
     assert eval(expression, namespace, namespace) == expected
+
+
+def test_expression_namespace_membership_follows_live_lookup() -> None:
+    python_globals: dict[str, object] = {"global_value": 1}
+    environment = StepEnvironment(
+        python_name_to_value={"local": None, "hidden": 1},
+        python_globals=python_globals,
+        python_name_to_cell={"cell": CellType(2)},
+        parent_name_to_value={"inherited": 3},
+        task_name_to_value={"injected": 4},
+        runtime_name_set=frozenset({"hidden"}),
+    )
+    namespace = environment.expression_namespace({"override": None})
+    for name in ("local", "global_value", "cell", "inherited", "injected", "override", "len", "__builtins__", environment.runtime_reference):
+        assert name in namespace
+    assert "missing" not in namespace
+    assert "hidden" not in namespace
+    assert 42 not in namespace
+
+    python_globals["later"] = 5
+    environment.assign("assigned", 6)
+    assert "later" in namespace and namespace["later"] == 5
+    assert "assigned" in namespace and namespace["assigned"] == 6
 
 
 def test_existing_python_names_require_output_declaration() -> None:

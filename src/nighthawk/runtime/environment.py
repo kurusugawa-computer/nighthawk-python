@@ -63,6 +63,16 @@ class _ExpressionNamespace(dict[str, object]):
             return self._override_name_to_value[name]
         return self._environment.resolve(name)
 
+    def __contains__(self, name: object) -> bool:
+        # Python 3.14 forward references check membership before looking up a name.
+        if not isinstance(name, str):
+            return False
+        try:
+            self[name]
+        except MissingEnvironmentNameError:
+            return False
+        return True
+
 
 @dataclass(frozen=True)
 class _RuntimeAccess:
