@@ -28,7 +28,7 @@ def test_documented_error_handler(example_name: str, example_name_to_path: dict[
 
     def respond(call: StepCall) -> StepResponse:
         if example_name == "output_validation":
-            return pass_response(count="not an integer")
+            return pass_response(binding_name_to_value={"count": "not an integer"})
         error_type = cast(type[BaseException], call.step_globals["InputError"]) if example_name == "custom_raise" else Exception
         return raise_response("invalid input", error_type=error_type)
 

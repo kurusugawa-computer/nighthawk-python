@@ -34,7 +34,7 @@ def test_readme_example(
         assert isinstance(average, float)
         computed_values.append(average)
         # A numeric string exercises coercion through the actual output contract.
-        return pass_response(result="invalid" if invalid_output else str(average))
+        return pass_response(binding_name_to_value={"result": "invalid" if invalid_output else str(average)})
 
     executor = CallbackExecutor(respond)
 

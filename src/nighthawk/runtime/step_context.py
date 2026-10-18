@@ -46,7 +46,8 @@ class StepContext:
 
     ``environment`` owns effective lookup and tracked step assignments.
     Use :meth:`record_assignment` or the common assignment operations to keep that environment and ``step_locals`` bookkeeping consistent.
-    Revision and mutation marks describe tracked changes; finalization independently validates all initialized declared outputs, with explicit candidate proposals taking precedence.
+    Revision and mutation marks describe tracked changes.
+    Finalization validates initialized declared outputs when the candidate omits its output selection; an explicit mapping supplies the complete selection.
     """
 
     execution_reference: ExecutionReference

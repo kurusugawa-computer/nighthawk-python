@@ -26,7 +26,7 @@ def classify(text: str) -> str:
 def test_classify_returns_scripted_label():
     executor = ScriptedExecutor(
         responses=[
-            pass_response(label="positive"),
+            pass_response(binding_name_to_value={"label": "positive"}),
         ]
     )
     with nh.run(executor):
@@ -39,16 +39,20 @@ def test_classify_returns_scripted_label():
 
 | Factory | Outcome | Use case |
 |---|---|---|
-| `pass_response(**bindings)` | pass | Normal completion with binding values |
+| `pass_response(*, binding_name_to_value=UNSET)` | pass | Normal completion with automatic or explicit output selection |
 | `raise_response(message, *, error_type=Exception)` | raise | Test error handling paths |
-| `return_response(value, /, **bindings)` | return | Early return from Natural function |
-| `break_response()` | break | Exit enclosing loop |
-| `continue_response()` | continue | Skip to next iteration |
+| `return_response(value, /, *, binding_name_to_value=UNSET)` | return | Early return from Natural function |
+| `break_response(*, binding_name_to_value=UNSET)` | break | Exit enclosing loop |
+| `continue_response(*, binding_name_to_value=UNSET)` | continue | Skip to next iteration |
 
 Responses carry resolved Python values: `return_response("bug")` returns the literal string `"bug"`, and `return_response(None)` returns `None`.
 `raise_response("failed", error_type=ValueError)` accepts an exception class; it does not look up a name in the Natural environment.
 For direct response construction, use `StepResponse(outcome=nh.runtime.Return(value))` or the other resolved outcomes from `nighthawk.runtime`.
 Output bindings and the return value pass through the ordinary, independent runtime validation and commit inspection.
+`StepResponse` shares `StepCandidate`'s frozen structure and output-selection contract.
+Omission or `nh.UNSET` selects initialized declared outputs, `{}` selects no writes, and a nonempty mapping selects exactly its entries without supplementation.
+For example, `pass_response(binding_name_to_value={"result": 7})` writes only `result`.
+Use `pass_response(binding_name_to_value={})` to explicitly suppress writeback; `pass_response()` retains automatic selection.
 
 **Testing error handling.** Use `raise_response` to verify that your code handles LLM failures gracefully:
 
@@ -85,7 +89,7 @@ Use [prompt observation](#inspecting-the-assembled-prompt) to inspect the assemb
 
 ```py
 def test_helper_is_discoverable():
-    executor = ScriptedExecutor(responses=[pass_response(result="")])
+    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
     with nh.run(executor):
         analyze(query="test")
 
@@ -104,8 +108,8 @@ from nighthawk.testing import CallbackExecutor, StepCall, StepResponse
 def handler(call: StepCall) -> StepResponse:
     text = call.step_locals.get("text", "")
     if isinstance(text, str) and "urgent" in text:
-        return pass_response(priority="high")
-    return pass_response(priority="normal")
+        return pass_response(binding_name_to_value={"priority": "high"})
+    return pass_response(binding_name_to_value={"priority": "normal"})
 
 
 def test_urgent_routing():

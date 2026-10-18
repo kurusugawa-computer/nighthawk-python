@@ -6,9 +6,12 @@ deterministic tests of Natural functions without LLM API calls.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
+from pydantic import Field
+
+from .composition import UNSET, UnsetType
 from .runtime.execution_reference import ExecutionReference
 from .runtime.step_context import StepContext
 from .runtime.step_contract import StepKind
@@ -44,17 +47,17 @@ class StepCall:
     task_name_to_value: dict[str, object]
 
 
-@dataclass
-class StepResponse:
+class StepResponse(StepCandidate):
     """Scripted response for a single Natural block execution.
 
     Attributes:
-        bindings: Proposed output values. Undeclared names fail finalization.
+        binding_name_to_value: Complete output selection.
+            Omission or UNSET selects initialized declared outputs; {} selects no writes.
+            Undeclared names fail finalization.
         outcome: Resolved Python control result. Strings are values, never expressions.
     """
 
-    bindings: dict[str, object] = field(default_factory=dict)
-    outcome: StepResult = field(default_factory=Pass)
+    outcome: StepResult = Field(default_factory=Pass)
 
 
 def _build_step_call(
@@ -115,7 +118,7 @@ class ScriptedExecutor:
                 f"{len(self.responses)} responses were supplied. "
                 "Supply another response or an explicit default_response."
             )
-        return StepCandidate(outcome=response.outcome, binding_name_to_value=response.bindings)
+        return response
 
     async def run_step_async(
         self,
@@ -146,7 +149,7 @@ class CallbackExecutor:
         )
         self.calls.append(call)
         response = self.handler(call)
-        return StepCandidate(outcome=response.outcome, binding_name_to_value=response.bindings)
+        return response
 
     async def run_step_async(
         self,
@@ -156,9 +159,9 @@ class CallbackExecutor:
         return self.run_step(request=request)
 
 
-def pass_response(**bindings: object) -> StepResponse:
-    """Create a response with pass outcome and optional binding values."""
-    return StepResponse(bindings=bindings)
+def pass_response(*, binding_name_to_value: Mapping[str, object] | UnsetType = UNSET) -> StepResponse:
+    """Continue with automatic output selection, or an explicit complete mapping."""
+    return StepResponse(binding_name_to_value=binding_name_to_value)
 
 
 def raise_response(message: str, *, error_type: type[BaseException] = Exception) -> StepResponse:
@@ -174,21 +177,22 @@ def raise_response(message: str, *, error_type: type[BaseException] = Exception)
     return StepResponse(outcome=Raise(message, error_type))
 
 
-def return_response(value: object, /, **bindings: object) -> StepResponse:
+def return_response(value: object, /, *, binding_name_to_value: Mapping[str, object] | UnsetType = UNSET) -> StepResponse:
     """Return a Python value subject to the Natural function's return contract.
 
     Args:
         value: Resolved value; strings are returned literally without evaluation.
-        **bindings: Proposed output values, independently validated at finalization.
+        binding_name_to_value: Complete output selection; omission or UNSET selects initialized declared outputs.
+            {} selects no writes.
     """
-    return StepResponse(bindings=bindings, outcome=Return(value))
+    return StepResponse(binding_name_to_value=binding_name_to_value, outcome=Return(value))
 
 
-def break_response() -> StepResponse:
+def break_response(*, binding_name_to_value: Mapping[str, object] | UnsetType = UNSET) -> StepResponse:
     """Create a response with break outcome (exit enclosing loop)."""
-    return StepResponse(outcome=Break())
+    return StepResponse(outcome=Break(), binding_name_to_value=binding_name_to_value)
 
 
-def continue_response() -> StepResponse:
+def continue_response(*, binding_name_to_value: Mapping[str, object] | UnsetType = UNSET) -> StepResponse:
     """Create a response with continue outcome (skip to next iteration)."""
-    return StepResponse(outcome=Continue())
+    return StepResponse(outcome=Continue(), binding_name_to_value=binding_name_to_value)

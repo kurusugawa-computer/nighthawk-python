@@ -227,7 +227,7 @@ class TestRetryingWithNaturalFunction:
         executor = ScriptedExecutor(
             responses=[
                 raise_response("transient failure"),
-                pass_response(result="success"),
+                pass_response(binding_name_to_value={"result": "success"}),
             ]
         )
 

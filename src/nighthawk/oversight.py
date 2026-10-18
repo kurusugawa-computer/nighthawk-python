@@ -81,11 +81,12 @@ class Reject:
 
 @dataclass(frozen=True)
 class Rewrite:
-    """Replace supplied commit fields; UNSET inherits and Return(None) returns None.
+    """Replace supplied commit fields; UNSET retains and Return(None) returns None.
 
     A mapping replaces all writes. Use outcome=Return(value=...) to supply
     a new return value or change another allowed outcome into a return.
     Replacements are validated before commit without replaying return expressions.
+    A resolved Raise cannot be paired with an explicit nonempty output mapping.
     """
 
     outcome: StepResult | UnsetType = UNSET
@@ -96,11 +97,13 @@ class Rewrite:
         if not isinstance(self.outcome, (UnsetType, Pass, Return, Break, Continue, Raise)):
             raise TypeError("Rewrite outcome must be a resolved StepResult or UNSET")
         if not isinstance(self.binding_name_to_value, UnsetType):
-            if not isinstance(self.binding_name_to_value, Mapping):
-                raise TypeError("Rewrite binding_name_to_value must be a mapping or UNSET")
+            if not isinstance(self.binding_name_to_value, Mapping) or any(not isinstance(name, str) for name in self.binding_name_to_value):
+                raise TypeError("Rewrite binding_name_to_value must be a string-keyed mapping or UNSET")
             object.__setattr__(self, "binding_name_to_value", _reference_mapping(self.binding_name_to_value))
         if self.outcome is UNSET and self.binding_name_to_value is UNSET:
             raise ValueError("Rewrite must change outcome or binding_name_to_value")
+        if isinstance(self.outcome, Raise) and not isinstance(self.binding_name_to_value, UnsetType) and len(self.binding_name_to_value):
+            raise ValueError("Rewrite Raise cannot include output bindings")
 
 
 type StepCommitDecision = Accept | Reject | Rewrite

@@ -5,13 +5,21 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from types import CellType, MappingProxyType
-from typing import Literal
+from typing import Literal, Never
 
 from .bindings import MISSING_ANNOTATION
 from .description import annotation_text
 from .discovery import DiscoveryResult, page_names
 
 type EnvironmentSource = Literal["effective", "python", "task", "step"]
+
+_EMPTY_NAME_TO_VALUE: Mapping[str, Never] = MappingProxyType({})
+
+
+def _copy_name_to_value[T](name_to_value: Mapping[str, T], parameter: str) -> dict[str, T]:
+    if not isinstance(name_to_value, Mapping) or any(not isinstance(name, str) for name in name_to_value):
+        raise TypeError(f"{parameter} must be a string-keyed mapping")
+    return dict(name_to_value)
 
 
 class MissingEnvironmentNameError(NameError):
@@ -98,26 +106,29 @@ class StepEnvironment:
         python_name_to_value: Mapping[str, object],
         python_globals: dict[str, object],
         local_name_set: frozenset[str] = frozenset(),
-        python_name_to_cell: Mapping[str, CellType] | None = None,
-        task_name_to_value: Mapping[str, object] | None = None,
+        python_name_to_cell: Mapping[str, CellType] = _EMPTY_NAME_TO_VALUE,
+        task_name_to_value: Mapping[str, object] = _EMPTY_NAME_TO_VALUE,
         output_name_set: frozenset[str] = frozenset(),
-        binding_name_to_annotation: Mapping[str, object] | None = None,
-        binding_name_to_type: Mapping[str, object] | None = None,
+        binding_name_to_annotation: Mapping[str, object] = _EMPTY_NAME_TO_VALUE,
+        binding_name_to_type: Mapping[str, object] = _EMPTY_NAME_TO_VALUE,
         runtime_name_set: frozenset[str] = frozenset(),
     ) -> None:
+        python_name_to_value = _copy_name_to_value(python_name_to_value, "python_name_to_value")
+        if not isinstance(python_globals, dict) or any(not isinstance(name, str) for name in python_globals):
+            raise TypeError("python_globals must be a string-keyed dict")
         self._runtime_name_set = frozenset(runtime_name_set)
         self._python_name_to_value = {name: value for name, value in python_name_to_value.items() if not self._is_runtime_name(name)}
         self._python_global_name_to_value = python_globals
         builtins_value = python_globals.get("__builtins__", __builtins__)
         self._python_builtin_name_to_value: dict[str, object] = builtins_value if isinstance(builtins_value, dict) else vars(builtins_value)
         self._local_name_set = local_name_set
-        self._python_name_to_cell = dict(python_name_to_cell or {})
+        self._python_name_to_cell = _copy_name_to_value(python_name_to_cell, "python_name_to_cell")
         self._output_name_set = output_name_set
         self._step_name_to_value: dict[str, object] = {}
-        self._binding_name_to_annotation = dict(binding_name_to_annotation or {})
-        self._binding_name_to_type = dict(binding_name_to_type or {})
+        self._binding_name_to_annotation = _copy_name_to_value(binding_name_to_annotation, "binding_name_to_annotation")
+        self._binding_name_to_type = _copy_name_to_value(binding_name_to_type, "binding_name_to_type")
         self.python_name_to_value: Mapping[str, object] = _PythonEnvironmentView(self)
-        self.task_name_to_value = MappingProxyType(dict(task_name_to_value or {}))
+        self.task_name_to_value = MappingProxyType(_copy_name_to_value(task_name_to_value, "task_name_to_value"))
         self.step_name_to_value = MappingProxyType(self._step_name_to_value)
         known_names = (
             python_name_to_value.keys()
@@ -211,8 +222,8 @@ class StepEnvironment:
         name_to_value.update(self.step_name_to_value)
         return name_to_value
 
-    def expression_namespace(self, overrides: Mapping[str, object] | None = None) -> dict[str, object]:
-        return _ExpressionNamespace(self, overrides or {})
+    def expression_namespace(self, overrides: Mapping[str, object] = _EMPTY_NAME_TO_VALUE) -> dict[str, object]:
+        return _ExpressionNamespace(self, _copy_name_to_value(overrides, "overrides"))
 
     def reference(self, name: str, *, source: EnvironmentSource = "effective") -> str:
         """Return a Python expression resolving this binding when evaluated."""

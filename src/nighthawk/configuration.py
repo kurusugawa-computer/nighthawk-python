@@ -121,8 +121,9 @@ class StepExecutorConfiguration(BaseModel):
             Instances retain identity; the host owns client lifetime. Serialization
             must explicitly exclude a live model field, including in nested records.
             Configuration representations omit the model to avoid traversing credentials.
-        model_settings: Provider-specific model settings. Accepts a dict or a
-            backend-specific BaseModel instance (auto-converted to dict).
+        model_settings: Provider-specific overrides. Defaults to an empty dict;
+            accepts a dict or a backend-specific BaseModel (converted to dict).
+            None and UNSET are invalid. An empty dict preserves model-owned defaults.
         prompts: Prompt templates for step execution.
         context_limits: Token and item limits for context rendering.
         json_renderer_style: Headson rendering style for JSON summarization.
@@ -136,11 +137,11 @@ class StepExecutorConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str | InstanceOf[Model] = Field(default="openai-responses:gpt-5.6-luna", repr=False)
-    model_settings: dict[str, Any] | BaseModel | None = None
+    model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
 
     @field_validator("model_settings", mode="before")
     @classmethod
-    def _normalize_model_settings(cls, value: Any) -> dict[str, Any] | None:
+    def _normalize_model_settings(cls, value: Any) -> dict[str, Any]:
         if isinstance(value, BaseModel):
             return value.model_dump()
         return value

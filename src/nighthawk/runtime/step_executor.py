@@ -7,8 +7,10 @@ from pydantic_ai import Agent, RunContext, StructuredDict
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.messages import UserContent
 from pydantic_ai.models import ModelRequestContext
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from ..composition import UNSET, UnsetType
 from ..configuration import ModelSelection, StepExecutorConfiguration
 from ..errors import ExecutionError, NighthawkError
 from ..tools._admission import ToolAdmissionCapability
@@ -125,10 +127,6 @@ def _new_agent_step_executor(
             case _:
                 model = model_identifier
 
-    constructor_arguments: dict[str, Any] = {}
-    if configuration.model_settings is not None:
-        constructor_arguments["model_settings"] = configuration.model_settings
-
     system_prompt_text = build_system_prompt(configuration=configuration)
 
     agent = Agent(
@@ -136,7 +134,7 @@ def _new_agent_step_executor(
         output_type=StepFinalResult,
         deps_type=StepContext,
         system_prompt=system_prompt_text,
-        **constructor_arguments,
+        model_settings=cast(ModelSettings, configuration.model_settings),
     )
 
     @agent.system_prompt(dynamic=True)
@@ -173,10 +171,14 @@ class AgentStepExecutor:
 
     def __init__(
         self,
-        configuration: StepExecutorConfiguration | None = None,
+        configuration: StepExecutorConfiguration | UnsetType = UNSET,
         agent: StepExecutionAgent | None = None,
     ) -> None:
-        self.configuration = configuration or StepExecutorConfiguration()
+        if not isinstance(configuration, (StepExecutorConfiguration, UnsetType)):
+            raise TypeError("configuration must be StepExecutorConfiguration or UNSET")
+        if agent is not None and not isinstance(agent, (AsyncExecutionAgent, SyncExecutionAgent)):
+            raise TypeError("agent must implement the synchronous or asynchronous agent protocol")
+        self.configuration = StepExecutorConfiguration() if isinstance(configuration, UnsetType) else configuration
         if agent is not None and not isinstance(self.configuration.model, str):
             raise NighthawkError("The external agent owns model selection; configuration.model must be a string")
         self.agent_is_managed = agent is None
@@ -193,15 +195,17 @@ class AgentStepExecutor:
         cls,
         *,
         agent: StepExecutionAgent,
-        configuration: StepExecutorConfiguration | None = None,
+        configuration: StepExecutorConfiguration | UnsetType = UNSET,
     ) -> AgentStepExecutor:
         """Create an executor wrapping an existing agent.
 
         Args:
             agent: A pre-configured agent to use for step execution.
-            configuration: Optional configuration. Defaults to
-                StepExecutorConfiguration().
+            configuration: Omission or UNSET creates StepExecutorConfiguration().
+                None and raw dictionaries are invalid; parse configuration data explicitly.
         """
+        if not isinstance(agent, (AsyncExecutionAgent, SyncExecutionAgent)):
+            raise TypeError("agent must implement the synchronous or asynchronous agent protocol")
         return cls(configuration=configuration, agent=agent)
 
     @classmethod
@@ -211,6 +215,8 @@ class AgentStepExecutor:
         configuration: StepExecutorConfiguration,
     ) -> AgentStepExecutor:
         """Create an executor from a configuration, building a managed agent internally."""
+        if not isinstance(configuration, StepExecutorConfiguration):
+            raise TypeError("configuration must be StepExecutorConfiguration")
         return cls(configuration=configuration)
 
     def resolve_model_selection(self, selection: ModelSelection) -> StepExecutor:
@@ -374,7 +380,7 @@ class AgentStepExecutor:
             usage_meter.record(result.usage, kind="step")
 
         step_outcome = self._parse_agent_result(result)
-        return await resolve_model_candidate(request, step_outcome, {})
+        return await resolve_model_candidate(request, step_outcome)
 
     def run_step(
         self,

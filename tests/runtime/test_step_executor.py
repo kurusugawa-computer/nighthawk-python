@@ -220,10 +220,14 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
 
 
 def test_external_agent_rejects_instance_configuration() -> None:
+    class FakeAgent:
+        def run_sync(self, *arguments, **keywords):
+            raise AssertionError("No model execution expected")
+
     configuration = nh.StepExecutorConfiguration(model=TestModel())
     for construct in (nh.AgentStepExecutor, nh.AgentStepExecutor.from_agent):
         with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
-            construct(configuration=configuration, agent=object())  # type: ignore[arg-type]
+            construct(configuration=configuration, agent=FakeAgent())
 
 
 def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:

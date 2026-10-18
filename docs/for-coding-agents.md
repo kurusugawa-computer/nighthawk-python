@@ -189,8 +189,8 @@ def test_quote_batch_processes_each_message_and_uses_host_price():
     messages = ["A dozen, please.", "Please send three."]
     executor = ScriptedExecutor(
         responses=[
-            pass_response(order={"quantity": 12}),
-            pass_response(order={"quantity": 3}),
+            pass_response(binding_name_to_value={"order": {"quantity": 12}}),
+            pass_response(binding_name_to_value={"order": {"quantity": 3}}),
         ],
     )
     with nh.run(executor):
@@ -199,14 +199,14 @@ def test_quote_batch_processes_each_message_and_uses_host_price():
 
 
 def test_quote_batch_stops_when_quantity_is_unclear():
-    executor = ScriptedExecutor(responses=[pass_response(order={"quantity": None})])
+    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"order": {"quantity": None}})])
     with nh.run(executor), pytest.raises(ValueError, match="Quantity needs clarification"):
         quote_batch(["A few, please.", "Then three more."], unit_price_cents=250)
     assert len(executor.calls) == 1
 
 
 def test_quote_batch_rejects_invalid_model_output():
-    executor = ScriptedExecutor(responses=[pass_response(order={"quantity": 0})])
+    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"order": {"quantity": 0}})])
     with nh.run(executor), pytest.raises(nh.ExecutionError):
         quote_batch(["One, please."], unit_price_cents=250)
 ```

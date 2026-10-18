@@ -55,10 +55,13 @@ It returns `None` or an awaitable completing that assignment.
 Callbacks run sequentially in output declaration order; Core records a successful assignment only after its callback returns normally.
 Both entry points accept synchronous or asynchronous writers; the synchronous entry point uses the ordinary bridge for awaitables.
 
-Normal finalization includes initialized declared outputs, even if the executor does not propose them.
-Tracked working values take precedence over initial values, and explicit executor proposals take precedence over both.
-Uninitialized outputs without proposals remain absent.
-An initial `Raise` discards outputs before value validation while still rejecting undeclared names.
+When `StepCandidate.binding_name_to_value` is omitted or `nh.UNSET`, finalization selects initialized declared outputs.
+Tracked working values take precedence over current Python values; uninitialized outputs and task-only references remain absent.
+A supplied mapping selects exactly those outputs, including when it is empty; omitted names are neither supplemented nor validated for writeback.
+Selected values must satisfy their output contracts before commit inspection.
+Use `request.snapshot_output_bindings()` and ordinary Python dictionary composition to explicitly combine current output values with replacements.
+An initial `Raise` selects no outputs and skips validation of pending working values.
+Pairing `Raise` with an explicitly supplied nonempty output mapping is invalid for both `StepCandidate` and `Rewrite`.
 A commit `Rewrite` with an explicitly supplied mapping replaces the selected outputs completely; rewriting to `{}` does not restore initial values.
 
 These are separate facts:
@@ -73,6 +76,53 @@ If the second write fails, the first completed write remains recorded and effect
 An interrupted writer must finish its cancellation handling before control can reach terminal delivery.
 If a writer mutates storage and then raises, Core cannot infer whether the assignment completed; that writer owns diagnosis and recovery for its partial effects.
 This interface does not promise database transactions, rollback, retries, or durable storage.
+
+This example uses the same executor with synchronous and asynchronous entry points to distinguish automatic, empty, explicit, and composed output selections.
+
+<!-- runnable-example:output_selection -->
+```py
+import asyncio
+
+import nighthawk as nh
+from nighthawk.runtime import Pass, StepCandidate, StepDefinition, StepRequest, execute_step, execute_step_async
+
+
+class Executor:
+    def run_step(self, *, request: StepRequest) -> StepCandidate:
+        selection = request.processed_natural_program
+        if selection == "automatic":
+            return StepCandidate(outcome=Pass())
+        if selection == "empty":
+            return StepCandidate(outcome=Pass(), binding_name_to_value={})
+        if selection == "explicit":
+            return StepCandidate(outcome=Pass(), binding_name_to_value={"first": 7})
+        return StepCandidate(outcome=Pass(), binding_name_to_value={**request.snapshot_output_bindings(), "first": 7})
+
+
+async def main() -> None:
+    selection_to_binding_name_to_value = {
+        "automatic": {"first": 1, "second": 2},
+        "empty": {},
+        "explicit": {"first": 7},
+        "composed": {"first": 7, "second": 2},
+    }
+    with nh.run(Executor()):
+        for asynchronous in (False, True):
+            for selection, expected_binding_name_to_value in selection_to_binding_name_to_value.items():
+                saved_name_to_value: dict[str, object] = {}
+                definition = StepDefinition(selection, output_binding_names=("first", "second"))
+                initial_name_to_value = {"first": 1, "second": 2}
+                if asynchronous:
+                    await execute_step_async(definition, name_to_value=initial_name_to_value, write_binding=saved_name_to_value.__setitem__)
+                else:
+                    execute_step(definition, name_to_value=initial_name_to_value, write_binding=saved_name_to_value.__setitem__)
+                assert saved_name_to_value == expected_binding_name_to_value
+
+
+asyncio.run(main())
+print("automatic=2; empty=0; explicit=1; composed=2; sync_and_async=True")
+```
+<!-- /runnable-example:output_selection -->
 
 Terminal delivery happens after writeback or failure, with the usual `StepCompleted`, `StepRaised`, `StepFailed`, or `StepInterrupted` record.
 Notification failure propagates without replaying execution or notification and without undoing completed writes.
@@ -110,7 +160,7 @@ definition = StepDefinition(
     binding_name_to_type={"summary": str},
     source_location="trusted_summary:1",
 )
-executor = ScriptedExecutor([pass_response(summary="The trial passed.")])
+executor = ScriptedExecutor([pass_response(binding_name_to_value={"summary": "The trial passed."})])
 with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
     outcome = execute_step(definition, name_to_value=name_to_value, write_binding=name_to_value.__setitem__)
 
@@ -162,7 +212,7 @@ async def main() -> None:
         binding_name_to_type={"selected": "Selection"},
         source_location="trusted_selection:1",
     )
-    executor = ScriptedExecutor([pass_response(selected={"label": "alpha"})])
+    executor = ScriptedExecutor([pass_response(binding_name_to_value={"selected": {"label": "alpha"}})])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
         outcome = await execute_step_async(definition, name_to_value={"candidates": ["alpha", "beta"], "Selection": Selection}, write_binding=write)
     assert outcome == Pass()

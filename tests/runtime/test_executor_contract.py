@@ -23,6 +23,7 @@ def test_candidate_preserves_live_values_and_freezes_mapping_membership() -> Non
     values: list[object] = [record]
     proposed = {"value": values}
     candidate = StepCandidate(outcome=Return(record), binding_name_to_value=proposed)
+    assert not isinstance(candidate.binding_name_to_value, nh.UnsetType)
     proposed["value"] = []
     assert candidate.binding_name_to_value["value"] is values
     assert isinstance(candidate.outcome, Return) and candidate.outcome.value is record
@@ -122,7 +123,9 @@ def test_custom_candidate_cannot_propose_undeclared_outputs(outcome: Pass | Rais
     with (
         nh.run(Executor()),
         nh.scope(oversight=Oversight(inspect_step_commit=lambda commit: commits.append(commit) or Accept())),
-        pytest.raises(nh.ExecutionError, match="Undeclared output.*unexpected"),
+        pytest.raises(
+            nh.ExecutionError, match="Raise cannot include output bindings" if isinstance(outcome, Raise) else "Undeclared output.*unexpected"
+        ),
     ):
         workflow()
     assert commits == []
@@ -223,6 +226,7 @@ def test_finalization_reads_current_python_output_associations(nonlocal_output: 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             nh.runtime.eval_expression(request.step_context, "change_value()" if nonlocal_output else "_change_global_output()")
+            assert request.snapshot_output_bindings() == {"value" if nonlocal_output else "_global_output": 7}
             return StepCandidate(outcome=Pass())
 
     @nh.natural_function
@@ -258,6 +262,7 @@ def test_deleted_python_output_is_not_resurrected_at_finalization() -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             nh.runtime.eval_expression(request.step_context, "delete_value()")
+            assert request.snapshot_output_bindings() == {}
             return StepCandidate(outcome=Pass())
 
     @nh.natural_function

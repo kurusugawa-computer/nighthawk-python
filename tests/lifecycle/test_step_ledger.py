@@ -228,7 +228,7 @@ def test_success_ledger_preserves_identity_and_validates_once() -> None:
         """
         return value
 
-    executor = ScriptedExecutor([StepResponse(bindings={"value": original})])
+    executor = ScriptedExecutor([StepResponse(binding_name_to_value={"value": original})])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(ledger.finished)):
         assert workflow() is original
     event = next(iter(ledger.execution_id_to_event.values()))

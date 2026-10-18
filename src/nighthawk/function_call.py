@@ -10,8 +10,9 @@ from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
+from .composition import UNSET, UnsetType
 from .configuration import ModelSelection
 from .errors import NighthawkError
 from .natural.definition import NaturalFunctionDefinition
@@ -31,6 +32,7 @@ class FunctionCall:
     model_selection: ModelSelection | None
 
 
+@runtime_checkable
 class FunctionCallHandler(Protocol):
     """Application-owned admission, grouping, and observation of function calls."""
 
@@ -48,9 +50,19 @@ _call: ContextVar[FunctionCall | None] = ContextVar("nighthawk_function_call", d
 
 
 @contextmanager
-def function_call_scope(handler: FunctionCallHandler | None) -> Iterator[None]:
-    """Install or explicitly clear interception independently of executor runs."""
-    token = _handler.set(handler)
+def function_call_scope(handler: FunctionCallHandler | None | UnsetType = UNSET) -> Iterator[None]:
+    """Inherit, replace, or clear interception independently of executor runs.
+
+    Omission or UNSET inherits; None clears; a handler replaces the current one.
+    Invalid handlers fail before context installation.
+    """
+    if (
+        not isinstance(handler, UnsetType)
+        and handler is not None
+        and (not isinstance(handler, FunctionCallHandler) or not callable(handler.invoke) or not callable(handler.invoke_async))
+    ):
+        raise TypeError("handler must implement FunctionCallHandler, be None, or be UNSET")
+    token = _handler.set(_handler.get() if isinstance(handler, UnsetType) else handler)
     try:
         yield
     finally:

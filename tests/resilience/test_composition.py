@@ -172,7 +172,7 @@ class TestCompositionWithNaturalFunction:
             responses=[
                 raise_response("transient error 1"),
                 raise_response("transient error 2"),
-                pass_response(result="classified"),
+                pass_response(binding_name_to_value={"result": "classified"}),
             ]
         )
 
@@ -250,7 +250,7 @@ class TestBudgetWithNaturalFunction:
     def test_budget_with_natural_function(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(result="classified"),
+                pass_response(binding_name_to_value={"result": "classified"}),
             ]
         )
 

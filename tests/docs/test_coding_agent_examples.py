@@ -23,7 +23,7 @@ def guide_examples(tmp_path: Path) -> list[Path]:
 
 
 def test_working_template(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    executor = ScriptedExecutor(responses=[pass_response(label="bug")])
+    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"label": "bug"})])
 
     def build_executor(*, configuration: nh.StepExecutorConfiguration) -> ScriptedExecutor:
         assert isinstance(configuration, nh.StepExecutorConfiguration)

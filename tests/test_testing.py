@@ -33,7 +33,7 @@ class ReviewVerdict(BaseModel):
 
 class TestScriptedExecutorPassOutcome:
     def test_returns_binding_value(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="hello")])
+        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "hello"})])
 
         @nh.natural_function
         def greet(name: str) -> str:
@@ -49,7 +49,7 @@ class TestScriptedExecutorPassOutcome:
         assert output == "hello"
 
     def test_records_call_metadata(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="")])
+        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
 
         @nh.natural_function
         def process(query: str) -> str:
@@ -71,7 +71,7 @@ class TestScriptedExecutorPassOutcome:
         assert call.step_globals["_module_level_helper"] is _module_level_helper
 
     def test_filters_globals_to_referenced_names_only(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="")])
+        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
 
         @nh.natural_function
         def minimal(text: str) -> str:
@@ -89,7 +89,9 @@ class TestScriptedExecutorPassOutcome:
         assert "__name__" not in call.step_globals
 
     def test_default_response_used_when_responses_exhausted(self) -> None:
-        executor = ScriptedExecutor([pass_response(result="first")], default_response=pass_response(result="default"))
+        executor = ScriptedExecutor(
+            [pass_response(binding_name_to_value={"result": "first"})], default_response=pass_response(binding_name_to_value={"result": "default"})
+        )
 
         @nh.natural_function
         def f() -> str:
@@ -109,8 +111,8 @@ class TestScriptedExecutorPassOutcome:
     def test_multiple_responses_consumed_in_order(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(result="first"),
-                pass_response(result="second"),
+                pass_response(binding_name_to_value={"result": "first"}),
+                pass_response(binding_name_to_value={"result": "second"}),
             ]
         )
 
@@ -130,7 +132,7 @@ class TestScriptedExecutorPassOutcome:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response_count", [0, 1])
 async def test_unexpected_invocation_fails_without_committing_outputs(execute: Callable[..., Awaitable[StepResult]], response_count: int) -> None:
-    executor = ScriptedExecutor([pass_response(value=7) for _ in range(response_count)])
+    executor = ScriptedExecutor([pass_response(binding_name_to_value={"value": 7}) for _ in range(response_count)])
     definition = StepDefinition("Set <:value>.", output_binding_names=("value",), binding_name_to_type={"value": int})
     writes: list[tuple[str, object]] = []
 
@@ -245,7 +247,7 @@ class TestScriptedExecutorReturnOutcome:
     def test_early_return(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                return_response("early", result="early"),
+                return_response("early", binding_name_to_value={"result": "early"}),
             ]
         )
 
@@ -268,7 +270,7 @@ class TestScriptedExecutorReturnOutcome:
 @pytest.mark.parametrize("value", ["effects.append('evaluated')", None, object()])
 async def test_resolved_return_preserves_values_without_expression_effects(callback: bool, asynchronous: bool, value: object) -> None:
     effects: list[str] = []
-    response = return_response(value, value="independent output")
+    response = return_response(value, binding_name_to_value={"value": "independent output"})
     executor = CallbackExecutor(lambda call: response) if callback else ScriptedExecutor([response])
 
     @nh.natural_function
@@ -335,7 +337,7 @@ class TestScriptedExecutorBindingFiltering:
     def test_rejects_extra_bindings_not_in_declared_outputs(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(result="hello", extra="invalid"),
+                pass_response(binding_name_to_value={"result": "hello", "extra": "invalid"}),
             ]
         )
 
@@ -356,8 +358,8 @@ class TestCallbackExecutor:
         def handler(call: StepCall) -> StepResponse:
             text = call.step_locals.get("text", "")
             if isinstance(text, str) and "urgent" in text:
-                return pass_response(category="high")
-            return pass_response(category="normal")
+                return pass_response(binding_name_to_value={"category": "high"})
+            return pass_response(binding_name_to_value={"category": "normal"})
 
         executor = CallbackExecutor(handler)
 
@@ -378,7 +380,7 @@ class TestCallbackExecutor:
 
         def handler(call: StepCall) -> StepResponse:
             received_locals.update(call.step_locals)
-            return pass_response(result="ok")
+            return pass_response(binding_name_to_value={"result": "ok"})
 
         executor = CallbackExecutor(handler)
 
@@ -396,7 +398,7 @@ class TestCallbackExecutor:
         assert received_locals["data"] == "input_value"
 
     def test_records_calls(self) -> None:
-        executor = CallbackExecutor(lambda _: pass_response(result=""))
+        executor = CallbackExecutor(lambda _: pass_response(binding_name_to_value={"result": ""}))
 
         @nh.natural_function
         def f() -> str:
@@ -415,9 +417,9 @@ class TestCallbackExecutor:
 
 class TestConvenienceFactories:
     def test_pass_response_creates_pass_outcome(self) -> None:
-        response = pass_response(x=1, y="two")
+        response = pass_response(binding_name_to_value={"x": 1, "y": "two"})
         assert response.outcome.kind == "pass"
-        assert response.bindings == {"x": 1, "y": "two"}
+        assert response.binding_name_to_value == {"x": 1, "y": "two"}
 
     def test_raise_response_creates_raise_outcome(self) -> None:
         response = raise_response("boom", error_type=ValueError)
@@ -430,28 +432,28 @@ class TestConvenienceFactories:
         assert response.outcome.error_type is Exception  # type: ignore[union-attr]
 
     def test_return_response_creates_return_outcome(self) -> None:
-        response = return_response(42, result=42)
+        response = return_response(42, binding_name_to_value={"result": 42})
         assert response.outcome.kind == "return"
         assert response.outcome.value == 42  # type: ignore[union-attr]
-        assert response.bindings == {"result": 42}
+        assert response.binding_name_to_value == {"result": 42}
 
     def test_break_response_creates_break_outcome(self) -> None:
         response = break_response()
         assert response.outcome.kind == "break"
-        assert response.bindings == {}
+        assert response.binding_name_to_value is nh.UNSET
 
     def test_continue_response_creates_continue_outcome(self) -> None:
         response = continue_response()
         assert response.outcome.kind == "continue"
-        assert response.bindings == {}
+        assert response.binding_name_to_value is nh.UNSET
 
 
 class TestCarryPatternMock:
     def test_carry_visible_in_step_locals_across_steps(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(result=10),
-                pass_response(result=20),
+                pass_response(binding_name_to_value={"result": 10}),
+                pass_response(binding_name_to_value={"result": 20}),
             ]
         )
 
@@ -484,8 +486,8 @@ class TestCarryPatternMock:
     def test_carry_branching_produces_independent_copies(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(result=105),
-                pass_response(result=200),
+                pass_response(binding_name_to_value={"result": 105}),
+                pass_response(binding_name_to_value={"result": 200}),
             ]
         )
 
@@ -516,7 +518,7 @@ class TestCarryPatternMock:
             carry = call.step_locals.get("carry")
             if isinstance(carry, list):
                 carry.append(f"step_{len(carry) + 1}")
-            return pass_response(result=(len(carry) if isinstance(carry, list) else 0) * 10)
+            return pass_response(binding_name_to_value={"result": (len(carry) if isinstance(carry, list) else 0) * 10})
 
         executor = CallbackExecutor(handler)
 
@@ -567,7 +569,7 @@ class TestFStringNaturalBlock:
 
         def handler(call: StepCall) -> StepResponse:
             received_programs.append(call.natural_program)
-            return pass_response(result="ok")
+            return pass_response(binding_name_to_value={"result": "ok"})
 
         executor = CallbackExecutor(handler)
 

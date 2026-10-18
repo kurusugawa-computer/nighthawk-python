@@ -43,8 +43,12 @@ async def test_partial_write_failure_records_only_completed_writes(execute: Call
 async def test_final_raise_discards_invalid_output_and_delivers_before_propagating(execute: Callable[..., Awaitable[StepResult]]) -> None:
     events: list[StepFinished] = []
     saved_name_to_value: dict[str, object] = {}
-    candidate = StepCandidate(outcome=Raise("domain error", error_type=LookupError), binding_name_to_value={"result": "invalid"})
-    with nh.run(InspectingExecutor(lambda request: candidate)), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(LookupError):
+
+    def candidate(request):
+        request.step_context.record_assignment("result", "invalid")
+        return StepCandidate(outcome=Raise("domain error", error_type=LookupError))
+
+    with nh.run(InspectingExecutor(candidate)), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(LookupError):
         await execute(
             StepDefinition("raise", output_binding_names=("result",)), name_to_value={"result": 0}, write_binding=saved_name_to_value.__setitem__
         )
@@ -63,7 +67,7 @@ async def test_terminal_failure_preserves_successful_write_without_redelivery(ex
         raise RuntimeError("notification failed")
 
     with (
-        nh.run(ScriptedExecutor([pass_response(result=7)])),
+        nh.run(ScriptedExecutor([pass_response(binding_name_to_value={"result": 7})])),
         nh.scope(lifecycle=StepLifecycle(finished)),
         pytest.raises(RuntimeError, match="notification failed"),
     ):
@@ -93,7 +97,7 @@ async def test_cancellation_during_write_joins_cleanup_and_records_completed_wri
         assert cleaned_up.is_set()
         events.append(event)
 
-    with nh.run(ScriptedExecutor([pass_response(first=1, second=2)])), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(ScriptedExecutor([pass_response(binding_name_to_value={"first": 1, "second": 2})])), nh.scope(lifecycle=StepLifecycle(finished)):
         task = asyncio.create_task(
             execute_step_async(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)
         )

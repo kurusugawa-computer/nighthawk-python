@@ -13,8 +13,8 @@ def helper(query: str) -> list[str]:
 
 class TestExecutorSelectionPatterns:
     def test_can_mix_fast_and_deep_executors_in_one_run(self) -> None:
-        fast_executor = ScriptedExecutor(responses=[pass_response(label="bug")])
-        deep_executor = ScriptedExecutor(responses=[pass_response(report="detailed analysis")])
+        fast_executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"label": "bug"})])
+        deep_executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"report": "detailed analysis"})])
 
         @nh.natural_function
         def classify_ticket(text: str) -> str:
@@ -59,7 +59,7 @@ class TestStateBoundaryPatterns:
             carry = call.step_locals["carry"]
             assert isinstance(carry, list)
             carry.append("step_1 summary")
-            return pass_response(result=10)
+            return pass_response(binding_name_to_value={"result": 10})
 
         executor = CallbackExecutor(handler)
 
@@ -80,7 +80,7 @@ class TestStateBoundaryPatterns:
         assert carry == ["step_1 summary"]
 
     def test_precisely_typed_callable_parameter_remains_visible_in_locals(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(result="item summary")])
+        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "item summary"})])
 
         @nh.natural_function
         def summarize(query: str, fetch_data: Callable[[str], list[str]]) -> str:
@@ -101,7 +101,7 @@ class TestStateBoundaryPatterns:
 
 class TestControlFlowPatterns:
     def test_post_block_logic_pattern_allows_python_validation(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(summary="concise summary")])
+        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"summary": "concise summary"})])
 
         @nh.natural_function
         def summarize(text: str) -> str:

@@ -5,6 +5,30 @@
 This page covers scope composition, model selection, function admission, request observation, cleanup, and execution identity, alongside prompt and context settings.
 Scope composition is shared across backends; model-selection support and request visibility depend on the active executor.
 
+## Omission, explicit values, and composition
+
+`nh.UNSET` represents an omitted argument wherever the signature accepts it.
+The receiving API defines the default behavior: scopes inherit, runs create fresh resources, and rewrites retain their current field.
+Ordinary values select the complete value, including empty dictionaries and sequences.
+`None` is accepted only where the parameter has a meaningful absent or disabled value.
+Composition uses `nh.Merge(...)` or `nh.Extend(...)` in their supported scope fields.
+
+| Argument | Omitted or `UNSET` | Explicit empty value | `None` |
+|---|---|---|---|
+| `scope(task_references=...)` | Inherit | `{}` removes scoped references | Invalid |
+| `scope(tools=...)` and other sequence fields | Inherit | `[]` empties the scoped collection | Invalid |
+| `scope(oversight=...)` or `scope(lifecycle=...)` | Inherit | Not a collection | Disable hooks |
+| `function_call_scope(handler)` | Inherit | Not a collection | Disable interception |
+| `run(..., run_id=...)` | Generate a fresh Id | `""` is invalid | Invalid |
+| `run(..., usage_meter=...)` | Create a fresh meter | Not a collection | Invalid |
+| Optional executor `configuration` | Create a fresh default configuration | Raw dictionaries are invalid | Invalid |
+
+Configuration value objects resolve their own field defaults and do not retain `UNSET` as unresolved configuration.
+`StepExecutorConfiguration.model_settings` defaults to `{}` and rejects `None` and `UNSET`.
+An empty settings mapping adds no overrides; model-owned defaults still apply.
+Use `StepExecutorConfiguration.model_validate(data)` to parse raw configuration data before supplying it to an executor.
+Mappings are shallow snapshots: their values retain identity, and `{"a": None}` supplies a value rather than deleting a key.
+
 ## Scoped overrides with `nh.scope()`
 
 Use `nh.scope()` to override execution settings within an existing run. Each scope generates a new `scope_id` while keeping the current `run_id`.
@@ -40,7 +64,7 @@ Composition is selected by each supplied value:
 - `nh.Extend(sequence)` appends prompt fragments, tools, or capabilities.
 - `nh.Merge(mapping)` merges task references, rejecting a same-name value unless it is the identical Python object.
 
-`oversight` and `lifecycle` accept `None`, which clears their hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Resolution errors leave the parent context intact.
+`oversight` and `lifecycle` accept `None`, which clears their hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Invalid argument shapes fail before model resolution; resolution errors leave the parent context intact.
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
@@ -575,6 +599,8 @@ print("models=A,B,A; unapproved_model_refused=True")
 ### Whole-function admission
 
 A host installs `nh.function_call_scope(handler)` independently of an executor run.
+Omission or `nh.UNSET` inherits the enclosing handler, `None` disables interception, and a handler replaces it.
+Handlers must provide callable `invoke` and `invoke_async` methods; invalid inputs fail before installing the scope.
 Its `invoke(call, proceed)` method calls `proceed()` synchronously; `invoke_async(call, proceed)` awaits `proceed()`.
 Refuse by raising before continuation entry.
 Returning without completing the continuation is a contract error.
@@ -658,7 +684,9 @@ with nh.function_call_scope(admission):
     assert admission.completed_calls == []
 
     admission.allowed = True
-    executor = ScriptedExecutor(responses=[pass_response(summary="First"), pass_response(summary="Second")])
+    executor = ScriptedExecutor(
+        responses=[pass_response(binding_name_to_value={"summary": "First"}), pass_response(binding_name_to_value={"summary": "Second"})]
+    )
     with nh.run(executor):
         assert summarize("First document") == "First"
         assert asyncio.run(summarize_async("Second document")) == "Second"

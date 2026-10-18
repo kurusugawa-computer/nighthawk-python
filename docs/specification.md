@@ -91,7 +91,7 @@ Each block starts a fresh model interaction; neither a parent's working values n
         - Examples: `openai-responses:gpt-5.6-luna`, `openai-responses:gpt-5.6-terra`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-    - `model_settings`: optional model/backend settings. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict). Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
+    - `model_settings`: model/backend overrides, defaulting to an empty dictionary. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict); rejects `None` and `UNSET`. An empty dictionary adds no overrides and preserves model-owned defaults. Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
     - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
     - `prompts`: prompt templates used for execution.
         - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
@@ -260,12 +260,14 @@ This controls implicit name availability, not Python introspection, object acces
 `step_locals` holds captured Python working values and tracked assignment bookkeeping; it is not the complete effective environment.
 Use `environment.resolve`, its source views, or the common runtime operations for name lookup.
 Generated assignments write validated, selected `<:name>` values back to the corresponding Python locals, cells, or globals after finalization.
-All initialized declared outputs are considered, even without tracked assignment or mutation marks.
+Automatic output selection considers all initialized declared outputs, even without tracked assignment or mutation marks.
+An explicit candidate mapping selects exactly its entries without supplementing other initialized outputs.
 Every block starts a fresh model interaction; Python values and scoped task references carry deliberately shared context between blocks.
 
 #### 8.1.1. Environment views and lookup
 
 All environment views have string keys and shallow read-only structure.
+Optional constructor mappings default to empty and reject `None`; explicitly supplied mappings are copied without testing their truthiness.
 
 | Member | Meaning |
 | --- | --- |
@@ -610,10 +612,10 @@ Semantics of `nh_assign`:
 
 Commit and mutation notes:
 
-- Commit selection is controlled only by `<:name>` bindings.
-- `<:name>` selects which top-level names are committed from `step_locals` into Python locals at Natural block boundaries.
+- Only names declared by `<:name>` bindings are eligible for commit.
+- An executor may select a complete subset through `StepCandidate.binding_name_to_value`; omission or `UNSET` selects initialized declared outputs from the environment.
 - Tracked assignment and mutation marks support working-state bookkeeping; they do not select which initialized outputs receive final validation.
-- All initialized declared outputs receive final validation, with explicit candidate proposals taking precedence; an initial `Raise` discards pending writes.
+- All selected outputs receive final validation; an initial `Raise` discards pending working values and rejects explicit nonempty output mappings.
 - Mutation of a shared object is immediately visible and does not require a generated name assignment.
 - Objects outside declared outputs are not recursively validated at finalization.
 
@@ -813,13 +815,13 @@ Nighthawk does not own workspace filesystem concerns (such as include resolution
 Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When empty (default `""`), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:
 
-- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | None = None, usage_meter: UsageMeter | UnsetType = UNSET)`
+- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | UnsetType = UNSET, usage_meter: UsageMeter | UnsetType = UNSET)`
     - Validates the synchronous or asynchronous executor protocol before installing context; invalid executors raise `TypeError` and leave any parent context intact.
     - Replaces the current context step executor with the provided step executor.
     - Installs `usage_meter` as the run-level meter when given; omission or `UNSET` creates a fresh `UsageMeter`; `None` is invalid.
     - Resets scoped tools, capabilities, and task references to empty, oversight and lifecycle to `None`, and context construction to `DefaultContextBuilder` for the run.
     - Generates a new `ExecutionReference` for the duration of the `with`.
-    - Uses provided `run_id` when given; otherwise generates a new `run_id` (trace root).
+    - Uses a provided nonempty string `run_id`; omission or `UNSET` generates a new `run_id` (trace root). `None`, empty strings, and other types are invalid before context installation.
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
 - `nighthawk.scope(...) -> Iterator[StepExecutor]`
@@ -829,7 +831,7 @@ API:
     - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
     - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
-    - Resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
+    - Validate every argument shape before delegated model resolution, and resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
     - Preserve the active step Id and source location inside a nested scope, so a child step remains correlated with the execution that called it.
     - `context_builder` replaces prompt construction; omission or `UNSET` inherits. See Section 8.2.4.
     - Explicit executor replacements use the same protocol validation as `run()`; invalid executors raise `TypeError` before context installation.
@@ -840,6 +842,12 @@ API:
     - Get the current step executor. Raises if unset.
 - `nighthawk.get_execution_reference() -> ExecutionReference`
     - Get the current runtime execution identity. Raises if unset.
+
+`UNSET` represents an omitted argument where the signature accepts it; the receiving API defines the default behavior.
+Ordinary values select the complete value, including empty collections; `None` requires an explicitly supported absent or disabled value.
+`Merge` and `Extend` request composition only in their supported scope fields.
+Configuration value objects resolve their own defaults rather than storing unresolved `UNSET` fields.
+These rules apply to the argument itself: `{"name": None}` supplies a value and never deletes the key.
 
 All run-scoped public getters, including `get_usage_meter()`, `get_oversight()`, and `get_lifecycle()`, require an active run and raise `NighthawkError` outside it. The meter is non-optional; oversight and lifecycle may be `None` inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Private optional meter discovery preserves budget behavior outside runs.
 
@@ -883,10 +891,14 @@ Semantics:
 
 ### 10.2. Host commit boundary
 
-Every executor returns a resolved `StepCandidate` containing an outcome and a shallow read-only `binding_name_to_value` mapping.
+Every executor returns a `StepCandidate` containing a resolved outcome and a `binding_name_to_value` selection, either `UNSET` or a shallow read-only mapping.
 The runner requires this contract for custom executors and managed agents alike.
-It checks allowed kinds, rejects undeclared output proposals, validates all initialized declared outputs with explicit proposals taking precedence, and independently validates a resolved return value.
-Unbound outputs without proposals remain absent; a later Python read raises normally.
+It checks allowed kinds, rejects undeclared selected output names, validates the selected output values, and independently validates a resolved return value.
+Omission or `UNSET` selects initialized declared outputs at finalization, preferring tracked assignments over current Python values, including live globals and cells.
+A supplied mapping is the complete selection: `{}` selects no writes, and a nonempty mapping receives no supplementation from the working environment.
+Omitted names in an explicit selection receive neither final value validation nor writeback.
+The standard agent executor omits its selection, preserving automatic validation of initialized declared outputs.
+Unbound outputs and task-only references remain absent from automatic selection; a later Python read of an unbound output raises normally.
 Assignment validation and finalization are separate boundaries and may each run validators.
 For example, an initialized `Annotated[str, AfterValidator(str.strip)]` output containing `" draft "` finalizes as `"draft"` even without model assignment.
 Selected output contracts are fixed at step entry.
@@ -895,7 +907,8 @@ A custom executor cannot change finalization contracts by replacing context meta
 `StepCommit.outcome` uses the frozen Pydantic models exported from `nighthawk.runtime`: `Pass()`, `Return(value)`, `Break()`, `Continue()`, and `Raise(message, error_type=Exception)`.
 `Return(None)` is distinct from `Pass()`.
 `Raise.error_type` is a resolved exception class, validated before inspection.
-An initial Raise discards pending outputs without validating their values, while still rejecting undeclared output names.
+An initial Raise selects no writes and discards pending working values without validating them.
+`StepCandidate` and `Rewrite` both reject a resolved Raise paired with an explicit nonempty output mapping at construction.
 Its commit mapping is empty.
 
 `Oversight.inspect_step_commit` receives one validated commit and may return its decision directly or asynchronously.
@@ -1086,6 +1099,10 @@ The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the unio
 `StepRequest` holds `execution_reference`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `binding_name_to_type`, `return_annotation`, `allowed_step_kinds`, and `allow_awaitable_return`.
 Its context owns the environment; no second namespace is assembled for the executor.
 Both methods return `StepCandidate(outcome=..., binding_name_to_value=...)` containing live values.
+`StepRequest.snapshot_output_bindings()` returns an independent dictionary of initialized declared outputs in declaration order using the automatic-selection rule.
+It preserves value identity, excludes unbound outputs and task-only references, and neither validates nor writes values.
+The snapshot fixes name associations when called; an omitted candidate selection reads them later, during finalization.
+Compose selected snapshots and replacements with ordinary Python dictionaries when needed.
 Finalization remains mandatory, as specified in Section 10.2.
 
 ### 14.2. AgentStepExecutor
@@ -1096,9 +1113,12 @@ Factory methods:
 
 - `AgentStepExecutor.from_configuration(*, configuration: StepExecutorConfiguration) -> AgentStepExecutor`
     - Creates an executor with a managed agent built from the configuration.
-- `AgentStepExecutor.from_agent(*, agent: StepExecutionAgent, configuration: StepExecutorConfiguration | None = None) -> AgentStepExecutor`
+- `AgentStepExecutor.from_agent(*, agent: StepExecutionAgent, configuration: StepExecutorConfiguration | UnsetType = UNSET) -> AgentStepExecutor`
     - Creates an executor wrapping an existing agent. The agent is not managed (not rebuilt on configuration changes).
-    - Configuration defaults to `StepExecutorConfiguration()` when not provided.
+    - Omission or `UNSET` creates a fresh `StepExecutorConfiguration()`. `None` and raw dictionaries are invalid before agent construction; parse data explicitly with `StepExecutorConfiguration.model_validate(data)`.
+
+The direct constructor uses the same optional configuration contract.
+`from_configuration` requires an explicit `StepExecutorConfiguration` object.
 
 Instance attributes:
 
@@ -1196,7 +1216,10 @@ The contracts above own these semantics; this table collects review cases for im
 | Existing closure cell is rebound before the Natural call, or an explicit global/nonlocal output is committed | Observe the latest cell value, or update the declared module/cell destination; do not use a captured value copy. |
 | `nh_eval` receives `(value := 8)` | Reject the named assignment and direct the model to tracked assignment. |
 | `nh_assign` targets an existing Python name not declared as an output, and its right-hand side calls a helper | Reject before invoking the helper; a new eligible temporary name is allowed. |
-| An initialized declared output is never assigned by the executor | Include it in non-Raise finalization; its validators may transform it or reject it. |
+| An initialized declared output is never assigned and the candidate omits its selection | Include it in non-Raise finalization; its validators may transform it or reject it. |
+| An executor explicitly supplies `{}` as its output selection | No final output value validation or writeback; do not supplement initial or tracked values. |
+| An executor supplies only one of several initialized outputs | Validate and inspect only that output; leave the other caller associations unchanged by writeback. |
+| A host composes `request.snapshot_output_bindings()` with replacements | Use those complete associations; later environment rebindings do not alter the explicit selection. |
 | Local `a: int = 0` is declared as `<:a>` and receives `'invalid'` through `nh_assign` | Reject at assignment validation and retain its previous working value; final output validation remains a separate boundary. |
 | A Pydantic model with `validate_assignment=True` has `confidence: float = Field(ge=0.0, le=1.0)` and receives `2.0` | Reject through the model-aware assignment path; the plain `float` annotation alone is insufficient. |
 | A dotted target is an annotated ordinary object attribute or a model field with assignment validation disabled | Report an unsupported target and recommend a Python helper. Report any earlier right-hand-side effects. |
@@ -1210,6 +1233,7 @@ The contracts above own these semantics; this table collects review cases for im
 | Host rewrites the output mapping to `{}` | No caller name assignments; workspace values are not automatically added back. |
 | Host supplies `Rewrite(outcome=Return(None))` | Validate `None` against the return contract; retain the candidate's output mapping. |
 | Initial `Raise` has invalid pending output values | Skip final validation of discarded values and inspect an empty output mapping. |
+| A candidate or rewrite explicitly pairs `Raise` with nonempty outputs | Reject the combination at construction. |
 | Host rewrites `Raise` to `Pass` without replacement outputs | Commit no outputs; discarded values remain absent from the candidate. |
 | Model evaluates `inspect(some.function)` | Evaluate the argument normally, describe the resulting value, and deliver one evaluation-operation record. |
 | A supported explicit output annotation cannot be resolved | Fail preparation; do not infer a weaker contract from its initial value. |
@@ -1287,6 +1311,8 @@ Core supplies optional call interception, exact transformation correspondence, c
 ### Whole-function interception and exact definitions
 
 `nh.function_call_scope(handler)` installs a synchronous/asynchronous `FunctionCallHandler` independently of `nh.run()`.
+Omission or `UNSET` inherits, `None` clears interception, and an explicit handler replaces it.
+Validate both callable handler methods before installing context; invalid values leave the parent handler intact.
 `None` explicitly clears it until scope exit.
 A handler can accept a call and establish a run before invoking `proceed()`.
 Core reads the current handler when the wrapper executes, so aliases created before installation still enter the boundary.

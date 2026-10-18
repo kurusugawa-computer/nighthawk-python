@@ -334,7 +334,7 @@ def _validate_step_executor(step_executor: object) -> None:
 def run(
     step_executor: StepExecutor,
     *,
-    run_id: str | None = None,
+    run_id: str | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
 ) -> Iterator[None]:
     """Start an execution run with the given step executor.
@@ -344,8 +344,8 @@ def run(
 
     Args:
         step_executor: The step executor to use for Natural block execution.
-        run_id: Optional identifier for the run. If not provided, a ULID is
-            generated automatically.
+        run_id: Nonempty identifier for the run. Omission or UNSET generates
+            a fresh ULID. None and empty strings are invalid.
         usage_meter: Optional meter that accumulates LLM usage for the run.
             If not provided, a fresh :class:`UsageMeter` is created.
 
@@ -356,8 +356,12 @@ def run(
         TypeError: If the executor does not implement either execution protocol or the usage meter is invalid.
     """
     _validate_step_executor(step_executor)
+    if not isinstance(run_id, (str, UnsetType)):
+        raise TypeError("run_id must be a nonempty string or UNSET")
+    if isinstance(run_id, str) and not run_id:
+        raise ValueError("run_id must not be empty")
     execution_reference = ExecutionReference(
-        run_id=run_id or generate_ulid(),
+        run_id=generate_ulid() if isinstance(run_id, UnsetType) else run_id,
         scope_id=generate_ulid(),
         step_execution_id=None,
         source_location=None,
@@ -456,8 +460,6 @@ def scope(
         raise TypeError("lifecycle must be StepLifecycle, None, or UNSET")
     next_step_executor = current_step_executor if isinstance(step_executor, UnsetType) else step_executor
     selection = _model_selection(model, step_executor_configuration)
-    if selection is not None:
-        next_step_executor = _resolve_model_selection(next_step_executor, selection)
     next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid())
     next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
     next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight
@@ -481,6 +483,9 @@ def scope(
     elif not isinstance(tools, UnsetType):
         entries = _compose_sequence((), tools)
         next_tools = resolve_scoped_tools((), entries)
+
+    if selection is not None:
+        next_step_executor = _resolve_model_selection(next_step_executor, selection)
 
     step_executor_token = _step_executor_var.set(next_step_executor)
     execution_reference_token = _execution_reference_var.set(next_execution_reference)

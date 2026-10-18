@@ -187,7 +187,10 @@ async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[...,
         await asyncio.sleep(0)
         order.append(name)
 
-    with nh.run(ScriptedExecutor([pass_response(first=1, second=2)])), nh.scope(lifecycle=StepLifecycle(lambda event: order.append("finished"))):
+    with (
+        nh.run(ScriptedExecutor([pass_response(binding_name_to_value={"first": 1, "second": 2})])),
+        nh.scope(lifecycle=StepLifecycle(lambda event: order.append("finished"))),
+    ):
         await execute(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)
     assert order == ["first", "second", "finished"]
 

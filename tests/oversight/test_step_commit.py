@@ -430,9 +430,8 @@ def test_reference_views_preserve_validated_values_and_freeze_only_mapping() -> 
 def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(request, RaiseStepOutcome(kind="raise", raise_message="failed"), {"result": "invalid"})
-            )
+            request.step_context.record_assignment("result", "invalid")
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, RaiseStepOutcome(kind="raise", raise_message="failed")))
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         assert commit.binding_name_to_value == {}
@@ -544,13 +543,11 @@ def test_undeclared_rewrite_and_raise_with_writes_are_rejected() -> None:
         {"step_outcome": {"kind": "pass"}, "bindings": {}}
         """
 
-    for decision in (
-        nh.oversight.Rewrite(binding_name_to_value={"unknown": 1}),
-        nh.oversight.Rewrite(outcome=nh.oversight.Raise("failed"), binding_name_to_value={"unknown": 1}),
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(binding_name_to_value={"unknown": 1}))),
+        pytest.raises(nh.NighthawkError),
     ):
-        with (
-            nh.run(StubExecutor()),
-            nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit, decision=decision: decision)),
-            pytest.raises(nh.NighthawkError),
-        ):
-            workflow()
+        workflow()
+    with pytest.raises(ValueError, match="Raise cannot include output bindings"):
+        nh.oversight.Rewrite(outcome=nh.oversight.Raise("failed"), binding_name_to_value={"unknown": 1})

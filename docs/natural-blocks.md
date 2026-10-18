@@ -150,7 +150,8 @@ An explicit output annotation determines its validation contract at block entry.
 Without one, the runtime infers the initialized value's type, except for `None` and a plain `object()`; otherwise the output is unconstrained.
 Annotate collections explicitly when element types matter: `findings: list[Finding] = []` retains its element contract, while `findings = []` selects only `list`.
 An unresolved explicit annotation fails preparation instead of silently falling back to inference.
-All bound declared outputs receive final validation even if the model never assigns them; an initial Raise discards pending outputs.
+The standard executor selects all bound declared outputs for final validation even if the model never assigns them; an initial Raise discards pending outputs.
+Custom executors may supply an explicit complete output selection; see [output selection](executors.md#output-selection).
 Output contracts constrain values, not the factual correctness of a judgment.
 See [binding contracts](specification.md#7-natural-dsl-bindings) for annotation acquisition and global/nonlocal writeback.
 

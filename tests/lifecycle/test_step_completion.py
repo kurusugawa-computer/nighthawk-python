@@ -342,7 +342,7 @@ def test_partial_assignment_failure_reports_only_completed_writes() -> None:
     module = ast.fix_missing_locations(ast.Module(body=statements[:1], type_ignores=[]))
     namespace = Namespace(__nighthawk_runner__=Proxy())
     with (
-        nh.run(ScriptedExecutor([StepResponse(bindings={"first": 1, "second": 2})])),
+        nh.run(ScriptedExecutor([StepResponse(binding_name_to_value={"first": 1, "second": 2})])),
         nh.scope(lifecycle=StepLifecycle(events.append)),
         pytest.raises(nh.ExecutionError, match="assignment failed"),
     ):

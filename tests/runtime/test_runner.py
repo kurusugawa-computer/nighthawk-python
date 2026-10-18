@@ -119,7 +119,7 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_async_natural_function_updates_output_binding_via_docstring_step():
-    with nh.run(ScriptedExecutor(default_response=pass_response(result=11))):
+    with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": 11}))):
 
         @nh.natural_function
         async def f(x: int) -> int:
@@ -135,7 +135,7 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_pass_step_finalize_coerces_committed_model_binding() -> None:
-    with nh.run(ScriptedExecutor(default_response=pass_response(result={"child": {"value": "7"}}))):
+    with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": {"child": {"value": "7"}}}))):
 
         @nh.natural_function
         def f() -> str:
@@ -151,7 +151,9 @@ def test_pass_step_finalize_coerces_committed_model_binding() -> None:
 
 
 def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
-    with nh.run(ScriptedExecutor(default_response=pass_response(result={"proposals": [{"kind": "approve", "score": "5"}]}))):
+    with nh.run(
+        ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": {"proposals": [{"kind": "approve", "score": "5"}]}}))
+    ):
 
         @nh.natural_function
         def f() -> str:
@@ -167,7 +169,7 @@ def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
 
 
 def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
-    with nh.run(ScriptedExecutor(default_response=pass_response(decision={"should_update": True, "next_plan": None}))):
+    with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"decision": {"should_update": True, "next_plan": None}}))):
 
         @nh.natural_function
         def f() -> int:
@@ -318,7 +320,10 @@ def test_compound_annotation_rejects_out_of_range_value() -> None:
         """
         return result
 
-    with nh.run(ScriptedExecutor(default_response=pass_response(result=11))), pytest.raises(nh.ExecutionError, match="less than or equal to 10"):
+    with (
+        nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": 11}))),
+        pytest.raises(nh.ExecutionError, match="less than or equal to 10"),
+    ):
         workflow()
 
 

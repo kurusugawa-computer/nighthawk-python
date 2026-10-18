@@ -38,7 +38,7 @@ async def evaluate_compiled_expression(
     allow_awaitable_result: bool = True,
     override_name_to_value: Mapping[str, object] | None = None,
 ) -> object:
-    namespace = step_context.environment.expression_namespace(override_name_to_value)
+    namespace = step_context.environment.expression_namespace({} if override_name_to_value is None else override_name_to_value)
     try:
         value = eval(compiled, namespace, namespace)
         if inspect.isawaitable(value):

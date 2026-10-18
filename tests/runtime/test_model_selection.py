@@ -97,7 +97,7 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
         with nh.scope(step_executor_configuration=replacement) as replaced:
             assert isinstance(replaced, PreservingExecutor)
             assert replaced.executor.configuration is replacement
-            assert replaced.executor.configuration.model_settings is None
+            assert replaced.executor.configuration.model_settings == {}
     assert selected == [second]
 
 
@@ -151,7 +151,7 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
         assert isinstance(active, nh.AgentStepExecutor)
         assert active.configuration is replacement
         assert active.configuration.model is second
-        assert active.configuration.model_settings is None
+        assert active.configuration.model_settings == {}
         assert active.configuration.user_prompt_suffix_fragments == ()
 
     @nh.natural_function(step_executor_configuration=replacement)

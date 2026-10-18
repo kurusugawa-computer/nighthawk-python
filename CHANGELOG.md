@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Breaking: `StepCandidate` and testing responses distinguish omitted output selection (`UNSET`, select initialized declared outputs) from an explicit complete mapping (`{}`, no writes). Added `StepRequest.snapshot_output_bindings()` for explicit Python composition. `StepResponse` and response factories use `binding_name_to_value`; keyword-expanded output arguments are removed.
+- Breaking: `Raise` rejects explicit nonempty output mappings in candidates and rewrites. Standard agent executors retain automatic output selection and final validation.
+- Breaking: optional executor configuration and run identifiers use `UNSET`; invalid `None`, raw configuration dictionaries, and empty run identifiers fail at entry. Environment mappings reject `None`, and `StepExecutorConfiguration.model_settings` defaults to an empty dictionary.
+- `function_call_scope` now supports omission or `UNSET` for inheritance, `None` for clearing, and validated handler replacement.
 - Breaking: Natural functions no longer copy parent working values into their environment. Share values through Python arguments, globals, closures, or explicit `scope(task_references=...)`; ordinary Python helpers can select references from the active environment. Removed the `parent` name source and `parent_name_to_value` from `StepEnvironment` and test-call records.
 - Documented explicit working-state snapshots, scoped reference replacement and clearing, and synchronous/asynchronous host sharing examples. Updated composition examples to declare their dependencies.
 
 ### Fixed
 
+- Falsey nonempty mappings and configuration objects retain their explicit values; invalid scope arguments fail before model resolution.
 - Nested configuration and sharing scopes preserve the active step identity so child executions retain their parent-step correlation.
 
 ## [0.15.0]

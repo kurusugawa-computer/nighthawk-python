@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 from pydantic import TypeAdapter
 
+from nighthawk.composition import UNSET, UnsetType
 from nighthawk.errors import ExecutionError
 from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
@@ -79,7 +80,7 @@ class InspectingExecutor:
 @dataclass
 class ModelResponseExecutor:
     outcome: StepOutcome
-    binding_name_to_value: dict[str, object] = field(default_factory=dict)
+    binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         return run_coroutine_synchronously(lambda: self.run_step_async(request=request))

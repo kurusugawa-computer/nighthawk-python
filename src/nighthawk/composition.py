@@ -1,4 +1,4 @@
-"""Explicit inheritance and composition operations for execution scopes."""
+"""Omitted arguments and explicit collection composition operations."""
 
 from __future__ import annotations
 
@@ -30,7 +30,11 @@ class UnsetType:
 
 
 UNSET = UnsetType()
-"""Inherit the enclosing scope value; also marks omitted rewrite fields."""
+"""An omitted argument: use the receiving API's documented default behavior.
+
+Scopes inherit, runs create fresh resources, and rewrites retain the current field.
+Ordinary values, including empty collections, remain explicit values.
+"""
 
 
 @dataclass(frozen=True, init=False)

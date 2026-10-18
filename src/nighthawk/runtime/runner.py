@@ -24,7 +24,6 @@ from ..oversight import (
 )
 from .async_bridge import run_coroutine_synchronously
 from .bindings import BindingValidationError, require_declared_binding_names, validate_output_bindings
-from .environment import UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
 from .interruption import chain_cleanup_errors
 from .notifications import await_notification
@@ -45,7 +44,7 @@ from .step_context import (
 )
 from .step_contract import StepKind
 from .step_executor import AsyncStepExecutor, StepExecutor, SyncStepExecutor
-from .step_request import StepCandidate, StepRequest
+from .step_request import StepCandidate, StepRequest, _snapshot_output_bindings
 from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
@@ -301,22 +300,19 @@ class Runner:
         *,
         preparation: PreparedStep,
         step_outcome: StepResult,
-        bindings: dict[str, object],
+        bindings: Mapping[str, object] | UnsetType,
     ) -> dict[str, object]:
-        require_declared_binding_names(bindings, preparation.output_binding_names)
+        if not isinstance(bindings, UnsetType):
+            require_declared_binding_names(bindings, preparation.output_binding_names)
         if step_outcome.kind == "raise":
+            if not isinstance(bindings, UnsetType) and len(bindings):
+                raise NighthawkError("StepCandidate Raise cannot include output bindings")
             return {}
-        environment = preparation.step_context.environment
-        selected_binding_name_to_value: dict[str, object] = {}
-        for name in preparation.output_binding_names:
-            if name in environment.step_name_to_value:
-                selected_binding_name_to_value[name] = environment.step_name_to_value[name]
-                continue
-            try:
-                selected_binding_name_to_value[name] = environment.python_name_to_value[name]
-            except (KeyError, UnboundEnvironmentNameError):
-                continue
-        selected_binding_name_to_value.update(bindings)
+        selected_binding_name_to_value = (
+            _snapshot_output_bindings(preparation.step_context.environment, preparation.output_binding_names)
+            if isinstance(bindings, UnsetType)
+            else dict(bindings)
+        )
         return self._validate_and_coerce_output_bindings(preparation=preparation, bindings=selected_binding_name_to_value)
 
     async def _apply_step_oversight_if_needed(
@@ -403,14 +399,13 @@ class Runner:
         if not isinstance(candidate, StepCandidate):
             raise ExecutionError("Step executor must return StepCandidate")
         step_outcome = candidate.outcome
-        bindings = dict(candidate.binding_name_to_value)
         self.attempted_outcome = step_outcome
         self._require_allowed_step_kind(step_outcome=step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
         self.failure_stage = "binding_validation"
         validated_bindings = self._validate_bindings_for_outcome(
             preparation=preparation,
             step_outcome=step_outcome,
-            bindings=bindings,
+            bindings=candidate.binding_name_to_value,
         )
         self.validated_binding_name_to_value = validated_bindings
         outcome = step_outcome
