@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0]
+
 ### Changed
 
 - Breaking: `StepCandidate` and testing responses distinguish omitted output selection (`UNSET`, select initialized declared outputs) from an explicit complete mapping (`{}`, no writes). Added `StepRequest.snapshot_output_bindings()` for explicit Python composition. `StepResponse` and response factories use `binding_name_to_value`; keyword-expanded output arguments are removed.
@@ -362,7 +364,8 @@ Invalid initial results fail before oversight; use resilience retries to recover
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.12.0...v0.13.0
