@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
 
       # setup-uv publishes no floating major tag since v8, so pin an exact release.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.13"
           # Same dependency set and cache key as "test (3.13)". Only that job
@@ -32,16 +32,16 @@ jobs:
           save-cache: false
 
       - name: Install dependencies
-        run: uv sync --all-extras --all-groups
+        run: uv sync --locked --all-extras --all-groups
 
       - name: Format check
-        run: uv run ruff format --check .
+        run: uv run --no-sync ruff format --check .
 
       - name: Lint
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Type check
-        run: uv run pyright
+        run: uv run --no-sync pyright
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -49,23 +49,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13", "3.14"]
-    continue-on-error: ${{ matrix.python-version != '3.13' }}
+        python-version: ["3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       # Sole writer of the per-Python-version dependency cache.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --all-groups
+        run: uv sync --locked --all-extras --all-groups
 
       - name: Run tests
-        run: uv run pytest -q
+        run: uv run --no-sync pytest -q
 
   build:
     name: Build distribution
@@ -78,7 +77,7 @@ jobs:
 
       # Keep packaging and its fresh installation check independent of the
       # source test job's dependency cache.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: false
 
@@ -87,14 +86,15 @@ jobs:
 
       - name: Verify documented examples against the installed wheel
         run: |
-          uv sync --all-groups
+          uv sync --locked --all-groups
           uv venv "$RUNNER_TEMP/nighthawk-distribution"
           uv pip install --python "$RUNNER_TEMP/nighthawk-distribution/bin/python" dist/*.whl
           NIGHTHAWK_DISTRIBUTION_PYTHON="$RUNNER_TEMP/nighthawk-distribution/bin/python" \
-            uv run pytest -q tests/docs/test_runtime_examples.py
+            uv run --no-sync pytest -q tests/docs/test_runtime_examples.py
 
       - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: python-package-distributions
           path: dist/
+          if-no-files-found: error
