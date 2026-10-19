@@ -11,7 +11,7 @@ from pydantic_ai.models.function import FunctionModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepLifecycle
-from nighthawk.oversight import Accept, Oversight, OversightRejectedError, Reject
+from nighthawk.oversight import AbortStep, Accept, Oversight, StepAbortedError
 from nighthawk.runtime import OperationFinished, OperationRequest, StepRequest
 from tests.support.contexts import new_context
 
@@ -39,12 +39,12 @@ def test_ordered_model_batch_remains_ordered_across_async_capability_hooks(rejec
             await asyncio.sleep(0.02)
         return args
 
-    async def inspect(request: OperationRequest) -> Accept | Reject:
+    async def inspect(request: OperationRequest) -> Accept | AbortStep:
         value = request.argument_name_to_value["value"]
         assert isinstance(value, int)
         inspected.append(value)
         await asyncio.sleep(0)
-        return Reject("first call denied") if reject_first and value == 1 else Accept()
+        return AbortStep("first call denied") if reject_first and value == 1 else Accept()
 
     async def model_function(messages: Any, information: Any) -> ModelResponse:
         nonlocal model_calls
@@ -74,11 +74,11 @@ def test_ordered_model_batch_remains_ordered_across_async_capability_hooks(rejec
         ),
     ):
         if reject_first:
-            with pytest.raises(OversightRejectedError, match="first call denied"):
+            with pytest.raises(StepAbortedError, match="first call denied"):
                 asyncio.run(executor.run_step_async(request=request))
             assert effects == []
             assert inspected == [1]
-            assert [event.status for event in finished] == ["rejected"]
+            assert [event.status for event in finished] == ["aborted"]
             assert model_calls == 1
             assert validation_and_body == ["validate:1"]
         else:

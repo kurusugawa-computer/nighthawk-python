@@ -23,6 +23,9 @@ class ToolError(TypedDict):
     guidance: str | None
     phase: NotRequired[str]
     evaluation_started: NotRequired[bool]
+    operation_id: NotRequired[str]
+    step_execution_id: NotRequired[str | None]
+    status: NotRequired[Literal["rejected", "skipped"]]
 
 
 class ToolOutcome(TypedDict):
@@ -77,6 +80,9 @@ def render_tool_handler_result_preview_text(
 ) -> str:
     if tool_handler_result["kind"] == "tool_result":
         tool_outcome = tool_handler_result["tool_outcome"]
+        if tool_outcome["error"] is not None and tool_outcome["error"].get("status") in ("rejected", "skipped"):
+            # Control feedback is not a lossy value preview. Preserve its identity and host-supplied reason.
+            return json.dumps({"value": None, "error": tool_outcome["error"]}, ensure_ascii=False)
         return render_tool_result_json_text(
             value=tool_outcome["payload"],
             error=tool_outcome["error"],

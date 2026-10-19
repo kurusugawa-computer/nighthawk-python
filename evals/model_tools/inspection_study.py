@@ -33,7 +33,7 @@ from pydantic_ai.usage import UsageLimits
 import nighthawk as nh
 from nighthawk.json_renderer import render_json_text
 from nighthawk.lifecycle import StepLifecycle
-from nighthawk.oversight import Accept, Oversight, OversightRejectedError, Reject
+from nighthawk.oversight import AbortStep, Accept, Oversight, StepAbortedError
 from nighthawk.runtime import ContextRequest, OperationFinished, StepEnvironment, StepRequest, inspect_value
 from nighthawk.runtime.environment import EnvironmentSource
 from nighthawk.runtime.expression import compile_expression, evaluate_compiled_expression
@@ -134,7 +134,7 @@ class TrialState:
         # Its Python helper reads that shared object, not an implicit parent environment.
         self.workspace.step_name_to_value = self.context.environment.snapshot_working_state()
 
-    async def inspect_operation(self, request: Any) -> Accept | Reject:
+    async def inspect_operation(self, request: Any) -> Accept | AbortStep:
         expression = request.expression or ""
         called_names = set()
         try:
@@ -155,7 +155,7 @@ class TrialState:
                     called_names.add(selected.args[0].value)
         if "rejected_action" in called_names:
             self.approvals.append("rejected")
-            return Reject("Synthetic host policy rejected this action")
+            return AbortStep("Synthetic host policy rejected this action")
         if "approved_action" in called_names:
             await asyncio.sleep(0)
             self.approvals.append("approved")
@@ -429,7 +429,7 @@ async def run_trial(
                     value = TypeAdapter(state.workspace.output_name_to_type["result"]).validate_python(
                         state.context.environment.step_name_to_value["result"]
                     )
-    except OversightRejectedError:
+    except StepAbortedError:
         outcome = "rejected"
     except Exception as exception:
         exception_type = type(exception).__name__

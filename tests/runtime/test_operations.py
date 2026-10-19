@@ -10,7 +10,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle, StepRaised
-from nighthawk.oversight import Accept, Oversight, OversightRejectedError, Reject
+from nighthawk.oversight import AbortStep, Accept, Oversight, StepAbortedError
 from nighthawk.runtime import (
     OperationError,
     OperationFinished,
@@ -94,11 +94,11 @@ def test_rejection_stops_queued_operations_and_preserves_completed_effects() -> 
         inspected = asyncio.Event()
         release = asyncio.Event()
 
-        async def inspect(request: OperationRequest) -> Accept | Reject:
+        async def inspect(request: OperationRequest) -> Accept | AbortStep:
             if request.expression == "effects.append('reject')":
                 inspected.set()
                 await release.wait()
-                return Reject("denied")
+                return AbortStep("denied")
             return Accept()
 
         with nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=finished.append)):
@@ -109,12 +109,12 @@ def test_rejection_stops_queued_operations_and_preserves_completed_effects() -> 
             await asyncio.sleep(0)
             release.set()
             outcomes = await asyncio.gather(first, second, return_exceptions=True)
-            assert all(isinstance(outcome, OversightRejectedError) for outcome in outcomes)
+            assert all(isinstance(outcome, StepAbortedError) for outcome in outcomes)
 
     with nh.run(StubExecutor()):
         asyncio.run(execute())
     assert effects == ["approved"]
-    assert [event.status for event in finished] == ["succeeded", "rejected"]
+    assert [event.status for event in finished] == ["succeeded", "aborted"]
     assert not finished[-1].evaluation_started
 
 
@@ -298,7 +298,7 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
 
     class Executor:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-            with pytest.raises(OversightRejectedError):
+            with pytest.raises(StepAbortedError):
                 await eval_expression_async(request.step_context, "7")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": 9})
 
@@ -312,8 +312,8 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
 
     with (
         nh.run(Executor()),
-        nh.scope(oversight=Oversight(inspect_operation=lambda request: Reject("denied")), lifecycle=StepLifecycle(terminal.append)),
-        pytest.raises(OversightRejectedError),
+        nh.scope(oversight=Oversight(inspect_operation=lambda request: AbortStep("denied")), lifecycle=StepLifecycle(terminal.append)),
+        pytest.raises(StepAbortedError),
     ):
         asyncio.run(workflow())
     assert len(terminal) == 1 and isinstance(terminal[0], StepFailed)

@@ -18,8 +18,8 @@ def _reference_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, obje
     return MappingProxyType(dict(name_to_value))
 
 
-class OversightRejectedError(NighthawkError):
-    """Raised when oversight explicitly rejects an execution boundary."""
+class StepAbortedError(NighthawkError):
+    """An explicit host decision ending the inspected step, without rollback."""
 
     def __init__(self, reason: str, *, subject: str = "operation") -> None:
         self.reason = reason
@@ -75,8 +75,28 @@ class Accept:
 
 
 @dataclass(frozen=True)
-class Reject:
+class RejectOperation:
+    """Do not execute this operation; expose reason and guidance to its caller or model."""
+
     reason: str
+    guidance: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("RejectOperation requires a nonempty string reason")
+        if self.guidance is not None and not isinstance(self.guidance, str):
+            raise TypeError("RejectOperation guidance must be a string or None")
+
+
+@dataclass(frozen=True)
+class AbortStep:
+    """End the current step; catching its exception cannot authorize completion."""
+
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("AbortStep requires a nonempty string reason")
 
 
 @dataclass(frozen=True)
@@ -106,12 +126,13 @@ class Rewrite:
             raise ValueError("Rewrite Raise cannot include output bindings")
 
 
-type StepCommitDecision = Accept | Reject | Rewrite
+type OperationDecision = Accept | RejectOperation | AbortStep
+type StepCommitDecision = Accept | Rewrite | AbortStep
 
 
 @dataclass(frozen=True)
 class Oversight:
-    inspect_operation: Callable[[OperationRequest], Accept | Reject | Awaitable[Accept | Reject]] | None = None
+    inspect_operation: Callable[[OperationRequest], OperationDecision | Awaitable[OperationDecision]] | None = None
     inspect_step_commit: Callable[[StepCommit], StepCommitDecision | Awaitable[StepCommitDecision]] | None = None
 
 
@@ -153,9 +174,11 @@ __all__ = [
     "Raise",
     "StepResult",
     "Accept",
+    "AbortStep",
+    "OperationDecision",
     "Oversight",
-    "OversightRejectedError",
-    "Reject",
+    "RejectOperation",
+    "StepAbortedError",
     "Rewrite",
     "StepCommit",
     "StepCommitDecision",

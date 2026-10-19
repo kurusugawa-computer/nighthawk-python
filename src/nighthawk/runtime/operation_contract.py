@@ -11,8 +11,9 @@ from ..errors import NighthawkError
 from ..tools.contracts import ToolBoundaryError
 from .execution_reference import ExecutionReference
 
-type OperationKind = Literal["evaluation", "assignment", "return", "native_tool", "inspection"]
+type OperationKind = Literal["evaluation", "assignment", "return", "native_tool", "inspection", "output"]
 type OperationPhase = Literal["admission", "inspection", "evaluation", "target_resolution", "validation", "assignment", "completed"]
+type OperationStatus = Literal["succeeded", "rejected", "aborted", "skipped", "failed", "interrupted"]
 
 
 class OperationRequest(BaseModel):
@@ -34,13 +35,43 @@ class OperationRequest(BaseModel):
 
 
 @dataclass(frozen=True)
+class OperationRejection:
+    """One refused operation and the host's deliberately model-visible feedback."""
+
+    request: OperationRequest
+    reason: str
+    guidance: str | None = None
+
+    def model_feedback(self) -> dict[str, object]:
+        """Expose correlation and feedback, without serializing live arguments or diagnostics."""
+        return {
+            "status": "rejected",
+            "operation_id": self.request.operation_id,
+            "step_execution_id": self.request.execution_reference.step_execution_id,
+            "reason": self.reason,
+            "guidance": self.guidance,
+            "evaluation_started": False,
+        }
+
+
+class OperationRejectedError(NighthawkError):
+    """The operation did not start; the same step can perform a different operation."""
+
+    def __init__(self, rejection: OperationRejection) -> None:
+        self.rejection = rejection
+        super().__init__(rejection.reason)
+
+
+@dataclass(frozen=True)
 class OperationFinished:
     request: OperationRequest
-    status: Literal["succeeded", "rejected", "failed", "interrupted"]
+    status: OperationStatus
     phase: OperationPhase
     evaluation_started: bool
     value: object = None
     original_exception: BaseException | None = None
+    rejection: OperationRejection | None = None
+    blocked_by_operation_id: str | None = None
 
 
 class OperationError(ToolBoundaryError):

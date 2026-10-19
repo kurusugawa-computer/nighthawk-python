@@ -330,15 +330,15 @@ import nighthawk as nh
 from nighthawk.runtime import OperationRequest, Return
 
 
-def inspect_operation(operation: OperationRequest) -> nh.oversight.Accept | nh.oversight.Reject:
+def inspect_operation(operation: OperationRequest) -> nh.oversight.OperationDecision:
     if operation.kind == "native_tool" and operation.tool_name == "delete_file":
-        return nh.oversight.Reject("Deletion requires host approval.")
+        return nh.oversight.RejectOperation("Deletion is unavailable.", "Choose an operation that preserves the file.")
     return nh.oversight.Accept()
 
 
 def inspect_step_commit(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
     if isinstance(commit.outcome, Return) and commit.outcome.value is None:
-        return nh.oversight.Reject("A result is required.")
+        return nh.oversight.AbortStep("A result is required.")
     return nh.oversight.Accept()
 
 
@@ -350,7 +350,9 @@ oversight = nh.oversight.Oversight(
 
 Install the configuration with `nh.scope(oversight=oversight)` inside an active run.
 Operation inspection precedes execution and cannot undo earlier side effects.
-Rejection terminates the step; it is not a model retry.
+`RejectOperation` returns deliberate feedback without executing that operation, allowing another choice within the same step.
+`AbortStep` terminates the current step; catching its exception cannot make that step succeed.
+The [operation feedback guide](operation-feedback.md) covers synchronous/asynchronous hooks, custom executors, model correction, and backend limits.
 Commit inspection receives resolved `Pass`, `Return`, `Break`, `Continue`, or `Raise` outcomes and validated output values.
 `Raise.error_type` is an exception class; its constructor runs only after inspection.
 

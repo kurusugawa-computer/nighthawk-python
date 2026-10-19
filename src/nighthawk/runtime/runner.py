@@ -15,10 +15,10 @@ from ..composition import UnsetType
 from ..errors import ExecutionError, NighthawkError
 from ..lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised, StepStarted
 from ..oversight import (
+    AbortStep,
     Accept,
-    OversightRejectedError,
-    Reject,
     Rewrite,
+    StepAbortedError,
     StepCommit,
     record_oversight_decision,
 )
@@ -103,6 +103,7 @@ class Runner:
         self.attempted_outcome: StepResult | None = None
         self.outcome: StepResult | None = None
         self.raise_exception: BaseException | None = None
+        self.commit_abort: StepAbortedError | None = None
         self.context_stack = ExitStack()
 
     @contextmanager
@@ -130,19 +131,25 @@ class Runner:
             self.failure_stage = self.preparation.step_context.operation_failure_stage
         finished: StepFinished
         if isinstance(original_exception, Exception):
-            rejection = original_exception if isinstance(original_exception, OversightRejectedError) else None
+            operation_abort = self.preparation.step_context.operation_abort if self.preparation is not None else None
+            rejection = (
+                original_exception
+                if isinstance(original_exception, StepAbortedError)
+                and (original_exception is operation_abort or original_exception is self.commit_abort)
+                else None
+            )
             finished = StepFailed(
                 execution_reference=execution_reference,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_step_kinds=self.preparation_state.allowed_step_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
-                failure_stage="oversight_rejection" if rejection else self.failure_stage,
+                failure_stage="oversight_abort" if rejection else self.failure_stage,
                 original_exception=original_exception,
                 attempted_outcome=self.attempted_outcome,
                 validated_binding_name_to_value=self.validated_binding_name_to_value,
                 inspection_subject=cast(typing.Literal["step_commit", "operation"], rejection.subject) if rejection else None,
-                rejection_reason=rejection.reason if rejection else None,
+                abort_reason=rejection.reason if rejection else None,
             )
             _record_internal_step_failure(step_span=step_span, exception=original_exception)
         elif original_exception is not None:
@@ -201,6 +208,8 @@ class Runner:
                 raise delivery_exception from original_exception
             raise
         if isinstance(finished, StepFailed):
+            if finished.original_exception is self.commit_abort:
+                raise finished.original_exception
             if self.preparation is not None and self.preparation.step_context.operation_failure is finished.original_exception:
                 raise finished.original_exception
             raise ExecutionError(finished, description=self.failure_description) from finished.original_exception
@@ -341,14 +350,15 @@ class Runner:
         if inspect.isawaitable(decision):
             decision = await decision
 
-        if isinstance(decision, Reject):
+        if isinstance(decision, AbortStep):
             record_oversight_decision(
                 subject="step_commit",
-                verdict="reject",
+                verdict="abort",
                 execution_reference=execution_reference,
                 reason=decision.reason,
             )
-            raise OversightRejectedError(decision.reason, subject="step_commit")
+            self.commit_abort = StepAbortedError(decision.reason, subject="step_commit")
+            raise self.commit_abort
 
         if isinstance(decision, Accept):
             record_oversight_decision(
@@ -360,7 +370,7 @@ class Runner:
             return outcome, bindings
 
         if not isinstance(decision, Rewrite):
-            raise NighthawkError("Oversight inspect_step_commit must return Accept, Reject, or Rewrite")
+            raise NighthawkError("Oversight inspect_step_commit must return Accept, Rewrite, or AbortStep")
 
         record_oversight_decision(
             subject="step_commit",

@@ -15,6 +15,7 @@ from .execution_reference import ExecutionReference
 
 if TYPE_CHECKING:
     from ..lifecycle import FailureStage
+    from ..oversight import StepAbortedError
 
 _MISSING: object = object()
 """Sentinel indicating a name could not be resolved. Distinct from None."""
@@ -72,6 +73,7 @@ class StepContext:
     operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     operation_failure: BaseException | None = field(default=None, init=False, repr=False)
     operation_failure_stage: FailureStage | None = field(default=None, init=False)
+    operation_abort: StepAbortedError | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self, task_name_to_value: Mapping[str, object]) -> None:
         self.binding_name_to_type = MappingProxyType(dict(self.binding_name_to_type))

@@ -6,7 +6,7 @@ from typing import Any
 import anyio
 import pytest
 import tiktoken
-from mcp.types import AudioContent, ImageContent, TextContent
+from mcp.types import AudioContent, ContentBlock, ImageContent, TextContent
 from opentelemetry import context as otel_context
 from pydantic_ai import RunContext
 from pydantic_ai._run_context import set_current_run_context
@@ -69,13 +69,15 @@ def test_mcp_boundary_low_level_mcp_server_returns_text_content_and_propagates_o
         assert otel_context.get_value("nighthawk.test") == "1"
         return _test_tool_handler_result(payload=2)
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="stub_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=parent_otel_context,
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="stub_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=parent_otel_context,
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert isinstance(content, list)
@@ -118,13 +120,15 @@ def test_mcp_boundary_low_level_mcp_server_keeps_empty_success_transport_empty(
         assert arguments == {"x": 1}
         return _test_tool_handler_result(payload=payload)
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="empty_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="empty_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert isinstance(content, list)
@@ -173,13 +177,15 @@ def test_mcp_boundary_low_level_mcp_server_preserves_non_empty_falsy_success_tex
         assert arguments == {"x": 1}
         return _test_tool_handler_result(payload=payload)
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="falsy_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="falsy_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 1
@@ -221,13 +227,15 @@ def test_mcp_boundary_low_level_mcp_server_returns_rich_image_content() -> None:
             payload=BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png", identifier="img1"),
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="image_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="image_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 3
@@ -272,13 +280,15 @@ def test_mcp_boundary_low_level_mcp_server_projects_image_url_to_text_content() 
             payload=ImageUrl(url="https://example.com/cat.png", identifier="img1"),
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="image_url_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="image_url_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 3
@@ -329,13 +339,15 @@ def test_mcp_boundary_preserves_tool_result_item_order_for_mixed_text_and_images
             ],
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="mixed_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="mixed_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 4
@@ -391,13 +403,15 @@ def test_mcp_boundary_preserves_tool_result_item_order_for_text_content_and_imag
             ],
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="mixed_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="mixed_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 4
@@ -448,13 +462,15 @@ def test_mcp_boundary_keeps_non_multimodal_structured_list_as_single_text_block(
             payload=["before", {"x": 1}, "after"],
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="structured_list_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="structured_list_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 1
@@ -473,13 +489,15 @@ def test_mcp_boundary_replaces_uploaded_file_with_text_fallback() -> None:
             ],
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="uploaded_file_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="uploaded_file_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 3
@@ -502,13 +520,15 @@ def test_mcp_boundary_projects_non_image_audio_binary_to_text_content() -> None:
             ),
         )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="tool/name with space",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="tool/name with space",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     text_block_list = [item for item in content if isinstance(item, TextContent)]
@@ -537,7 +557,7 @@ def test_mcp_boundary_low_level_mcp_server_falls_back_to_preview_when_rich_proje
         def set_attribute(self, name: str, value: object) -> None:
             self.attribute_name_to_value[name] = value
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -546,13 +566,15 @@ def test_mcp_boundary_low_level_mcp_server_falls_back_to_preview_when_rich_proje
     monkeypatch.setattr(mcp_boundary_module, "_tool_outcome_to_mcp_content_list", raise_projection_failure)
     monkeypatch.setattr(mcp_boundary_module, "get_current_span", lambda: recording_span)
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="projection_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="projection_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+            )
+        ).content
 
     with caplog.at_level("WARNING", logger="nighthawk"):
         content = anyio.run(call_boundary)
@@ -579,7 +601,7 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
 
     captured: dict[str, object] = {}
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -606,14 +628,16 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
         json_renderer_style="strict",
     )
 
-    async def call_boundary() -> list[object]:
-        return await call_tool_for_low_level_mcp_server(
-            tool_name="projection_tool",
-            arguments={"x": 1},
-            tool_handler=tool_handler,
-            parent_otel_context=otel_context.get_current(),
-            rendering_policy=rendering_policy,
-        )
+    async def call_boundary() -> list[ContentBlock]:
+        return (
+            await call_tool_for_low_level_mcp_server(
+                tool_name="projection_tool",
+                arguments={"x": 1},
+                tool_handler=tool_handler,
+                parent_otel_context=otel_context.get_current(),
+                rendering_policy=rendering_policy,
+            )
+        ).content
 
     content = anyio.run(call_boundary)
     assert len(content) == 1
@@ -634,7 +658,7 @@ def test_mcp_boundary_claude_code_falls_back_to_preview_when_rich_projection_rai
         assert arguments == {"x": 1}
         return _test_tool_handler_result(payload=2)
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -662,7 +686,7 @@ def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
 
     captured: dict[str, object] = {}
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[object]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")

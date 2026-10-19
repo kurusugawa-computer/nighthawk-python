@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Protocol, cast, runtime_checkable
 
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, RunContext, StructuredDict
 from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.messages import UserContent
 from pydantic_ai.models import ModelRequestContext
+from pydantic_ai.output import OutputContext
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.function import FunctionToolset
 
@@ -20,6 +23,8 @@ from ..tools.execution import ToolResultWrapperToolset
 from .async_bridge import run_coroutine_synchronously
 from .context import DefaultContextBuilder, build_context_content, build_context_request
 from .model_candidate import resolve_model_candidate
+from .model_response import get_response_rejection, record_response_rejection
+from .operation_contract import OperationRejectedError
 from .prompt import build_system_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
 from .scoping import (
     _context_builder_var,
@@ -54,8 +59,43 @@ class _OperationFailureGuard(AbstractCapability[StepContext]):
         # Pydantic AI can classify a body ValidationError as retryable or let a capability supply a substitute result.
         # Neither clears our operation failure, and neither may cause another model request for this step.
         if ctx.deps.operation_failure is not None:
-            raise ctx.deps.operation_failure
+            raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
         return request_context
+
+
+class _StepOutputBoundary(_OperationFailureGuard):
+    """Resolve candidate operations while the agent can still receive feedback."""
+
+    def __init__(self, request: StepRequest) -> None:
+        super().__init__()
+        self.request = request
+
+    async def after_output_process(self, ctx: RunContext[StepContext], *, output_context: OutputContext, output: Any) -> Any:
+        if ctx.partial_output:
+            return output
+        if ctx.deps.operation_failure is not None:
+            raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
+        rejection = get_response_rejection(ctx.deps)
+        if rejection is not None:
+            raise ModelRetry(json.dumps(rejection.model_feedback(), ensure_ascii=False))
+        try:
+            return await resolve_model_candidate(self.request, _parse_step_outcome(output))
+        except OperationRejectedError as exception:
+            if ctx.deps.operation_failure is not None:
+                raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
+            record_response_rejection(ctx.deps, exception.rejection)
+            raise ModelRetry(json.dumps(exception.rejection.model_feedback(), ensure_ascii=False)) from exception
+
+
+def _parse_step_outcome(raw_output: Any) -> StepOutcome:
+    try:
+        if isinstance(raw_output, StepFinalResult):
+            return raw_output.result
+        if isinstance(raw_output, dict) and "result" in raw_output:
+            return TypeAdapter(StepOutcome).validate_python(raw_output["result"])
+        return TypeAdapter(StepOutcome).validate_python(raw_output)
+    except Exception as exception:
+        raise ExecutionError(f"Step produced invalid step outcome: {exception}") from exception
 
 
 @runtime_checkable
@@ -236,7 +276,7 @@ class AgentStepExecutor:
         self,
         *,
         user_prompt: tuple[UserContent, ...],
-        step_context: StepContext,
+        request: StepRequest,
         toolset: ToolResultWrapperToolset,
         structured_output_type: object,
     ) -> Any:
@@ -246,12 +286,13 @@ class AgentStepExecutor:
         normalized_user_prompt: str | tuple[UserContent, ...] = (
             user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
         )
-        capabilities = [*_current_capabilities(), _OperationFailureGuard(), ToolAdmissionCapability()]
+        # First means last for after_output_process: resolve the output after application hooks.
+        capabilities = [_StepOutputBoundary(request), *_current_capabilities(), ToolAdmissionCapability()]
 
         if isinstance(self.agent, AsyncExecutionAgent):
             return await self.agent.run(
                 normalized_user_prompt,
-                deps=step_context,
+                deps=request.step_context,
                 toolsets=[toolset],
                 output_type=structured_output_type,
                 capabilities=capabilities,
@@ -260,7 +301,7 @@ class AgentStepExecutor:
         if isinstance(self.agent, SyncExecutionAgent):
             return self.agent.run_sync(
                 normalized_user_prompt,
-                deps=step_context,
+                deps=request.step_context,
                 toolsets=[toolset],
                 output_type=structured_output_type,
                 capabilities=capabilities,
@@ -313,20 +354,6 @@ class AgentStepExecutor:
 
         return structured_output_type, step_system_prompt_fragment
 
-    def _parse_agent_result(
-        self,
-        result: Any,
-    ) -> StepOutcome:
-        try:
-            raw_output = result.output
-            if isinstance(raw_output, StepFinalResult):
-                return raw_output.result
-            if isinstance(raw_output, dict) and "result" in raw_output:
-                return TypeAdapter(StepOutcome).validate_python(raw_output["result"])
-            return TypeAdapter(StepOutcome).validate_python(raw_output)
-        except Exception as e:
-            raise ExecutionError(f"Step produced invalid step outcome: {e}") from e
-
     async def run_step_async(
         self,
         *,
@@ -361,7 +388,7 @@ class AgentStepExecutor:
             try:
                 result = await self._run_agent(
                     user_prompt=user_prompt,
-                    step_context=step_context,
+                    request=request,
                     toolset=toolset,
                     structured_output_type=structured_output_type,
                 )
@@ -373,14 +400,16 @@ class AgentStepExecutor:
                 raise failure from failure.__cause__
 
         if step_context.operation_failure is not None:
-            raise step_context.operation_failure
+            raise step_context.operation_failure from step_context.operation_failure.__cause__
 
         usage_meter = get_usage_meter()
         if usage_meter is not None and hasattr(result, "usage"):
             usage_meter.record(result.usage, kind="step")
 
-        step_outcome = self._parse_agent_result(result)
-        return await resolve_model_candidate(request, step_outcome)
+        if isinstance(result.output, StepCandidate):
+            return result.output
+        # Protocol agents that do not execute Pydantic AI capabilities own their model loop.
+        return await resolve_model_candidate(request, _parse_step_outcome(result.output))
 
     def run_step(
         self,

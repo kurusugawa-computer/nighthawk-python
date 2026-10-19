@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -9,6 +10,7 @@ from pydantic import TypeAdapter
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
 from pydantic_ai.messages import CachePoint, TextContent, ToolReturnContent, is_multi_modal_content
+from pydantic_ai.tools import ToolDenied
 from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_core import PydanticSerializationError
@@ -16,7 +18,8 @@ from pydantic_core import PydanticSerializationError
 from ..json_renderer import project_discovery_value, to_jsonable_value
 from ..runtime._user_content import is_top_level_sequence_payload
 from ..runtime.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
-from ..runtime.operation_contract import OperationError
+from ..runtime.model_response import record_response_rejection
+from ..runtime.operation_contract import OperationError, OperationRejectedError, OperationRejection
 from ..runtime.operations import OperationExecution, execute_operation_async, new_operation_request
 from ..runtime.step_context import StepContext
 from .contracts import ErrorKind, ToolError, ToolOutcome
@@ -77,20 +80,45 @@ def _normalize_tool_failure(*, kind: ErrorKind, message: str, guidance: str | No
 def _build_standard_tool_return_value(*, tool_outcome: ToolOutcome) -> object:
     if tool_outcome["error"] is None:
         return tool_outcome["payload"]
+    if tool_outcome["error"].get("status") == "rejected":
+        return ToolDenied(json.dumps(tool_outcome["error"], ensure_ascii=False))
     return {
         "value": tool_outcome["payload"],
         "error": tool_outcome["error"],
     }
 
 
-async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]]) -> ToolOutcome:
+def rejection_tool_outcome(rejection: OperationRejection) -> ToolOutcome:
+    return {
+        "payload": None,
+        "error": {
+            "kind": "oversight",
+            "status": "rejected",
+            "operation_id": rejection.request.operation_id,
+            "step_execution_id": rejection.request.execution_reference.step_execution_id,
+            "message": rejection.reason,
+            "guidance": rejection.guidance,
+            "phase": "inspection",
+            "evaluation_started": False,
+        },
+    }
+
+
+async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]], step_context: StepContext) -> ToolOutcome:
     """Exceptions from Pydantic AI toolset plumbing are handled in ``tool_bridge.execute_tool_call``."""
 
     try:
         value = await tool_call()
+    except OperationRejectedError as exception:
+        if step_context.operation_failure is not None:
+            raise step_context.operation_failure from step_context.operation_failure.__cause__
+        record_response_rejection(step_context, exception.rejection)
+        return rejection_tool_outcome(exception.rejection)
     except (ModelRetry, CallDeferred, ApprovalRequired):
         raise
     except OperationError as exception:
+        if step_context.operation_failure is not None:
+            raise step_context.operation_failure from step_context.operation_failure.__cause__
         outcome = _normalize_tool_failure(
             kind=exception.kind,
             message=str(exception),
@@ -125,7 +153,7 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
 
             return await execute_operation_async(run_context.deps, request, admit=lambda: None, execute=execute)
 
-        tool_result = await _run_tool_and_normalize(tool_call)
+        tool_result = await _run_tool_and_normalize(tool_call, run_context.deps)
         return tool_result
 
     # DEPENDENCY: Pydantic AI's WrapperToolset calls self.call_tool() rather

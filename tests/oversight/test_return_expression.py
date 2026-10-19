@@ -10,20 +10,20 @@ from pydantic import AfterValidator
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.oversight import Accept, Oversight, Reject
+from nighthawk.oversight import AbortStep, Accept, Oversight
 from nighthawk.runtime import OperationRequest
 from nighthawk.runtime.step_contract import ReturnStepOutcome
 from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
-def approve_name_expression(request: OperationRequest) -> Accept | Reject:
+def approve_name_expression(request: OperationRequest) -> Accept | AbortStep:
     assert request.kind == "return" and request.expression is not None
     try:
         expression = ast.parse(request.expression, mode="eval").body
     except SyntaxError:
-        return Reject("Invalid return expression")
+        return AbortStep("Invalid return expression")
     if not isinstance(expression, ast.Name) or expression.id not in {"value", "previous"}:
-        return Reject("Return must name an approved binding")
+        return AbortStep("Return must name an approved binding")
     return Accept()
 
 
@@ -57,7 +57,7 @@ def test_host_policy_can_limit_return_expression_syntax(expression: str, accepte
         if accepted:
             assert workflow() == (7 if expression == "previous" else 4)
         else:
-            with pytest.raises(nh.oversight.OversightRejectedError, match="approved binding"):
+            with pytest.raises(nh.oversight.StepAbortedError, match="approved binding"):
                 workflow()
 
 
@@ -117,15 +117,15 @@ def test_a_bare_name_can_still_trigger_await(reject_awaitable: bool) -> None:
         """
         return 0
 
-    def inspect_expression(request: OperationRequest) -> Accept | Reject:
+    def inspect_expression(request: OperationRequest) -> Accept | AbortStep:
         if reject_awaitable:
-            return Reject("Host disallows awaiting this expression")
+            return AbortStep("Host disallows awaiting this expression")
         return approve_name_expression(request)
 
     executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": Pending()})
     with nh.run(executor), nh.scope(oversight=Oversight(inspect_operation=inspect_expression)):
         if reject_awaitable:
-            with pytest.raises(nh.oversight.OversightRejectedError):
+            with pytest.raises(nh.oversight.StepAbortedError):
                 asyncio.run(workflow())
         else:
             assert asyncio.run(workflow()) == 9

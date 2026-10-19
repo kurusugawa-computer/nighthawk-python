@@ -18,7 +18,14 @@ if TYPE_CHECKING:
     from .environment import StepEnvironment
     from .expression import eval_expression, eval_expression_async
     from .inspection import inspect_value
-    from .operation_contract import OperationError, OperationFinished, OperationRequest
+    from .operation_contract import (
+        OperationDeliveryError,
+        OperationError,
+        OperationFinished,
+        OperationRejectedError,
+        OperationRejection,
+        OperationRequest,
+    )
     from .step_definition import StepDefinition
     from .step_request import StepCandidate, StepRequest
     from .step_result import Break, Continue, Pass, Raise, Return, StepResult
@@ -48,6 +55,9 @@ _name_to_module = {
     "StepEnvironment": "environment",
     "inspect_value": "inspection",
     "OperationError": "operation_contract",
+    "OperationDeliveryError": "operation_contract",
+    "OperationRejectedError": "operation_contract",
+    "OperationRejection": "operation_contract",
     "OperationFinished": "operation_contract",
     "OperationRequest": "operation_contract",
     "Pass": "step_result",
@@ -82,6 +92,9 @@ __all__ = [
     "StepEnvironment",
     "inspect_value",
     "OperationError",
+    "OperationDeliveryError",
+    "OperationRejectedError",
+    "OperationRejection",
     "OperationFinished",
     "OperationRequest",
     "Pass",

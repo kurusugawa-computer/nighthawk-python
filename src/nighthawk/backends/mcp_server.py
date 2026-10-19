@@ -8,7 +8,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import copy_context
-from typing import Any, cast
+from typing import Any
 
 from opentelemetry import context as otel_context
 from pydantic_ai.exceptions import UnexpectedModelBehavior
@@ -19,7 +19,7 @@ from ..runtime.step_context import (
     resolve_tool_result_rendering_policy,
 )
 from ..tools.contracts import ToolHandlerResult, ToolOutcome, build_tool_result_observation
-from .mcp_boundary import call_tool_for_low_level_mcp_server, tool_handler_result_to_low_level_mcp_content
+from .mcp_boundary import call_tool_for_low_level_mcp_server, tool_handler_result_to_low_level_mcp_result
 from .tool_bridge import get_current_step_run_context_required
 
 
@@ -95,21 +95,19 @@ class McpServer:
                     "error": {"kind": "resolution", "message": f"Unknown tool: {name}", "guidance": "Choose a visible tool name and retry."},
                 }
                 tool_handler_result: ToolHandlerResult = build_tool_result_observation(tool_outcome=tool_outcome)
-                content_block_list = tool_handler_result_to_low_level_mcp_content(
+                return tool_handler_result_to_low_level_mcp_result(
                     tool_name=name,
                     tool_handler_result=tool_handler_result,
                     rendering_policy=self._tool_result_rendering_policy,
                 )
-                return mcp_types.CallToolResult(content=cast(list[mcp_types.ContentBlock], content_block_list))
 
-            content_block_list = await call_tool_for_low_level_mcp_server(
+            return await call_tool_for_low_level_mcp_server(
                 tool_name=name,
                 arguments=arguments,
                 tool_handler=handler,
                 parent_otel_context=self._parent_otel_context,
                 rendering_policy=self._tool_result_rendering_policy,
             )
-            return mcp_types.CallToolResult(content=cast(list[mcp_types.ContentBlock], content_block_list))
 
         mcp_server = McpLowLevelServer(
             "nighthawk",

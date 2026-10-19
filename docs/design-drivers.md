@@ -187,6 +187,26 @@ The deterministic evidence covers absent parent bindings, preparation failures, 
 It does not establish that separating names prevents repeated model calls or improves judgments.
 Assess those hypotheses through application evaluations, including independent reuse and the effort needed to declare shared dependencies.
 
+## Correcting refused operations within a Natural step
+
+**Status:** Execution contracts have deterministic coverage in `tests/runtime/test_operation_recovery.py` and `tests/backends/test_rejection_feedback.py`, with executable [model and custom-executor examples](operation-feedback.md).
+No independent application case or comparative model-quality evaluation is recorded.
+
+A host may refuse a proposed operation while still permitting a different way to complete the task.
+Previously every operation-inspection rejection ended the step, even if an executor caught the exception.
+Ordinary helper return values can communicate expected domain findings, but cannot change that Core-owned inspection and finalization contract.
+Reimplementing the operation pipeline in application executors would duplicate state, notification, and termination responsibilities.
+
+Core therefore separates `RejectOperation`, which refuses one body and exposes deliberate feedback, from `AbortStep`, which ends the inspected step.
+The same step retains its live environment, prior effects, model history, and request controls while the model or custom executor chooses another operation.
+Refusal records survive successful finalization; failed notifications and terminal stops cannot become ordinary feedback.
+Visible model batches stop at refusal, while provider-internal batches remain a documented backend boundary.
+
+Applications own the policy, alternative operations, acceptance criteria, and any durable evidence or improvement process.
+Core does not infer that a later accepted output means the task was completed, automatically retry an operation, or add a separate repair agent or policy engine.
+The deterministic tests establish execution behavior, not improved judgment, accumulated capability, or comparative advantage.
+Further application evidence should compare successful corrections, unacceptable effects, authoring and maintenance burden, and inference cost against ordinary Python/model-library compositions.
+
 ## Using Nighthawk to develop Nighthawk
 
 **Status:** Conceptual application direction.

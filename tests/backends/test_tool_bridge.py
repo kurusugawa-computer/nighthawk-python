@@ -239,7 +239,7 @@ def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decis
     def test_invalid_tool_decision() -> int:  # type: ignore[no-untyped-def]
         return 5
 
-    def invalid_tool_decision(_tool_call: nh.runtime.OperationRequest) -> nh.oversight.Accept | nh.oversight.Reject:
+    def invalid_tool_decision(_tool_call: nh.runtime.OperationRequest) -> nh.oversight.Accept | nh.oversight.AbortStep:
         return cast(Any, "bad")
 
     step_context = _new_step_context()
@@ -279,11 +279,11 @@ def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decis
         ):
             return await handler({})
 
-    with pytest.raises(NighthawkError, match="must return Accept or Reject"):
+    with pytest.raises(NighthawkError, match="must return Accept, RejectOperation, or AbortStep"):
         anyio.run(call_handler)
 
 
-def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_event(
+def test_backend_handler_preserves_oversight_abort_and_records_tool_span_event(
     tool_span_exporter: tuple[InMemorySpanExporter, TracerProvider],
 ) -> None:
     span_exporter, tracer_provider = tool_span_exporter
@@ -294,9 +294,9 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
         tool_call_count += 1
         return 7
 
-    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.Reject:
+    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
         assert tool_call.argument_name_to_value == {}
-        return nh.oversight.Reject("needs oversight")
+        return nh.oversight.AbortStep("needs oversight")
 
     step_context = _new_step_context()
     run_context = RunContext(
@@ -338,7 +338,7 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
         ):
             return await handler({})
 
-    with pytest.raises(nh.oversight.OversightRejectedError, match="needs oversight"):
+    with pytest.raises(nh.oversight.StepAbortedError, match="needs oversight"):
         anyio.run(call_handler)
     assert tool_call_count == 0
 
@@ -347,7 +347,7 @@ def test_backend_handler_preserves_oversight_rejection_and_records_tool_span_eve
     oversight_event = next(event for event in tool_spans[0].events if event.name == "nighthawk.oversight.decision")
     oversight_attributes = dict(oversight_event.attributes or {})
     assert oversight_attributes["nighthawk.oversight.subject"] == "operation"
-    assert oversight_attributes["nighthawk.oversight.verdict"] == "reject"
+    assert oversight_attributes["nighthawk.oversight.verdict"] == "abort"
     assert oversight_attributes["tool.name"] == "test_governed_tool"
     assert oversight_attributes["nighthawk.oversight.reason"] == "needs oversight"
     assert oversight_attributes["run.id"]

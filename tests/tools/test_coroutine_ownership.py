@@ -6,6 +6,7 @@ import inspect
 import pytest
 
 from nighthawk.tools.execution import _run_tool_and_normalize
+from tests.support.contexts import new_context
 
 
 def test_normalization_failure_does_not_dispose_application_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -24,7 +25,7 @@ def test_normalization_failure_does_not_dispose_application_value(monkeypatch: p
     monkeypatch.setattr("nighthawk.tools.execution._normalize_tool_success", fail)
     try:
         with pytest.raises(ValueError, match="normalization failed"):
-            asyncio.run(_run_tool_and_normalize(tool_call))
+            asyncio.run(_run_tool_and_normalize(tool_call, new_context()))
         assert inspect.getcoroutinestate(retained) == inspect.CORO_CREATED
     finally:
         retained.close()

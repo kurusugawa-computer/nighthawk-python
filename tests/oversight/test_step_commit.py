@@ -47,9 +47,9 @@ def test_scope_oversight_inherits_and_can_clear() -> None:
 
 
 def test_step_commit_reject_records_failed_step_trace(step_span_exporter: InMemorySpanExporter) -> None:
-    def reject_step(review: nh.oversight.StepCommit) -> nh.oversight.Reject:
+    def reject_step(review: nh.oversight.StepCommit) -> nh.oversight.AbortStep:
         _ = review
-        return nh.oversight.Reject("host rejected step")
+        return nh.oversight.AbortStep("host rejected step")
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=reject_step)):
 
@@ -61,7 +61,7 @@ def test_step_commit_reject_records_failed_step_trace(step_span_exporter: InMemo
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        with pytest.raises(nh.ExecutionError, match="host rejected step"):
+        with pytest.raises(nh.oversight.StepAbortedError, match="host rejected step"):
             natural_value_function()
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
@@ -70,7 +70,7 @@ def test_step_commit_reject_records_failed_step_trace(step_span_exporter: InMemo
     assert oversight_event.name == "nighthawk.oversight.decision"
     oversight_attributes = dict(oversight_event.attributes or {})
     assert oversight_attributes["nighthawk.oversight.subject"] == "step_commit"
-    assert oversight_attributes["nighthawk.oversight.verdict"] == "reject"
+    assert oversight_attributes["nighthawk.oversight.verdict"] == "abort"
     assert oversight_attributes["nighthawk.oversight.reason"] == "host rejected step"
     assert str(oversight_attributes["step.source_location"]).startswith(f"{__name__}:")
     assert step_span.status.status_code == StatusCode.ERROR
@@ -110,7 +110,7 @@ def test_invalid_step_commit_decision_raises_nighthawk_error_and_records_failed_
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        with pytest.raises(NighthawkError, match="must return Accept, Reject, or Rewrite"):
+        with pytest.raises(NighthawkError, match="must return Accept, Rewrite, or AbortStep"):
             natural_value_function()
 
     step_span = _get_finished_step_spans(step_span_exporter)[0]
@@ -118,7 +118,7 @@ def test_invalid_step_commit_decision_raises_nighthawk_error_and_records_failed_
     failed_attributes = dict(failed_event.attributes or {})
     assert failed_attributes["nighthawk.step.error_kind"] == "NighthawkError"
     error_message = str(failed_attributes["nighthawk.step.error_message"])
-    assert "must return Accept, Reject, or Rewrite" in error_message
+    assert "must return Accept, Rewrite, or AbortStep" in error_message
     assert step_span.status.status_code == StatusCode.ERROR
 
 

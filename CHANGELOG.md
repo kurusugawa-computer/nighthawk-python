@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Breaking: operation inspection now returns `Accept`, `RejectOperation`, or `AbortStep`. Commit inspection accepts `Accept`, `Rewrite`, or `AbortStep`. Replace terminal `Reject(reason)` decisions with `AbortStep(reason)`; there is no legacy alias or implicit change to recoverable behavior.
+- Breaking: `StepAbortedError` replaces `OversightRejectedError`. Terminal records use `failure_stage="oversight_abort"` and `abort_reason` instead of `oversight_rejection` and `rejection_reason`. Aborted operation records use status `"aborted"`; recoverable refusals use `"rejected"`.
+- Breaking: explicit commit `AbortStep` decisions also propagate `StepAbortedError` instead of an `ExecutionError` wrapper, matching operation inspection; terminal delivery may still supply a host exception.
+- Standard agent output processing resolves candidate expressions before leaving its model loop. Rejected return expressions can be corrected without recreating the step or replaying prior operations.
+- Rejection stops the remaining calls in the same visible model response before argument validation, records them as `"skipped"`, and discards that response's final candidates. Nighthawk makes `early` dispatch follow emission order; ordinary Pydantic AI runs retain their own strategies.
+- MCP/SDK tool responses carry error indicators and structured refusal information. Coding-agent internal batches and inference requests remain outside Core's visible response/request boundaries.
+
+### Added
+
+- `OperationRejection`, `OperationRejectedError`, and exported `OperationDeliveryError` support direct executor recovery and correlated failure diagnostics. Refusals retain live state, earlier effects, request accounting, and ordinary finalization.
+- Deterministic model, executor, lifecycle, ordering, and backend tests cover refusal feedback, skipped calls, cancellation, notification failures, limits, and nested execution. See [operation feedback](docs/operation-feedback.md) for examples and migration details.
+
 ## [0.16.0]
 
 ### Changed

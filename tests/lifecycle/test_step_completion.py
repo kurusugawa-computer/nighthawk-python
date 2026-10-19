@@ -95,25 +95,25 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
         """
         return 0
 
-    def reject(request: nh.runtime.OperationRequest) -> nh.oversight.Reject:
+    def reject(request: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
         assert request.expression == "calculate()"
         assert request.expected_type is int
         assert request.kind == "return"
         assert request.execution_reference == nh.get_execution_reference()
-        return nh.oversight.Reject("return forbidden")
+        return nh.oversight.AbortStep("return forbidden")
 
     with (
         nh.run(StubExecutor()),
         nh.scope(lifecycle=StepLifecycle(events.append), oversight=nh.oversight.Oversight(inspect_operation=reject)),
-        pytest.raises(nh.oversight.OversightRejectedError) as caught,
+        pytest.raises(nh.oversight.StepAbortedError) as caught,
     ):
         workflow()
     assert evaluated == []
     assert len(events) == 1
     event = events[0]
     assert isinstance(event, StepFailed)
-    assert event.failure_stage == "oversight_rejection" and event.inspection_subject == "operation"
-    assert event.rejection_reason == "return forbidden"
+    assert event.failure_stage == "oversight_abort" and event.inspection_subject == "operation"
+    assert event.abort_reason == "return forbidden"
     assert caught.value is event.original_exception
     assert not event.assigned_binding_name_to_value
 

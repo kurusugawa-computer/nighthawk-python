@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import tiktoken
 from opentelemetry import context as otel_context
@@ -28,6 +28,9 @@ from ._text_fallback import (
     format_unresolvable_content_text,
 )
 from .tool_bridge import ToolHandler
+
+if TYPE_CHECKING:
+    from mcp.types import CallToolResult
 
 _logger = logging.getLogger("nighthawk")
 
@@ -187,27 +190,51 @@ def tool_handler_result_to_low_level_mcp_content(
         return [mcp_types.TextContent(type="text", text=render_preview())]
 
 
+def tool_handler_result_to_low_level_mcp_result(
+    *,
+    tool_name: str,
+    tool_handler_result: ToolHandlerResult,
+    rendering_policy: ToolResultRenderingPolicy | None = None,
+) -> CallToolResult:
+    from mcp import types as mcp_types
+
+    content = tool_handler_result_to_low_level_mcp_content(
+        tool_name=tool_name, tool_handler_result=tool_handler_result, rendering_policy=rendering_policy
+    )
+    error = tool_handler_result["tool_outcome"]["error"] if tool_handler_result["kind"] == "tool_result" else None
+    return mcp_types.CallToolResult(
+        content=cast(list[mcp_types.ContentBlock], content),
+        is_error=tool_handler_result["kind"] != "tool_result" or error is not None,
+        structured_content={"error": dict(error)} if error is not None else None,
+    )
+
+
 def _tool_handler_result_to_claude_code_sdk_content(
     *,
     tool_name: str,
     tool_handler_result: ToolHandlerResult,
     rendering_policy: ToolResultRenderingPolicy | None = None,
 ) -> dict[str, object]:
-    content_block_list = tool_handler_result_to_low_level_mcp_content(
+    result = tool_handler_result_to_low_level_mcp_result(
         tool_name=tool_name,
         tool_handler_result=tool_handler_result,
         rendering_policy=rendering_policy,
     )
 
     dumped_content_block_list: list[dict[str, object]] = []
-    for content_block in content_block_list:
+    for content_block in result.content:
         model_dump = getattr(content_block, "model_dump", None)
         if callable(model_dump):
             dumped_content_block_list.append(cast(dict[str, object], model_dump(mode="json", by_alias=True, exclude_none=True)))
             continue
         raise TypeError(f"Unsupported MCP content block: {type(content_block).__name__}")
 
-    return {"content": dumped_content_block_list}
+    response: dict[str, object] = {"content": dumped_content_block_list}
+    if result.is_error:
+        response["isError"] = True
+    if result.structured_content is not None:
+        response["structuredContent"] = result.structured_content
+    return response
 
 
 async def _get_tool_handler_result(
@@ -252,14 +279,14 @@ async def call_tool_for_low_level_mcp_server(
     tool_handler: ToolHandler,
     parent_otel_context: OtelContext,
     rendering_policy: ToolResultRenderingPolicy | None = None,
-) -> list[object]:
+) -> CallToolResult:
     tool_handler_result = await _get_tool_handler_result(
         tool_name=tool_name,
         arguments=arguments,
         tool_handler=tool_handler,
         parent_otel_context=parent_otel_context,
     )
-    return tool_handler_result_to_low_level_mcp_content(
+    return tool_handler_result_to_low_level_mcp_result(
         tool_name=tool_name,
         tool_handler_result=tool_handler_result,
         rendering_policy=rendering_policy,

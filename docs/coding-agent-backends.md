@@ -60,6 +60,11 @@ All three backends accept `working_directory` in their model settings. This abso
 
 If a backend CLI process fails (e.g., crashes, times out, or returns an invalid response), Nighthawk surfaces the failure as an `ExecutionError`. See [Patterns](patterns.md#error-handling) for error handling patterns.
 
+Operation inspection can return `RejectOperation` to deliver structured refusal through MCP/SDK error results while keeping the transport available for another inspected request.
+`AbortStep`, inspection failures, and operation notification failures terminate the step even if the coding agent catches a tool error.
+Core cannot identify a coding agent's invisible response batches or individually gate its internal inference requests.
+The [operation feedback support matrix](operation-feedback.md#ordering-and-backend-boundaries) describes these limits and the distinct behavior of directly visible Pydantic AI responses.
+
 ### Allowed tool names
 
 Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the backend via MCP. When `None` (default), all tools visible in the current scope are exposed.

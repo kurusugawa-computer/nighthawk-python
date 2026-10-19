@@ -55,7 +55,7 @@ class Ledger:
         ("validation", "return_validation"),
         ("executor", "executor"),
         ("rewrite", "rewrite_validation"),
-        ("reject", "oversight_rejection"),
+        ("reject", "oversight_abort"),
         ("inspector", "commit_inspection"),
         ("return_inspector", "operation_inspection"),
         ("outcome", "outcome_validation"),
@@ -80,7 +80,7 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
         if scenario == "rewrite":
             return nh.oversight.Rewrite(binding_name_to_value={"value": "bad"})
         if scenario == "reject":
-            return nh.oversight.Reject("rejected")
+            return nh.oversight.AbortStep("rejected")
         if scenario == "inspector":
             raise ValueError("inspection failed")
         return nh.oversight.Accept()

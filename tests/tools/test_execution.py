@@ -171,7 +171,7 @@ def test_wrapper_call_tool_propagates_application_exception() -> None:
         _call_wrapped_tool(name="test_raises", function=test_raises)
 
 
-def test_wrapper_call_tool_outcome_propagates_oversight_rejection() -> None:
+def test_wrapper_call_tool_outcome_propagates_oversight_abort() -> None:
     tool_call_count = 0
 
     def test_denied_tool(run_context) -> int:  # type: ignore[no-untyped-def]
@@ -180,32 +180,32 @@ def test_wrapper_call_tool_outcome_propagates_oversight_rejection() -> None:
         tool_call_count += 1
         return 1
 
-    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.Reject:
+    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
         assert tool_call.tool_name == "test_denied_tool"
-        return nh.oversight.Reject("human rejected tool")
+        return nh.oversight.AbortStep("human rejected tool")
 
     with (
         nh.run(StubExecutor()),
         nh.scope(oversight=nh.oversight.Oversight(inspect_operation=reject_tool_call)),
-        pytest.raises(nh.oversight.OversightRejectedError, match="human rejected tool"),
+        pytest.raises(nh.oversight.StepAbortedError, match="human rejected tool"),
     ):
         _call_wrapped_tool_outcome(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
     assert tool_call_count == 0
 
 
-def test_wrapper_call_tool_propagates_oversight_rejection() -> None:
+def test_wrapper_call_tool_propagates_oversight_abort() -> None:
     def test_denied_tool(run_context) -> int:  # type: ignore[no-untyped-def]
         _ = run_context
         return 1
 
-    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.Reject:
+    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
         assert tool_call.tool_name == "test_denied_tool"
-        return nh.oversight.Reject("human rejected tool")
+        return nh.oversight.AbortStep("human rejected tool")
 
     with (
         nh.run(StubExecutor()),
         nh.scope(oversight=nh.oversight.Oversight(inspect_operation=reject_tool_call)),
-        pytest.raises(nh.oversight.OversightRejectedError, match="human rejected tool"),
+        pytest.raises(nh.oversight.StepAbortedError, match="human rejected tool"),
     ):
         _call_wrapped_tool(name="test_denied_tool", function=test_denied_tool, inherit_run=True)
 

@@ -31,7 +31,7 @@ type FailureStage = Literal[
     "return_validation",
     "commit_inspection",
     "rewrite_validation",
-    "oversight_rejection",
+    "oversight_abort",
     "raise_construction",
     "binding_assignment",
 ]
@@ -82,7 +82,7 @@ class StepFailed(_StepFinished):
     attempted_outcome: StepResult | None = None
     validated_binding_name_to_value: Mapping[str, object] | None = None
     inspection_subject: Literal["step_commit", "operation"] | None = None
-    rejection_reason: str | None = None
+    abort_reason: str | None = None
     kind: Literal["failed"] = field(default="failed", init=False)
 
 

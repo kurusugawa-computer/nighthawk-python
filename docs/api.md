@@ -181,9 +181,11 @@
         - StepCommit
         - Rewrite
         - Accept
-        - Reject
+        - RejectOperation
+        - AbortStep
         - Oversight
-        - OversightRejectedError
+        - StepAbortedError
+        - OperationDecision
         - StepCommitDecision
 
 ## Lifecycle
@@ -257,6 +259,10 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
         - OperationRequest
         - OperationFinished
         - OperationError
+        - OperationRejection
+        - OperationRejectedError
+        - OperationDeliveryError
+        - OperationStatus
 
 ::: nighthawk.runtime.expression
     options:
