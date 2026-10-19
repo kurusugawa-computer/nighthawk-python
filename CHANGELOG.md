@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0]
+
 ### Changed
 
 - Breaking: operation inspection now returns `Accept`, `RejectOperation`, or `AbortStep`. Commit inspection accepts `Accept`, `Rewrite`, or `AbortStep`. Replace terminal `Reject(reason)` decisions with `AbortStep(reason)`; there is no legacy alias or implicit change to recoverable behavior.
@@ -378,7 +380,8 @@ Invalid initial results fail before oversight; use resilience retries to recover
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.15.0...v0.17.0
 [0.16.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.13.0...v0.14.0
