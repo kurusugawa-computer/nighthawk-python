@@ -332,18 +332,24 @@ def _validate_step_executor(step_executor: object) -> None:
 
 @contextmanager
 def run(
-    step_executor: StepExecutor,
+    step_executor: StepExecutor | UnsetType = UNSET,
     *,
+    execution_model: str | Model | None | UnsetType = UNSET,
+    decision_model: str | Model | None | UnsetType = UNSET,
+    step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
     run_id: str | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
 ) -> Iterator[None]:
-    """Start an execution run with the given step executor.
+    """Start a run with independent execution and decision model selections.
 
     Establishes a run-scoped context that makes the step executor
     available to all Natural blocks executed within this scope.
 
     Args:
-        step_executor: The step executor to use for Natural block execution.
+        step_executor: Optional custom executor; omission creates a managed AgentStepExecutor.
+        execution_model: Model for execute blocks; omission leaves the executor selection unchanged.
+        decision_model: Model for decide blocks; omission leaves the executor selection unchanged.
+        step_executor_configuration: Full configuration replacement, exclusive with model selections.
         run_id: Nonempty identifier for the run. Omission or UNSET generates
             a fresh ULID. None and empty strings are invalid.
         usage_meter: Optional meter that accumulates LLM usage for the run.
@@ -355,7 +361,14 @@ def run(
     Raises:
         TypeError: If the executor does not implement either execution protocol or the usage meter is invalid.
     """
+    from .step_executor import AgentStepExecutor
+
+    if isinstance(step_executor, UnsetType):
+        step_executor = AgentStepExecutor()
     _validate_step_executor(step_executor)
+    selection = _model_selection(execution_model, decision_model, step_executor_configuration)
+    if selection is not None:
+        step_executor = _resolve_model_selection(step_executor, selection)
     if not isinstance(run_id, (str, UnsetType)):
         raise TypeError("run_id must be a nonempty string or UNSET")
     if isinstance(run_id, str) and not run_id:
@@ -416,7 +429,8 @@ def _compose_sequence[T](current: tuple[T, ...], supplied: Sequence[T] | Extend[
 @contextmanager
 def scope(
     *,
-    model: str | Model | UnsetType = UNSET,
+    execution_model: str | Model | None | UnsetType = UNSET,
+    decision_model: str | Model | None | UnsetType = UNSET,
     step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
     step_executor: StepExecutor | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
@@ -436,7 +450,7 @@ def scope(
     Context builders replace presentation while preserving the live environment.
     Oversight and lifecycle accept None, which clears their hooks. Resolve all changes before
     installing context. Executor replacement precedes delegated model selection.
-    model replaces only the model; step_executor_configuration replaces all configuration
+    execution_model and decision_model replace their respective models; step_executor_configuration replaces all configuration
     fields. Supplying both is invalid. Selection preserves unrelated scoped controls.
     A new scope retains the active step identity and its source location.
     """
@@ -459,7 +473,7 @@ def scope(
     if lifecycle is not None and not isinstance(lifecycle, (UnsetType, StepLifecycle)):
         raise TypeError("lifecycle must be StepLifecycle, None, or UNSET")
     next_step_executor = current_step_executor if isinstance(step_executor, UnsetType) else step_executor
-    selection = _model_selection(model, step_executor_configuration)
+    selection = _model_selection(execution_model, decision_model, step_executor_configuration)
     next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid())
     next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
     next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight

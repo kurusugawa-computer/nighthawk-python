@@ -15,9 +15,9 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
     agent = FakeAgent()
     with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             <missing_name>
             """
 
@@ -33,7 +33,7 @@ def test_natural_traceback_includes_docstring_sentinel_line(tmp_path):
     assert callable(wrapped)
 
     wrapped_lines, wrapped_start_lineno = inspect.getsourcelines(wrapped)
-    expected_natural_lineno = next(lineno for lineno, line_text in enumerate(wrapped_lines, start=wrapped_start_lineno) if '"""natural' in line_text)
+    expected_natural_lineno = next(lineno for lineno, line_text in enumerate(wrapped_lines, start=wrapped_start_lineno) if '"""execute' in line_text)
 
     natural_frame = next(
         (frame for frame in frames if frame.filename == __file__ and frame.lineno == expected_natural_lineno),
@@ -53,14 +53,14 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
     agent = FakeAgent()
     with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
             x = 10
-            """natural
+            """execute
             Say hi.
             """
 
-            """natural
+            """execute
             <missing_name>
             """
 
@@ -90,7 +90,7 @@ def test_natural_traceback_includes_inline_block_line(tmp_path):
         if isinstance(statement, ast.Expr)
         and isinstance(statement.value, ast.Constant)
         and isinstance(statement.value.value, str)
-        and statement.value.value.startswith("natural\n")
+        and statement.value.value.startswith("execute\n")
     ]
     assert len(inline_natural_line_numbers) >= 2
 
@@ -127,9 +127,9 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
 
     with nh.run(_FailingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             Say hi.
             """
 
@@ -145,7 +145,7 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
     assert callable(wrapped)
 
     wrapped_lines, wrapped_start_lineno = inspect.getsourcelines(wrapped)
-    expected_natural_lineno = next(lineno for lineno, line_text in enumerate(wrapped_lines, start=wrapped_start_lineno) if '"""natural' in line_text)
+    expected_natural_lineno = next(lineno for lineno, line_text in enumerate(wrapped_lines, start=wrapped_start_lineno) if '"""execute' in line_text)
 
     natural_frame = next(
         (frame for frame in frames if frame.filename == __file__ and frame.lineno == expected_natural_lineno),

@@ -10,7 +10,7 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
     requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="codex:gpt-5.6-luna",
+        execution_model="codex:gpt-5.6-luna",
         model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
@@ -22,10 +22,10 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
 
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-        @nh.natural_function
+        @nh.function
         def test_function() -> str:
             result = ""
-            """natural
+            """execute
             Set <:result> to "2".
             """
 
@@ -38,7 +38,7 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
     requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="codex:gpt-5.6-luna",
+        execution_model="codex:gpt-5.6-luna",
         model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
@@ -54,10 +54,10 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
 
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]), nh.scope(tools=[test_operation]):
 
-        @nh.natural_function
+        @nh.function
         def test_function() -> int:
             result = 0
-            """natural
+            """execute
             Compute <:result> with test_operation(a=20, b=22).
             """
             return int(result)
@@ -76,7 +76,7 @@ def test_codex_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            model="codex:default",
+            execution_model="codex:default",
             model_settings=CodexModelSettings(
                 working_directory=str(working_directory.resolve()),
             ).model_dump(),
@@ -87,9 +87,9 @@ def test_codex_skill() -> None:
         )
         with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-            @nh.natural_function
+            @nh.function
             def test_function():
-                """natural
+                """execute
                 ---
                 deny: [pass, raise]
                 ---
@@ -116,7 +116,7 @@ def test_codex_skill_calc() -> None:
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     configuration = nh.StepExecutorConfiguration(
-        model="codex:default",
+        execution_model="codex:default",
         model_settings=CodexModelSettings(
             working_directory=str(working_directory.resolve()),
         ).model_dump(),
@@ -127,12 +127,12 @@ def test_codex_skill_calc() -> None:
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-        @nh.natural_function
+        @nh.function
         def test_function():
             def calc(a, b):
                 return a + b * 8
 
-            """natural
+            """execute
             ---
             deny: [pass, raise]
             ---

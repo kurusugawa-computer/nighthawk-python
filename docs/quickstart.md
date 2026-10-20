@@ -19,14 +19,12 @@ Save as `quickstart.py`:
 ```py
 import nighthawk as nh
 
-step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"))
+with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
 
-with nh.run(step_executor):
-
-    @nh.natural_function
+    @nh.function
     def calculate_total(items: str) -> int:
         total = 0
-        """natural
+        """execute
         Read <items> and set <:total> to the sum of all quantities mentioned.
         """
         return total

@@ -52,10 +52,10 @@ from typing import Literal
 import nighthawk as nh
 
 
-@nh.natural_function
+@nh.function
 def classify_ticket(text: str) -> Literal["bug", "feature", "question"]:
     label: Literal["bug", "feature", "question"] = "question"
-    """natural
+    """execute
     ---
     deny: [raise, return]
     ---
@@ -66,13 +66,15 @@ def classify_ticket(text: str) -> Literal["bug", "feature", "question"]:
 
 if __name__ == "__main__":
     executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
+        configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
     )
     with nh.run(executor):
         print(classify_ticket("The application crashes when opening a file."))
 ```
 
-`@nh.natural_function` transforms standalone strings beginning with `natural` into executable blocks.
+`@nh.function` transforms standalone strings beginning with `execute` or `decide <:output>` into executable blocks.
+Use `execute` for operations and assignments; use `decide` for typed judgments, with Python controlling subsequent actions.
+See [Typed decisions](decisions.md) for the output, input, and failure contracts.
 Define these functions in source files so Nighthawk can inspect their source.
 `nh.run(executor)` supplies the executor and usage meter; a run must be active when a block executes or a declared model resolves.
 Ordinary Python calls compose Natural functions within that run.
@@ -120,10 +122,10 @@ class OrderRequest(BaseModel):
     quantity: Annotated[int | None, Field(ge=1, le=100)]
 
 
-@nh.natural_function
+@nh.function
 def interpret_order(message: str) -> OrderRequest:
     order: OrderRequest
-    """natural
+    """execute
     Interpret the requested item quantity in <message> and set <:order>.
     Resolve ordinary number words and expressions such as a dozen.
     Use quantity=None when no single quantity is clear or it is outside 1 through 100.
@@ -233,7 +235,7 @@ Keep the following principles in mind, and read the linked contract before imple
 
 | When you need to... | Principle to preserve | Read before implementing |
 | --- | --- | --- |
-| Change models or inject capabilities for part of a workflow | `nh.scope(...)` composes settings within a run and restores the parent on exit. `model=...` selects a model; replacing the full configuration has broader effects. | [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) |
+| Change models or inject capabilities for part of a workflow | `nh.scope(...)` composes settings within a run and restores the parent on exit. `execution_model=...` and `decision_model=...` select models independently; replacing the full configuration has broader effects. | [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) |
 | Retry, fall back, vote, or cache | Compose policy around ordinary Python calls. Catch `nh.ExecutionError` for runtime failures and application exception types for direct application failures. Reconcile existing effects before repeating work; retrying record storage must not replay execution. | [Resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) |
 | Run concurrent judgments or enforce timeouts | Natural functions can be `async def`; Python owns concurrency and shared-state coordination. Cancellation is cooperative, and cleanup can extend waiting. A synchronous timeout does not stop its worker. | [Async Natural functions](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#async-natural-functions) and [timeouts](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#timeout) |
 | Refuse a function before its Python effects or record its completion | Host admission, block completion, and request observations are different boundaries. A completed block does not establish that its containing function succeeded. | [Execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) |

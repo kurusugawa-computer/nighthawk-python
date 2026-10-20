@@ -7,7 +7,7 @@ deterministic tests of Natural functions without LLM API calls.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import Field
 
@@ -15,6 +15,7 @@ from .composition import UNSET, UnsetType
 from .runtime.execution_reference import ExecutionReference
 from .runtime.step_context import StepContext
 from .runtime.step_contract import StepKind
+from .runtime.step_definition import BlockKind
 from .runtime.step_request import StepCandidate, StepRequest
 from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
@@ -24,6 +25,8 @@ class StepCall:
     """Recorded information about a single Natural block execution.
 
     Attributes:
+        block_kind: execute or decide.
+        input_binding_name_to_value: Complete explicitly referenced evidence.
         execution_reference: Invocation identity shared with oversight and terminal delivery.
         natural_program: The processed Natural block text (after frontmatter removal and interpolation).
         binding_names: Write binding names (``<:name>`` targets) requested by the Natural function.
@@ -45,6 +48,8 @@ class StepCall:
     step_locals: dict[str, object]
     step_globals: dict[str, object]
     task_name_to_value: dict[str, object]
+    block_kind: BlockKind = "execute"
+    input_binding_name_to_value: dict[str, object] = field(default_factory=dict)
 
 
 class StepResponse(StepCandidate):
@@ -53,7 +58,7 @@ class StepResponse(StepCandidate):
     Attributes:
         binding_name_to_value: Complete output selection.
             Omission or UNSET selects initialized declared outputs; {} selects no writes.
-            Undeclared names fail finalization.
+            Undeclared names fail finalization. Decisions always require an explicit answer mapping.
         outcome: Resolved Python control result. Strings are values, never expressions.
     """
 
@@ -65,6 +70,8 @@ def _build_step_call(
     step_context: StepContext,
     binding_names: list[str],
     allowed_step_kinds: tuple[StepKind, ...],
+    block_kind: BlockKind,
+    input_binding_name_to_value: Mapping[str, object],
 ) -> StepCall:
     referenced_global_names = (
         step_context.read_binding_names | (set(step_context.environment.task_name_to_value) | step_context.type_alias_reference_names)
@@ -73,6 +80,8 @@ def _build_step_call(
     return StepCall(
         execution_reference=step_context.execution_reference,
         natural_program=processed_natural_program,
+        block_kind=block_kind,
+        input_binding_name_to_value=dict(input_binding_name_to_value),
         binding_names=list(binding_names),
         binding_name_to_type=dict(step_context.binding_name_to_type),
         allowed_step_kinds=allowed_step_kinds,
@@ -107,7 +116,12 @@ class ScriptedExecutor:
         request: StepRequest,
     ) -> StepCandidate:
         call = _build_step_call(
-            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
+            request.processed_natural_program,
+            request.step_context,
+            list(request.output_binding_names),
+            request.allowed_step_kinds,
+            request.block_kind,
+            request.input_binding_name_to_value,
         )
         self.calls.append(call)
         index = len(self.calls) - 1
@@ -145,7 +159,12 @@ class CallbackExecutor:
         request: StepRequest,
     ) -> StepCandidate:
         call = _build_step_call(
-            request.processed_natural_program, request.step_context, list(request.output_binding_names), request.allowed_step_kinds
+            request.processed_natural_program,
+            request.step_context,
+            list(request.output_binding_names),
+            request.allowed_step_kinds,
+            request.block_kind,
+            request.input_binding_name_to_value,
         )
         self.calls.append(call)
         response = self.handler(call)

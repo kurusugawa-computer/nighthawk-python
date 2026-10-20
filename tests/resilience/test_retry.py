@@ -232,11 +232,11 @@ class TestRetryingWithNaturalFunction:
         )
 
         @retrying(attempts=2, on=Exception, wait=wait_none())
-        @nh.natural_function
+        @nh.function
         def classify(text: str) -> str:
             _ = text
             result: str = ""
-            """natural
+            """execute
             Classify <text> and set <:result>.
             """
             return result

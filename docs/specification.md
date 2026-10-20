@@ -12,11 +12,12 @@ This document defines Natural syntax, runtime behavior, and host-facing contract
 Execute natural-language descriptions of work inside ordinary Python programs, from small classifications to autonomous agent tasks.
 Python owns deterministic procedure, execution points, permitted control results, and declared names receiving validated writes.
 Natural supplies judgment using accessible Python lexical values and explicitly scoped task references.
-Read bindings express dependencies and presentation priority, not an access allowlist.
+In `execute`, read bindings express dependencies and presentation priority, not an access allowlist.
+In `decide`, only explicitly referenced input values are sent as evidence.
 Essential inputs should normally be explicit parameters; scoped task references declare shared contextual dependencies.
 Calling a Natural function does not copy its caller's working values into the child's environment.
 
-Ordinary applications need `natural_function`, output contracts, and an executor selected through `run`; `scope` varies configuration and task injection.
+Ordinary applications need `function`, output contracts, and an executor selected through `run`; `scope` varies configuration and task injection.
 Host approval and lifecycle records are optional integration surfaces, while runtime validation is mandatory for every executor.
 Use native Pydantic and Pydantic AI value contracts, models, agents, tools, content, capabilities, and usage types where they fit.
 Source instrumentation enters the runtime and dispatches results; Natural prose remains interpreted work rather than generated deterministic Python source.
@@ -53,7 +54,7 @@ Each block starts a fresh model interaction; neither a parent's working values n
 
 ## 4. Terminology
 
-- Natural block: a Python docstring or inline string literal beginning with the sentinel `natural`.
+- Natural block: a Python docstring or inline string literal beginning with an `execute` or `decide <:output>` header.
 - Natural DSL: the constrained syntax inside a Natural block (token binding plus free-form instructions).
 - Python locals (`python_locals`): the actual Python local variables in the function's frame.
 - Python globals (`python_globals`): the Python module globals for the compiled function.
@@ -74,24 +75,26 @@ Each block starts a fresh model interaction; neither a parent's working values n
 
 ### 5.1. Decorator
 
-- `nighthawk.natural_function`
+- `nighthawk.function`
     - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
     - Compilation happens at decoration time; blocks execute when the synchronous body runs or the asynchronous coroutine executes.
-    - Bare and parameterized decorator forms are supported. `model=...` declares model-only selection; `step_executor_configuration=...` declares full configuration replacement. Omission or `UNSET` inherits, and simultaneous selections are invalid.
-    - Declarations are inert until execution. Optional whole-function admission precedes declared selection resolution and body effects; see [embedded execution boundaries](#embedded-execution-boundaries).
+    - Bare `@nh.function` and empty `@nh.function()` forms are supported. Models belong to `run` and `scope`; the decorator accepts no model configuration.
+    - Decoration does not initialize providers. Optional whole-function admission precedes body effects; see [embedded execution boundaries](#embedded-execution-boundaries).
     - Note: The decorator requires the function source to be available for inspection.
     - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional. `nh.get_transformed_function(function)` exposes the compiled body sharing the original module globals. It follows outer wrappers and supported method descriptors, requires no run, and raises `TypeError` for invalid inputs or wrapper cycles. Execute through the decorated function to establish runtime context.
     - Instrumentation preserves original defaults without evaluating them again, live closure cells, and defining module globals. Generated helper names avoid application bindings, including names appearing inside Natural text.
-    - `nh.get_natural_function_definition(function)` supplies exact transformation correspondence without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions).
+    - `nh.get_function_definition(function)` supplies exact transformation correspondence without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions).
 
 ### 5.2. Configuration
 
 - `StepExecutorConfiguration`
-    - `model`: Provider-qualified string or an existing Pydantic AI `Model` instance. Default: `openai-responses:gpt-5.6-luna` (see [Pydantic AI providers](pydantic-ai-providers.md)).
+    - `execution_model`: Provider-qualified string or an existing Pydantic AI `Model`, used by `execute`. Default: `None`.
         - Examples: `openai-responses:gpt-5.6-luna`, `openai-responses:gpt-5.6-terra`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
-    - `model_settings`: model/backend overrides, defaulting to an empty dictionary. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict); rejects `None` and `UNSET`. An empty dictionary adds no overrides and preserves model-owned defaults. Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
+    - `decision_model`: Provider-qualified string or an existing Pydantic AI decision model, used by `decide`. Default: `None`. A missing model fails before a request for that block kind.
+    - `decision_model_settings`: Decision model settings, defaulting to an empty dictionary; accepts the same forms as `model_settings`.
+    - `model_settings`: execution model/backend overrides, defaulting to an empty dictionary. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict); rejects `None` and `UNSET`. An empty dictionary adds no overrides and preserves model-owned defaults. Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
     - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
     - `prompts`: prompt templates used for execution.
         - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
@@ -103,7 +106,8 @@ Each block starts a fresh model interaction; neither a parent's working values n
 
 Runtime Models are borrowed resources. Configuration validation, shallow derivation, managed Agent construction, and scope replacement preserve the exact supplied Model. Two instances with the same name can have different authentication. Nighthawk does not clone, reconstruct, mutate, enter, or close supplied clients. The host owns client lifetime and any SDK restrictions on threads or event loops.
 
-A managed executor uses one common prompt, tools, dynamic output contract, capability, settings, and oversight path for either model form. Configuration model settings override Model defaults under Pydantic AI's existing precedence, with per-run capabilities retaining their ordinary behavior. Explicit tokenizer encoding wins; otherwise inference uses the string's model component or `Model.model_name`, falling back to `o200k_base` for unknown names. Invalid explicit encoding fails.
+For `execute`, a managed executor uses one common prompt, tools, dynamic output contract, capability, settings, and oversight path for either string or borrowed model selection.
+The decision path uses typed questions and explicit evidence instead of execution tools and prompt previews. Configuration model settings override Model defaults under Pydantic AI's existing precedence, with per-run capabilities retaining their ordinary behavior. Explicit tokenizer encoding wins; otherwise inference uses the string's model component or `Model.model_name`, falling back to `o200k_base` for unknown names. Invalid explicit encoding fails.
 
 Model instances cannot be reconstructed from mappings. Configuration `repr` and `str` omit the model without invoking its representation. Python and JSON serialization including a live model field raises `PydanticSerializationError` with no traversal of the Model; explicit exclusion or inclusion of only other fields succeeds, including nested Pydantic records. String configurations remain serializable. A partial dump cannot reconstruct authenticated execution resources. `model_copy(update=...)` preserves Model identity by default but does not validate updates; callers must supply valid typed settings.
 
@@ -145,31 +149,31 @@ Nighthawk recognizes Natural blocks in two places.
 
 A function is considered a Natural function when it has a docstring whose underlying string literal begins with:
 
-- `natural\n`
+- `execute\n` or `decide <:name>\n`
 
 The Natural program is derived from the docstring by:
 
-1) Removing the leading `natural\n` sentinel prefix.
+1) Removing the block header (`execute` or `decide <:output>`) and its newline.
 2) Normalizing indentation by applying `textwrap.dedent` to the remainder.
 
 This normalization exists because Natural blocks are typically indented inside Python code. It ensures the Natural program text is stable regardless of surrounding Python indentation.
 
 Recommended form:
 
-- `"""natural\n..."""`
+- `"""execute\n..."""`
 
 2) Inline Natural blocks
 
 Inside a function body, a standalone expression statement whose AST is syntactically a string literal begins with:
 
-- `natural\n`
+- `execute\n`
 
 The expression value must be either:
 
 - A plain string literal, or
 - An f-string literal
 
-The Natural program is derived at runtime using the same rules as a docstring Natural block: remove the `natural\n` prefix, then apply `textwrap.dedent` to the remainder.
+The Natural program is derived at runtime by removing its block header and applying `textwrap.dedent` to the body.
 
 Docstring note:
 
@@ -183,11 +187,41 @@ Decision (inline shape):
 
 Sentinel rules (both docstring and inline):
 
-- The sentinel is case-sensitive and must match exactly `natural`.
-- The literal must begin with `natural\n` (no leading blank lines, no leading whitespace).
-- The sentinel line must contain only `natural` (no trailing whitespace).
+- Headers are case-sensitive, with no leading blank lines or whitespace.
+- Execution blocks begin with exactly `execute\n`.
+- Decision blocks begin with `decide <:name>\n`, with exactly one output binding and no trailing whitespace.
+- An f-string header must be static; its body may interpolate trusted source values.
+
+### Typed decision blocks
+
+A `decide <:name>` header declares exactly one destination; a Pydantic output model can contain multiple questions.
+The body must contain a nonempty judgment instruction and no output binding markers or control-flow frontmatter.
+It supplies Pydantic AI `Agent.instructions`; the header never becomes a model instruction.
+Explicit input bindings provide complete serialized evidence, with supported top-level multimodal content preserved.
+No execution context previews, implicit locals/globals, execution prompt templates, execution suffix fragments, context builders, or scoped action tools are sent.
+Unsupported evidence serialization fails rather than silently summarizing a value.
+Pydantic AI's decision model owns supported output schemas and the mapping to questions; Nighthawk does not implement another planner.
+Examples include booleans, finite choices, bounded probabilities, described rubric levels, and structured models; unsupported schemas fail before an API request.
+
+A decision produces only `Pass` and an explicit mapping containing its one destination.
+An omitted answer, refusal, invalid result, or unsupported configuration fails; existing destination values never substitute for a missing answer.
+Custom executors must obey the same output requirement.
+Normal runtime validation and commit oversight run before Python assignment; successful completion requires the destination to remain present after oversight.
+Python owns subsequent branching, retries, and actions.
+Scoped Pydantic AI capabilities can observe the request, but decision requests cannot expose action tools or select an execution model.
+
+Terminal lifecycle records include `block_kind` and, when a managed model run returned, its native `AgentRunResult` in `model_result`.
+Use `record.execution_reference.step_execution_id` to correlate each invocation, including repeated decisions in one function.
+`record.model_result.response.provider_details` preserves confidence, probabilities, and unrounded scores without replacing typed Python results.
+`record.model_result.usage` exposes that run's usage; the common meter includes completed execution and decision model runs.
+Model evidence remains available if later commit inspection or writeback fails.
+When the model run itself fails before returning, `model_result` is absent; Core does not invent provider details or usage.
 
 ## 7. Natural DSL: bindings
+
+`execute` declares output bindings in its body, including multiple destinations and repeated references to a destination.
+`decide` declares its single output in its header; its body contains read bindings and judgment criteria.
+A marker declares an output, not an assignment event; instruction and tool execution determine intermediate assignments in `execute`.
 
 The Natural program may contain bindings with angle brackets:
 
@@ -826,7 +860,7 @@ API:
     - Can be used even when no step executor is currently set.
 - `nighthawk.scope(...) -> Iterator[StepExecutor]`
     - Every configurable parameter defaults to `UNSET`; omission and explicit `UNSET` inherit.
-    - `model=...` replaces only the model; `step_executor_configuration=...` replaces the full configuration, including defaults. Supplying both is invalid.
+    - `execution_model=...` and `decision_model=...` independently replace their models; `step_executor_configuration=...` replaces the full configuration, including defaults. Model selections cannot accompany full configuration replacement.
     - Ordinary values replace; empty sequences or mappings clear inherited collections.
     - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
     - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
@@ -1206,10 +1240,10 @@ This is a proof example for nested Natural execution with explicit inputs. Its f
 import nighthawk as nh
 
 
-@nh.natural_function
+@nh.function
 async def block_two(i: int) -> str:
     message = ""
-    """natural
+    """execute
     Inspect <i>, the explicitly supplied one-based iteration.
     Set <:message> to 'fifth' on iteration 5, 'eighth' on iteration 8,
     and 'ordinary' on every other iteration.
@@ -1217,10 +1251,10 @@ async def block_two(i: int) -> str:
     return message
 
 
-@nh.natural_function
+@nh.function
 async def block_one() -> list[str]:
     messages: list[str] = []
-    """natural
+    """execute
     Call <block_two> ten times in sequence.
     Before each call, use nh_assign to set the temporary name i to the
     current one-based iteration, from 1 through 10.
@@ -1301,7 +1335,7 @@ Malformed declarations or annotations for undeclared outputs raise `BindingDecla
 `execute_step(definition, *, name_to_value, write_binding)` and its asynchronous counterpart execute one invocation using the explicit namespace and required `write_binding(name, value)` callback.
 Definitions retain no invocation state and may be reused with different namespaces, initial values, types, and writers; annotation resolution and inference occur on every invocation.
 They require an active run and use its configured executor and the ordinary preparation, operation, validation, commit-inspection, and lifecycle machinery.
-The program is a body without the `natural` sentinel; deny frontmatter is supported.
+The program is a body without a block header. `block_kind="execute"` is the default and supports deny frontmatter; `block_kind="decide"` requires exactly one output and a judgment instruction.
 Declarations are authoritative host metadata; these entry points do not parse bindings from text, expand includes, or interpolate source.
 The [embedded execution guide](embedded-execution.md) provides complete examples and the public API contract.
 
@@ -1366,10 +1400,10 @@ Async calls use the context in which the coroutine runs; a Task uses its selecte
 Argument expressions and unrelated outer decorators execute outside this boundary.
 Arguments retain object identity, and inspection never evaluates deferred annotations.
 
-`FunctionCall` exposes `call_id`, `parent_call_id`, `definition`, `arguments`, the immutable shallow `keyword_name_to_value` mapping, and inert `model_selection`.
+`FunctionCall` exposes `call_id`, `parent_call_id`, `definition`, `arguments`, the immutable shallow `keyword_name_to_value` mapping.
 `nh.get_function_call()` returns the current invocation or `None`.
 Every intercepted nested call gets its own identity; Core does not assign host execution units or implicitly start another run.
-Handler ordering is entry, permitted selection resolution, body and owned processing, model-scope restoration, then handler return or failure.
+Handler ordering is entry, body and owned processing, then handler return or failure. The body inherits its caller's active scope.
 
 The continuation may start once, only while its handler is active and in that same Task and thread.
 A normal handler return without completing its continuation raises `FunctionCallError`; refusal raises the host's own exception before proceeding.
@@ -1379,7 +1413,7 @@ A synchronous function returning a coroutine returns that exact object without i
 Intercepted generator and async-generator functions raise `FunctionCallError` before body execution because iterator creation is not completion of their lifetime.
 Detached application tasks, unjoined threads, external service work, hard process termination, and malicious internal mutation are outside this guarantee.
 
-`nh.get_natural_function_definition(value)` returns a frozen `NaturalFunctionDefinition` only for a registered public wrapper or its standard bound-method, staticmethod, or classmethod descriptor.
+`nh.get_function_definition(value)` returns a frozen `FunctionDefinition` only for a registered public wrapper or its standard bound-method, staticmethod, or classmethod descriptor.
 Its `original_function`, `function`, and `transformed_function` fields are the actual objects.
 Copied attributes, raw source/body functions, and unrelated outer wrappers are not exact registration evidence.
 The registry uses weak ownership; a snapshot held by the application intentionally retains its functions.
@@ -1387,11 +1421,12 @@ The registry uses weak ownership; a snapshot held by the application intentional
 
 ### Model declarations and observation
 
-`@nh.natural_function(model=...)` and `nh.scope(model=...)` replace only the model, retaining other configuration fields.
-`step_executor_configuration=...` replaces the full configuration, including default values of omitted fields.
-Omission and `UNSET` inherit, and supplying both selections is invalid.
-A `ModelSelection` is inert: decoration and definition lookup do not initialize providers or credentials.
-Function declarations apply only inside an accepted continuation and restore the parent even on failure or cancellation.
+`nh.run(execution_model=..., decision_model=...)` creates a managed executor when none is supplied.
+`nh.scope(execution_model=..., decision_model=...)` replaces either model independently, retaining other configuration fields.
+Omission or `UNSET` inherits each selection; `None` clears it, causing that block kind to fail until a model is selected again.
+`step_executor_configuration=...` replaces the full configuration and cannot accompany individual model selections.
+Functions inherit the active settings without a decorator override.
+`ModelSelection` is inert and is resolved by the active executor before installing a scope.
 
 The active executor's optional `ConfigurableStepExecutor.resolve_model_selection()` accepts, maps, or rejects selection synchronously.
 Core never unwraps a host executor to bypass its policy, and verifies the returned executor protocol.

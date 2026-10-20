@@ -1,4 +1,7 @@
 # Natural blocks
+
+Natural has two block kinds: `execute` for instructions involving actions and assignments, and `decide` for typed judgments.
+Both use `@nh.function`. This guide describes `execute`; see [Typed decisions](decisions.md) for `decide <:output>`.
 <!-- prompt-example markers (e.g. prompt-example:basic-binding) are test anchors used by tests/docs/test_prompt_examples.py to verify that documented prompt examples match actual rendering output. -->
 
 > This page assumes you have completed [Quickstart](quickstart.md).
@@ -13,7 +16,7 @@ All examples assume the [Quickstart](quickstart.md) setup:
 import nighthawk as nh
 
 step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
+    configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
 )
 
 with nh.run(step_executor):
@@ -31,10 +34,10 @@ Every Natural block execution follows the same pattern: Nighthawk assembles a pr
 When you write:
 
 ```py
-@nh.natural_function
+@nh.function
 def classify_priority(text: str) -> str:
     priority: str = "normal"
-    """natural
+    """execute
     Read <text> and update <:priority> with one of: low, normal, high.
     """
     return priority
@@ -95,10 +98,10 @@ It does not restrict access to other lexical, inherited, or scoped task values.
 An existing Python name can be rebound only if also declared as an output.
 
 ```py
-@nh.natural_function
+@nh.function
 def greet(user_name: str, language: str) -> str:
     greeting = ""
-    """natural
+    """execute
     Compose a short greeting for <user_name> in <language> and set <:greeting>.
     """
     return greeting
@@ -113,10 +116,10 @@ A write binding allows the LLM to set a new value. The value is committed back i
 Pre-declared (with type annotation and initial value):
 
 ```py
-@nh.natural_function
+@nh.function
 def extract_sentiment(review: str) -> str:
     sentiment: str = "neutral"
-    """natural
+    """execute
     Read <review> and update <:sentiment> with one of: positive, neutral, negative.
     """
     return sentiment
@@ -125,10 +128,10 @@ def extract_sentiment(review: str) -> str:
 Annotation only (type without initial value):
 
 ```py
-@nh.natural_function
+@nh.function
 def extract_topic(article: str) -> str:
     topic: str
-    """natural
+    """execute
     Read <article> and set <:topic> to the main topic.
     """
     return topic
@@ -137,9 +140,9 @@ def extract_topic(article: str) -> str:
 Not pre-declared:
 
 ```py
-@nh.natural_function
+@nh.function
 def detect_language(text: str):
-    """natural
+    """execute
     Read <text> and set <:language> to the detected language code.
     """
     # `language` is intentionally introduced by <:language>.
@@ -169,10 +172,10 @@ class ReviewVerdict(BaseModel):
     risk_level: str
 
 
-@nh.natural_function
+@nh.function
 def judge_review(review_data: str) -> ReviewVerdict:
     verdict: ReviewVerdict
-    """natural
+    """execute
     Analyze <review_data> and produce a structured <:verdict>.
     Set approved, reason, and risk_level fields.
     """
@@ -202,7 +205,7 @@ Nested multimodal values inside dicts, models, and objects are not recursively h
 def summarize_report(report: Report) -> str:
     report_scan = report.attachments.scan_image
     summary = ""
-    """natural
+    """execute
     Read <report_scan> and summarize the visual evidence in <:summary>.
     """
     return summary
@@ -220,10 +223,10 @@ Inline f-string blocks embed Python expressions directly into the Natural progra
 PROJECT_POLICY = ["safety-first", "concise-output", "cite-assumptions"]
 
 
-@nh.natural_function
+@nh.function
 def choose_policy(post: str) -> str:
     selected_policy = ""
-    f"""natural
+    f"""execute
     Read <post>.
     Available policies: {PROJECT_POLICY}
     Select the single best policy and set <:selected_policy>.
@@ -272,10 +275,10 @@ class Config(BaseModel):
     style: str = "formal"
 
 
-@nh.natural_function
+@nh.function
 def generate(config: Config, topic: str) -> str:
     output = ""
-    f"""natural
+    f"""execute
     Write about <topic> in {config.style} style.
     Keep the output under {config.max_length} words.
     Set <:output>.
@@ -303,14 +306,14 @@ The LLM discovers callable functions from the LOCALS and GLOBALS sections of the
 ### Local functions
 
 ```py
-@nh.natural_function
+@nh.function
 def compute_score_with_local_function() -> int:
     def add_points(base: int, bonus: int) -> int:
         """Return a deterministic sum for score calculation."""
         return base + bonus
 
     result = 0
-    """natural
+    """execute
     Compute <:result> by choosing the most suitable local helper based on its docstring.
     Use base=38 and bonus=4.
     """
@@ -353,9 +356,9 @@ def python_average(numbers):
     return sum(numbers) / len(numbers)
 
 
-@nh.natural_function
+@nh.function
 def calculate_average(numbers):
-    """natural
+    """execute
     Map each element of <numbers> to the number it represents,
     then compute <:result> by calling <python_average> with the mapped list.
     """
@@ -451,10 +454,10 @@ class ReviewVerdict(BaseModel):
     risk_level: str
 
 
-@nh.natural_function
+@nh.function
 def judge_review(review_data: str | JsonableValue) -> ReviewVerdict:
     verdict: ReviewVerdict
-    """natural
+    """execute
     Analyze <review_data> and produce a structured <:verdict>.
     """
     return verdict
@@ -526,10 +529,10 @@ def get_feedback_summary(topic: str, max_items: int = 10) -> str:
 
 
 # Natural block sees only what it needs
-@nh.natural_function
+@nh.function
 def analyze_feedback(topic: str) -> str:
     result = ""
-    """natural
+    """execute
     Call <get_feedback_summary> for <topic> and set <:result>
     to an actionable recommendation.
     """

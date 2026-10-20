@@ -164,7 +164,7 @@ if __name__ == "__main__":
 def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     codex_executable = _write_executable_codex_stub(directory=tmp_path)
 
-    nh.StepExecutorConfiguration(model="codex:default")
+    nh.StepExecutorConfiguration(execution_model="codex:default")
 
     class StubExecutor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:

@@ -10,7 +10,7 @@ def test_docstring_natural_block_detected_and_bindings_extracted():
     src = textwrap.dedent(
         '''
         def f(numbers):
-            """natural
+            """execute
             Consider <numbers> and compute <:result>.
             """
             return result
@@ -30,7 +30,7 @@ def test_inline_natural_block_detected():
         '''
         def f(x):
             """not natural"""
-            """natural
+            """execute
             Make <:y> be 1.
             """
             return y
@@ -47,7 +47,7 @@ def test_inline_fstring_natural_block_detected_and_bindings_extracted():
     src = textwrap.dedent(
         '''
         def f(x):
-            f"""natural
+            f"""execute
             Set <:y> to {x + 1}.
             """
             return y
@@ -105,7 +105,7 @@ def test_natural_sentinel_rejects_trailing_whitespace_on_sentinel_line_docstring
     src = textwrap.dedent(
         '''
         def f():
-            """natural\t
+            """execute\t
             Make <:y> be 1.
             """
             return y
@@ -124,7 +124,7 @@ def test_natural_inline_parentheses_do_not_matter():
         '''
         def f():
             x = 0
-            ("""natural
+            ("""execute
             Make <:y> be 1.
             """)
             _ = x

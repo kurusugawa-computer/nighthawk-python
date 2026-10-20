@@ -19,9 +19,9 @@ def model_named(name: str) -> FunctionModel:
 
 def test_live_model_identity_and_nested_serialization_barrier() -> None:
     model = model_named("unknown-local-model")
-    configuration = nh.StepExecutorConfiguration(model=model)
-    assert configuration.model is model
-    assert configuration.model_copy().model is model
+    configuration = nh.StepExecutorConfiguration(execution_model=model)
+    assert configuration.execution_model is model
+    assert configuration.model_copy().execution_model is model
     assert "model=" not in repr(configuration)
     assert "model=" not in str(configuration)
 
@@ -31,50 +31,51 @@ def test_live_model_identity_and_nested_serialization_barrier() -> None:
     container = Container(configuration=configuration)
     for record in (configuration, container):
         for dump in (record.model_dump, record.model_dump_json):
-            with pytest.raises(PydanticSerializationError, match="exclude the model field explicitly"):
+            with pytest.raises(PydanticSerializationError, match="exclude the live model field explicitly"):
                 dump()
-    assert "model" not in configuration.model_dump(exclude={"model"})
-    configuration.model_dump_json(exclude={"model"})
+    assert "execution_model" not in configuration.model_dump(exclude={"execution_model"})
+    configuration.model_dump_json(exclude={"execution_model"})
     assert configuration.model_dump(include={"tokenizer_encoding"}) == {"tokenizer_encoding": None}
-    assert "model" not in container.model_dump(exclude={"configuration": {"model"}})["configuration"]
-    container.model_dump_json(exclude={"configuration": {"model"}})
+    assert "execution_model" not in container.model_dump(exclude={"configuration": {"execution_model"}})["configuration"]
+    container.model_dump_json(exclude={"configuration": {"execution_model"}})
 
 
-@pytest.mark.parametrize("value", [None, 1, {}, {"model_name": "gpt-4o"}, object()])
+@pytest.mark.parametrize("value", [1, {}, {"model_name": "gpt-4o"}, object()])
 def test_only_existing_models_or_qualified_strings_are_accepted(value: object) -> None:
     with pytest.raises(ValidationError):
-        nh.StepExecutorConfiguration(model=value)  # type: ignore[arg-type]
+        nh.StepExecutorConfiguration(execution_model=value)  # type: ignore[arg-type]
 
 
 def test_string_configuration_round_trip_and_schema() -> None:
-    configuration = nh.StepExecutorConfiguration(model="openai:gpt-4o")
+    configuration = nh.StepExecutorConfiguration(execution_model="openai:gpt-4o")
     assert nh.StepExecutorConfiguration.model_validate_json(configuration.model_dump_json()) == configuration
-    assert nh.StepExecutorConfiguration.model_json_schema()["properties"]["model"]["type"] == "string"
+    assert nh.StepExecutorConfiguration.model_json_schema()["properties"]["execution_model"]["anyOf"] == [{"type": "string"}, {"type": "null"}]
 
 
 @pytest.mark.parametrize(("name", "expected"), [("gpt-4", "cl100k_base"), ("unknown-model", "o200k_base")])
 def test_tokenizer_model_names_and_explicit_override(name: str, expected: str) -> None:
     model = model_named(name)
-    assert nh.StepExecutorConfiguration(model=model).resolve_token_encoding().name == expected
-    assert nh.StepExecutorConfiguration(model=model, tokenizer_encoding="cl100k_base").resolve_token_encoding().name == "cl100k_base"
+    assert nh.StepExecutorConfiguration(execution_model=model).resolve_token_encoding().name == expected
+    assert nh.StepExecutorConfiguration(execution_model=model, tokenizer_encoding="cl100k_base").resolve_token_encoding().name == "cl100k_base"
     with pytest.raises(ValueError):
-        nh.StepExecutorConfiguration(model=model, tokenizer_encoding="invalid-encoding").resolve_token_encoding()
+        nh.StepExecutorConfiguration(execution_model=model, tokenizer_encoding="invalid-encoding").resolve_token_encoding()
 
 
 def test_run_configuration_model_default_applies():
     configuration = nh.StepExecutorConfiguration()
-    assert configuration.model == "openai-responses:gpt-5.6-luna"
+    assert configuration.execution_model is None
+    assert configuration.decision_model is None
 
 
 def test_run_configuration_model_requires_provider_model_format():
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(model="openai-responses")
+        nh.StepExecutorConfiguration(execution_model="openai-responses")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(model=":gpt-5.6-luna")
+        nh.StepExecutorConfiguration(execution_model=":gpt-5.6-luna")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(model="openai-responses:")
+        nh.StepExecutorConfiguration(execution_model="openai-responses:")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna:extra")
+        nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna:extra")

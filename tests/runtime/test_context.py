@@ -12,10 +12,10 @@ from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
 from nighthawk.runtime import ContextRequest, DefaultContextBuilder, assign_tool_async
 
 
-@nh.natural_function
+@nh.function
 async def workflow(payload: object) -> int:
     result: int = 0
-    """natural
+    """execute
     Examine <payload> and produce <:result>.
     """
     return result

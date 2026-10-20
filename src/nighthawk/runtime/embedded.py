@@ -25,7 +25,7 @@ def execute_step(
 ) -> StepResult:
     """Execute and save one step under the active run and scope.
 
-    The trusted program is a body without the ``natural`` sentinel; deny frontmatter is supported.
+    The trusted program is a body without the ``execute`` sentinel; deny frontmatter is supported.
     Declarations are authoritative metadata supplied by the host, without source interpolation or include expansion.
     The explicit namespace is shallow-copied during preparation; contained objects retain identity.
     Declared reads must exist there, even when a builtin or scoped task reference has the same name.
@@ -57,6 +57,7 @@ def execute_step(
             definition.return_annotation,
             definition.is_in_loop,
             name_to_value=name_to_value,
+            block_kind=definition.block_kind,
         )
         for name in definition.output_binding_names:
             if name not in envelope["bindings"]:
@@ -95,6 +96,7 @@ async def execute_step_async(
             definition.return_annotation,
             definition.is_in_loop,
             name_to_value=name_to_value,
+            block_kind=definition.block_kind,
         )
         for name in definition.output_binding_names:
             if name not in envelope["bindings"]:

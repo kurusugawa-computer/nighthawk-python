@@ -29,9 +29,9 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
 
     with nh.run(NoopExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             <later_value>
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 0}}
@@ -63,9 +63,9 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
 
     with nh.run(NoopExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             <missing>
             Hello.
             """
@@ -98,9 +98,9 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             <NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER>
             <:result>
             Set result.

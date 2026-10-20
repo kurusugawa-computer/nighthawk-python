@@ -23,9 +23,9 @@ from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context
 
 
-@nh.natural_function
+@nh.function
 async def run_validated_action() -> None:
-    """natural
+    """execute
     Call action once, then finish.
     """
 
@@ -63,7 +63,7 @@ def test_native_validator_python_exception_preserves_identity_and_admission(vali
         model_calls += 1
         return ModelResponse(parts=[ToolCallPart("action", {"value": 1}, "failed-admission")])
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(tools=[tool], lifecycle=StepLifecycle(on_operation_finished=operations.append, on_step_finished=terminals.append)),
@@ -167,7 +167,7 @@ def test_invalid_tool_request_retains_failed_admission(tool_name: str, arguments
             return ModelResponse(parts=[ToolCallPart(tool_name, arguments, "invalid")])
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with nh.run(executor), nh.scope(tools=[Tool(action)], lifecycle=StepLifecycle(on_operation_finished=operations.append)):
         asyncio.run(run_validated_action())
     assert model_calls == 2
@@ -203,7 +203,7 @@ def test_capability_recovery_dispatches_once_after_recording_failed_admission() 
             return ModelResponse(parts=[ToolCallPart("action", {"value": "invalid"}, "recovered")])
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(

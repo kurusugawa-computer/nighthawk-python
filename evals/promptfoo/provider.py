@@ -388,7 +388,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
             model_settings_dict = {"openai_reasoning_effort": reasoning_effort}
 
     configuration = nh.StepExecutorConfiguration(
-        model=model,
+        execution_model=model,
         model_settings=model_settings_dict,
         prompts=prompt_templates,
     )

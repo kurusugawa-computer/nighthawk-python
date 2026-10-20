@@ -65,6 +65,7 @@ nav:
   - Getting started:
       - Quickstart: quickstart.md
       - Natural blocks: natural-blocks.md
+      - Typed decisions: decisions.md
       - Executors: executors.md
       - Runtime configuration: runtime-configuration.md
       - Operation feedback: operation-feedback.md

@@ -18,10 +18,10 @@ _module_value = 99
 def test_natural_text_does_not_capture_outer_values() -> None:
     value = 5
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         result: int = 0
-        """natural
+        """execute
         <value> <:result>
         {"step_outcome": {"kind": "return", "return_expression": "value"}, "bindings": {}}
         """
@@ -41,10 +41,10 @@ def test_natural_text_does_not_capture_outer_values() -> None:
 def test_explicit_cell_observes_rebinding_and_empty_cells() -> None:
     value = 5
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal value
-        """natural
+        """execute
         <value>
         {"step_outcome": {"kind": "return", "return_expression": "value"}, "bindings": {}}
         """
@@ -60,9 +60,9 @@ def test_explicit_cell_observes_rebinding_and_empty_cells() -> None:
 
 
 def test_local_classification_blocks_injected_fallback_without_explicit_read() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "value"}, "bindings": {}}
         """
         value = 99
@@ -77,17 +77,17 @@ def test_local_classification_blocks_injected_fallback_without_explicit_read() -
 def test_child_without_cells_does_not_borrow_parent_python_cells() -> None:
     _module_value = 5
 
-    @nh.natural_function
+    @nh.function
     def child() -> int:
-        """natural
+        """execute
         Read the value.
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     def parent() -> int:
         nonlocal child, _module_value
-        """natural
+        """execute
         Call the child.
         """
         return 0
@@ -109,10 +109,10 @@ def test_original_application_helper_keeps_its_own_closure() -> None:
     def helper() -> int:
         return value
 
-    @nh.natural_function
+    @nh.function
     def workflow(value: int) -> int:
         nonlocal helper
-        """natural
+        """execute
         <helper>
         {"step_outcome": {"kind": "return", "return_expression": "helper() + value"}, "bindings": {}}
         """
@@ -131,9 +131,9 @@ def test_defaults_run_once_and_retain_live_objects() -> None:
         defaults.append(value)
         return value
 
-    @nh.natural_function
+    @nh.function
     def workflow(value: list[int] = make_default(), *, other: list[int] = make_default()) -> tuple[list[int], list[int]]:  # noqa: B008
-        """natural
+        """execute
         {"step_outcome": {"kind": "pass"}, "bindings": {}}
         """
         return value, other
@@ -149,9 +149,9 @@ def test_defaults_run_once_and_retain_live_objects() -> None:
 
 
 def test_instrumentation_does_not_call_shadowed_dict_or_zip() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(dict: str, zip: str) -> str:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "dict + zip"}, "bindings": {}}
         """
         return ""
@@ -161,14 +161,14 @@ def test_instrumentation_does_not_call_shadowed_dict_or_zip() -> None:
 
 
 def test_nested_decorated_function_owns_its_own_cells() -> None:
-    @nh.natural_function
+    @nh.function
     def parent() -> int:
         value = 5
 
-        @nh.natural_function
+        @nh.function
         def child() -> int:
             nonlocal value
-            """natural
+            """execute
             Read <value>.
             """
             return 0
@@ -194,10 +194,10 @@ def test_global_rebinding_during_an_operation_is_visible_to_nested_expressions()
         global _module_value
         _module_value = 11
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         nonlocal change_global
-        """natural
+        """execute
         Read the changing global.
         """
 
@@ -217,4 +217,4 @@ def test_unavailable_source_is_reported_explicitly() -> None:
     namespace: dict[str, Any] = {}
     exec(compile("def generated():\n    pass\n", "<unavailable-natural-source>", "exec"), namespace)
     with pytest.raises(nh.NighthawkError, match="available Python"):
-        nh.natural_function(namespace["generated"])
+        nh.function(namespace["generated"])

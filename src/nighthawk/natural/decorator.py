@@ -12,10 +12,6 @@ from functools import wraps
 from types import CellType, FunctionType
 from typing import Any, cast, overload
 
-from pydantic_ai.models import Model
-
-from ..composition import UNSET, UnsetType
-from ..configuration import StepExecutorConfiguration, _model_selection
 from ..errors import NighthawkError
 from ..function_call import _invoke, _invoke_async
 from ..runtime.annotations import SourceAnnotation
@@ -25,7 +21,7 @@ from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope
 from ._names import _RuntimeNames
 from .blocks import extract_program
-from .definition import NaturalFunctionDefinition, _register_definition
+from .definition import FunctionDefinition, _register_definition
 from .transform import transform_module_ast
 
 type NaturalFunctionCallable = Callable[..., Any]
@@ -113,46 +109,24 @@ def _build_transformed_factory_module(
 
 
 @overload
-def natural_function[**P, R](
-    func: Callable[P, R], *, model: str | Model | UnsetType = UNSET, step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET
-) -> Callable[P, R]: ...
+def function[**P, R](func: Callable[P, R]) -> Callable[P, R]: ...
 
 
 @overload
-def natural_function[**P, R](
-    *, model: str | Model | UnsetType = UNSET, step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET
-) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
+def function[**P, R]() -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
-def natural_function(
-    func: NaturalFunctionCallable | None = None,
-    *,
-    model: str | Model | UnsetType = UNSET,
-    step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
-) -> NaturalFunctionCallable:
-    """Transform a function containing Natural blocks into an executable Natural function.
+def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCallable:
+    """Instrument execute and decide blocks while preserving the Python signature.
 
-    Parses the function source to find Natural blocks, rewrites the AST to
-    delegate block execution to the active step executor at runtime.
-
-    Args:
-        func: The source function, or omit it for a parameterized decorator.
-        model: Inert model-only declaration, resolved after host admission.
-            Omission or UNSET inherits the active executor configuration.
-        step_executor_configuration: Inert full configuration replacement.
-            Cannot be combined with model; the function scope restores its parent.
+    Models and execution controls are selected by the active run and scope.
     """
-    selection = _model_selection(model, step_executor_configuration)
     if func is None:
-        return lambda function: natural_function(function, model=model, step_executor_configuration=step_executor_configuration)  # type: ignore[return-value]
-
+        return function
     if isinstance(func, staticmethod):
-        decorated_static_function = natural_function(func.__func__, model=model, step_executor_configuration=step_executor_configuration)
-        return cast(NaturalFunctionCallable, staticmethod(decorated_static_function))
-
+        return cast(NaturalFunctionCallable, staticmethod(function(func.__func__)))
     if isinstance(func, classmethod):
-        decorated_class_function = natural_function(func.__func__, model=model, step_executor_configuration=step_executor_configuration)
-        return cast(NaturalFunctionCallable, classmethod(decorated_class_function))
+        return cast(NaturalFunctionCallable, classmethod(function(func.__func__)))
 
     if sys.implementation.name != "cpython" or sys.version_info < (3, 13):
         raise NighthawkError("Natural source instrumentation requires CPython 3.13 or later")
@@ -276,18 +250,18 @@ def natural_function(
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await _invoke_async(definition, transformed_async, args, kwargs, selection)
+            return await _invoke_async(definition, transformed_async, args, kwargs)
 
-        definition = NaturalFunctionDefinition(func, async_wrapper, transformed)
+        definition = FunctionDefinition(func, async_wrapper, transformed)
         _register_definition(definition)
         async_wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
         return cast(NaturalFunctionCallable, async_wrapper)  # type: ignore[return-value]
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        return _invoke(definition, args, kwargs, selection)
+        return _invoke(definition, args, kwargs)
 
-    definition = NaturalFunctionDefinition(func, wrapper, transformed)
+    definition = FunctionDefinition(func, wrapper, transformed)
     _register_definition(definition)
     wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
     return cast(NaturalFunctionCallable, wrapper)  # type: ignore[return-value]

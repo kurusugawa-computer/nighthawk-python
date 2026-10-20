@@ -100,24 +100,24 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
         }
     )
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         value: int = 0
-        f"""natural
+        f"""execute
         <:value>
         {program}
         """
         return value
 
-    @nh.natural_function
+    @nh.function
     def disallowed() -> None:
-        """natural
+        """execute
         {"step_outcome": {"kind": "break"}, "bindings": {}}
         """
 
-    @nh.natural_function
+    @nh.function
     def invalid_raise() -> None:
-        """natural
+        """execute
         {"step_outcome": {"kind": "raise", "raise_message": "failed", "raise_error_type": "MissingException"}, "bindings": {}}
         """
 
@@ -149,10 +149,10 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
 def test_inner_python_handler_does_not_hide_step_failure() -> None:
     ledger = Ledger()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> NaturalExecutionError | None:
         try:
-            """natural
+            """execute
             {"step_outcome": {"kind": "return", "return_expression": "1/0"}, "bindings": {}}
             """
         except NaturalExecutionError as exception:
@@ -179,10 +179,10 @@ def test_return_await_failure_is_recorded_and_translated(tracing: bool, monkeypa
         await asyncio.sleep(0)
         raise failure
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         nonlocal calculate
-        """natural
+        """execute
         <calculate>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}
         """
@@ -218,11 +218,11 @@ def test_success_ledger_preserves_identity_and_validates_once() -> None:
 
     Counted = Annotated[Record, AfterValidator(validate)]  # noqa: N806
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> Counted:  # type: ignore[valid-type]
         nonlocal Counted
         value: Counted = original  # pyright: ignore[reportInvalidTypeForm]
-        """natural
+        """execute
         <Counted> <:value>
         Finish.
         """
@@ -252,9 +252,9 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
             ledger.finished(event)
         raise StepDeliveryError(event.execution_reference, storage_error)
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -270,10 +270,10 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
 def test_preparation_failure_has_identity_and_unknown_fields() -> None:
     ledger = Ledger()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         preparation_text = "Finish."
-        f"""natural
+        f"""execute
         ---
         deny: [not_an_outcome]
         ---
@@ -293,9 +293,9 @@ def test_preparation_failure_has_identity_and_unknown_fields() -> None:
 def test_dsl_raise_translates_from_prepared_exception() -> None:
     ledger = Ledger()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         <ValueError>
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "ValueError"}, "bindings": {}}
         """
@@ -316,10 +316,10 @@ def test_cancellation_is_stored_without_host_translation() -> None:
     async def cancelled() -> int:
         raise interruption
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         nonlocal cancelled
-        """natural
+        """execute
         <cancelled>
         {"step_outcome": {"kind": "return", "return_expression": "cancelled()"}, "bindings": {}}
         """
@@ -363,15 +363,15 @@ def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStag
         notifications.append(event)
         ledger.finished(event)
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> None:
-        """natural
+        """execute
         Finish.
         """
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -396,16 +396,16 @@ def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStag
 def test_nested_host_exception_still_records_each_execution() -> None:
     ledger = Ledger()
 
-    @nh.natural_function
+    @nh.function
     def inner() -> None:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "1/0"}, "bindings": {}}
         """
 
-    @nh.natural_function
+    @nh.function
     def outer() -> None:
         nonlocal inner
-        """natural
+        """execute
         <inner>
         {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
         """
@@ -433,9 +433,9 @@ def test_returning_handler_does_not_preserve_host_exception_type() -> None:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             raise original
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 

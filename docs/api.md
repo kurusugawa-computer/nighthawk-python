@@ -13,9 +13,9 @@
         - Extend
         - Merge
         - get_transformed_function
-        - natural_function
-        - NaturalFunctionDefinition
-        - get_natural_function_definition
+        - function
+        - FunctionDefinition
+        - get_function_definition
         - FunctionCall
         - FunctionCallHandler
         - FunctionCallError
@@ -210,6 +210,7 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
 ::: nighthawk.runtime.step_definition
     options:
       members:
+        - BlockKind
         - StepDefinition
 
 ::: nighthawk.runtime.embedded

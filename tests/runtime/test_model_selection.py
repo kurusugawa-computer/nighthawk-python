@@ -17,37 +17,37 @@ def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytes
     constructions: list[object] = []
     monkeypatch.setattr("nighthawk.runtime.step_executor._new_agent_step_executor", lambda configuration: constructions.append(configuration))
 
-    @nh.natural_function(model="openai:inert")
+    @nh.function
     def function() -> None:
-        raise AssertionError("body should be refused")
+        with nh.scope(execution_model="openai:inert"):
+            raise AssertionError("body should be refused")
 
-    assert nh.get_natural_function_definition(function) is not None
+    assert nh.get_function_definition(function) is not None
     handler = RecordingHandler()
     handler.refuse = True
     with nh.function_call_scope(handler), pytest.raises(PermissionError):
         function()
-    selection = handler.calls[0].model_selection
-    assert selection is not None and selection.model == "openai:inert"
     assert not constructions
-    with pytest.raises(ValueError, match="exactly one"):
-        nh.natural_function(model="test:A", step_executor_configuration=nh.StepExecutorConfiguration())
+    with pytest.raises(ValueError, match="exclusively"):
+        nh.ModelSelection(execution_model="test:A", configuration=nh.StepExecutorConfiguration())
     with (
         nh.run(StubExecutor()),
-        pytest.raises(ValueError, match="exactly one"),
-        nh.scope(model="test:A", step_executor_configuration=nh.StepExecutorConfiguration()),
+        pytest.raises(ValueError, match="exclusively"),
+        nh.scope(execution_model="test:A", step_executor_configuration=nh.StepExecutorConfiguration()),
     ):
         pass
     with pytest.raises(ValueError):
         nh.ModelSelection()
-    with pytest.raises(TypeError):
-        nh.ModelSelection(model=None)  # type: ignore[arg-type]
+    assert nh.ModelSelection(execution_model=None).apply(nh.StepExecutorConfiguration()).execution_model is None
 
 
 @pytest.mark.parametrize("outcome", ["success", "failure", "cancel"])
 def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: str) -> None:
     first, second = deterministic_model("A"), deterministic_model("B")
     observer = RequestObserver()
-    configuration = nh.StepExecutorConfiguration(model=first, model_settings={"temperature": 0.25}, user_prompt_suffix_fragments=("inherited",))
+    configuration = nh.StepExecutorConfiguration(
+        execution_model=first, model_settings={"temperature": 0.25}, user_prompt_suffix_fragments=("inherited",)
+    )
     executor = PreservingExecutor(nh.AgentStepExecutor.from_configuration(configuration=configuration), {"allowed:B": second}, observer)
     selected: list[Any] = []
     meter = nh.UsageMeter()
@@ -57,28 +57,28 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
     class Handler(RecordingHandler):
         async def invoke_async(self, call: nh.FunctionCall, proceed: Callable) -> object:
             assert nh.get_step_executor() is executor
-            assert call.model_selection is not None
             try:
                 return await super().invoke_async(call, proceed)
             finally:
                 assert nh.get_step_executor() is executor
 
-    @nh.natural_function(model="allowed:B")
+    @nh.function
     async def child() -> None:
-        active = nh.get_step_executor()
-        assert isinstance(active, PreservingExecutor)
-        selected.append(active.executor.configuration.model)
-        assert active.observer is observer
-        assert active.executor.configuration.model_settings == {"temperature": 0.25}
-        assert active.executor.configuration.user_prompt_suffix_fragments == ("inherited",)
-        assert nh.get_usage_meter() is meter
-        assert nh.get_capabilities() == (observer,)
-        assert nh.get_oversight() is oversight
-        assert nh.get_lifecycle() is lifecycle
-        if outcome == "failure":
-            raise ValueError("failed child")
-        if outcome == "cancel":
-            raise asyncio.CancelledError("cancelled child")
+        with nh.scope(execution_model="allowed:B"):
+            active = nh.get_step_executor()
+            assert isinstance(active, PreservingExecutor)
+            selected.append(active.executor.configuration.execution_model)
+            assert active.observer is observer
+            assert active.executor.configuration.model_settings == {"temperature": 0.25}
+            assert active.executor.configuration.user_prompt_suffix_fragments == ("inherited",)
+            assert nh.get_usage_meter() is meter
+            assert nh.get_capabilities() == (observer,)
+            assert nh.get_oversight() is oversight
+            assert nh.get_lifecycle() is lifecycle
+            if outcome == "failure":
+                raise ValueError("failed child")
+            if outcome == "cancel":
+                raise asyncio.CancelledError("cancelled child")
 
     with (
         nh.function_call_scope(Handler()),
@@ -91,9 +91,9 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
             with pytest.raises(ValueError if outcome == "failure" else asyncio.CancelledError):
                 asyncio.run(child())
         assert nh.get_step_executor() is executor
-        with nh.scope(model=nh.UNSET):
+        with nh.scope(execution_model=nh.UNSET):
             assert nh.get_step_executor() is executor
-        replacement = nh.StepExecutorConfiguration(model=second)
+        replacement = nh.StepExecutorConfiguration(execution_model=second)
         with nh.scope(step_executor_configuration=replacement) as replaced:
             assert isinstance(replaced, PreservingExecutor)
             assert replaced.executor.configuration is replacement
@@ -102,30 +102,32 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
 
 
 def test_unsupported_resolvers_and_subclasses_fail_without_unwrapping() -> None:
-    with nh.run(StubExecutor()), pytest.raises(nh.NighthawkError, match="ConfigurableStepExecutor"), nh.scope(model="test:B"):
+    with nh.run(StubExecutor()), pytest.raises(nh.NighthawkError, match="ConfigurableStepExecutor"), nh.scope(execution_model="test:B"):
         pass
 
     class Invalid(StubExecutor):
         def resolve_model_selection(self, selection: nh.ModelSelection) -> Any:
             return object()
 
-    with nh.run(Invalid()), pytest.raises(nh.NighthawkError, match="return a StepExecutor"), nh.scope(model="test:B"):
+    with nh.run(Invalid()), pytest.raises(nh.NighthawkError, match="return a StepExecutor"), nh.scope(execution_model="test:B"):
         pass
 
     class Custom(nh.AgentStepExecutor):
         pass
 
-    custom = Custom(configuration=nh.StepExecutorConfiguration(model=deterministic_model("A")))
-    with nh.run(custom), pytest.raises(nh.NighthawkError, match="subclasses"), nh.scope(model="test:B"):
+    custom = Custom(configuration=nh.StepExecutorConfiguration(execution_model=deterministic_model("A")))
+    with nh.run(custom), pytest.raises(nh.NighthawkError, match="subclasses"), nh.scope(execution_model="test:B"):
         pass
 
 
 def test_rejected_model_and_explicit_executor_replacement() -> None:
     observer = RequestObserver()
     model = deterministic_model("A")
-    executor = PreservingExecutor(nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=model)), {}, observer)
+    executor = PreservingExecutor(
+        nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model)), {}, observer
+    )
     with nh.run(executor), nh.scope(capabilities=[observer]):
-        with pytest.raises(PermissionError), nh.scope(model="not:allowed"):
+        with pytest.raises(PermissionError), nh.scope(execution_model="not:allowed"):
             pass
         assert nh.get_step_executor() is executor
         assert observer.records == []
@@ -141,8 +143,8 @@ def test_rejected_model_and_explicit_executor_replacement() -> None:
 @pytest.mark.parametrize("asynchronous", [False, True])
 def test_full_function_configuration_replaces_defaults_and_restores(asynchronous: bool) -> None:
     first, second = deterministic_model("A"), deterministic_model("B")
-    parent = nh.StepExecutorConfiguration(model=first, model_settings={"temperature": 0.5}, user_prompt_suffix_fragments=("parent",))
-    replacement = nh.StepExecutorConfiguration(model=second)
+    parent = nh.StepExecutorConfiguration(execution_model=first, model_settings={"temperature": 0.5}, user_prompt_suffix_fragments=("parent",))
+    replacement = nh.StepExecutorConfiguration(execution_model=second)
     executor = nh.AgentStepExecutor.from_configuration(configuration=parent)
     handler = RecordingHandler()
 
@@ -150,17 +152,19 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
         active = nh.get_step_executor()
         assert isinstance(active, nh.AgentStepExecutor)
         assert active.configuration is replacement
-        assert active.configuration.model is second
+        assert active.configuration.execution_model is second
         assert active.configuration.model_settings == {}
         assert active.configuration.user_prompt_suffix_fragments == ()
 
-    @nh.natural_function(step_executor_configuration=replacement)
+    @nh.function
     def function() -> None:
-        check_configuration()
+        with nh.scope(step_executor_configuration=replacement):
+            check_configuration()
 
-    @nh.natural_function(step_executor_configuration=replacement)
+    @nh.function
     async def async_function() -> None:
-        check_configuration()
+        with nh.scope(step_executor_configuration=replacement):
+            check_configuration()
 
     with nh.function_call_scope(handler), nh.run(executor):
         if asynchronous:
@@ -168,8 +172,7 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
         else:
             function()
         assert nh.get_step_executor() is executor
-    selection = handler.calls[0].model_selection
-    assert selection is not None and selection.configuration is replacement
+    assert len(handler.calls) == 1
 
 
 def test_concurrent_model_selection_and_actual_cancellation_restore_each_context() -> None:
@@ -178,29 +181,30 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
         observer = RequestObserver(threshold=1000)
         handler = RecordingHandler()
         executor = PreservingExecutor(
-            nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=first)),
+            nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=first)),
             {"allowed:B": second, "allowed:C": third},
             observer,
         )
         child_entered, sibling_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
         selected: list[object] = []
 
-        @nh.natural_function
+        @nh.function
         def inherited_prefix() -> None:
             active = nh.get_step_executor()
             assert isinstance(active, PreservingExecutor)
             assert _current_task_references()["policy"] is observer
-            selected.append(active.executor.configuration.model)
+            selected.append(active.executor.configuration.execution_model)
             block()
 
-        @nh.natural_function(model="allowed:B")
+        @nh.function
         async def child() -> None:
-            inherited_prefix()
-            child_entered.set()
-            try:
-                await release.wait()
-            finally:
+            with nh.scope(execution_model="allowed:B"):
                 inherited_prefix()
+                child_entered.set()
+                try:
+                    await release.wait()
+                finally:
+                    inherited_prefix()
 
         alias = child
 
@@ -212,7 +216,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
                 assert nh.get_function_call() is None
 
         async def sibling() -> None:
-            with nh.scope(model="allowed:C"):
+            with nh.scope(execution_model="allowed:C"):
                 inherited_prefix()
                 sibling_entered.set()
                 await release.wait()
@@ -247,9 +251,9 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
 def test_function_scope_requires_a_model_selection_resolver() -> None:
     with nh.run(ScriptedExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")):
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")):
                 pass
 
         with pytest.raises(nh.NighthawkError, match="ConfigurableStepExecutor"):

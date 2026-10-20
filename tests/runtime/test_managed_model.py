@@ -80,7 +80,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
 
     monkeypatch.setattr(models, "infer_model", select)
     configuration = nh.StepExecutorConfiguration(
-        model="test:managed-local" if string_selection else model,
+        execution_model="test:managed-local" if string_selection else model,
         model_settings={"temperature": 0.1},
         system_prompt_suffix_fragments=("configured-system",),
         user_prompt_suffix_fragments=("configured-user",),
@@ -89,37 +89,37 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
     assert executor.agent_is_managed
     assert executor.agent is not None and executor.agent.model is model  # type: ignore[attr-defined]
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal invoked
         result: int = 0  # noqa: F841
         for _ in range(1):
-            """natural
+            """execute
             ---
             deny: [return]
             ---
             FIRST_STEP <invoked> <:result>
             Use the tools.
             """
-        """natural
+        """execute
         SECOND_STEP <invoked> <:result>
         Return result plus one.
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     async def workflow_async() -> int:
         nonlocal invoked
         result: int = 0  # noqa: F841
         for _ in range(1):
-            """natural
+            """execute
             ---
             deny: [return]
             ---
             FIRST_STEP <invoked> <:result>
             Use the tools.
             """
-        """natural
+        """execute
         SECOND_STEP <invoked> <:result>
         Return result plus one.
         """
@@ -213,9 +213,9 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
         async def aclose(self) -> None:
             closed.append(self.key)
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
-        """natural
+        """execute
         Return seven.
         """
         return 0
@@ -229,7 +229,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
             selected_models = [OpenAIResponsesModel("gpt-4o", provider=OpenAIProvider(openai_client=client)) for client in clients]
             configurations = [
                 nh.StepExecutorConfiguration(
-                    model=model, model_settings={"openai_store": False, "temperature": 0.1 + index / 10}, tokenizer_encoding="o200k_base"
+                    execution_model=model, model_settings={"openai_store": False, "temperature": 0.1 + index / 10}, tokenizer_encoding="o200k_base"
                 )
                 for index, model in enumerate(selected_models)
             ]
@@ -239,7 +239,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                 with nh.scope(step_executor_configuration=configurations[1]):
                     child = nh.get_step_executor()
                     assert isinstance(child, nh.AgentStepExecutor)
-                    assert child.configuration.model is selected_models[1]
+                    assert child.configuration.execution_model is selected_models[1]
                     assert child.agent is not None and child.agent.model is selected_models[1]  # type: ignore[attr-defined]
                     assert await workflow() == 7
                 assert nh.get_step_executor() is parent
@@ -261,7 +261,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                     update={"prompts": nh.StepPromptTemplates(step_system_prompt_template="Replacement system prompt")}
                 )
                 with nh.scope(step_executor_configuration=derived):
-                    assert derived.model is selected_models[0]
+                    assert derived.execution_model is selected_models[0]
                     assert await workflow() == 7
                 assert await workflow() == 7
                 assert_credentials_absent()

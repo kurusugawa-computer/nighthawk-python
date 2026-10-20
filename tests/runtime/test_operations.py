@@ -191,17 +191,17 @@ def test_child_raise_propagates_and_records_distinct_parent_and_child_steps() ->
     terminal: list[StepFinished] = []
     operations: list[OperationFinished] = []
 
-    @nh.natural_function
+    @nh.function
     async def child() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "raise", "raise_message": "child failed", "raise_error_type": "ValueError"}, "bindings": {}}
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     async def parent() -> int:
         nonlocal child
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "child()"}, "bindings": {}}
         """
         return 0
@@ -225,10 +225,10 @@ def test_return_expression_and_async_commit_inspection_do_not_replay_effects() -
     operations: list[OperationFinished] = []
     commits: list[nh.oversight.StepCommit] = []
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         nonlocal effects
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "(effects.append('executed'), 7)[1]"}, "bindings": {}}
         """
         return 0
@@ -302,10 +302,10 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
                 await eval_expression_async(request.step_context, "7")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": 9})
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         value: int = 0
-        """natural
+        """execute
         Set <:value>.
         """
         return value

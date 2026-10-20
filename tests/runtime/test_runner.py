@@ -71,9 +71,9 @@ def test_sync_step_execution_sets_execution_reference_step_execution_id() -> Non
 
     with nh.run(StepIdAssertingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f(x: int):
-            """natural
+            """execute
             <x>
             <:result>
             This is a docstring Natural block.
@@ -105,9 +105,9 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 
     with nh.run(AssertingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f(x: int):
-            """natural
+            """execute
             <x>
             <:result>
             This is a docstring Natural block.
@@ -121,9 +121,9 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 def test_async_natural_function_updates_output_binding_via_docstring_step():
     with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": 11}))):
 
-        @nh.natural_function
+        @nh.function
         async def f(x: int) -> int:
-            """natural
+            """execute
             <x>
             <:result>
             Complete this step.
@@ -137,9 +137,9 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
 def test_pass_step_finalize_coerces_committed_model_binding() -> None:
     with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": {"child": {"value": "7"}}}))):
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
-            """natural
+            """execute
             <:result>
             Complete this step.
             """
@@ -155,9 +155,9 @@ def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
         ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": {"proposals": [{"kind": "approve", "score": "5"}]}}))
     ):
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
-            """natural
+            """execute
             <:result>
             Complete this step.
             """
@@ -171,9 +171,9 @@ def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
 def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
     with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"decision": {"should_update": True, "next_plan": None}}))):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             <:decision>
             Complete this step.
             """
@@ -203,9 +203,9 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
 
     with nh.run(AsyncStepIdAssertingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         async def f() -> int:
-            """natural
+            """execute
             <:result>
             execute one step.
             """
@@ -219,9 +219,9 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
 
 
 def test_resolved_return_value_is_validated() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
-        """natural
+        """execute
         Return an integer.
         """
         return 0
@@ -233,12 +233,12 @@ def test_resolved_return_value_is_validated() -> None:
 def test_resolved_continue_effect_skips_following_statements():
     with nh.run(ScriptedExecutor(default_response=continue_response())):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
             total = 0
             for _ in range(5):
                 total += 1
-                """natural
+                """execute
                 Complete this step.
                 """
                 total += 100
@@ -250,12 +250,12 @@ def test_resolved_continue_effect_skips_following_statements():
 def test_resolved_break_effect_breaks_loop():
     with nh.run(ScriptedExecutor(default_response=break_response())):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
             total = 0
             for _ in range(5):
                 total += 1
-                """natural
+                """execute
                 Complete this step.
                 """
                 total += 100
@@ -267,9 +267,9 @@ def test_resolved_break_effect_breaks_loop():
 def test_resolved_break_outside_loop_raises():
     with nh.run(ScriptedExecutor(default_response=break_response())):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             Complete this step.
             """
             return 1
@@ -298,9 +298,9 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
 
     with nh.run(recording_executor):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             This should remain literal: {GLOBAL_NUMBER}
             """
 
@@ -310,11 +310,11 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
 
 
 def test_compound_annotation_rejects_out_of_range_value() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         if True:
             result: Annotated[int, Field(ge=0, le=10)] = 0
-        """natural
+        """execute
         <:result>
         Complete this step.
         """
@@ -328,10 +328,10 @@ def test_compound_annotation_rejects_out_of_range_value() -> None:
 
 
 def test_initialized_output_is_validated_without_executor_assignment() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> str:
         result: Annotated[str, AfterValidator(str.strip)] = " draft "
-        """natural
+        """execute
         <:result>
         Complete this step.
         """
@@ -342,10 +342,10 @@ def test_initialized_output_is_validated_without_executor_assignment() -> None:
 
 
 def test_invalid_initialized_output_fails_without_executor_assignment() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         result: Annotated[int, Field(ge=0)] = -1
-        """natural
+        """execute
         <:result>
         Complete this step.
         """

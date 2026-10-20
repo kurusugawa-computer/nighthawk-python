@@ -15,16 +15,16 @@ _MODULE_SOURCE = '''
 import nighthawk as nh
 
 
-@nh.natural_function
+@nh.function
 def uses_later_helper() -> None:
-    """natural
+    """execute
     Do nothing.
     """
 
 
-@nh.natural_function
+@nh.function
 async def uses_later_helper_async() -> None:
-    """natural
+    """execute
     Do nothing.
     """
 
@@ -83,13 +83,13 @@ def test_async_natural_function_sees_module_names_defined_after_decoration(probe
 
 def test_decoration_and_execution_preserve_module_globals() -> None:
     def workflow() -> None:
-        """natural
+        """execute
         Do nothing.
         """
 
     module_name_to_value = workflow.__globals__
     original_name_to_value = dict(module_name_to_value)
-    decorated = nh.natural_function(workflow)
+    decorated = nh.function(workflow)
     transformed = nh.get_transformed_function(decorated)
     assert transformed.__globals__ is module_name_to_value
     assert module_name_to_value.keys() == original_name_to_value.keys()

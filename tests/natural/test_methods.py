@@ -9,9 +9,9 @@ def test_async_natural_function_allows_self_reference_freevar():
 
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         async def f() -> int:
-            """natural
+            """execute
             {"step_outcome": {"kind": "pass"}, "bindings": {}}
             """
             if False:
@@ -27,9 +27,9 @@ def test_natural_function_supports_instance_method():
     with nh.run(StubExecutor()):
 
         class NaturalMethodCarrier:
-            @nh.natural_function
+            @nh.function
             def evaluate(self, value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 31}}
@@ -47,9 +47,9 @@ def test_natural_function_supports_staticmethod_for_both_decorator_orders():
 
         class NaturalStaticMethodCarrier:
             @staticmethod
-            @nh.natural_function
+            @nh.function
             def static_inner(value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 41}}
@@ -57,10 +57,10 @@ def test_natural_function_supports_staticmethod_for_both_decorator_orders():
                 _ = value
                 return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            @nh.natural_function
+            @nh.function
             @staticmethod
             def static_outer(value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 42}}
@@ -79,9 +79,9 @@ def test_natural_function_supports_classmethod_for_both_decorator_orders():
 
         class NaturalClassMethodCarrier:
             @classmethod
-            @nh.natural_function
+            @nh.function
             def class_inner(cls, value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 51}}
@@ -90,10 +90,10 @@ def test_natural_function_supports_classmethod_for_both_decorator_orders():
                 _ = value
                 return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            @nh.natural_function
+            @nh.function
             @classmethod
             def class_outer(cls, value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 52}}
@@ -112,9 +112,9 @@ def test_natural_function_supports_async_instance_method():
     with nh.run(StubExecutor()):
 
         class NaturalAsyncMethodCarrier:
-            @nh.natural_function
+            @nh.function
             async def evaluate(self, value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 61}}
@@ -132,9 +132,9 @@ def test_natural_function_supports_async_staticmethod_for_both_decorator_orders(
 
         class NaturalAsyncStaticMethodCarrier:
             @staticmethod
-            @nh.natural_function
+            @nh.function
             async def static_inner(value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 71}}
@@ -142,10 +142,10 @@ def test_natural_function_supports_async_staticmethod_for_both_decorator_orders(
                 _ = value
                 return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            @nh.natural_function
+            @nh.function
             @staticmethod
             async def static_outer(value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 72}}
@@ -164,9 +164,9 @@ def test_natural_function_supports_async_classmethod_for_both_decorator_orders()
 
         class NaturalAsyncClassMethodCarrier:
             @classmethod
-            @nh.natural_function
+            @nh.function
             async def class_inner(cls, value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 81}}
@@ -175,10 +175,10 @@ def test_natural_function_supports_async_classmethod_for_both_decorator_orders()
                 _ = value
                 return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            @nh.natural_function
+            @nh.function
             @classmethod
             async def class_outer(cls, value: int) -> int:
-                """natural
+                """execute
                 <value>
                 <:result>
                 {"step_outcome": {"kind": "pass"}, "bindings": {"result": 82}}

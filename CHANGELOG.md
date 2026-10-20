@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Breaking: `@nh.function` replaces `@nh.natural_function`; Natural action blocks start with `execute` instead of `natural`.
+- Breaking: select `execution_model` and `decision_model` independently through `nh.run(...)`, `nh.scope(...)`, or `StepExecutorConfiguration`. Reusable functions no longer carry model configuration. No model is selected by default.
+- `FunctionDefinition` and `get_function_definition` replace the Natural-prefixed names. Function call records no longer carry decorator model selections.
+- Upgrade Pydantic AI to 2.58 and adapt ordered tool dispatch to its expanded event contract.
+
+### Added
+
+- `decide <:output>` blocks use Pydantic AI decision models, including OpenAI Decisions, with standard typed output contracts and complete explicitly referenced input values.
+- Decision steps require a valid answer from the current invocation, then validate and commit one output through the common runtime. Missing answers, refusals, and invalid results cannot reuse an initialized destination.
+- `StepDefinition.block_kind` supports embedded decisions. Terminal lifecycle records expose `block_kind` and the Pydantic AI `model_result`, correlated by `step_execution_id`.
+
 ## [0.17.0]
 
 ### Changed

@@ -12,7 +12,7 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
     from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
     run_configuration = nh.StepExecutorConfiguration(
-        model="claude-code-sdk:sonnet",
+        execution_model="claude-code-sdk:sonnet",
         model_settings=ClaudeCodeSdkModelSettings(
             working_directory=str(tmp_path.resolve()),
         ).model_dump(),
@@ -24,10 +24,10 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
 
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-        @nh.natural_function
+        @nh.function
         def test_function() -> str:
             result = ""
-            """natural
+            """execute
             Set <:result> to "2".
             """
 
@@ -47,7 +47,7 @@ def test_claude_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            model="claude-code-sdk:sonnet",
+            execution_model="claude-code-sdk:sonnet",
             model_settings=ClaudeCodeSdkModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
@@ -61,9 +61,9 @@ def test_claude_skill() -> None:
         )
         with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-            @nh.natural_function
+            @nh.function
             def test_function():
-                """natural
+                """execute
                 ---
                 deny: [pass, raise]
                 ---
@@ -90,7 +90,7 @@ def test_claude_skill_calc() -> None:
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     configuration = nh.StepExecutorConfiguration(
-        model="claude-code-sdk:haiku",
+        execution_model="claude-code-sdk:haiku",
         model_settings=ClaudeCodeSdkModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
@@ -104,12 +104,12 @@ def test_claude_skill_calc() -> None:
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-        @nh.natural_function
+        @nh.function
         def test_function():
             def calc(a, b):
                 return a + b * 8
 
-            """natural
+            """execute
             ---
             deny: [pass, raise]
             ---
@@ -129,7 +129,7 @@ def test_claude_mcp_callback() -> None:
     from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
     configuration = nh.StepExecutorConfiguration(
-        model="claude-code-sdk:haiku",
+        execution_model="claude-code-sdk:haiku",
         model_settings=ClaudeCodeSdkModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
@@ -142,12 +142,12 @@ def test_claude_mcp_callback() -> None:
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
 
-        @nh.natural_function
+        @nh.function
         def test_function():
             def calc(a, b):
                 return a + b * 8
 
-            """natural
+            """execute
             ---
             deny: [pass, raise]
             ---

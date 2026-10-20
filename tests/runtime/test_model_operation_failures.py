@@ -16,9 +16,9 @@ from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
 from nighthawk.runtime import OperationFinished
 
 
-@nh.natural_function
+@nh.function
 async def run_action() -> None:
-    """natural
+    """execute
     Call action once, then finish.
     """
 
@@ -60,7 +60,7 @@ def test_application_validation_failure_stops_before_another_model_request(route
             return ModelResponse(parts=[selected])
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(
@@ -107,7 +107,7 @@ def test_model_input_failure_and_explicit_retry_remain_recoverable(failure_origi
             return ModelResponse(parts=[ToolCallPart("action", {"value": 1}, "second")])
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(tools=[Tool(action, max_retries=2)], capabilities=[Hooks()], lifecycle=StepLifecycle(on_operation_finished=operations.append)),

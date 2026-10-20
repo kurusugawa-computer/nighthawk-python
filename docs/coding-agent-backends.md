@@ -8,17 +8,17 @@ The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural 
 
 Claude Code (SDK):
 ```py
-configuration = nh.StepExecutorConfiguration(model="claude-code-sdk:default")
+configuration = nh.StepExecutorConfiguration(execution_model="claude-code-sdk:default")
 ```
 
 Claude Code (CLI):
 ```py
-configuration = nh.StepExecutorConfiguration(model="claude-code-cli:default")
+configuration = nh.StepExecutorConfiguration(execution_model="claude-code-cli:default")
 ```
 
 Codex:
 ```py
-configuration = nh.StepExecutorConfiguration(model="codex:default")
+configuration = nh.StepExecutorConfiguration(execution_model="codex:default")
 ```
 
 The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-5.6-luna`). Available aliases depend on the backend CLI version.
@@ -73,7 +73,7 @@ Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the ba
 from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
 configuration = nh.StepExecutorConfiguration(
-    model="claude-code-sdk:default",
+    execution_model="claude-code-sdk:default",
     model_settings=ClaudeCodeSdkModelSettings(
         allowed_tool_names=("nh_eval", "nh_assign"),
     ),
@@ -125,7 +125,7 @@ The `claude` CLI must be installed separately (it is a system tool, not a Python
 from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
 configuration = nh.StepExecutorConfiguration(
-    model="claude-code-cli:sonnet",
+    execution_model="claude-code-cli:sonnet",
     model_settings=ClaudeCodeCliModelSettings(
         permission_mode="bypassPermissions",
         setting_sources=["project"],
@@ -170,7 +170,7 @@ pip install nighthawk-python[claude-code-sdk]
 from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
 configuration = nh.StepExecutorConfiguration(
-    model="claude-code-sdk:sonnet",
+    execution_model="claude-code-sdk:sonnet",
     model_settings=ClaudeCodeSdkModelSettings(
         permission_mode="bypassPermissions",
         setting_sources=["project"],
@@ -218,7 +218,7 @@ The `codex` CLI must be installed separately (it is a system tool, not a Python 
 from nighthawk.backends.codex import CodexModelSettings
 
 configuration = nh.StepExecutorConfiguration(
-    model="codex:default",
+    execution_model="codex:default",
     model_settings=CodexModelSettings(
         working_directory="/abs/path/to/project",
     ),
@@ -280,7 +280,7 @@ Example Natural function that invokes the skill:
 import nighthawk as nh
 
 
-@nh.natural_function
+@nh.function
 def summarize_feedback(feedback_items: list[str]) -> str:
     def group_feedback_by_topic(feedback_items: list[str]) -> dict[str, list[str]]:
         """Group feedback by topic using deterministic keyword rules."""
@@ -296,7 +296,7 @@ def summarize_feedback(feedback_items: list[str]) -> str:
         return topic_to_feedback_items
 
     summary_markdown = ""
-    """natural
+    """execute
     ---
     deny: [raise, return]
     ---

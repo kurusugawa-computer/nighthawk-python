@@ -56,18 +56,18 @@ def test_resolved_executor_value_is_never_evaluated_as_python(asynchronous: bool
                 request.binding_name_to_type["value"] = str  # type: ignore[index]
             return StepCandidate(outcome=Return("raise_if_evaluated()"), binding_name_to_value={"value": "7"})
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> str:
         value: int = 1
-        """natural
+        """execute
         Set <:value> and return a string.
         """
         return str(value)
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> str:
         value: int = 1
-        """natural
+        """execute
         Set <:value> and return a string.
         """
         return str(value)
@@ -94,10 +94,10 @@ def test_selected_contract_survives_executor_context_replacement() -> None:
             request.step_context.binding_name_to_type = {"value": str}
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": "7"})
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         value: int = 1
-        """natural
+        """execute
         Set <:value>.
         """
         return value
@@ -114,9 +114,9 @@ def test_custom_candidate_cannot_propose_undeclared_outputs(outcome: Pass | Rais
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             return StepCandidate(outcome=outcome, binding_name_to_value={"unexpected": object()})
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -144,11 +144,11 @@ def test_initial_outputs_and_candidate_return_have_independent_validation() -> N
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             return StepCandidate(outcome=Return(3))
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> Counted:  # type: ignore[valid-type]
         nonlocal Counted
         value: Counted = 3  # type: ignore[valid-type]
-        """natural
+        """execute
         <:value>
         Finish.
         """
@@ -178,9 +178,9 @@ def test_resolved_raise_is_constructed_only_after_commit_inspection() -> None:
         calls.append("inspected")
         return Accept()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -229,17 +229,17 @@ def test_finalization_reads_current_python_output_associations(nonlocal_output: 
             assert request.snapshot_output_bindings() == {"value" if nonlocal_output else "_global_output": 7}
             return StepCandidate(outcome=Pass())
 
-    @nh.natural_function
+    @nh.function
     def global_workflow() -> None:
         global _global_output
-        """natural
+        """execute
         Update <:_global_output> through the helper.
         """
 
-    @nh.natural_function
+    @nh.function
     def nonlocal_workflow() -> None:
         nonlocal value, change_value
-        """natural
+        """execute
         Update <:value> through the helper.
         """
 
@@ -265,10 +265,10 @@ def test_deleted_python_output_is_not_resurrected_at_finalization() -> None:
             assert request.snapshot_output_bindings() == {}
             return StepCandidate(outcome=Pass())
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal value, delete_value
-        """natural
+        """execute
         Process <:value>.
         """
         return value

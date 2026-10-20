@@ -389,7 +389,7 @@ async def run_trial(
 ) -> dict[str, Any]:
     state = make_trial(case)
     configuration = nh.StepExecutorConfiguration(
-        model=model,
+        execution_model=model,
         model_settings=model_settings if model_settings is not None else {"max_tokens": 4096, "timeout": 90},
         context_limits=nh.StepContextLimits(tool_result_max_tokens=512),
         json_renderer_style="strict",

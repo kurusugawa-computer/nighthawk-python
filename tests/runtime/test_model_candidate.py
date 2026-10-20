@@ -27,10 +27,10 @@ def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: n
         inspected.append(commit)
         return decision
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal invalid_exception
-        """natural
+        """execute
         <invalid_exception>
         Raise an error.
         """
@@ -62,9 +62,9 @@ async def test_asynchronous_natural_awaits_model_return_expression() -> None:
 
     with nh.run(AssertingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         async def f() -> int:
-            """natural
+            """execute
             return the value.
             """
             return 0
@@ -89,9 +89,9 @@ def test_synchronous_natural_rejects_awaitable_model_return_expression():
 
     with nh.run(AssertingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             return the value.
             """
             return 0
@@ -103,9 +103,9 @@ def test_synchronous_natural_rejects_awaitable_model_return_expression():
 def test_model_return_expression_resolves_proposed_binding():
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
             """
@@ -118,9 +118,9 @@ def test_model_return_expression_resolves_proposed_binding():
 def test_model_return_expression_rejects_unbound_name():
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
-            """natural
+            """execute
             {"step_outcome": {"kind": "return", "return_expression": "missing"}, "bindings": {}}
             """
             return 0
@@ -136,9 +136,9 @@ def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None
             outcome = RaiseStepOutcome(kind="raise", raise_message="failed") if raising else PassStepOutcome(kind="pass")
             return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, {"undeclared": 1}))
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -153,10 +153,10 @@ def test_denied_return_never_calls_inspector_or_evaluator() -> None:
         calls.append("inspected")
         return nh.oversight.Accept()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal calls
-        """natural
+        """execute
         ---
         deny: [return]
         ---

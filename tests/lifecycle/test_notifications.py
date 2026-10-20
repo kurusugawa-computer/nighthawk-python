@@ -41,18 +41,18 @@ def test_async_notifications_are_awaited_in_order(asynchronous: bool) -> None:
             events.append("executed")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": 7})
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> int:
         value = 0
-        """natural
+        """execute
         Set <:value>.
         """
         return value
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> int:
         value = 0
-        """natural
+        """execute
         Set <:value>.
         """
         return value
@@ -71,9 +71,9 @@ def test_started_delivery_failure_prevents_preparation_and_still_delivers_termin
         await asyncio.sleep(0)
         raise error
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         <missing_preparation_input>
         """
 
@@ -99,11 +99,11 @@ def test_terminal_delivery_failure_preserves_caller_writes_and_completed_record(
         await asyncio.sleep(0)
         raise error
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         value = 0
         try:
-            """natural
+            """execute
             <:value>
             {"step_outcome": {"kind": "pass"}, "bindings": {"value": 7}}
             """
@@ -136,9 +136,9 @@ def test_interruption_bounds_async_terminal_cleanup_and_preserves_original(repea
             cleanup_entered.set()
             await asyncio.Event().wait()
 
-        @nh.natural_function
+        @nh.function
         async def workflow() -> None:
-            """natural
+            """execute
             Wait.
             """
 
@@ -166,9 +166,9 @@ def test_async_source_hooks_share_the_callers_event_loop() -> None:
             asyncio.get_running_loop().call_soon(future.set_result, None)
             await future
 
-        @nh.natural_function
+        @nh.function
         async def workflow() -> None:
-            """natural
+            """execute
             {"step_outcome": {"kind": "pass"}, "bindings": {}}
             """
 
@@ -186,9 +186,9 @@ def test_sync_bridge_reports_a_foreign_event_loop_resource() -> None:
         async def started(event: StepStarted) -> None:
             await future
 
-        @nh.natural_function
+        @nh.function
         def workflow() -> None:
-            """natural
+            """execute
             {"step_outcome": {"kind": "pass"}, "bindings": {}}
             """
 
@@ -255,10 +255,10 @@ def _exercise_interrupted_sync_notification(inside_event_loop: bool, operation_n
                 await asyncio.sleep(0.001)
             cleanup_finished.set()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         nonlocal interrupt
-        """natural
+        """execute
         Interrupt this step.
         """
 
@@ -337,9 +337,9 @@ def _exercise_repeated_async_cancellation(boundary: str, self_cancel: bool) -> N
                     await nh.runtime.eval_expression_async(request.step_context, "1")
                 return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
-        @nh.natural_function
+        @nh.function
         async def workflow() -> None:
-            """natural
+            """execute
             Complete this block.
             """
 

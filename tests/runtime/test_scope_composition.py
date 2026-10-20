@@ -138,9 +138,9 @@ def test_task_references_are_available_through_the_active_environment() -> None:
                 environment.task_name_to_value["len"] = None  # type: ignore[index]
             return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Inspect the visible environment.
         """
 

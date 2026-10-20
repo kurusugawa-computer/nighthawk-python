@@ -103,9 +103,9 @@ class TestHostInstalledUsageMeter:
         scoped_meter = UsageMeter()
         step_executor = nh.AgentStepExecutor.from_agent(agent=_UsageAgent())
 
-        @nh.natural_function
+        @nh.function
         def natural_pass_function() -> None:
-            """natural
+            """execute
             Do nothing.
             """
 

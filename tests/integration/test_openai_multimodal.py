@@ -51,7 +51,7 @@ class PixelColorClassification(BaseModel):
     third: Literal["red", "green", "blue"]
 
 
-@nh.natural_function
+@nh.function
 def classify_pixel_colors(
     first_image: BinaryContent,
     second_image: BinaryContent,
@@ -62,7 +62,7 @@ def classify_pixel_colors(
         second="red",
         third="green",
     )
-    """natural
+    """execute
     Inspect <first_image>, <second_image>, and <third_image> as actual images.
     These are three different solid-color PNG images.
     Set <:result> so that `first`, `second`, and `third` are the lowercase color names of those images.
@@ -76,7 +76,7 @@ def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content(
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-5.6-luna",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )
@@ -116,7 +116,7 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-5.6-luna",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )
@@ -144,14 +144,14 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
             ),
         ]
 
-    @nh.natural_function
+    @nh.function
     def classify_tool_returned_pixel_colors() -> PixelColorClassification:
         result = PixelColorClassification(
             first="blue",
             second="red",
             third="green",
         )
-        """natural
+        """execute
         Call the tool `load_pixel_color_gallery()` directly. Do not use `nh_eval` to access it.
         The tool result contains three labeled images in this order: first, second, third.
         Determine the colors from the actual returned images, not from defaults.

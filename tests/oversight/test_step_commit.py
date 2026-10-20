@@ -53,9 +53,9 @@ def test_step_commit_reject_records_failed_step_trace(step_span_exporter: InMemo
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=reject_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 17}}
             """
@@ -83,9 +83,9 @@ def test_step_commit_async_rewrite_updates_return_value() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         async def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
             """
@@ -102,9 +102,9 @@ def test_invalid_step_commit_decision_raises_nighthawk_error_and_records_failed_
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=invalid_step_decision)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
             """
@@ -132,9 +132,9 @@ def test_invalid_step_rewrite_flows_through_finalize_validation() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 11}}
             """
@@ -151,9 +151,9 @@ def test_step_commit_rewrite_is_coerced_by_finalize_validation() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": {"value": 1}}}
             """
@@ -177,9 +177,9 @@ def test_step_commit_receives_validated_bindings_and_return_value() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "return", "return_expression": "int(result) + 1"}, "bindings": {"result": "41"}}
             """
@@ -204,9 +204,9 @@ def test_step_commit_pass_has_no_return_value() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 3}}
             """
@@ -227,9 +227,9 @@ def test_invalid_executor_output_fails_before_oversight_is_consulted() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=observe)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": "not an int"}}
             """
@@ -250,9 +250,9 @@ def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 5}}
             """
@@ -268,9 +268,9 @@ def test_rewrite_return_value_type_mismatch_raises_execution_error() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 5}}
             """
@@ -287,9 +287,9 @@ def test_rewrite_bindings_with_invalid_value_raises_execution_error() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 5}}
             """
@@ -307,9 +307,9 @@ def test_rewrite_to_disallowed_step_kind_raises_execution_error() -> None:
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             ---
             deny:
               - return
@@ -324,23 +324,23 @@ def test_rewrite_to_disallowed_step_kind_raises_execution_error() -> None:
 
 
 def test_explicit_none_return_and_resolved_kind_change() -> None:
-    @nh.natural_function
+    @nh.function
     def optional() -> int | None:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "5"}, "bindings": {}}
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     def required() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "5"}, "bindings": {}}
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     def passing() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "pass"}, "bindings": {}}
         """
         return 0
@@ -370,10 +370,10 @@ def test_accept_does_not_repeat_validators_and_replacement_does() -> None:
 
     Counted = Annotated[int, AfterValidator(validate)]  # noqa: N806
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> Counted:  # type: ignore[valid-type]
         nonlocal Counted
-        """natural
+        """execute
         <Counted>
         {"step_outcome": {"kind": "return", "return_expression": "4"}, "bindings": {}}
         """
@@ -413,9 +413,9 @@ def test_reference_views_preserve_validated_values_and_freeze_only_mapping() -> 
             commit.binding_name_to_value["values"] = []  # type: ignore[index]
         return nh.oversight.Accept()
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> tuple[object, object, object]:
-        """natural
+        """execute
         <:values> <:record> <:unique>
         Produce values.
         """
@@ -438,10 +438,10 @@ def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
         assert isinstance(commit.outcome, nh.oversight.Raise)
         return nh.oversight.Rewrite(outcome=nh.oversight.Pass())
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         result: int = 3
-        """natural
+        """execute
         <:result>
         Raise an error.
         """
@@ -467,10 +467,10 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
                 )
             )
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal OriginalError
-        """natural
+        """execute
         <OriginalError>
         Raise an error.
         """
@@ -518,12 +518,12 @@ def test_invalid_replacement_never_partially_commits_or_reinspects() -> None:
         calls.append(commit)
         return nh.oversight.Rewrite(binding_name_to_value={"first": 99, "second": "invalid"})
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> tuple[int, int]:
         first: int = 1
         second: int = 2
         try:
-            """natural
+            """execute
             <:first> <:second>
             {"step_outcome": {"kind": "pass"}, "bindings": {"first": 3, "second": 4}}
             """
@@ -537,9 +537,9 @@ def test_invalid_replacement_never_partially_commits_or_reinspects() -> None:
 
 
 def test_undeclared_rewrite_and_raise_with_writes_are_rejected() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         {"step_outcome": {"kind": "pass"}, "bindings": {}}
         """
 

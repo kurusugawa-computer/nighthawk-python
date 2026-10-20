@@ -17,7 +17,7 @@ def test_agent_step_executor_constructor_supports_standard_path_with_agent() -> 
             raise AssertionError
 
     step_executor = nh.AgentStepExecutor(agent=FakeAgent())
-    assert step_executor.configuration.model == "openai-responses:gpt-5.6-luna"
+    assert step_executor.configuration.execution_model is None
 
 
 class RuntimeChildModel(BaseModel):
@@ -47,10 +47,10 @@ def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
             result: RuntimeResultModel = RuntimeResultModel(value=0)
-            """natural
+            """execute
             <:result>
             Update the result value.
             """
@@ -73,9 +73,9 @@ def test_agent_executor_records_run_result_usage() -> None:
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             Say hi.
             """
 
@@ -104,9 +104,9 @@ def test_agent_executor_passes_plain_string_to_text_only_custom_agent() -> None:
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=recording_agent)):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             Say hi.
             """
 
@@ -135,9 +135,9 @@ def test_agent_executor_passes_multimodal_tuple_to_custom_agent() -> None:
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=recording_agent)):
 
-        @nh.natural_function
+        @nh.function
         def f(photo: BinaryContent) -> None:
-            """natural
+            """execute
             Inspect <photo>.
             """
 
@@ -168,7 +168,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
 
             current_step_executor = nh.get_step_executor()
             assert isinstance(current_step_executor, nh.AgentStepExecutor)
-            current_model_identifier = current_step_executor.configuration.model
+            current_model_identifier = current_step_executor.configuration.execution_model
             assert isinstance(current_model_identifier, str)
             self.seen_model_identifiers.append(current_model_identifier)
             assign_tool(deps, "observed_model_identifier", repr(current_model_identifier))
@@ -177,7 +177,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
 
     initial_model_identifier = "openai-responses:gpt-5.6-luna"
     recording_agent = RecordingAgent()
-    step_executor_configuration = nh.StepExecutorConfiguration(model=initial_model_identifier)
+    step_executor_configuration = nh.StepExecutorConfiguration(execution_model=initial_model_identifier)
     step_executor = nh.AgentStepExecutor.from_agent(
         agent=recording_agent,
         configuration=step_executor_configuration,
@@ -185,22 +185,22 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
 
     with nh.run(step_executor):
 
-        @nh.natural_function
+        @nh.function
         def f() -> tuple[str, str, str]:
-            """natural
+            """execute
             <:observed_model_identifier>
             Record the current model identifier.
             """
             first_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-terra")):
-                """natural
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-terra")):
+                """execute
                 <:observed_model_identifier>
                 Record the current model identifier.
                 """
                 second_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            """natural
+            """execute
             <:observed_model_identifier>
             Record the current model identifier.
             """
@@ -224,7 +224,7 @@ def test_external_agent_rejects_instance_configuration() -> None:
         def run_sync(self, *arguments, **keywords):
             raise AssertionError("No model execution expected")
 
-    configuration = nh.StepExecutorConfiguration(model=TestModel())
+    configuration = nh.StepExecutorConfiguration(execution_model=TestModel())
     for construct in (nh.AgentStepExecutor, nh.AgentStepExecutor.from_agent):
         with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
             construct(configuration=configuration, agent=FakeAgent())
@@ -250,9 +250,9 @@ def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
 
     agent = FakeAgent()
 
-    @nh.natural_function
+    @nh.function
     def natural_pass_function() -> None:
-        """natural
+        """execute
         Do nothing.
         """
 

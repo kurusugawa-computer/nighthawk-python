@@ -31,9 +31,9 @@ effects = []
 def contract():
     effects.append("annotation")
     return int
-@nh.natural_function
+@nh.function
 def workflow() -> contract():
-    """natural
+    """execute
     Complete this step.
     """
     return 1
@@ -59,10 +59,10 @@ def test_deferred_global_output_contract_is_resolved_before_validation(tmp_path:
 from typing import Annotated
 from pydantic import Field
 result: Annotated[int, Field(ge=0, le=10)] = 0
-@nh.natural_function
+@nh.function
 def workflow() -> int:
     global result
-    """natural
+    """execute
     Update <:result>.
     """
     return result
@@ -111,10 +111,10 @@ def annotation_effect():
     effects.append("annotation")
     raise AssertionError("unused module annotation")
 unused: annotation_effect() = None
-@nh.natural_function
+@nh.function
 def workflow() -> int:
     result: int = 0
-    """natural
+    """execute
     Update <:result>.
     """
     return result

@@ -34,31 +34,31 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
     contexts: list[nh.StepContext] = []
     events: list[StepFinished] = []
 
-    @nh.natural_function
+    @nh.function
     def child(value: list[int]) -> None:
         nonlocal child_cell
         child_local = 11  # noqa: F841 - read by Natural.
-        """natural
+        """execute
         Child: inspect <value>, <child_cell>, <child_local>, and <_module_value>.
         """
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_child_function(value: list[int]) -> None:
         nonlocal child_cell
         child_local = 11  # noqa: F841 - read by Natural.
-        """natural
+        """execute
         Child: inspect <value>, <child_cell>, <child_local>, and <_module_value>.
         """
 
-    @nh.natural_function
+    @nh.function
     def grandchild(value: list[int]) -> None:
-        """natural
+        """execute
         Grandchild: inspect <value>.
         """
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_grandchild(value: list[int]) -> None:
-        """natural
+        """execute
         Grandchild: inspect <value>.
         """
 
@@ -155,31 +155,31 @@ async def test_missing_parent_read_fails_before_executor_and_writeback_through_c
     calls: list[nh.FunctionCall] = []
     requests: list[StepRequest] = []
 
-    @nh.natural_function
+    @nh.function
     def child() -> None:
         nonlocal result
-        """natural
+        """execute
         Read <parent_input> and <parent_temporary>, then write <:result>.
         """
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_child() -> None:
         nonlocal result
-        """natural
+        """execute
         Read <parent_input> and <parent_temporary>, then write <:result>.
         """
 
     child_alias = asynchronous_child if asynchronous else child
 
-    @nh.natural_function
+    @nh.function
     def parent(parent_input: str) -> None:
-        """natural
+        """execute
         Parent: inspect <parent_input>.
         """
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_parent(parent_input: str) -> None:
-        """natural
+        """execute
         Parent: inspect <parent_input>.
         """
 
@@ -230,15 +230,15 @@ async def test_replaced_or_cleared_references_do_not_reappear_from_parent_workin
     shared = object()
     replacement = object()
 
-    @nh.natural_function
+    @nh.function
     async def child(expected: object) -> None:
-        """natural
+        """execute
         Child: inspect <expected>.
         """
 
-    @nh.natural_function
+    @nh.function
     async def parent() -> None:
-        """natural
+        """execute
         Parent: inspect <shared_value>.
         """
 
@@ -274,9 +274,9 @@ async def test_async_reference_context_timing_concurrency_and_cancellation() -> 
     first, second, blocked = object(), object(), object()
     entered, cleaned = asyncio.Event(), asyncio.Event()
 
-    @nh.natural_function
+    @nh.function
     async def child() -> object:
-        """natural
+        """execute
         Return <shared_value>.
         """
 

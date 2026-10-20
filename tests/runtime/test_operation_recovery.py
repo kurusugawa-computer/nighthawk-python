@@ -75,18 +75,18 @@ def test_custom_executor_recovers_without_restarting_the_step(asynchronous_execu
             value = await eval_expression_async(request.step_context, "7")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": value})
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         value: int = 0
-        """natural
+        """execute
         Set <:value> using the permitted operation.
         """
         return value
 
-    @nh.natural_function
+    @nh.function
     async def workflow_async() -> int:
         value: int = 0
-        """natural
+        """execute
         Set <:value> using the permitted operation.
         """
         return value
@@ -251,15 +251,17 @@ def test_standard_model_receives_refusal_and_corrects_the_same_step(route: str) 
             parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "return", "return_expression": "7"}}, "finish")]
         )
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
-        """natural
+        """execute
         Return a permitted value.
         """
         return 0
 
     profile = ModelProfile(supports_json_schema_output=True, default_structured_output_mode="native") if route == "native_output" else None
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond, profile=profile)))
+    executor = nh.AgentStepExecutor.from_configuration(
+        configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond, profile=profile))
+    )
     with (
         nh.run(executor),
         nh.scope(
@@ -312,9 +314,9 @@ def test_rejected_batch_skips_later_validation_bodies_and_output(end_strategy: A
         assert "skipped" in str([part.content for part in feedback])
         return ModelResponse(parts=[ToolCallPart(output_name, {"result": {"kind": "return", "return_expression": "record(4)"}}, "finish")])
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
-        """natural
+        """execute
         Record permitted values and return the final value.
         """
         return 0
@@ -359,9 +361,9 @@ def test_earlier_output_is_discarded_after_rejection_without_replaying_its_effec
             parts.append(ToolCallPart("forbidden", {}, "refused"))
         return ModelResponse(parts=parts)
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
-        """natural
+        """execute
         Return a permitted value.
         """
         return 0
@@ -395,13 +397,13 @@ def test_capability_cannot_replace_rejection_with_success_or_different_feedback(
         assert isinstance(content, dict) and content["reason"] == "Host feedback"
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         Choose a permitted method.
         """
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(
@@ -434,13 +436,13 @@ def test_repeated_rejections_preserve_request_accounting_and_host_stop() -> None
         requests += 1
         return ModelResponse(parts=[ToolCallPart("forbidden", {}, f"attempt-{requests}")])
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         Choose a permitted operation.
         """
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(
@@ -483,13 +485,13 @@ def test_cancellation_while_waiting_for_correction_prevents_another_model_reques
             requests += 1
             return ModelResponse(parts=[ToolCallPart("nh_eval", {"expression": "7"}, "refused")])
 
-        @nh.natural_function
+        @nh.function
         async def workflow() -> None:
-            """natural
+            """execute
             Evaluate a permitted expression.
             """
 
-        executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+        executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
         with (
             nh.run(executor),
             nh.scope(
@@ -514,9 +516,9 @@ def test_child_abort_stays_terminal_while_python_controls_parent_recovery(catch_
     terminals: list[StepFinished] = []
     operations: list[OperationFinished] = []
 
-    @nh.natural_function
+    @nh.function
     async def child() -> None:
-        """natural
+        """execute
         Child execution.
         """
 
@@ -538,9 +540,9 @@ def test_child_abort_stays_terminal_while_python_controls_parent_recovery(catch_
             await eval_expression_async(request.step_context, "invoke_child()")
             return StepCandidate(outcome=Pass())
 
-    @nh.natural_function
+    @nh.function
     async def parent() -> None:
-        """natural
+        """execute
         Parent execution.
         """
 
@@ -600,9 +602,9 @@ def test_native_output_refusal_skips_coemitted_tools_and_respects_retry_limit(ou
         assert "skipped" in str(feedback)
         return ModelResponse(parts=[TextPart(json.dumps({"result": {"kind": "return", "return_expression": "7"}}))])
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
-        """natural
+        """execute
         Return a permitted value.
         """
         return 0
@@ -643,9 +645,9 @@ def test_accepted_output_cannot_hide_exhausted_rejection_retries() -> None:
             ]
         )
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
-        """natural
+        """execute
         Return a permitted value.
         """
         return 0
@@ -677,9 +679,9 @@ def test_corrected_operation_does_not_bypass_commit_abort() -> None:
             assert await eval_expression_async(request.step_context, "7") == 7
             return StepCandidate(outcome=Pass())
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         Complete a permitted operation.
         """
 

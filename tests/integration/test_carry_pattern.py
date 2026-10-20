@@ -7,26 +7,26 @@ def test_carry_continuity_across_blocks():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-5.6-luna",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="medium"),
         ),
     )
 
     with nh.run(step_executor):
 
-        @nh.natural_function
+        @nh.function
         def step_1(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Set <:result> to 10.
             Append a one-line summary of what you did to <carry>.
             """
             return result
 
-        @nh.natural_function
+        @nh.function
         def step_2(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Read <carry> to find the previous result.
             Add 10 to it and set <:result>.
             Append a one-line summary of what you did to <carry>.
@@ -49,36 +49,36 @@ def test_carry_branching():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-5.6-luna",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
 
     with nh.run(step_executor):
 
-        @nh.natural_function
+        @nh.function
         def seed_step(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Set <:result> to 100.
             Append a one-line summary of what you did to <carry>.
             """
             return result
 
-        @nh.natural_function
+        @nh.function
         def branch_add(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Read <carry> to find the previous result.
             Add 5 to it and set <:result>.
             Append a one-line summary of what you did to <carry>.
             """
             return result
 
-        @nh.natural_function
+        @nh.function
         def branch_multiply(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Read <carry> to find the previous result.
             Multiply it by 2 and set <:result>.
             Append a one-line summary of what you did to <carry>.
@@ -108,17 +108,17 @@ def test_carry_with_fstring_injection():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-5.6-luna",
             model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
 
     with nh.run(step_executor):
 
-        @nh.natural_function
+        @nh.function
         def compute_with_context(context_text: str) -> int:
             result = 0
-            f"""natural
+            f"""execute
             Prior context: {context_text}
             Add 1 to the previous result mentioned in the context and set <:result>.
             """

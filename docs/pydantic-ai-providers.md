@@ -2,12 +2,12 @@
 
 > See [Executors](executors.md) for choosing between providers, backends, and custom executors.
 
-Nighthawk delegates Natural block execution to an LLM. The model is selected through the `model` field of `StepExecutorConfiguration` using the `provider:model` format:
+Nighthawk delegates Natural block execution to an LLM. The model is selected through the `execution_model` field of `StepExecutorConfiguration` using the `provider:model` format:
 
 ```py
 import nighthawk as nh
 
-configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
+configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")
 ```
 
 The configuration also accepts a borrowed Pydantic AI `Model` instance; the host retains its client lifetime.
@@ -15,7 +15,7 @@ For per-function or lexical model-only selection that preserves other configurat
 Request capabilities observe the Pydantic AI request boundary; provider SDK retries or individual HTTP attempts can remain hidden inside it.
 See [request usage and admission](runtime-configuration.md#request-usage-and-admission) before treating observations as a transport ledger or strict budget cap.
 
-The default model is `openai-responses:gpt-5.6-luna`. Recommended model for quality: `openai-responses:gpt-5.6-terra`.
+Models are selected explicitly; both model fields default to `None`. See [Typed decisions](decisions.md) for `decision_model` and OpenAI Decisions.
 
 ## Pydantic AI providers
 
@@ -25,27 +25,27 @@ Examples:
 
 OpenAI:
 ```py
-configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
+configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")
 ```
 
 Anthropic (direct API):
 ```py
-configuration = nh.StepExecutorConfiguration(model="anthropic:claude-sonnet-4-6")
+configuration = nh.StepExecutorConfiguration(execution_model="anthropic:claude-sonnet-4-6")
 ```
 
 AWS Bedrock:
 ```py
-configuration = nh.StepExecutorConfiguration(model="bedrock:us.anthropic.claude-sonnet-4-6-v1:0")
+configuration = nh.StepExecutorConfiguration(execution_model="bedrock:us.anthropic.claude-sonnet-4-6-v1:0")
 ```
 
 Google Vertex AI:
 ```py
-configuration = nh.StepExecutorConfiguration(model="google-vertex:gemini-3-pro-preview")
+configuration = nh.StepExecutorConfiguration(execution_model="google-vertex:gemini-3-pro-preview")
 ```
 
 Groq:
 ```py
-configuration = nh.StepExecutorConfiguration(model="groq:llama-4-scout-17b-16e-instruct")
+configuration = nh.StepExecutorConfiguration(execution_model="groq:llama-4-scout-17b-16e-instruct")
 ```
 
 
@@ -88,7 +88,7 @@ Pydantic AI providers accept standard Pydantic AI model settings via the `model_
 
 ```py
 configuration = nh.StepExecutorConfiguration(
-    model="openai-responses:gpt-5.6-luna",
+    execution_model="openai-responses:gpt-5.6-luna",
     model_settings={"temperature": 0.5},
 )
 ```
@@ -109,4 +109,4 @@ Each Pydantic AI provider requires its own credentials (e.g., `OPENAI_API_KEY` f
 
 ## In-memory authentication
 
-Pydantic AI Providers accept caller-owned authentication clients or keys through Python constructors. Construct an authenticated Model and pass it through `StepExecutorConfiguration.model`; see [Caller-authenticated models](runtime-configuration.md#caller-authenticated-models) for the handoff and [the configuration contract](specification.md#52-configuration) for ownership and serialization. The Docker host supplies its own credential input channel. This option does not remove environment-configured provider strings.
+Pydantic AI Providers accept caller-owned authentication clients or keys through Python constructors. Construct an authenticated Model and pass it through `StepExecutorConfiguration.execution_model`; see [Caller-authenticated models](runtime-configuration.md#caller-authenticated-models) for the handoff and [the configuration contract](specification.md#52-configuration) for ownership and serialization. The Docker host supplies its own credential input channel. This option does not remove environment-configured provider strings.

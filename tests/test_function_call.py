@@ -44,7 +44,7 @@ def test_refusal_alias_arguments_and_finally_without_blocks() -> None:
     handler = RecordingHandler()
     effects: list[str] = []
 
-    @nh.natural_function
+    @nh.function
     def function(value: object, *, fail: bool = False) -> object:
         effects.append("body")
         try:
@@ -80,11 +80,11 @@ def test_refusal_alias_arguments_and_finally_without_blocks() -> None:
 def test_recursive_and_mixed_parentage_and_explicit_clear() -> None:
     handler = RecordingHandler()
 
-    @nh.natural_function
+    @nh.function
     def recursive(depth: int) -> int:
         return recursive(depth - 1) + 1 if depth else 0
 
-    @nh.natural_function
+    @nh.function
     async def parent() -> int:
         return recursive(2)
 
@@ -102,7 +102,7 @@ def test_recursive_and_mixed_parentage_and_explicit_clear() -> None:
 def test_async_uses_execution_context_and_task_context() -> None:
     first, second = RecordingHandler(), RecordingHandler()
 
-    @nh.natural_function
+    @nh.function
     async def function() -> int:
         return 7
 
@@ -136,7 +136,7 @@ def test_sync_continuation_guard_and_return_coroutine_identity() -> None:
 
     coroutine = body()
 
-    @nh.natural_function
+    @nh.function
     def function() -> Any:
         return coroutine
 
@@ -171,7 +171,7 @@ def test_invalid_async_handlers(mode: str) -> None:
                 return await asyncio.to_thread(lambda: asyncio.run(proceed()))  # type: ignore[arg-type]
             return await asyncio.create_task(proceed())  # type: ignore[arg-type]
 
-    @nh.natural_function
+    @nh.function
     async def function() -> None:
         effects.append("body")
 
@@ -185,11 +185,11 @@ def test_invalid_async_handlers(mode: str) -> None:
 
 
 def test_generators_rejected_before_body() -> None:
-    @nh.natural_function
+    @nh.function
     def generator():
         yield 1
 
-    @nh.natural_function
+    @nh.function
     async def async_generator():
         yield 1
 
@@ -209,10 +209,10 @@ def test_completed_block_delivery_failure_is_observed_after_function_finally() -
         terminal.append(event)
         raise error
 
-    @nh.natural_function
+    @nh.function
     def function() -> None:
         try:
-            """natural
+            """execute
             {"step_outcome": {"kind": "pass"}, "bindings": {}}
             """
         finally:
@@ -236,9 +236,9 @@ def test_handler_can_establish_run_and_observe_outer_alias() -> None:
             with nh.run(StubExecutor()):
                 return super().invoke(call, proceed)
 
-    @nh.natural_function
+    @nh.function
     def function() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "3"}, "bindings": {}}
         """
         return 0
@@ -252,7 +252,7 @@ def test_handler_can_establish_run_and_observe_outer_alias() -> None:
         assert outer() == 3
     assert len(handler.calls) == 1
     assert handler.calls[0].definition.function is function
-    assert nh.get_natural_function_definition(outer) is None
+    assert nh.get_function_definition(outer) is None
 
 
 def test_awaited_child_finally_finishes_before_parent_handler_returns() -> None:
@@ -260,7 +260,7 @@ def test_awaited_child_finally_finishes_before_parent_handler_returns() -> None:
         entered, release = asyncio.Event(), asyncio.Event()
         handler = RecordingHandler()
 
-        @nh.natural_function
+        @nh.function
         async def child() -> int:
             try:
                 return 4
@@ -268,7 +268,7 @@ def test_awaited_child_finally_finishes_before_parent_handler_returns() -> None:
                 entered.set()
                 await release.wait()
 
-        @nh.natural_function
+        @nh.function
         async def parent() -> int:
             return await asyncio.create_task(child())
 

@@ -105,10 +105,10 @@ async def test_type_contracts_respect_explicit_and_scoped_names(execute: Callabl
 async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callable[..., Awaitable[StepResult]]) -> None:
     events: list[StepFinished] = []
 
-    @nh.natural_function
+    @nh.function
     def child(value: int) -> int:
         result = 0
-        """natural
+        """execute
         Read <value> and write <:result>.
         """
         return result

@@ -35,14 +35,12 @@ def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
 
-step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"))
+with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
 
-with nh.run(step_executor):
-
-    @nh.natural_function
+    @nh.function
     def calculate_average(numbers: list[object]) -> float:
         result: float = 0.0
-        """natural
+        """execute
         Map each element of <numbers> to the number it represents,
         then compute <:result> by calling <python_average> with the mapped list.
         """
@@ -65,6 +63,7 @@ The [runtime configuration guide](https://kurusugawa-computer.github.io/nighthaw
 ## Documentation
 
 - [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickstart/) -- Install and run a Natural function.
+- [Typed decisions](https://kurusugawa-computer.github.io/nighthawk-python/decisions/) -- Integrate typed judgments with `decide` and scoped decision models.
 - [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) -- Design prompts, bindings, and Python helpers.
 - [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) and [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- Compose, test, and debug workflows.
 - [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) and [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- Runtime contracts and public interfaces.

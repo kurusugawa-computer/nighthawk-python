@@ -18,14 +18,12 @@ def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
 
-step_executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"))
+with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
 
-with nh.run(step_executor):
-
-    @nh.natural_function
+    @nh.function
     def calculate_average(numbers: list[object]) -> float:
         result: float = 0.0
-        """natural
+        """execute
         Map each element of <numbers> to the number it represents,
         then compute <:result> by calling <python_average> with the mapped list.
         """
@@ -42,6 +40,7 @@ See [Philosophy](philosophy.md) for the design rationale.
 
 - **[Quickstart](quickstart.md)** -- Setup and first example. Start here.
 - **[Natural blocks](natural-blocks.md)** -- Learn what Natural blocks are: bindings, functions, writing guidelines, and binding function design.
+- **[Typed decisions](decisions.md)** -- Answer typed questions using `decide` and inspect per-step evidence.
 - **[Executors](executors.md)** -- Choose an execution backend: Pydantic AI provider, coding agent, or custom.
 
 ## Patterns and verification

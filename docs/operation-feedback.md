@@ -62,17 +62,17 @@ async def inspect_operation_async(request: OperationRequest) -> OperationDecisio
     return inspect_operation(request)
 
 
-@nh.natural_function
+@nh.function
 def calculate() -> int:
-    """natural
+    """execute
     Calculate the requested value using a permitted operation and return it.
     """
     return 0
 
 
-@nh.natural_function
+@nh.function
 async def calculate_async() -> int:
-    """natural
+    """execute
     Calculate the requested value using a permitted operation and return it.
     """
     return 0
@@ -92,7 +92,7 @@ def make_executor() -> nh.AgentStepExecutor:
             parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "return", "return_expression": "1 + 1"}}, "finish")]
         )
 
-    return nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=FunctionModel(respond)))
+    return nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
 
 
 def run_sync_example() -> int:

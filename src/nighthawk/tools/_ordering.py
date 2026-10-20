@@ -1,6 +1,6 @@
 """Keep validation and refusal barriers inside ordered model-tool dispatch.
 
-Pydantic AI 2.37 validates function batches before its execution barriers.
+Pydantic AI 2.58 validates function batches before its execution barriers.
 These scoped compatibility hooks move validation to sequential dispatch,
 stop later calls after a refusal, and discard candidates from that response.
 Pydantic AI still owns execution, retry limits, and output selection among
@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic_ai import _agent_graph, _tool_execution
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent, HandleResponseEvent, RetryPromptPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import AgentStreamEvent, FunctionToolCallEvent, FunctionToolResultEvent, RetryPromptPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.tool_manager import ToolManager, ValidatedToolCall
 from pydantic_ai.tools import ToolApproved
 
@@ -83,7 +83,7 @@ async def _skip_call(processor: Any, call: ToolCallPart, *, output: bool = False
     )
 
 
-async def _run(self: Any) -> AsyncIterator[HandleResponseEvent]:
+async def _run(self: Any) -> AsyncIterator[AgentStreamEvent]:
     if not _requires_ordered_validation(self):
         async for event in _original_run(self):
             yield event
@@ -106,9 +106,7 @@ async def _run(self: Any) -> AsyncIterator[HandleResponseEvent]:
                 }
 
 
-async def _handle_tool_calls(
-    self: Any, ctx: Any, tool_calls: list[ToolCallPart], *, response_output: Any = None
-) -> AsyncIterator[HandleResponseEvent]:
+async def _handle_tool_calls(self: Any, ctx: Any, tool_calls: list[ToolCallPart], *, response_output: Any = None) -> AsyncIterator[AgentStreamEvent]:
     if _ordered_dispatch.get() and isinstance(ctx.deps.user_deps, StepContext):
         with model_response_scope(ctx.deps.user_deps):
             async for event in _original_handle_tool_calls(self, ctx, tool_calls, response_output=response_output):
@@ -118,7 +116,7 @@ async def _handle_tool_calls(
             yield event
 
 
-async def _run_function_calls(self: Any, calls: list[ToolCallPart]) -> AsyncIterator[HandleResponseEvent]:
+async def _run_function_calls(self: Any, calls: list[ToolCallPart]) -> AsyncIterator[AgentStreamEvent]:
     batches = ([call] for call in calls) if _requires_ordered_validation(self) else (calls,)
     for batch in batches:
         if _rejection(self) is not None:
@@ -163,7 +161,7 @@ async def _run_output_tool_call(self: Any, call: ToolCallPart) -> Any:
     return result
 
 
-async def _run_output(self: Any, call: ToolCallPart) -> AsyncIterator[HandleResponseEvent]:
+async def _run_output(self: Any, call: ToolCallPart) -> AsyncIterator[AgentStreamEvent]:
     if _rejection(self) is not None:
         part = await _skip_call(self, call, output=True)
         for event in self._record_output_part(call, part, args_valid=None):
@@ -173,7 +171,7 @@ async def _run_output(self: Any, call: ToolCallPart) -> AsyncIterator[HandleResp
         yield event
 
 
-async def _finalize_deferred(self: Any) -> AsyncIterator[HandleResponseEvent]:
+async def _finalize_deferred(self: Any) -> AsyncIterator[AgentStreamEvent]:
     if _rejection(self) is not None:
         settled = {part.tool_call_id for part in self.output_parts if isinstance(part, (ToolReturnPart, RetryPromptPart))}
         for call in self.tool_calls:
@@ -187,7 +185,7 @@ async def _finalize_deferred(self: Any) -> AsyncIterator[HandleResponseEvent]:
         yield event
 
 
-async def _run_early_strategy(self: Any) -> AsyncIterator[HandleResponseEvent]:
+async def _run_early_strategy(self: Any) -> AsyncIterator[AgentStreamEvent]:
     strategy = _tool_execution._GracefulProcessor._run_strategy if _requires_ordered_validation(self) else _original_early_strategy
     async for event in strategy(self):
         yield event
@@ -195,7 +193,7 @@ async def _run_early_strategy(self: Any) -> AsyncIterator[HandleResponseEvent]:
 
 async def _validate_exhaustive_calls(
     self: Any, calls: list[ToolCallPart], *, validated_calls: dict[str, ValidatedToolCall[Any]]
-) -> AsyncIterator[HandleResponseEvent]:
+) -> AsyncIterator[AgentStreamEvent]:
     if not _requires_ordered_validation(self):
         async for event in _original_validation(self, calls, validated_calls=validated_calls):
             yield event

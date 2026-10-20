@@ -26,13 +26,14 @@ if TYPE_CHECKING:
         OperationRejection,
         OperationRequest,
     )
-    from .step_definition import StepDefinition
+    from .step_definition import BlockKind, StepDefinition
     from .step_request import StepCandidate, StepRequest
     from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 _name_to_module = {
     "StepResult": "step_result",
     "StepDefinition": "step_definition",
+    "BlockKind": "step_definition",
     "BindingDeclarationError": "bindings",
     "BindingError": "bindings",
     "MISSING_ANNOTATION": "bindings",
@@ -70,6 +71,7 @@ _name_to_module = {
 __all__ = [
     "StepResult",
     "StepDefinition",
+    "BlockKind",
     "BindingDeclarationError",
     "BindingError",
     "MISSING_ANNOTATION",

@@ -116,11 +116,11 @@ class PreservingExecutor:
 
     def resolve_model_selection(self, selection: nh.ModelSelection) -> PreservingExecutor:
         configuration = selection.apply(self.executor.configuration)
-        model = configuration.model
+        model = configuration.execution_model
         if isinstance(model, str):
             if model not in self.model_name_to_model:
                 raise PermissionError("Model selection is not allowed")
-            configuration = configuration.model_copy(update={"model": self.model_name_to_model[model]})
+            configuration = configuration.model_copy(update={"execution_model": self.model_name_to_model[model]})
         elif not any(model is allowed for allowed in self.model_name_to_model.values()):
             raise PermissionError("Borrowed model is not allowed")
         return PreservingExecutor(nh.AgentStepExecutor.from_configuration(configuration=configuration), self.model_name_to_model, self.observer)
@@ -145,15 +145,16 @@ def deterministic_model(name: str, tokens: int = 60) -> FunctionModel:
     return FunctionModel(respond, model_name=name)
 
 
-@nh.natural_function
+@nh.function
 def block() -> None:
-    """natural
+    """execute
     Complete this block without changing anything.
     """
 
 
-@nh.natural_function(model="allowed:B")
+@nh.function
 async def child() -> None:
-    """natural
-    Complete this child block without changing anything.
-    """
+    with nh.scope(execution_model="allowed:B"):
+        """execute
+        Complete this child block without changing anything.
+        """

@@ -98,16 +98,16 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
     with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)):
         a = 1.0
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
             nonlocal a
             x = 10
-            """natural
+            """execute
             Say hi.
             """
 
             y = "hello"
-            """natural
+            """execute
             <a><G>
             """
 

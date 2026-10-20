@@ -42,11 +42,11 @@ def approve_name_expression(request: OperationRequest) -> Accept | AbortStep:
     ],
 )
 def test_host_policy_can_limit_return_expression_syntax(expression: str, accepted: bool) -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         value: int = 0
         previous: int = 7
-        """natural
+        """execute
         <:value> <:previous>
         Finish.
         """
@@ -71,11 +71,11 @@ def test_name_only_policy_does_not_skip_return_validation() -> None:
 
     Counted = Annotated[int, AfterValidator(increment)]  # noqa: N806
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> Counted:  # pyright: ignore[reportInvalidTypeForm]
         nonlocal Counted
         value: Counted = 0  # pyright: ignore[reportInvalidTypeForm]
-        """natural
+        """execute
         <Counted> <:value>
         Finish.
         """
@@ -108,10 +108,10 @@ def test_a_bare_name_can_still_trigger_await(reject_awaitable: bool) -> None:
             yield
             return 9
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         value: object = None  # noqa: F841
-        """natural
+        """execute
         <:value>
         Finish.
         """
@@ -135,10 +135,10 @@ def test_a_bare_name_can_still_trigger_await(reject_awaitable: bool) -> None:
 def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
     events: list[StepFinished] = []
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         value: int = 0
-        """natural
+        """execute
         <:value>
         Finish.
         """
@@ -174,19 +174,19 @@ def test_return_expression_runs_once_and_keeps_resolved_value(asynchronous: bool
     async def calculate_async() -> int:
         return calculate()
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> int:
         nonlocal calculate
-        """natural
+        """execute
         <calculate> <:result>
         {"step_outcome": {"kind": "return", "return_expression": "calculate() + result"}, "bindings": {"result": 1}}
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> int:
         nonlocal calculate_async
-        """natural
+        """execute
         <calculate_async> <:result>
         {"step_outcome": {"kind": "return", "return_expression": "(await calculate_async()) + result"}, "bindings": {"result": 1}}
         """

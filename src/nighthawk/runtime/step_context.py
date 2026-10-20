@@ -6,7 +6,9 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import InitVar, dataclass, field, replace
 from types import CellType, MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from pydantic_ai import AgentRunResult
 
 from ..errors import NighthawkError
 from ..json_renderer import JsonRendererStyle
@@ -63,6 +65,7 @@ class StepContext:
     # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
 
     type_alias_reference_names: frozenset[str] = frozenset()
+    model_result: AgentRunResult[Any] | None = None
     processed_natural_program: str = ""
     binding_name_to_type: Mapping[str, object] = field(default_factory=dict)
     assigned_binding_names: set[str] = field(default_factory=set)

@@ -117,11 +117,13 @@ class StepExecutorConfiguration(BaseModel):
     """Configuration for a step executor.
 
     Attributes:
-        model: Provider-qualified identifier or borrowed Pydantic AI Model instance.
+        execution_model: Provider-qualified identifier or borrowed Pydantic AI Model instance.
             Instances retain identity; the host owns client lifetime. Serialization
             must explicitly exclude a live model field, including in nested records.
             Configuration representations omit the model to avoid traversing credentials.
-        model_settings: Provider-specific overrides. Defaults to an empty dict;
+        decision_model: Model for typed decisions; omitted models fail when their block is executed.
+        decision_model_settings: Settings for the decision model.
+        model_settings: Execution model provider-specific overrides. Defaults to an empty dict;
             accepts a dict or a backend-specific BaseModel (converted to dict).
             None and UNSET are invalid. An empty dict preserves model-owned defaults.
         prompts: Prompt templates for step execution.
@@ -136,10 +138,12 @@ class StepExecutorConfiguration(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model: str | InstanceOf[Model] = Field(default="openai-responses:gpt-5.6-luna", repr=False)
+    execution_model: str | InstanceOf[Model] | None = Field(default=None, repr=False)
+    decision_model: str | InstanceOf[Model] | None = Field(default=None, repr=False)
+    decision_model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
     model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
 
-    @field_validator("model_settings", mode="before")
+    @field_validator("model_settings", "decision_model_settings", mode="before")
     @classmethod
     def _normalize_model_settings(cls, value: Any) -> dict[str, Any]:
         if isinstance(value, BaseModel):
@@ -153,15 +157,15 @@ class StepExecutorConfiguration(BaseModel):
     system_prompt_suffix_fragments: tuple[str, ...] = ()
     user_prompt_suffix_fragments: tuple[str, ...] = ()
 
-    @field_validator("model")
+    @field_validator("execution_model", "decision_model")
     @classmethod
-    def _validate_model(cls, value: str | Model) -> str | Model:
+    def _validate_model(cls, value: str | Model | None) -> str | Model | None:
         return _validate_model_identifier(value) if isinstance(value, str) else value
 
-    @field_serializer("model")
-    def _serialize_model(self, value: str | Model) -> str:
-        if not isinstance(value, str):
-            raise PydanticSerializationError("A runtime Model cannot be serialized; exclude the model field explicitly")
+    @field_serializer("execution_model", "decision_model")
+    def _serialize_model(self, value: str | Model | None) -> str | None:
+        if value is not None and not isinstance(value, str):
+            raise PydanticSerializationError("A runtime Model cannot be serialized; exclude the live model field explicitly")
         return value
 
     def resolve_token_encoding(self) -> tiktoken.Encoding:
@@ -174,7 +178,10 @@ class StepExecutorConfiguration(BaseModel):
         if self.tokenizer_encoding is not None:
             return tiktoken.get_encoding(self.tokenizer_encoding)
 
-        model_name = self.model.split(":", 1)[1] if isinstance(self.model, str) else self.model.model_name
+        if self.execution_model is None:
+            return tiktoken.get_encoding("o200k_base")
+
+        model_name = self.execution_model.split(":", 1)[1] if isinstance(self.execution_model, str) else self.execution_model.model_name
 
         try:
             return tiktoken.encoding_for_model(model_name)
@@ -184,35 +191,45 @@ class StepExecutorConfiguration(BaseModel):
 
 @dataclass(frozen=True)
 class ModelSelection:
-    """Inert model-only selection or full configuration replacement.
+    """Scoped model replacements or a full configuration replacement.
 
+    UNSET inherits each model independently; None clears its configuration.
     Selection never constructs a provider. Borrowed model identity is preserved.
     """
 
-    model: str | Model | UnsetType = field(default=UNSET, repr=False)
+    execution_model: str | Model | None | UnsetType = field(default=UNSET, repr=False)
+    decision_model: str | Model | None | UnsetType = field(default=UNSET, repr=False)
     configuration: StepExecutorConfiguration | UnsetType = field(default=UNSET, repr=False)
 
     def __post_init__(self) -> None:
-        if isinstance(self.model, UnsetType) == isinstance(self.configuration, UnsetType):
-            raise ValueError("Supply exactly one of model or configuration")
-        if not isinstance(self.model, (str, Model, UnsetType)):
-            raise TypeError("model must be a model identifier or Model instance")
-        if isinstance(self.model, str):
-            _validate_model_identifier(self.model)
+        selected = any(not isinstance(value, UnsetType) for value in (self.execution_model, self.decision_model))
+        if selected == (not isinstance(self.configuration, UnsetType)):
+            raise ValueError("Supply model selections or configuration, exclusively")
+        for value in (self.execution_model, self.decision_model):
+            if value is not None and not isinstance(value, (str, Model, UnsetType)):
+                raise TypeError("Models must be model identifiers, Model instances, None, or UNSET")
+            if isinstance(value, str):
+                _validate_model_identifier(value)
         if not isinstance(self.configuration, (StepExecutorConfiguration, UnsetType)):
             raise TypeError("configuration must be StepExecutorConfiguration")
 
     def apply(self, configuration: StepExecutorConfiguration) -> StepExecutorConfiguration:
-        """Resolve this selection against a configuration without creating providers."""
+        """Resolve this selection without creating providers."""
         if isinstance(self.configuration, StepExecutorConfiguration):
             return self.configuration
-        return configuration.model_copy(update={"model": self.model})
+        field_name_to_value = {
+            name: value
+            for name, value in (("execution_model", self.execution_model), ("decision_model", self.decision_model))
+            if not isinstance(value, UnsetType)
+        }
+        return configuration.model_copy(update=field_name_to_value)
 
 
 def _model_selection(
-    model: str | Model | UnsetType,
+    execution_model: str | Model | None | UnsetType,
+    decision_model: str | Model | None | UnsetType,
     configuration: StepExecutorConfiguration | UnsetType,
 ) -> ModelSelection | None:
-    if isinstance(model, UnsetType) and isinstance(configuration, UnsetType):
+    if all(isinstance(value, UnsetType) for value in (execution_model, decision_model, configuration)):
         return None
-    return ModelSelection(model=model, configuration=configuration)
+    return ModelSelection(execution_model=execution_model, decision_model=decision_model, configuration=configuration)

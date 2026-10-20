@@ -238,11 +238,13 @@ def test_mcp_boundary_low_level_mcp_server_returns_rich_image_content() -> None:
         ).content
 
     content = anyio.run(call_boundary)
-    assert len(content) == 3
+    assert len(content) == 4
     assert isinstance(content[0], TextContent)
     assert content[0].text == "See file img1."
     assert isinstance(content[1], TextContent)
-    assert content[1].text == "This is file img1:"
+    assert 'file_id="img1"' in content[1].text
+    assert content[1].text.startswith("<tool_result ")
+    assert isinstance(content[3], TextContent) and content[3].text == "</tool_result>"
     item: Any = content[2]
     assert item.type == "image"
     assert item.mime_type == "image/png"
@@ -266,9 +268,10 @@ def test_mcp_boundary_claude_code_returns_rich_image_content() -> None:
     response = anyio.run(call_boundary)
     content = response["content"]
     assert isinstance(content, list)
-    assert len(content) == 3
+    assert len(content) == 4
     assert content[0] == {"type": "text", "text": "See file img1."}
-    assert content[1] == {"type": "text", "text": "This is file img1:"}
+    assert content[1]["type"] == "text" and 'file_id="img1"' in content[1]["text"]
+    assert content[3] == {"type": "text", "text": "</tool_result>"}
     assert content[2]["type"] == "image"
     assert content[2]["mimeType"] == "image/png"
 
@@ -291,11 +294,13 @@ def test_mcp_boundary_low_level_mcp_server_projects_image_url_to_text_content() 
         ).content
 
     content = anyio.run(call_boundary)
-    assert len(content) == 3
+    assert len(content) == 4
     assert isinstance(content[0], TextContent)
     assert content[0].text == "See file img1."
     assert isinstance(content[1], TextContent)
-    assert content[1].text == "This is file img1:"
+    assert 'file_id="img1"' in content[1].text
+    assert content[1].text.startswith("<tool_result ")
+    assert isinstance(content[3], TextContent) and content[3].text == "</tool_result>"
     assert isinstance(content[2], TextContent)
     assert content[2].text == "<image>\nImage URL: https://example.com/cat.png"
 
@@ -318,9 +323,10 @@ def test_mcp_boundary_claude_code_projects_audio_url_to_text_content() -> None:
     response = anyio.run(call_boundary)
     content = response["content"]
     assert isinstance(content, list)
-    assert len(content) == 3
+    assert len(content) == 4
     assert content[0] == {"type": "text", "text": "See file audio1."}
-    assert content[1] == {"type": "text", "text": "This is file audio1:"}
+    assert content[1]["type"] == "text" and 'file_id="audio1"' in content[1]["text"]
+    assert content[3] == {"type": "text", "text": "</tool_result>"}
     assert content[2] == {
         "type": "text",
         "text": "<file>\nAudio URL: https://example.com/sample.mp3\nMedia type: audio/mpeg",

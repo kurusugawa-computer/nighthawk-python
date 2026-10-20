@@ -43,6 +43,7 @@ from .step_context import (
     step_context_scope,
 )
 from .step_contract import StepKind
+from .step_definition import BlockKind
 from .step_executor import AsyncStepExecutor, StepExecutor, SyncStepExecutor
 from .step_request import StepCandidate, StepRequest, _snapshot_output_bindings
 from .step_result import Break, Continue, Pass, Raise, Return, StepResult
@@ -140,6 +141,8 @@ class Runner:
             )
             finished = StepFailed(
                 execution_reference=execution_reference,
+                block_kind=self.preparation_state.block_kind,
+                model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_step_kinds=self.preparation_state.allowed_step_kinds,
@@ -155,6 +158,8 @@ class Runner:
         elif original_exception is not None:
             finished = StepInterrupted(
                 execution_reference=execution_reference,
+                block_kind=self.preparation_state.block_kind,
+                model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_step_kinds=self.preparation_state.allowed_step_kinds,
@@ -168,6 +173,8 @@ class Runner:
             assert self.raise_exception is not None
             finished = StepRaised(
                 execution_reference=execution_reference,
+                block_kind=self.preparation_state.block_kind,
+                model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_step_kinds=self.preparation_state.allowed_step_kinds,
@@ -181,6 +188,8 @@ class Runner:
             assert isinstance(self.outcome, (Pass, Return, Break, Continue))
             finished = StepCompleted(
                 execution_reference=execution_reference,
+                block_kind=self.preparation_state.block_kind,
+                model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_step_kinds=self.preparation_state.allowed_step_kinds,
@@ -408,6 +417,10 @@ class Runner:
         self.failure_stage = "outcome_validation"
         if not isinstance(candidate, StepCandidate):
             raise ExecutionError("Step executor must return StepCandidate")
+        if preparation.block_kind == "decide" and (
+            isinstance(candidate.binding_name_to_value, UnsetType) or set(candidate.binding_name_to_value) != set(preparation.output_binding_names)
+        ):
+            raise ExecutionError("decide requires an explicit answer from the current invocation")
         step_outcome = candidate.outcome
         self.attempted_outcome = step_outcome
         self._require_allowed_step_kind(step_outcome=step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
@@ -433,6 +446,8 @@ class Runner:
             bindings=validated_bindings,
             return_annotation=return_annotation,
         )
+        if preparation.block_kind == "decide" and set(validated_bindings) != set(preparation.output_binding_names):
+            raise ExecutionError("decide commit must retain its answer")
         self.outcome = outcome
         self.attempted_outcome = outcome
         self.validated_binding_name_to_value = validated_bindings
@@ -452,6 +467,7 @@ class Runner:
         is_in_loop: bool,
         caller_frame: FrameType | None,
         name_to_value: Mapping[str, object] | None,
+        block_kind: BlockKind,
     ) -> PreparedStep:
         preparation = self.preparation_state.prepare(
             natural_program,
@@ -461,6 +477,7 @@ class Runner:
             is_in_loop,
             caller_frame=caller_frame,
             name_to_value=name_to_value,
+            block_kind=block_kind,
         )
         self.preparation = preparation
         self.context_stack.enter_context(step_context_scope(preparation.step_context))
@@ -498,6 +515,8 @@ class Runner:
         allow_awaitable_return: bool,
     ) -> StepRequest:
         return StepRequest(
+            block_kind=preparation.block_kind,
+            input_binding_name_to_value=preparation.input_binding_name_to_value,
             execution_reference=preparation.step_context.execution_reference,
             processed_natural_program=preparation.processed_program,
             step_context=preparation.step_context,
@@ -519,12 +538,13 @@ class Runner:
         *,
         caller_frame: FrameType | None = None,
         name_to_value: Mapping[str, object] | None = None,
+        block_kind: BlockKind = "execute",
     ) -> StepEnvelope:
         if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
         preparation = self._prepare(
-            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value
+            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value, block_kind
         )
         self.failure_stage = "preparation"
         return_annotation = self.preparation_state.resolve_step_annotation(
@@ -558,12 +578,13 @@ class Runner:
         *,
         caller_frame: FrameType | None = None,
         name_to_value: Mapping[str, object] | None = None,
+        block_kind: BlockKind = "execute",
     ) -> StepEnvelope:
         if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
         preparation = self._prepare(
-            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value
+            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value, block_kind
         )
         self.failure_stage = "preparation"
         return_annotation = self.preparation_state.resolve_step_annotation(

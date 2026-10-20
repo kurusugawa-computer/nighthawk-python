@@ -122,11 +122,11 @@ async def test_normal_and_embedded_execution_have_same_validation_and_lifecycle_
 
     OutputType = Annotated[str, AfterValidator(validate)]  # noqa: N806
 
-    @nh.natural_function
+    @nh.function
     def normal() -> str:
         nonlocal OutputType
         result: OutputType = " initial "  # type: ignore[valid-type]
-        """natural
+        """execute
         Write <:result>.
         """
         return result

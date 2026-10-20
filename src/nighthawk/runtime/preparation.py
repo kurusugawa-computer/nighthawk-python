@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import FrameType
 
 from ..errors import ExecutionError, NaturalParseError
-from ..natural.blocks import parse_frontmatter, validate_frontmatter_deny
+from ..natural.blocks import extract_bindings, parse_frontmatter, validate_frontmatter_deny
 from .annotations import SourceAnnotation, module_annotations, resolve_contract
 from .bindings import MISSING_ANNOTATION, infer_binding_types, normalize_binding_names
 from .description import discover_type_alias_reference_names
@@ -15,6 +15,7 @@ from .environment import StepEnvironment
 from .scoping import _current_task_references, get_execution_reference
 from .step_context import StepContext, ToolResultRenderingPolicy, get_python_cell_scope_stack
 from .step_contract import StepKind
+from .step_definition import BlockKind
 from .step_executor import StepExecutor
 
 
@@ -50,6 +51,7 @@ def _build_step_globals(
 
 @dataclass(frozen=True)
 class PreparedStep:
+    block_kind: BlockKind
     processed_program: str
     allowed_step_kinds: tuple[StepKind, ...]
     step_context: StepContext
@@ -62,6 +64,7 @@ class StepPreparation:
     """Own preparation and the partial facts available for failure reporting."""
 
     def __init__(self, step_executor: StepExecutor, runtime_name_set: frozenset[str]) -> None:
+        self.block_kind: BlockKind = "execute"
         self.step_executor = step_executor
         self.runtime_name_set = runtime_name_set
         self.processed_natural_program: str | None = None
@@ -165,15 +168,28 @@ class StepPreparation:
         binding_name_to_type: dict[str, object],
         is_in_loop: bool,
         *,
+        block_kind: BlockKind = "execute",
         caller_frame: FrameType | None,
         name_to_value: Mapping[str, object] | None,
     ) -> PreparedStep:
+        self.block_kind = block_kind
+        if block_kind not in ("execute", "decide"):
+            raise ExecutionError("Unknown block kind")
+        if block_kind == "decide" and len(output_binding_names) != 1:
+            raise ExecutionError("decide requires exactly one output binding")
         normalize_binding_names(input_binding_names)
         normalize_binding_names(output_binding_names)
         processed_without_frontmatter, denied_step_kinds = _split_frontmatter(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
         self.processed_natural_program = processed_without_frontmatter
-        allowed_step_kinds = _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
+        if block_kind == "decide":
+            if denied_step_kinds:
+                raise ExecutionError("decide does not accept control-flow frontmatter")
+            if not processed_without_frontmatter.strip():
+                raise ExecutionError("decide requires a judgment instruction")
+            if extract_bindings(processed_without_frontmatter)[1]:
+                raise ExecutionError("decide instructions cannot declare output bindings")
+        allowed_step_kinds: tuple[StepKind, ...] = ("pass",) if block_kind == "decide" else _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
         self.allowed_step_kinds = allowed_step_kinds
         scoped_task_name_to_value = _current_task_references()
         if name_to_value is None:
@@ -221,6 +237,7 @@ class StepPreparation:
 
         input_binding_name_to_value = self.input_binding_name_to_value
         return PreparedStep(
+            block_kind=block_kind,
             processed_program=processed_without_frontmatter,
             allowed_step_kinds=allowed_step_kinds,
             step_context=step_context,

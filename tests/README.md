@@ -28,6 +28,7 @@ Within `runtime/`, use these owners:
 - `test_environment.py`: name resolution, precedence, and live or inherited value views, including application names resembling generated helpers.
 - `test_prompt_values.py`: value presentation in prompt context, including those application names.
 - `test_step_executor.py`: agent adaptation, scoped tool delivery, prompt content, and completed usage forwarding.
+- `test_decisions.py`: OpenAI Decisions through a local SDK transport, typed contracts, full evidence, scoped models, failures, and per-step details.
 - `test_model_selection.py`: model/configuration resolution, executor policy, and restoration across function and scope boundaries.
 - `test_model_candidate.py`: resolving model-facing return and exception expressions, including admission before evaluation.
 - `test_discovery.py`: live references, name and member discovery, and environment presentation.

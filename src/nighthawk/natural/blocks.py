@@ -10,6 +10,7 @@ import yaml
 
 from ..errors import NaturalParseError
 from ..runtime.bindings import BindingDeclarationError, normalize_binding_names
+from ..runtime.step_definition import BlockKind
 
 _BINDING_PATTERN = re.compile(r"<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
 
@@ -21,17 +22,34 @@ class NaturalBlock:
     input_bindings: tuple[str, ...]
     output_bindings: tuple[str, ...]
     lineno: int
+    block_kind: BlockKind = "execute"
 
 
 def is_natural_sentinel(text: str) -> bool:
-    return text.startswith("natural\n")
+    return text.startswith(("execute\n", "decide ", "decide\t", "decide\n"))
+
+
+def parse_block(text: str) -> tuple[BlockKind, str, tuple[str, ...], tuple[str, ...]]:
+    header, separator, body = text.partition("\n")
+    if not separator:
+        raise NaturalParseError("Block header must end with a newline")
+    program = textwrap.dedent(body)
+    inputs, outputs = extract_bindings(program)
+    if header == "execute":
+        return "execute", program, inputs, outputs
+    match = re.fullmatch(r"decide[ \t]+<:([A-Za-z_][A-Za-z0-9_]*)>", header)
+    if match is None:
+        raise NaturalParseError("Expected execute or decide <:output> block header")
+    if outputs:
+        raise NaturalParseError("decide output must be declared only in its header")
+    if not program.strip():
+        raise NaturalParseError("decide requires a judgment instruction")
+    _, declared_outputs = extract_bindings(match.group(0))
+    return "decide", program, inputs, declared_outputs
 
 
 def extract_program(text: str) -> str:
-    if not is_natural_sentinel(text):
-        raise NaturalParseError("Missing natural sentinel")
-    program = text.removeprefix("natural\n")
-    return textwrap.dedent(program)
+    return parse_block(text)[1]
 
 
 def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -86,6 +104,9 @@ def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string:
         formatted_value_placeholder=_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
     )
 
+    if _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER in boundary_marked_text.partition("\n")[0]:
+        raise NaturalParseError("Block header must be static")
+
     if re.search(r"<[^>]*" + _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
         raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
 
@@ -94,8 +115,7 @@ def _extract_program_and_bindings_from_joined_string(joined_string: ast.JoinedSt
     _validate_joined_string_bindings_do_not_span_formatted_values(joined_string)
 
     scan_text = _joined_string_scan_text(joined_string, formatted_value_placeholder="")
-    program = extract_program(scan_text)
-    input_bindings, output_bindings = extract_bindings(program)
+    _, program, input_bindings, output_bindings = parse_block(scan_text)
     return program, input_bindings, output_bindings
 
 
@@ -117,11 +137,11 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
 
     docstring_text = ast.get_docstring(func_def, clean=False)
     if docstring_text and is_natural_sentinel(docstring_text):
-        program = extract_program(docstring_text)
-        input_bindings, output_bindings = extract_bindings(program)
+        block_kind, program, input_bindings, output_bindings = parse_block(docstring_text)
         blocks.append(
             NaturalBlock(
                 kind="docstring",
+                block_kind=block_kind,
                 text=program,
                 input_bindings=input_bindings,
                 output_bindings=output_bindings,
@@ -144,11 +164,11 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             text = value.value
             if is_natural_sentinel(text):
-                program = extract_program(text)
-                input_bindings, output_bindings = extract_bindings(program)
+                block_kind, program, input_bindings, output_bindings = parse_block(text)
                 blocks.append(
                     NaturalBlock(
                         kind="inline",
+                        block_kind=block_kind,
                         text=program,
                         input_bindings=input_bindings,
                         output_bindings=output_bindings,
@@ -157,10 +177,12 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
                 )
 
         if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
-            program, input_bindings, output_bindings = _extract_program_and_bindings_from_joined_string(value)
+            _validate_joined_string_bindings_do_not_span_formatted_values(value)
+            block_kind, program, input_bindings, output_bindings = parse_block(_joined_string_scan_text(value, formatted_value_placeholder=""))
             blocks.append(
                 NaturalBlock(
                     kind="inline",
+                    block_kind=block_kind,
                     text=program,
                     input_bindings=input_bindings,
                     output_bindings=output_bindings,

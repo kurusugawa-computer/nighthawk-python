@@ -16,10 +16,10 @@ class TestExecutorSelectionPatterns:
         fast_executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"label": "bug"})])
         deep_executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"report": "detailed analysis"})])
 
-        @nh.natural_function
+        @nh.function
         def classify_ticket(text: str) -> str:
             label: str = ""
-            """natural
+            """execute
             ---
             deny: [raise, return]
             ---
@@ -27,10 +27,10 @@ class TestExecutorSelectionPatterns:
             """
             return label
 
-        @nh.natural_function
+        @nh.function
         def write_analysis_report(ticket_text: str, product_context: str) -> str:
             report: str = ""
-            """natural
+            """execute
             ---
             deny: [raise, return]
             ---
@@ -63,10 +63,10 @@ class TestStateBoundaryPatterns:
 
         executor = CallbackExecutor(handler)
 
-        @nh.natural_function
+        @nh.function
         def step_1(carry: list[str]) -> int:
             result: int = 0
-            """natural
+            """execute
             Set <:result> to 10.
             Append a one-line summary of what you did to <carry>.
             """
@@ -82,10 +82,10 @@ class TestStateBoundaryPatterns:
     def test_precisely_typed_callable_parameter_remains_visible_in_locals(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "item summary"})])
 
-        @nh.natural_function
+        @nh.function
         def summarize(query: str, fetch_data: Callable[[str], list[str]]) -> str:
             result: str = ""
-            """natural
+            """execute
             Use <fetch_data> to get data for <query> and set <:result>.
             """
             return result
@@ -103,10 +103,10 @@ class TestControlFlowPatterns:
     def test_post_block_logic_pattern_allows_python_validation(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"summary": "concise summary"})])
 
-        @nh.natural_function
+        @nh.function
         def summarize(text: str) -> str:
             summary: str = ""
-            """natural
+            """execute
             ---
             deny: [raise, return]
             ---

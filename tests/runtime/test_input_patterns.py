@@ -94,7 +94,7 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
     executor = Executor()
     with nh.run(executor):
         reference = nh.get_execution_reference()
-        with pytest.raises(TypeError), nh.scope(model="test:model", task_references=None):  # type: ignore[arg-type]
+        with pytest.raises(TypeError), nh.scope(execution_model="test:model", task_references=None):  # type: ignore[arg-type]
             pytest.fail("Invalid scope entered")
         assert nh.get_execution_reference() is reference
         assert nh.get_step_executor() is executor
@@ -102,7 +102,7 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
 
 
 def test_function_handler_inherits_replaces_clears_and_validates_before_entry() -> None:
-    @nh.natural_function
+    @nh.function
     def function() -> int:
         return 1
 

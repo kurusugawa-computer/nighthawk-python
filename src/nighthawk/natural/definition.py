@@ -10,7 +10,7 @@ from weakref import ref as weak_reference
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
-class NaturalFunctionDefinition:
+class FunctionDefinition:
     """A snapshot retaining the actual source, public wrapper, and compiled body."""
 
     original_function: Callable[..., object]
@@ -18,20 +18,20 @@ class NaturalFunctionDefinition:
     transformed_function: Callable[..., object]
 
 
-_function_id_to_definition_reference: dict[int, ReferenceType[NaturalFunctionDefinition]] = {}
+_function_id_to_definition_reference: dict[int, ReferenceType[FunctionDefinition]] = {}
 
 
-def _register_definition(definition: NaturalFunctionDefinition) -> None:
+def _register_definition(definition: FunctionDefinition) -> None:
     function_id = id(definition.function)
 
-    def remove(reference: ReferenceType[NaturalFunctionDefinition]) -> None:
+    def remove(reference: ReferenceType[FunctionDefinition]) -> None:
         if _function_id_to_definition_reference.get(function_id) is reference:
             del _function_id_to_definition_reference[function_id]
 
     _function_id_to_definition_reference[function_id] = weak_reference(definition, remove)
 
 
-def get_natural_function_definition(function: object) -> NaturalFunctionDefinition | None:
+def get_function_definition(function: object) -> FunctionDefinition | None:
     """Look up an exact wrapper, normalizing only standard method descriptors.
 
     Copied attributes and unrelated outer decorators are not registration evidence.

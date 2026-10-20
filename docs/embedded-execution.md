@@ -1,7 +1,7 @@
 # Embedded execution
 
 Use `nighthawk.runtime.execute_step` or `execute_step_async` when a Python host selects trusted Natural text, binding names, and output types at invocation time.
-For a fixed operation, prefer an ordinary `@nh.natural_function` with meaningful parameters and a return annotation.
+For a fixed operation, prefer an ordinary `@nh.function` with meaningful parameters and a return annotation.
 The embedded entry points serve hosts whose dynamic declarations must participate in Core validation and whose binding writes must complete inside the same step lifecycle.
 
 Create a `StepDefinition` for the trusted program and its declarations, then call `execute_step(definition, *, name_to_value, write_binding)` or await `execute_step_async` with the same arguments.
@@ -19,7 +19,7 @@ Setting `is_in_loop=True` permits `Break` and `Continue`; deny frontmatter can f
 Core snapshots its name-to-object associations during preparation; objects retain their identity and remain live.
 Core does not automatically save outputs into that mapping.
 
-The host supplies `StepDefinition` with the program body without the `natural` sentinel, separate `input_binding_names` and ordered `output_binding_names`, and an optional `binding_name_to_type` mapping.
+The host supplies `StepDefinition` with the program body without the `execute` sentinel, separate `input_binding_names` and ordered `output_binding_names`, and an optional `binding_name_to_type` mapping.
 Declarations must be ordered sequences of unique ASCII Python identifiers, excluding keywords.
 A name may be declared for both reading and writing.
 Definitions copy the declaration sequences and type mapping, preserving annotation object identity.

@@ -21,13 +21,13 @@ Natural blocks can drive Python control flow when the surrounding syntax allows 
 <!-- /outcome-kinds-table -->
 
 ```py
-@nh.natural_function
+@nh.function
 def process_posts(posts: list[str]) -> list[str]:
     summaries: list[str] = []
 
     for post in posts:
         summary: str
-        """natural
+        """execute
         Evaluate <post>.
         If this post means "stop now", break.
         If this post should be skipped, continue.
@@ -43,9 +43,9 @@ Its declaration and contract remain discoverable even without a value preview.
 If it remains unassigned, a later Python read raises normally.
 
 ```py
-@nh.natural_function
+@nh.function
 def route_message(message: str) -> str:
-    """natural
+    """execute
     Evaluate <message>.
     If immediate exit is required, set <:result> and return.
     If the message is invalid, raise with a clear reason.
@@ -63,10 +63,10 @@ There are two standard patterns:
 **Post-block logic pattern** (`var = init; block; check; return var`) -- recommended for most cases:
 
 ```py
-@nh.natural_function
+@nh.function
 def must_produce_result(text: str) -> str:
     result = ""
-    """natural
+    """execute
     ---
     deny: [raise, return]
     ---
@@ -82,9 +82,9 @@ def must_produce_result(text: str) -> str:
 **Direct return pattern** (the block is the terminal expression):
 
 ```py
-@nh.natural_function
+@nh.function
 def summarize(text: str) -> str:
-    """natural
+    """execute
     ---
     deny: [pass, raise]
     ---
@@ -114,10 +114,10 @@ Prefer a specific domain exception when the caller must distinguish an expected 
 
 <!-- error-example:default_raise -->
 ```py
-@nh.natural_function
+@nh.function
 def validate(data: str) -> str:
     result = ""
-    """natural
+    """execute
     Validate <data>. If invalid, raise with a clear reason.
     Otherwise set <:result> to "valid".
     """
@@ -141,10 +141,10 @@ class InputError(Exception):
     pass
 
 
-@nh.natural_function
+@nh.function
 def strict_validate(data: str) -> str:
     result = ""
-    """natural
+    """execute
     Validate <data>. If invalid, raise an <InputError>.
     Otherwise set <:result> to "valid".
     """
@@ -169,10 +169,10 @@ Handle only the failure stage for which the application has a recovery policy:
 
 <!-- error-example:output_validation -->
 ```py
-@nh.natural_function
+@nh.function
 def extract_count(text: str) -> int:
     count: int = 0
-    """natural
+    """execute
     Read <text> and set <:count> to the number of items.
     """
     return count
@@ -198,10 +198,10 @@ For the exception hierarchy, see [Specification Section 13](specification.md#13-
 Natural functions can be async. The execution model is identical to sync natural functions, with two additions:
 
 ```py
-@nh.natural_function
+@nh.function
 async def summarize_async(text: str) -> str:
     result = ""
-    """natural
+    """execute
     Summarize <text> in one sentence and set <:result>.
     """
     return result
@@ -224,10 +224,10 @@ async def fetch_data(query: str) -> list[str]:
     ...
 
 
-@nh.natural_function
+@nh.function
 async def analyze(query: str) -> str:
     result = ""
-    """natural
+    """execute
     Use <fetch_data> to retrieve data for <query>, then set <:result> to a summary.
     """
     return result
@@ -243,10 +243,10 @@ Async natural functions are ordinary coroutines, so you can run multiple Natural
 import asyncio
 
 
-@nh.natural_function
+@nh.function
 async def classify(text: str) -> str:
     label: str = ""
-    """natural
+    """execute
     Read <text> and set <:label> to one of: positive, negative, neutral.
     """
     return label
@@ -291,20 +291,20 @@ from pydantic import Field
 import nighthawk as nh
 
 
-@nh.natural_function
+@nh.function
 async def assess_line(document: str, line: str) -> float:
     confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
-    """natural
+    """execute
     Assess how strongly <document> supports <line>.
     Set <:confidence> to a score from 0.0 to 1.0.
     """
     return confidence
 
 
-@nh.natural_function
+@nh.function
 async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
     summary = ""
-    """natural
+    """execute
     Summarize <document> in <:summary>, with one claim per line.
     """
     assessments: list[tuple[str, float]] = []
@@ -328,22 +328,22 @@ from pydantic import Field
 import nighthawk as nh
 
 
-@nh.natural_function
+@nh.function
 async def assess_claim(document: str, claim: str) -> float:
     confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
-    """natural
+    """execute
     Assess how strongly <document> supports <claim>, applying <review_guidance>.
     Set <:confidence> to a score from 0.0 to 1.0.
     """
     return confidence
 
 
-@nh.natural_function
+@nh.function
 async def review_claims(document: str, claims: list[str]) -> list[tuple[str, float]]:
     review_guidance = "Check quantitative and causal claims against direct evidence."
     assessments: list[tuple[str, float]] = []
     with nh.scope(task_references={"review_guidance": review_guidance}):
-        """natural
+        """execute
         Use <review_guidance> to choose claims from <claims> that need closer review.
         Call <assess_claim> with <document> and each selected claim, awaiting each result.
         Store the selected claims and their returned scores in <:assessments>.
@@ -361,20 +361,20 @@ The [nested execution acceptance example](specification.md#144-nested-execution-
 Pass a mutable object as a read binding and let the LLM mutate it in-place:
 
 ```py
-@nh.natural_function
+@nh.function
 def step_1(carry: list[str]) -> int:
     result = 0
-    """natural
+    """execute
     Set <:result> to 10.
     Append a one-line summary of what you did to <carry>.
     """
     return result
 
 
-@nh.natural_function
+@nh.function
 def step_2(carry: list[str]) -> int:
     result = 0
-    """natural
+    """execute
     Read <carry> for prior context.
     The carry says the previous result was 10.
     Set <:result> to 20 (previous result plus 10).
@@ -639,10 +639,10 @@ from functools import lru_cache
 
 
 @lru_cache(maxsize=256)
-@nh.natural_function
+@nh.function
 def classify(text: str) -> str:
     label: str = ""
-    """natural
+    """execute
     Read <text> and set <:label> to one of: positive, negative, neutral.
     """
     return label

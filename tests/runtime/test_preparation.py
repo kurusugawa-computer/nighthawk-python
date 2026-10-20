@@ -55,10 +55,10 @@ _global_contract_result: Annotated[int, Field(ge=0, le=10)] = 0
 
 
 def test_global_output_uses_module_annotation_and_writes_back() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         global _global_contract_result
-        """natural
+        """execute
         <:_global_contract_result>
         {"step_outcome": {"kind": "pass"}, "bindings": {"_global_contract_result": "7"}}
         """
@@ -77,10 +77,10 @@ def test_global_output_uses_module_annotation_and_writes_back() -> None:
 def test_nonlocal_output_infers_live_value_without_outer_annotation() -> None:
     result: object = "initial"
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> object:
         nonlocal result
-        """natural
+        """execute
         <:result>
         {"step_outcome": {"kind": "pass"}, "bindings": {"result": "7"}}
         """
@@ -93,9 +93,9 @@ def test_nonlocal_output_infers_live_value_without_outer_annotation() -> None:
 
 
 def test_return_annotation_resolution_fails_before_executor() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> UnavailableReturnContract:  # type: ignore[name-defined]  # noqa: F821
-        """natural
+        """execute
         This executor would fail if reached.
         """
 
@@ -112,11 +112,11 @@ def test_return_annotation_resolution_fails_before_executor() -> None:
 
 
 def test_explicit_object_and_any_do_not_infer_initial_type() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> tuple[object, Any]:
         first: object = "initial"
         second: Any = "initial"
-        """natural
+        """execute
         <:first> <:second>
         {"step_outcome": {"kind": "pass"}, "bindings": {"first": 7, "second": [1]}}
         """
@@ -127,11 +127,11 @@ def test_explicit_object_and_any_do_not_infer_initial_type() -> None:
 
 
 def test_compound_annotation_is_static_and_preserves_metadata() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         if False:
             result: Annotated[int, Field(ge=0, le=10)]
-        """natural
+        """execute
         <:result>
         {"step_outcome": {"kind": "pass"}, "bindings": {"result": "7"}}
         """
@@ -142,13 +142,13 @@ def test_compound_annotation_is_static_and_preserves_metadata() -> None:
 
 
 def test_ambiguous_annotations_fail_preparation_before_executor() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(condition: bool) -> object:
         if condition:
             result: int = 0  # pyright: ignore[reportRedeclaration, reportAssignmentType]
         else:
             result: str = ""
-        """natural
+        """execute
         <:result>
         """
         return result
@@ -166,10 +166,10 @@ def test_ambiguous_annotations_fail_preparation_before_executor() -> None:
 
 
 def test_unresolved_annotation_fails_preparation_with_identity() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> object:
         result: UnavailableContract = "initial"  # type: ignore[name-defined]  # noqa: F821
-        """natural
+        """execute
         <:result>
         """
         return result
@@ -188,7 +188,7 @@ def test_unresolved_annotation_fails_preparation_with_identity() -> None:
 
 
 def test_nested_scope_annotations_do_not_override_output_contract() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         result: int = 0
 
@@ -199,7 +199,7 @@ def test_nested_scope_annotations_do_not_override_output_contract() -> None:
         class Nested:
             result: str = "nested"
 
-        """natural
+        """execute
         <:result>
         {"step_outcome": {"kind": "pass"}, "bindings": {"result": "7"}}
         """
@@ -210,10 +210,10 @@ def test_nested_scope_annotations_do_not_override_output_contract() -> None:
 
 
 def test_explicit_none_output_is_a_contract() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         result: None = None
-        """natural
+        """execute
         <:result>
         {"step_outcome": {"kind": "pass"}, "bindings": {"result": 1}}
         """
@@ -227,10 +227,10 @@ def test_frontmatter_deny_return_recognizes_leading_blank_lines():
     nh.StepExecutorConfiguration()
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
             result = 0
-            """natural
+            """execute
 
             ---
             deny:
@@ -249,7 +249,7 @@ def test_frontmatter_deny_return_allows_bindings():
     nh.StepExecutorConfiguration()
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def f(x: int):
             computed_result = x + 1
             envelope_json_text = json.dumps(
@@ -259,7 +259,7 @@ def test_frontmatter_deny_return_allows_bindings():
                 }
             )
 
-            f"""natural
+            f"""execute
             ---
             deny:
               - return
@@ -290,9 +290,9 @@ def test_scope_task_references_are_merged_into_step_context() -> None:
 
     with nh.run(executor), nh.scope(task_references={"search_repository": search_repository}):
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             Execute one step.
             """
 
@@ -308,10 +308,10 @@ def test_unannotated_binding_type_inferred_from_initial_value():
     executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "hello"})])
     with nh.run(executor):
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result = ""
-            """natural
+            """execute
             <:result>
             This is a docstring Natural block.
             """

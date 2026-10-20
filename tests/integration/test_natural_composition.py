@@ -17,10 +17,10 @@ from nighthawk.runtime import ContextRequest, DefaultContextBuilder, Return
 from tests.integration.skip_helpers import requires_openai_integration
 
 
-@nh.natural_function
+@nh.function
 async def assess_line(document: str, line: str) -> float:
     confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
-    """natural
+    """execute
     Assess how strongly <document> supports <line>.
     Set <:confidence> to a score from 0.0 to 1.0.
     Directly documented facts merit at least 0.8; unsupported claims merit at most 0.2.
@@ -28,10 +28,10 @@ async def assess_line(document: str, line: str) -> float:
     return confidence
 
 
-@nh.natural_function
+@nh.function
 async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
     summary = ""
-    """natural
+    """execute
     Summarize <document> in <:summary>, with one factual claim per line.
     Produce exactly two nonempty lines, one for each named team and its completed ticket count.
     Preserve each team's name and numerical count, using decimal digits.
@@ -43,17 +43,17 @@ async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
     return assessments
 
 
-@nh.natural_function
+@nh.function
 async def assess_claim(document: str, claim: str) -> float:
     confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
-    """natural
+    """execute
     Assess how strongly <document> supports <claim>, applying <review_guidance>.
     Set <:confidence> to a score from 0.0 to 1.0.
     """
     return confidence
 
 
-@nh.natural_function
+@nh.function
 async def review_claims(document: str, claims: list[str]) -> list[tuple[str, float]]:
     review_guidance = (
         "Review numerical and causal claims only. "
@@ -63,7 +63,7 @@ async def review_claims(document: str, claims: list[str]) -> list[tuple[str, flo
     )
     assessments: list[tuple[str, float]] = []
     with nh.scope(task_references={"review_guidance": review_guidance}):
-        """natural
+        """execute
         Use <review_guidance> to choose claims from <claims> that need closer review.
         Call <assess_claim> with <document> and each selected claim exactly once, awaiting each result.
         Store each selected claim verbatim and its returned score in <:assessments>.
@@ -72,10 +72,10 @@ async def review_claims(document: str, claims: list[str]) -> list[tuple[str, flo
     return assessments
 
 
-@nh.natural_function
+@nh.function
 async def block_two(i: int) -> str:
     message = ""
-    """natural
+    """execute
     Inspect <i>, the explicitly supplied one-based iteration.
     Set <:message> to 'fifth' on iteration 5, 'eighth' on iteration 8,
     and 'ordinary' on every other iteration.
@@ -83,10 +83,10 @@ async def block_two(i: int) -> str:
     return message
 
 
-@nh.natural_function
+@nh.function
 async def block_one() -> list[str]:
     messages: list[str] = []
-    """natural
+    """execute
     Call <block_two> ten times in sequence.
     Before each call, use nh_assign to set the temporary name i to the
     current one-based iteration, from 1 through 10.
@@ -132,7 +132,7 @@ def executor(request: pytest.FixtureRequest) -> nh.AgentStepExecutor:
     settings_class = requires_openai_integration()
     return nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            model=f"openai-responses:{request.param}",
+            execution_model=f"openai-responses:{request.param}",
             model_settings=settings_class(openai_reasoning_effort="medium", max_tokens=8192, timeout=90),
         )
     )

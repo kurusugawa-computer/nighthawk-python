@@ -7,7 +7,7 @@ from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_tool_asyn
 
 
 def test_every_source_helper_name_can_be_an_application_binding() -> None:
-    @nh.natural_function
+    @nh.function
     def __nh_factory__(__nh_captured_values__: int = 17) -> tuple[int, int]:  # noqa: N807 - deliberately collides with the factory name.
         __nh_execution__ = 1
         __nh_envelope__ = 2  # noqa: F841 - read by Natural.
@@ -21,13 +21,13 @@ def test_every_source_helper_name_can_be_an_application_binding() -> None:
         __nh_source_annotation__ = 10  # noqa: F841 - read by Natural.
         __nh_missing_annotation__ = 11  # noqa: F841 - read by Natural.
         __nh_extract_program__ = 12  # noqa: F841 - read by Natural.
-        """natural
+        """execute
         Read <__nh_envelope__>, <__nh_bindings__>, <__nh_step_outcome__>, <__nighthawk_runner__>,
         <__nh_cell_anchor__>, <__nh_name_to_cell__>, <__nh_python_cell_scope__>, <__nh_function_name_to_cell__>,
         <__nh_source_annotation__>, <__nh_missing_annotation__>, <__nh_extract_program__>, and <__nh_captured_values__>.
         Increment <:__nh_execution__>.
         """
-        f"""natural
+        f"""execute
         The original argument was {__nh_captured_values__}.
         Increment <:__nh_execution__> again.
         """
@@ -71,10 +71,10 @@ def test_every_source_helper_name_can_be_an_application_binding() -> None:
 def test_factory_capture_names_preserve_live_nonlocal_cells() -> None:
     __nh_captured_values__ = 5
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         nonlocal __nh_captured_values__
-        """natural
+        """execute
         Increment <:__nh_captured_values__>.
         """
         return __nh_captured_values__
@@ -91,20 +91,20 @@ def test_factory_capture_names_preserve_live_nonlocal_cells() -> None:
 
 
 def test_child_receives_shared_application_binding_even_when_its_own_helper_has_that_name() -> None:
-    @nh.natural_function
+    @nh.function
     async def child() -> int:
         result = 0
-        """natural
+        """execute
         Copy the shared execution value into <:result>.
         """
         return result
 
-    @nh.natural_function
+    @nh.function
     async def parent() -> int:
         nonlocal child
         __nh_execution__ = 7  # noqa: F841 - explicitly shared by the executor.
         result = 0
-        """natural
+        """execute
         Call <child> and store its result in <:result>.
         """
         return result

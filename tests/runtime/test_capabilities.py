@@ -70,9 +70,9 @@ def test_agent_step_executor_passes_scoped_capabilities_to_agent_run() -> None:
     step_executor = nh.AgentStepExecutor.from_agent(agent=recording_agent)
     capability = _MarkerCapability("scoped")
 
-    @nh.natural_function
+    @nh.function
     def natural_pass_function() -> None:
-        """natural
+        """execute
         Do nothing.
         """
 
@@ -101,9 +101,9 @@ def test_before_model_request_hook_fires_for_natural_block_on_test_model() -> No
     agent: Agent[StepContext, Any] = Agent(TestModel(), deps_type=StepContext)
     step_executor = nh.AgentStepExecutor.from_agent(agent=agent)
 
-    @nh.natural_function
+    @nh.function
     def natural_pass_function() -> None:
-        """natural
+        """execute
         Do nothing.
         """
 

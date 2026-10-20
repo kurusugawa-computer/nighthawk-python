@@ -35,10 +35,10 @@ class TestScriptedExecutorPassOutcome:
     def test_returns_binding_value(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "hello"})])
 
-        @nh.natural_function
+        @nh.function
         def greet(name: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Read <name> and set <:result> to a greeting.
             """
             return result
@@ -51,10 +51,10 @@ class TestScriptedExecutorPassOutcome:
     def test_records_call_metadata(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
 
-        @nh.natural_function
+        @nh.function
         def process(query: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Use <_module_level_helper> to process <query> and set <:result>.
             """
             return result
@@ -73,10 +73,10 @@ class TestScriptedExecutorPassOutcome:
     def test_filters_globals_to_referenced_names_only(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
 
-        @nh.natural_function
+        @nh.function
         def minimal(text: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Summarize <text> and set <:result>.
             """
             return result
@@ -93,10 +93,10 @@ class TestScriptedExecutorPassOutcome:
             [pass_response(binding_name_to_value={"result": "first"})], default_response=pass_response(binding_name_to_value={"result": "default"})
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result: str = ""
-            """natural
+            """execute
             Set <:result>.
             """
             return result
@@ -116,10 +116,10 @@ class TestScriptedExecutorPassOutcome:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result: str = ""
-            """natural
+            """execute
             Set <:result>.
             """
             return result
@@ -161,10 +161,10 @@ class TestScriptedExecutorRaiseOutcome:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result: str = ""
-            """natural
+            """execute
             Set <:result>.
             """
             return result
@@ -180,10 +180,10 @@ class TestScriptedExecutorRaiseOutcome:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f(data: str) -> str:
             result: str = ""
-            """natural
+            """execute
             <ValueError>
             Validate <data> and set <:result>.
             """
@@ -203,12 +203,12 @@ class TestScriptedExecutorBreakOutcome:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> int:
             count = 0
             for _i in range(10):
                 count += 1
-                """natural
+                """execute
                 Decide whether to continue.
                 """
             return count
@@ -227,11 +227,11 @@ class TestScriptedExecutorContinueOutcome:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> list[int]:
             results: list[int] = []
             for i in range(3):
-                """natural
+                """execute
                 Decide whether to process this item.
                 """
                 results.append(i)
@@ -251,10 +251,10 @@ class TestScriptedExecutorReturnOutcome:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result: str = ""
-            """natural
+            """execute
             Set <:result>.
             """
             result = "late"
@@ -273,19 +273,19 @@ async def test_resolved_return_preserves_values_without_expression_effects(callb
     response = return_response(value, binding_name_to_value={"value": "independent output"})
     executor = CallbackExecutor(lambda call: response) if callback else ScriptedExecutor([response])
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> object:
         nonlocal effects
-        """natural
+        """execute
         Read <effects> and set <:value>.
         Return a result.
         """
         raise AssertionError("Expected an early return")
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> object:
         nonlocal effects
-        """natural
+        """execute
         Read <effects> and set <:value>.
         Return a result.
         """
@@ -302,10 +302,10 @@ class TestScriptedExecutorAllowedStepKinds:
     def test_records_allowed_step_kinds_in_loop(self) -> None:
         executor = ScriptedExecutor(responses=[break_response()])
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
             for _i in range(1):
-                """natural
+                """execute
                 Do something.
                 """
 
@@ -319,9 +319,9 @@ class TestScriptedExecutorAllowedStepKinds:
     def test_records_allowed_step_kinds_outside_loop(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response()])
 
-        @nh.natural_function
+        @nh.function
         def f() -> None:
-            """natural
+            """execute
             Do something.
             """
 
@@ -341,10 +341,10 @@ class TestScriptedExecutorBindingFiltering:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result: str = ""
-            """natural
+            """execute
             Set <:result>.
             """
             return result
@@ -363,10 +363,10 @@ class TestCallbackExecutor:
 
         executor = CallbackExecutor(handler)
 
-        @nh.natural_function
+        @nh.function
         def classify(text: str) -> str:
             category: str = ""
-            """natural
+            """execute
             Classify <text> and set <:category>.
             """
             return category
@@ -384,10 +384,10 @@ class TestCallbackExecutor:
 
         executor = CallbackExecutor(handler)
 
-        @nh.natural_function
+        @nh.function
         def f(data: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Process <data> and set <:result>.
             """
             return result
@@ -400,10 +400,10 @@ class TestCallbackExecutor:
     def test_records_calls(self) -> None:
         executor = CallbackExecutor(lambda _: pass_response(binding_name_to_value={"result": ""}))
 
-        @nh.natural_function
+        @nh.function
         def f() -> str:
             result: str = ""
-            """natural
+            """execute
             Set <:result>.
             """
             return result
@@ -457,18 +457,18 @@ class TestCarryPatternMock:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def step_1(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Set <:result> to 10. Append a summary to <carry>.
             """
             return result
 
-        @nh.natural_function
+        @nh.function
         def step_2(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Read <carry> and set <:result>.
             """
             return result
@@ -491,10 +491,10 @@ class TestCarryPatternMock:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def branch_fn(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Read <carry> and set <:result>.
             """
             return result
@@ -522,10 +522,10 @@ class TestCarryPatternMock:
 
         executor = CallbackExecutor(handler)
 
-        @nh.natural_function
+        @nh.function
         def step(carry: list[str]) -> int:
             result = 0
-            """natural
+            """execute
             Set <:result>. Append to <carry>.
             """
             return result
@@ -548,9 +548,9 @@ class TestPydanticReturnTypeCoercion:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def judge_review(review_data: str) -> ReviewVerdict:
-            """natural
+            """execute
             Analyze <review_data> and return a structured verdict.
             """
             raise AssertionError("The scripted response returns early")
@@ -573,10 +573,10 @@ class TestFStringNaturalBlock:
 
         executor = CallbackExecutor(handler)
 
-        @nh.natural_function
+        @nh.function
         def process(context_text: str) -> str:
             result: str = ""
-            f"""natural
+            f"""execute
             Prior context: {context_text}
             Set <:result> based on the context.
             """

@@ -13,13 +13,13 @@ from tests.support.executors import StubExecutor
 
 def test_original_unwrap_signature_and_transformed_accessor() -> None:
     def original(value: int = 3) -> int:
-        """natural
+        """execute
         <value>
         {"step_outcome": {"kind": "return", "return_expression": "value + 1"}, "bindings": {}}
         """
         return 0
 
-    decorated = nh.natural_function(original)
+    decorated = nh.function(original)
 
     @wraps(decorated)
     def outer(*arguments: Any, **keywords: Any) -> object:
@@ -37,12 +37,12 @@ def test_original_unwrap_signature_and_transformed_accessor() -> None:
 
 def test_async_and_method_descriptors() -> None:
     async def original() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "4"}, "bindings": {}}
         """
         return 0
 
-    decorated = nh.natural_function(original)
+    decorated = nh.function(original)
     assert inspect.unwrap(decorated) is original
     assert inspect.iscoroutinefunction(nh.get_transformed_function(decorated))
 

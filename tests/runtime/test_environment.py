@@ -131,19 +131,19 @@ def test_nested_natural_counter_proof() -> None:
     child_parent_execution_id_list: list[str] = []
     parent_execution_id_list: list[str] = []
 
-    @nh.natural_function
+    @nh.function
     async def block_two() -> str:
         message = ""
-        """natural
+        """execute
         Inspect <i>. Set <:message> to fifth on iteration 5, eighth on 8, and ordinary otherwise.
         """
         return message
 
-    @nh.natural_function
+    @nh.function
     async def block_one() -> list[str]:
         nonlocal block_two
         messages: list[str] = []
-        """natural
+        """execute
         Call <block_two> ten times with explicitly shared iteration context and collect <:messages>.
         """
         return messages

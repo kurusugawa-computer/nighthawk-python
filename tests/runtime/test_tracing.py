@@ -40,9 +40,9 @@ def _require_non_empty_text(value: object) -> str:
 def test_step_span_records_completed_event_for_pass_outcome(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 17}}
             """
@@ -64,9 +64,9 @@ def test_step_span_records_completed_event_for_pass_outcome(step_span_exporter: 
 def test_step_span_records_completed_event_for_return_outcome(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "return", "return_expression": "result"}, "bindings": {"result": 11}}
             """
@@ -88,9 +88,9 @@ def test_step_span_records_completed_event_for_return_outcome(step_span_exporter
 def test_step_span_keeps_source_location_attribute_format(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 23}}
             """
@@ -109,9 +109,9 @@ def test_step_span_keeps_source_location_attribute_format(step_span_exporter: In
 def test_step_span_records_raise_event_without_error_status(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_raise_function() -> None:
-            """natural
+            """execute
             <ValueError>
             {"step_outcome": {"kind": "raise", "raise_message": "expected", "raise_error_type": "ValueError"}, "bindings": {}}
             """
@@ -137,9 +137,9 @@ def test_step_span_records_raise_event_without_error_status(step_span_exporter: 
 def test_step_span_records_failure_event_for_execution_error(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             ---
             deny:
               - return
@@ -181,9 +181,9 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
 
     with nh.run(FailingExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_failure_function() -> None:
-            """natural
+            """execute
             fail
             """
 
@@ -208,9 +208,9 @@ def test_step_span_attributes_include_run_scope_and_step_identity(step_span_expo
     with nh.run(StubExecutor(), run_id="trace-run"):
         expected_scope_id = nh.get_execution_reference().scope_id
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 31}}
             """
@@ -227,9 +227,9 @@ def test_step_span_attributes_include_run_scope_and_step_identity(step_span_expo
 def test_step_span_event_structure_is_compact(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 111}}
             """
@@ -248,9 +248,9 @@ def test_step_span_event_structure_is_compact(step_span_exporter: InMemorySpanEx
 def test_step_span_failure_event_structure_is_compact(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor()):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             ---
             deny:
               - return
@@ -280,9 +280,9 @@ def test_step_span_failure_event_structure_is_compact(step_span_exporter: InMemo
 def test_run_span_has_only_run_id_attribute(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor(), run_id="attr-test"):
 
-        @nh.natural_function
+        @nh.function
         def natural_value_function() -> int:
-            """natural
+            """execute
             <:result>
             {"step_outcome": {"kind": "pass"}, "bindings": {"result": 42}}
             """

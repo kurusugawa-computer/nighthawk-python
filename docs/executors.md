@@ -24,12 +24,12 @@ See [Philosophy](philosophy.md) for the purpose and composition principles, and 
 ```py
 import nighthawk as nh
 
-configuration = nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna")
+configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")
 step_executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
 ```
 
-The `model` field accepts a `provider:model` identifier or a borrowed Pydantic AI `Model` instance whose client lifetime remains with the host.
-The default model is `openai-responses:gpt-5.6-luna`.
+The `execution_model` and `decision_model` fields accept a `provider:model` identifier or a borrowed Pydantic AI `Model` instance whose client lifetime remains with the host.
+Neither model is selected by default. A missing model fails when its block kind is executed. For ordinary use, select models directly with `nh.run(execution_model=..., decision_model=...)`.
 `model_settings` defaults to an empty dictionary; `None` and `UNSET` are invalid field values.
 Optional executor configuration arguments use omission or `nh.UNSET` to create a fresh default configuration.
 An explicit configuration replaces the complete value; raw dictionaries and `None` are rejected before constructing an agent.

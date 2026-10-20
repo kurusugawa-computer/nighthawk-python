@@ -4,14 +4,17 @@ import json
 from typing import Any, Protocol, cast, runtime_checkable
 
 from pydantic import TypeAdapter
-from pydantic_ai import Agent, RunContext, StructuredDict
+from pydantic_ai import Agent, AgentRunResult, RunContext, StructuredDict, models
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.messages import UserContent
-from pydantic_ai.models import ModelRequestContext
+from pydantic_ai.models import Model, ModelRequestContext
+from pydantic_ai.models.decision import DecisionModel
+from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.output import OutputContext
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.function import FunctionToolset
+from pydantic_core import to_json
 
 from ..composition import UNSET, UnsetType
 from ..configuration import ModelSelection, StepExecutorConfiguration
@@ -20,6 +23,7 @@ from ..tools._admission import ToolAdmissionCapability
 from ..tools._ordering import sequential_model_tools
 from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
+from ._user_content import try_project_user_prompt_value
 from .async_bridge import run_coroutine_synchronously
 from .context import DefaultContextBuilder, build_context_content, build_context_request
 from .model_candidate import resolve_model_candidate
@@ -49,6 +53,25 @@ from .step_contract import (
     build_step_system_prompt_suffix_fragment,
 )
 from .step_request import StepCandidate, StepRequest
+from .step_result import Pass
+
+
+def _require_decision_model(model: Model) -> None:
+    while isinstance(model, WrapperModel):
+        model = model.wrapped
+    if not isinstance(model, DecisionModel):
+        raise NighthawkError("decision_model must be a Pydantic AI DecisionModel")
+
+
+class _DecisionBoundary(AbstractCapability[StepContext]):
+    """Keep decisions limited to typed answers, including under scoped capabilities."""
+
+    async def before_model_request(self, ctx: RunContext[StepContext], request_context: ModelRequestContext) -> ModelRequestContext:
+        _require_decision_model(request_context.model)
+        parameters = request_context.model_request_parameters
+        if parameters.function_tools or parameters.native_tools:
+            raise NighthawkError("decide cannot expose action tools")
+        return request_context
 
 
 class _OperationFailureGuard(AbstractCapability[StepContext]):
@@ -146,7 +169,9 @@ class ConfigurableStepExecutor(Protocol):
 def _new_agent_step_executor(
     configuration: StepExecutorConfiguration,
 ) -> StepExecutionAgent:
-    model_identifier = configuration.model
+    model_identifier = configuration.execution_model
+    if model_identifier is None:
+        raise NighthawkError("execute requires execution_model in run or scope")
     model: object = model_identifier
     if isinstance(model_identifier, str):
         provider, provider_model_name = model_identifier.split(":", 1)
@@ -219,10 +244,12 @@ class AgentStepExecutor:
         if agent is not None and not isinstance(agent, (AsyncExecutionAgent, SyncExecutionAgent)):
             raise TypeError("agent must implement the synchronous or asynchronous agent protocol")
         self.configuration = StepExecutorConfiguration() if isinstance(configuration, UnsetType) else configuration
-        if agent is not None and not isinstance(self.configuration.model, str):
-            raise NighthawkError("The external agent owns model selection; configuration.model must be a string")
+        if agent is not None and self.configuration.execution_model is not None and not isinstance(self.configuration.execution_model, str):
+            raise NighthawkError("The external agent owns model selection; configuration.execution_model must be a string")
         self.agent_is_managed = agent is None
-        self.agent = agent if agent is not None else _new_agent_step_executor(self.configuration)
+        self.agent = (
+            agent if agent is not None else (_new_agent_step_executor(self.configuration) if self.configuration.execution_model is not None else None)
+        )
         self.token_encoding = self.configuration.resolve_token_encoding()
         self.tool_result_rendering_policy = ToolResultRenderingPolicy(
             tokenizer_encoding_name=self.token_encoding.name,
@@ -266,11 +293,46 @@ class AgentStepExecutor:
         configuration = selection.apply(self.configuration)
         if self.agent_is_managed:
             return AgentStepExecutor.from_configuration(configuration=configuration)
-        if not isinstance(configuration.model, str) or configuration.model != self.configuration.model:
+        if configuration.execution_model != self.configuration.execution_model:
             raise NighthawkError("The external agent owns model selection; scope cannot switch its model")
         if self.agent is None:
             raise NighthawkError("AgentStepExecutor.agent is not initialized")
         return AgentStepExecutor.from_agent(agent=self.agent, configuration=configuration)
+
+    async def _run_decision(self, request: StepRequest) -> StepCandidate:
+        selected_model = self.configuration.decision_model
+        if selected_model is None:
+            raise NighthawkError("decide requires decision_model in run or scope")
+        model = models.infer_model(selected_model)
+        _require_decision_model(model)
+        output_name = request.output_binding_names[0]
+        output_type = request.binding_name_to_type[output_name]
+        # Full, explicitly referenced evidence only. Execution previews are lossy and require tool rereads.
+        content: list[UserContent] = []
+        for name, value in request.input_binding_name_to_value.items():
+            projected = try_project_user_prompt_value(value)
+            content.append(f"Binding <{name}>:\n")
+            if projected is not None:
+                content.extend(projected)
+            else:
+                content.append(to_json(value).decode())
+            content.append("\n")
+        if not content:
+            content.append("No input bindings.")
+        agent = Agent(
+            model=model,
+            output_type=cast(Any, output_type),
+            deps_type=StepContext,
+            instructions=request.processed_natural_program,
+            model_settings=cast(ModelSettings, self.configuration.decision_model_settings),
+        )
+        with step_context_scope(request.step_context):
+            result = await agent.run(content, deps=request.step_context, capabilities=[*_current_capabilities(), _DecisionBoundary()])
+        # Accessing response requires a real response from this invocation, even if a capability supplies output.
+        _ = result.response
+        request.step_context.model_result = result
+        get_usage_meter().record(result.usage, kind="decide")
+        return StepCandidate(outcome=Pass(), binding_name_to_value={output_name: result.output})
 
     async def _run_agent(
         self,
@@ -359,6 +421,10 @@ class AgentStepExecutor:
         *,
         request: StepRequest,
     ) -> StepCandidate:
+        if request.block_kind == "decide":
+            return await self._run_decision(request)
+        if self.agent is None:
+            raise NighthawkError("execute requires execution_model in run or scope")
         step_context = request.step_context
         processed_natural_program = request.processed_natural_program
         allowed_step_kinds = request.allowed_step_kinds
@@ -402,9 +468,11 @@ class AgentStepExecutor:
         if step_context.operation_failure is not None:
             raise step_context.operation_failure from step_context.operation_failure.__cause__
 
+        if isinstance(result, AgentRunResult):
+            step_context.model_result = result
         usage_meter = get_usage_meter()
         if usage_meter is not None and hasattr(result, "usage"):
-            usage_meter.record(result.usage, kind="step")
+            usage_meter.record(result.usage, kind="execute")
 
         if isinstance(result.output, StepCandidate):
             return result.output

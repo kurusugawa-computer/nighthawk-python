@@ -18,8 +18,8 @@ from .errors import (
 )
 from .function_call import FunctionCall, FunctionCallError, FunctionCallHandler, function_call_scope, get_function_call
 from .json_renderer import JsonableValue, to_jsonable_value
-from .natural.decorator import get_transformed_function, natural_function
-from .natural.definition import NaturalFunctionDefinition, get_natural_function_definition
+from .natural.decorator import function, get_transformed_function
+from .natural.definition import FunctionDefinition, get_function_definition
 from .runtime.scoping import (
     ExecutionReference,
     UsageMeter,
@@ -44,8 +44,8 @@ __all__ = [
     "FunctionCallHandler",
     "function_call_scope",
     "get_function_call",
-    "NaturalFunctionDefinition",
-    "get_natural_function_definition",
+    "FunctionDefinition",
+    "get_function_definition",
     "ModelSelection",
     "ConfigurableStepExecutor",
     "runtime",
@@ -80,7 +80,7 @@ __all__ = [
     "oversight",
     "lifecycle",
     "get_lifecycle",
-    "natural_function",
+    "function",
     "get_transformed_function",
     "resilience",
     "run",

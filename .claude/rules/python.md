@@ -32,7 +32,7 @@ Write a comment or docstring only for a fact that the code, names, signatures, t
 The following text is consumed at runtime or serves as test data.
 Change it only as a deliberate behavior change:
 
-- Natural docstrings (`"""natural ...`).
+- Natural docstrings (`"""execute ...`).
 - Docstrings of binding functions and tools, which LLMs may read.
 - Docstrings of Pydantic models that enter LLM-facing JSON schemas, such as `StepFinalResult`.
 - Fixture docstrings that tests assert on or expose to Natural blocks.

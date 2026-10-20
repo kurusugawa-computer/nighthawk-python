@@ -6,17 +6,15 @@ import asyncio
 import inspect
 import threading
 from collections.abc import Awaitable, Callable, Coroutine, Iterator, Mapping
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
 from .composition import UNSET, UnsetType
-from .configuration import ModelSelection
 from .errors import NighthawkError
-from .natural.definition import NaturalFunctionDefinition
-from .runtime.scoping import scope
+from .natural.definition import FunctionDefinition
 from .ulid import generate_ulid
 
 
@@ -26,10 +24,9 @@ class FunctionCall:
 
     call_id: str
     parent_call_id: str | None
-    definition: NaturalFunctionDefinition
+    definition: FunctionDefinition
     arguments: tuple[object, ...]
     keyword_name_to_value: Mapping[str, object]
-    model_selection: ModelSelection | None
 
 
 @runtime_checkable
@@ -103,36 +100,24 @@ class _Continuation:
             raise FunctionCallError("Handler returned without completing its continuation")
 
 
-def _selection_scope(selection: ModelSelection | None):
-    return nullcontext() if selection is None else scope(model=selection.model, step_executor_configuration=selection.configuration)
-
-
-def _new_call(
-    definition: NaturalFunctionDefinition, arguments: tuple[object, ...], keyword_name_to_value: dict[str, Any], selection: ModelSelection | None
-) -> FunctionCall:
+def _new_call(definition: FunctionDefinition, arguments: tuple[object, ...], keyword_name_to_value: dict[str, Any]) -> FunctionCall:
     parent = _call.get()
-    return FunctionCall(
-        generate_ulid(), parent.call_id if parent else None, definition, arguments, MappingProxyType(dict(keyword_name_to_value)), selection
-    )
+    return FunctionCall(generate_ulid(), parent.call_id if parent else None, definition, arguments, MappingProxyType(dict(keyword_name_to_value)))
 
 
-def _invoke(
-    definition: NaturalFunctionDefinition, arguments: tuple[object, ...], keyword_name_to_value: dict[str, Any], selection: ModelSelection | None
-) -> object:
+def _invoke(definition: FunctionDefinition, arguments: tuple[object, ...], keyword_name_to_value: dict[str, Any]) -> object:
     handler = _handler.get()
     if handler is None:
-        with _selection_scope(selection):
-            return definition.transformed_function(*arguments, **keyword_name_to_value)
+        return definition.transformed_function(*arguments, **keyword_name_to_value)
     if inspect.isgeneratorfunction(definition.original_function) or inspect.isasyncgenfunction(definition.original_function):
         raise FunctionCallError("Intercepted generator functions are unsupported")
-    call = _new_call(definition, arguments, keyword_name_to_value, selection)
+    call = _new_call(definition, arguments, keyword_name_to_value)
     guard = _Continuation()
 
     def proceed() -> object:
         guard.start()
         try:
-            with _selection_scope(selection):
-                return definition.transformed_function(*arguments, **keyword_name_to_value)
+            return definition.transformed_function(*arguments, **keyword_name_to_value)
         finally:
             guard.finished = True
 
@@ -147,25 +132,22 @@ def _invoke(
 
 
 async def _invoke_async(
-    definition: NaturalFunctionDefinition,
+    definition: FunctionDefinition,
     body: Callable[..., Awaitable[object]],
     arguments: tuple[object, ...],
     keyword_name_to_value: dict[str, Any],
-    selection: ModelSelection | None,
 ) -> object:
     handler = _handler.get()
     if handler is None:
-        with _selection_scope(selection):
-            return await body(*arguments, **keyword_name_to_value)
-    call = _new_call(definition, arguments, keyword_name_to_value, selection)
+        return await body(*arguments, **keyword_name_to_value)
+    call = _new_call(definition, arguments, keyword_name_to_value)
     guard = _Continuation()
     continuations: list[Coroutine[Any, Any, object]] = []
 
     async def execute() -> object:
         guard.start()
         try:
-            with _selection_scope(selection):
-                return await body(*arguments, **keyword_name_to_value)
+            return await body(*arguments, **keyword_name_to_value)
         finally:
             guard.finished = True
 

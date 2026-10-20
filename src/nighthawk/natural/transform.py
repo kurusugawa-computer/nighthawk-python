@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import ast
 
+from ..runtime.step_definition import BlockKind
 from ._names import _RuntimeNames
 from .blocks import (
     _joined_string_is_natural_sentinel,
     _joined_string_scan_text,
     _validate_joined_string_bindings_do_not_span_formatted_values,
-    extract_bindings,
-    extract_program,
     is_natural_sentinel,
+    parse_block,
 )
 
 
@@ -54,8 +54,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 ):
                     docstring_text = first_statement.value.value
                     if is_natural_sentinel(docstring_text):
-                        program = extract_program(docstring_text)
-                        input_bindings, output_bindings = extract_bindings(program)
+                        block_kind, program, input_bindings, output_bindings = parse_block(docstring_text)
                         return_annotation = self._current_return_annotation_expression()
                         binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                         injected = build_runtime_call_and_assignments(
@@ -67,6 +66,7 @@ class NaturalTransformer(ast.NodeTransformer):
                             is_in_loop=self._loop_depth > 0,
                             is_async_function=self._is_async_function_stack[-1],
                             runtime_names=self._runtime_names,
+                            block_kind=block_kind,
                         )
 
                         # Preserve user-source location: the injected runtime call and its
@@ -182,8 +182,7 @@ class NaturalTransformer(ast.NodeTransformer):
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             text = value.value
             if is_natural_sentinel(text):
-                program = extract_program(text)
-                input_bindings, output_bindings = extract_bindings(program)
+                block_kind, program, input_bindings, output_bindings = parse_block(text)
                 return_annotation = self._current_return_annotation_expression()
                 binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
                 is_in_loop = self._loop_depth > 0
@@ -196,6 +195,7 @@ class NaturalTransformer(ast.NodeTransformer):
                     is_in_loop=is_in_loop,
                     is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
                     runtime_names=self._runtime_names,
+                    block_kind=block_kind,
                 )
 
                 sentinel_location = ast.copy_location(ast.Pass(), node)
@@ -210,8 +210,7 @@ class NaturalTransformer(ast.NodeTransformer):
             is_in_loop = self._loop_depth > 0
 
             scan_text = _joined_string_scan_text(value, formatted_value_placeholder="")
-            program = extract_program(scan_text)
-            input_bindings, output_bindings = extract_bindings(program)
+            block_kind, program, input_bindings, output_bindings = parse_block(scan_text)
             binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
 
             extracted_program_call = ast.Call(
@@ -229,6 +228,7 @@ class NaturalTransformer(ast.NodeTransformer):
                 is_in_loop=is_in_loop,
                 is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
                 runtime_names=self._runtime_names,
+                block_kind=block_kind,
             )
 
             sentinel_location = ast.copy_location(ast.Pass(), node)
@@ -323,6 +323,7 @@ def build_runtime_call_and_assignments(
     is_in_loop: bool,
     is_async_function: bool,
     runtime_names: _RuntimeNames | None = None,
+    block_kind: BlockKind = "execute",
 ) -> list[ast.stmt]:
     if runtime_names is None:
         runtime_names = _RuntimeNames(set(input_binding_names) | set(output_binding_names))
@@ -346,7 +347,7 @@ def build_runtime_call_and_assignments(
             return_annotation,
             ast.Constant(is_in_loop),
         ],
-        keywords=[],
+        keywords=[ast.keyword(arg="block_kind", value=ast.Constant(block_kind))],
     )
     envelope_value: ast.expr = ast.Await(value=call_expression) if is_async_function else call_expression
 

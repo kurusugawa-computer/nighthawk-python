@@ -122,10 +122,10 @@ def test_read_only_source_annotations_are_available_without_resolving_them() -> 
         effects.append("annotation")
         return int
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         findings: list[annotation_effect()] = []  # type: ignore[valid-type]  # noqa: F841 - referenced by Natural.
-        """natural
+        """execute
         Describe <findings>.
         """
 

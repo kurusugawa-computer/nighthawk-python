@@ -10,12 +10,15 @@ import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Literal
+from typing import Any, Literal
+
+from pydantic_ai import AgentRunResult
 
 from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
 from .runtime.operation_contract import OperationFinished
 from .runtime.step_contract import StepKind
+from .runtime.step_definition import BlockKind
 from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 type FailureStage = Literal[
@@ -40,6 +43,8 @@ type FailureStage = Literal[
 @dataclass(frozen=True, kw_only=True)
 class _StepFinished:
     execution_reference: ExecutionReference
+    block_kind: BlockKind = "execute"
+    model_result: AgentRunResult[Any] | None = field(default=None, repr=False)
     processed_natural_program: str | None = None
     input_binding_name_to_value: Mapping[str, object] | None = None
     allowed_step_kinds: tuple[StepKind, ...] | None = None

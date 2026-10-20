@@ -5,6 +5,17 @@
 This page covers scope composition, model selection, function admission, request observation, cleanup, and execution identity, alongside prompt and context settings.
 Scope composition is shared across backends; model-selection support and request visibility depend on the active executor.
 
+Select models directly for ordinary use:
+
+```python
+with nh.run(execution_model="openai-responses:gpt-6-luna", decision_model="openai-decisions:gpt-6-luna"):
+    result = workflow(document)
+```
+
+Both fields default to `None`; only a block using an unconfigured model fails.
+A nested scope can change either field independently.
+See [Typed decisions](decisions.md) for input, result, and failure contracts.
+
 ## Omission, explicit values, and composition
 
 `nh.UNSET` represents an omitted argument wherever the signature accepts it.
@@ -44,7 +55,7 @@ with nh.run(step_executor):
 
 Parameters:
 
-- `model`: replace only the model while preserving other executor configuration fields; cannot be combined with `step_executor_configuration`.
+- `execution_model` and `decision_model`: independently replace each model; `None` clears a selection. These cannot be combined with `step_executor_configuration`.
 - `step_executor_configuration`: replace the entire configuration.
 - `step_executor`: replace the step executor entirely.
 - `usage_meter`: replace the `UsageMeter` that steps in this scope record into. See [Usage metering](#usage-metering).
@@ -64,7 +75,7 @@ Composition is selected by each supplied value:
 - `nh.Extend(sequence)` appends prompt fragments, tools, or capabilities.
 - `nh.Merge(mapping)` merges task references, rejecting a same-name value unless it is the identical Python object.
 
-`oversight` and `lifecycle` accept `None`, which clears their hooks. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Invalid argument shapes fail before model resolution; resolution errors leave the parent context intact.
+`oversight` and `lifecycle` accept `None`, which clears their hooks. The two model fields accept `None` to clear their selections. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Invalid argument shapes fail before model resolution; resolution errors leave the parent context intact.
 
 The context manager yields the resolved `StepExecutor` for the scope.
 
@@ -109,9 +120,9 @@ from nighthawk.runtime import StepDefinition, StepEnvironment, execute_step
 from nighthawk.testing import CallbackExecutor, StepCall, StepResponse, pass_response
 
 
-@nh.natural_function
+@nh.function
 def child(value: int) -> None:
-    """natural
+    """execute
     Inspect <value> using <policy>.
     """
 
@@ -162,9 +173,9 @@ import nighthawk as nh
 from nighthawk.runtime import Pass, StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step_async
 
 
-@nh.natural_function
+@nh.function
 async def child(value: int) -> None:
-    """natural
+    """execute
     Inspect <value> using <policy>.
     """
 
@@ -376,7 +387,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 model = OpenAIResponsesModel("gpt-5.6-luna", provider=OpenAIProvider(api_key=credentials.api_key))
 configuration = nh.StepExecutorConfiguration(
-    model=model,
+    execution_model=model,
     model_settings={"openai_store": False},
     tokenizer_encoding="o200k_base",
 )
@@ -386,10 +397,10 @@ with nh.run(executor):
 ```
 
 The host supplies `credentials` and owns the Model's client lifetime.
-`nh.scope(model=another_model)` selects a borrowed Model while retaining the other configuration fields, then restores the parent executor on exit.
+`nh.scope(execution_model=another_model)` selects a borrowed Model while retaining the other configuration fields, then restores the parent executor on exit.
 External agents created through `from_agent` own their model selection.
 
-Live Models cannot be serialized as settings; use `configuration.model_dump(exclude={"model"})` for a partial export.
+Live Models cannot be serialized as settings; use `configuration.model_dump(exclude={"execution_model", "decision_model"})` for a partial export.
 See the [configuration contract](specification.md#52-configuration) for ownership, serialization, and setting precedence.
 
 ## Mixing executors
@@ -398,11 +409,11 @@ Use `nh.scope(step_executor=...)` to switch executors within a single run. This 
 
 ```py
 fast_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
+    configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
 )
 
 deep_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model="codex:default"),
+    configuration=nh.StepExecutorConfiguration(execution_model="codex:default"),
 )
 
 with nh.run(fast_executor):
@@ -429,7 +440,7 @@ The LOCALS and GLOBALS sections are bounded by token and item limits configured 
 
 ```py
 configuration = nh.StepExecutorConfiguration(
-    model="openai-responses:gpt-5.6-luna",
+    execution_model="openai-responses:gpt-5.6-luna",
     context_limits=nh.StepContextLimits(
         locals_max_tokens=4096,
         locals_max_items=50,
@@ -482,27 +493,28 @@ For admission between requests within an unfinished block, use [request usage an
 
 ## Model selection and function admission
 
-`model=` changes only the model; `step_executor_configuration=` replaces the whole configuration.
-Both accept omission or `nh.UNSET` for inheritance and cannot be supplied together.
+`execution_model=` and `decision_model=` independently change their respective models; `step_executor_configuration=` replaces the whole configuration.
+Omission or `nh.UNSET` inherits; individual model selections cannot accompany a full configuration replacement.
 The active executor resolves selection through `ConfigurableStepExecutor`; a host wrapper must return a wrapper retaining its controls.
 Unsupported executors fail before model requests, and custom `AgentStepExecutor` subclasses must explicitly implement resolution.
 
 ```python
-@nh.natural_function(model="openai-responses:gpt-5.6-luna")
+@nh.function
 async def child() -> int:
-    """natural
-    Return the integer 17.
-    """
-    return 0
+    with nh.scope(execution_model="openai-responses:gpt-5.6-luna"):
+        """execute
+        Return the integer 17.
+        """
+        return 0
 
 
 with nh.run(executor), nh.scope(capabilities=[request_observer]):
-    with nh.scope(model=borrowed_model):
+    with nh.scope(execution_model=borrowed_model):
         result = parent()
 ```
 
-Model declarations are inert until invocation is accepted; they neither initialize providers during decoration nor require credentials for definition lookup.
-Selection is applied before the Python body, and parent settings are restored before the host call handler observes return or failure.
+The decorator carries no model declaration and requires no credentials.
+Model selection is applied when entering a run or scope, and scope exit restores the parent settings.
 The same meter, capabilities, oversight, lifecycle, task references, and call handler survive model-only selection.
 Explicit replacement, clearing hooks, or starting another run remains application-controlled.
 
@@ -534,11 +546,11 @@ class AllowedModels:
 
     def resolve_model_selection(self, selection: nh.ModelSelection) -> AllowedModels:
         configuration = selection.apply(self.executor.configuration)
-        model = configuration.model
+        model = configuration.execution_model
         if isinstance(model, str):
             if model not in self.model_name_to_model:
                 raise PermissionError("Model is not allowed")
-            configuration = configuration.model_copy(update={"model": self.model_name_to_model[model]})
+            configuration = configuration.model_copy(update={"execution_model": self.model_name_to_model[model]})
         elif not any(model is allowed for allowed in self.model_name_to_model.values()):
             raise PermissionError("Borrowed model is not allowed")
         executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
@@ -562,23 +574,24 @@ def simulated_model(name: str) -> FunctionModel:
     return FunctionModel(respond, model_name=name)
 
 
-@nh.natural_function
+@nh.function
 def work() -> None:
-    """natural
+    """execute
     Complete this simulated task.
     """
 
 
-@nh.natural_function(model="allowed:B")
+@nh.function
 async def child() -> None:
-    """natural
-    Complete this simulated child task.
-    """
+    with nh.scope(execution_model="allowed:B"):
+        """execute
+        Complete this simulated child task.
+        """
 
 
 model_name_to_model = {"allowed:A": simulated_model("A"), "allowed:B": simulated_model("B")}
 executor = AllowedModels(
-    nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(model=model_name_to_model["allowed:A"])),
+    nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model_name_to_model["allowed:A"])),
     model_name_to_model,
 )
 with nh.run(executor):
@@ -587,7 +600,7 @@ with nh.run(executor):
     assert nh.get_step_executor() is executor
     work()
     try:
-        with nh.scope(model="unapproved:model"):
+        with nh.scope(execution_model="unapproved:model"):
             raise AssertionError("Unapproved model should have been refused")
     except PermissionError:
         pass
@@ -651,24 +664,25 @@ class Admission:
 body_effects: list[str] = []
 
 
-@nh.natural_function(model="unconfigured:model")
+@nh.function
 def refused_work() -> None:
-    body_effects.append("refused body")
+    with nh.scope(execution_model="unconfigured:model"):
+        body_effects.append("refused body")
 
 
-@nh.natural_function
+@nh.function
 def summarize(text: str) -> str:
     summary: str = ""
-    """natural
+    """execute
     Summarize <text> in <:summary>.
     """
     return summary
 
 
-@nh.natural_function
+@nh.function
 async def summarize_async(text: str) -> str:
     summary: str = ""
-    """natural
+    """execute
     Summarize <text> in <:summary>.
     """
     return summary
@@ -770,16 +784,16 @@ async def simulated_response(messages: list[ModelMessage], information: AgentInf
     )
 
 
-@nh.natural_function
+@nh.function
 def investigate() -> None:
-    """natural
+    """execute
     Investigate until the task is complete.
     """
 
 
 budget = RequestBudget(threshold=100)
 executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model=FunctionModel(simulated_response)),
+    configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(simulated_response)),
 )
 with nh.run(executor), nh.scope(capabilities=[budget]):
     try:
@@ -819,9 +833,9 @@ from nighthawk.lifecycle import StepFinished, StepLifecycle
 from nighthawk.testing import ScriptedExecutor, pass_response
 
 
-@nh.natural_function
+@nh.function
 async def work() -> None:
-    """natural
+    """execute
     Complete this simulated task.
     """
 

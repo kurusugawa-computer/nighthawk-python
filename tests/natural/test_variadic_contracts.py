@@ -30,9 +30,9 @@ class CandidateExecutor:
 
 @pytest.mark.parametrize("use_assignment", [False, True])
 def test_positional_variadic_output_validates_elements_and_retains_tuple(use_assignment: bool) -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(*values: Annotated[int, Field(ge=0)]) -> tuple[int, ...]:
-        """natural
+        """execute
         Update <:values>.
         """
         return values
@@ -50,9 +50,9 @@ def test_positional_variadic_output_validates_elements_and_retains_tuple(use_ass
 
 @pytest.mark.parametrize("use_assignment", [False, True])
 def test_keyword_variadic_output_validates_values(use_assignment: bool) -> None:
-    @nh.natural_function
+    @nh.function
     async def workflow(**values: Annotated[int, Field(ge=0)]) -> dict[str, int]:
-        """natural
+        """execute
         Update <:values>.
         """
         return values
@@ -69,9 +69,9 @@ def test_keyword_variadic_output_validates_values(use_assignment: bool) -> None:
 
 
 def test_unpacked_positional_annotation_is_already_a_collection_contract() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(*values: Unpack[tuple[int, str]]) -> tuple[int, str]:  # noqa: UP044
-        """natural
+        """execute
         Update <:values>.
         """
         return values
@@ -81,9 +81,9 @@ def test_unpacked_positional_annotation_is_already_a_collection_contract() -> No
 
 
 def test_starred_positional_annotation_is_already_a_collection_contract() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(*values: *tuple[int, str]) -> tuple[int, str]:
-        """natural
+        """execute
         Update <:values>.
         """
         return values
@@ -93,9 +93,9 @@ def test_starred_positional_annotation_is_already_a_collection_contract() -> Non
 
 
 def test_unpacked_keyword_annotation_preserves_typed_dictionary_contract() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(**values: Unpack[ReviewOptions]) -> ReviewOptions:
-        """natural
+        """execute
         Update <:values>.
         """
         return values
@@ -107,9 +107,9 @@ def test_unpacked_keyword_annotation_preserves_typed_dictionary_contract() -> No
 
 
 def test_variadic_contracts_do_not_resolve_shadowed_container_names() -> None:
-    @nh.natural_function
+    @nh.function
     def workflow(tuple: object, dict: object, str: object, *values: int) -> object:
-        """natural
+        """execute
         Update <:values>.
         """
         return values

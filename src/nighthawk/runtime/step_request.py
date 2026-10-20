@@ -10,6 +10,7 @@ from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
 from .step_context import StepContext
 from .step_contract import StepKind
+from .step_definition import BlockKind
 from .step_result import Raise, StepResult
 
 
@@ -35,6 +36,8 @@ class StepRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid", validate_default=True)
 
+    block_kind: BlockKind = "execute"
+    input_binding_name_to_value: Mapping[str, object] = {}
     execution_reference: ExecutionReference
     processed_natural_program: str
     step_context: InstanceOf[StepContext]
@@ -55,7 +58,7 @@ class StepRequest(BaseModel):
         """
         return _snapshot_output_bindings(self.step_context.environment, self.output_binding_names)
 
-    @field_validator("binding_name_to_type", mode="after")
+    @field_validator("binding_name_to_type", "input_binding_name_to_value", mode="after")
     @classmethod
     def freeze_contracts(cls, value: Mapping[str, object]) -> Mapping[str, object]:
         return MappingProxyType(dict(value))
@@ -68,6 +71,8 @@ class StepRequest(BaseModel):
             raise ValueError("StepRequest output names must be unique")
         if set(self.binding_name_to_type) != set(self.output_binding_names):
             raise ValueError("StepRequest requires one contract for each declared output")
+        if self.block_kind == "decide" and (len(self.output_binding_names) != 1 or self.allowed_step_kinds != ("pass",)):
+            raise ValueError("decide requires one output and only the pass outcome")
         if not self.allowed_step_kinds:
             raise ValueError("StepRequest requires at least one allowed outcome kind")
         return self

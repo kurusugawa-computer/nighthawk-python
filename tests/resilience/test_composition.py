@@ -176,18 +176,18 @@ class TestCompositionWithNaturalFunction:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def primary(text: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Classify <text> and set <:result>.
             """
             return result
 
-        @nh.natural_function
+        @nh.function
         def backup(text: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Simple classify <text> and set <:result>.
             """
             return result
@@ -254,10 +254,10 @@ class TestBudgetWithNaturalFunction:
             ]
         )
 
-        @nh.natural_function
+        @nh.function
         def classify(text: str) -> str:
             result: str = ""
-            """natural
+            """execute
             Classify <text> and set <:result>.
             """
             return result

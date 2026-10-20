@@ -218,9 +218,9 @@ def test_scope_extend_appends_prompt_suffix_fragments() -> None:
 
 
 def test_decorated_function_requires_step_executor():
-    @nh.natural_function
+    @nh.function
     def f(x: int):
-        f"""natural
+        f"""execute
         <:result>
         {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
         """  # noqa: B021
@@ -231,9 +231,9 @@ def test_decorated_function_requires_step_executor():
 
 
 def test_async_decorated_function_requires_step_executor():
-    @nh.natural_function
+    @nh.function
     async def f(x: int):
-        f"""natural
+        f"""execute
         <:result>
         {{"step_outcome": {{"kind": "pass"}}, "bindings": {{"result": {x + 1}}}}}
         """  # noqa: B021

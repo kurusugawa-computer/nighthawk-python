@@ -109,9 +109,9 @@ def test_native_validator_failure_preserves_earlier_body_and_stops_later_validat
 
     executor = nh.AgentStepExecutor.from_agent(agent=Agent(FunctionModel(respond), deps_type=nh.StepContext, end_strategy=end_strategy))
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         Record the three values in order.
         """
 
@@ -147,9 +147,9 @@ def test_exhaustive_output_settlement_keeps_later_valid_output_after_retry_exhau
 
     executor = nh.AgentStepExecutor.from_agent(agent=Agent(FunctionModel(respond), deps_type=nh.StepContext, end_strategy="exhaustive"))
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         Complete the calls and finish.
         """
 

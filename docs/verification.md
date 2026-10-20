@@ -14,10 +14,10 @@ import nighthawk as nh
 from nighthawk.testing import ScriptedExecutor, pass_response
 
 
-@nh.natural_function
+@nh.function
 def classify(text: str) -> str:
     label: str = ""
-    """natural
+    """execute
     Read <text> and set <:label> to one of: positive, negative, neutral.
     """
     return label
@@ -133,7 +133,7 @@ import nighthawk as nh
 @pytest.mark.integration
 def test_classify_with_real_llm():
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(model="openai-responses:gpt-5.6-luna"),
+        configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
     )
     with nh.run(step_executor):
         result = classify("Great product, highly recommend!")
@@ -183,15 +183,15 @@ async def observe_request(messages: list[ModelMessage], information: AgentInfo) 
     return ModelResponse(parts=[ToolCallPart("final_result", {"result": {"kind": "pass"}})])
 
 
-@nh.natural_function
+@nh.function
 def inspect_label(text: str) -> None:
-    """natural
+    """execute
     Read <text> and inspect the signature of <format_label>.
     """
 
 
 executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(model=FunctionModel(observe_request)),
+    configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(observe_request)),
 )
 with nh.run(executor):
     inspect_label("sample label")

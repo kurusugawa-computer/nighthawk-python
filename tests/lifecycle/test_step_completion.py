@@ -30,18 +30,18 @@ def test_completion_runs_after_caller_assignments(asynchronous: bool) -> None:
         assert nh.get_step_context().execution_reference == event.execution_reference
         events.append(event)
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> None:
         nonlocal value
-        """natural
+        """execute
         <:value>
         {"step_outcome": {"kind": "pass"}, "bindings": {"value": 7}}
         """
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> None:
         nonlocal value
-        """natural
+        """execute
         <:value>
         {"step_outcome": {"kind": "pass"}, "bindings": {"value": 7}}
         """
@@ -62,11 +62,11 @@ def test_delivery_exception_does_not_reenter_completion(outcome: str) -> None:
         events.append(event)
         raise RuntimeError("delivery")
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal value
         for _ in range(2):
-            f"""natural
+            f"""execute
             <:value>
             {{"step_outcome": {outcome_json}, "bindings": {{"value": 7}}}}
             """
@@ -86,10 +86,10 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
         evaluated.append("evaluated")
         return 3
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
         nonlocal calculate
-        """natural
+        """execute
         <calculate> <:value>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {"value": "7"}}
         """
@@ -135,10 +135,10 @@ def test_return_expression_acceptance_evaluates_and_awaits_once() -> None:
         calls.append("evaluated")
         return calculate()
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> Counted:  # type: ignore[valid-type]
         nonlocal Counted, expression
-        """natural
+        """execute
         <expression> <Counted> <:value>
         {"step_outcome": {"kind": "return", "return_expression": "expression()"}, "bindings": {"value": 1}}
         """
@@ -180,9 +180,9 @@ def test_execution_identity_distinguishes_repeated_and_concurrent_calls() -> Non
             assert nh.get_execution_reference() == step_context.execution_reference
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -213,10 +213,10 @@ def test_cancellation_preserves_interruption_and_delivers_once(delivery_fails: b
         await asyncio.Event().wait()
         return 0
 
-    @nh.natural_function
+    @nh.function
     async def workflow() -> int:
         nonlocal blocked
-        """natural
+        """execute
         <blocked>
         {"step_outcome": {"kind": "return", "return_expression": "blocked()"}, "bindings": {}}
         """
@@ -249,10 +249,10 @@ def test_raise_constructor_failure_is_not_domain_raise() -> None:
         def __init__(self, message: str) -> None:
             raise failure
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         nonlocal DomainError
-        """natural
+        """execute
         <DomainError>
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "DomainError"}, "bindings": {}}
         """
@@ -271,10 +271,10 @@ def test_domain_nighthawk_error_is_a_raised_record() -> None:
     class DomainError(nh.NighthawkError):
         pass
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
         nonlocal DomainError
-        """natural
+        """execute
         <DomainError>
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "DomainError"}, "bindings": {}}
         """
@@ -289,16 +289,16 @@ def test_nested_calls_and_scope_configuration_restore() -> None:
     events: list[StepFinished] = []
     other_events: list[StepFinished] = []
 
-    @nh.natural_function
+    @nh.function
     def inner() -> None:
-        """natural
+        """execute
         {"step_outcome": {"kind": "pass"}, "bindings": {}}
         """
 
-    @nh.natural_function
+    @nh.function
     def outer() -> None:
         nonlocal inner
-        """natural
+        """execute
         <inner>
         {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
         """
@@ -362,9 +362,9 @@ def test_process_control_is_interruption(exception: BaseException) -> None:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             raise exception
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -382,19 +382,19 @@ def test_pre_await_failure_preserves_original_exception(asynchronous: bool) -> N
     def calculate() -> int:
         raise failure
 
-    @nh.natural_function
+    @nh.function
     def synchronous() -> int:
         nonlocal calculate
-        """natural
+        """execute
         <calculate>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}
         """
         return 0
 
-    @nh.natural_function
+    @nh.function
     async def asynchronous_function() -> int:
         nonlocal calculate
-        """natural
+        """execute
         <calculate>
         {"step_outcome": {"kind": "return", "return_expression": "calculate()"}, "bindings": {}}
         """
@@ -427,9 +427,9 @@ def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:
         assert threading.get_ident() == caller_thread
         events.append(event)
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -445,9 +445,9 @@ def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:
 def test_invalid_inspection_decision_keeps_inspection_stage(subject: str) -> None:
     events: list[StepFinished] = []
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> int:
-        """natural
+        """execute
         {"step_outcome": {"kind": "return", "return_expression": "4"}, "bindings": {}}
         """
         return 0
@@ -468,12 +468,12 @@ def test_invalid_inspection_decision_keeps_inspection_stage(subject: str) -> Non
 def test_distinct_blocks_have_distinct_source_locations() -> None:
     events: list[StepFinished] = []
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish first.
         """
-        """natural
+        """execute
         Finish second.
         """
 
@@ -494,9 +494,9 @@ def test_lifecycle_is_captured_before_executor_work(monkeypatch: pytest.MonkeyPa
             monkeypatch.setattr(runner, "get_lifecycle", lambda: StepLifecycle(redirected.append))
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -520,9 +520,9 @@ def test_handler_rethrowing_interruption_preserves_its_cause(interruption: BaseE
         assert isinstance(event, StepInterrupted)
         raise event.original_exception
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
@@ -541,9 +541,9 @@ def test_handler_rethrowing_prepared_domain_exception_has_no_self_cause() -> Non
         assert isinstance(event, StepRaised)
         raise event.exception
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         <ValueError>
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "ValueError"}, "bindings": {}}
         """
@@ -570,9 +570,9 @@ def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() 
                 raise RuntimeError("mediation bypass")
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
-    @nh.natural_function
+    @nh.function
     def workflow() -> None:
-        """natural
+        """execute
         Finish.
         """
 
