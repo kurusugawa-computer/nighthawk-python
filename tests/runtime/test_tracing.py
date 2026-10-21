@@ -175,8 +175,8 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
-            _ = (processed_natural_program, step_context, binding_names, allowed_step_kinds)
+            allowed_outcome_kinds = request.allowed_outcome_kinds
+            _ = (processed_natural_program, step_context, binding_names, allowed_outcome_kinds)
             raise CustomExecutionError("ignored")
 
     with nh.run(FailingExecutor()):

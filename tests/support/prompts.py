@@ -22,12 +22,12 @@ class FakeAgent:
         self.seen_prompts: list[str | tuple[UserContent, ...]] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
+        from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 
         self.seen_prompts.append(user_prompt)
         assert deps is not None
         _ = kwargs
-        return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+        return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
 
 def build_step_context(

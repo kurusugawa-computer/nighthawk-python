@@ -65,18 +65,17 @@ def classify_ticket(text: str) -> Literal["bug", "feature", "question"]:
 
 
 if __name__ == "__main__":
-    executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
-    )
-    with nh.run(executor):
+    with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
         print(classify_ticket("The application crashes when opening a file."))
 ```
 
 `@nh.function` transforms standalone strings beginning with `execute` or `decide <:output>` into executable blocks.
 Use `execute` for operations and assignments; use `decide` for typed judgments, with Python controlling subsequent actions.
-See [Typed decisions](decisions.md) for the output, input, and failure contracts.
+See [Typed decisions](https://kurusugawa-computer.github.io/nighthawk-python/decisions/) for the output, input, and failure contracts.
 Define these functions in source files so Nighthawk can inspect their source.
-`nh.run(executor)` supplies the executor and usage meter; a run must be active when a block executes or a declared model resolves.
+`nh.run(execution_model=..., decision_model=...)` supplies the selected models and a fresh usage meter; `nh.run(executor)` accepts a custom executor.
+A run must be active when a block executes.
+Defining a function requires neither a run nor provider credentials.
 Ordinary Python calls compose Natural functions within that run.
 
 Start with a provider-backed executor for judgments using Python bindings and helpers.
@@ -87,11 +86,14 @@ Read [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickst
 
 - `<name>` requires an existing Python value and prioritizes its presentation to the model. It is not an access allowlist or a read-only object wrapper.
 - `<:name>` declares a Python output slot whose committed value is validated. Annotate outputs explicitly, using `Literal`, typed collections, or Pydantic models for the contract.
-- Natural can finish with `pass`, `return`, or `raise`, and with `break` or `continue` inside a loop. `pass` continues with the next Python statement; `return` exits the surrounding function.
+- An `execute` block can finish with `pass`, `return`, or `raise`, and with `break` or `continue` inside a loop. `pass` continues with the next Python statement; `return` exits the surrounding function.
 - Use `deny` frontmatter to prohibit outcomes that would bypass required Python work. The template denies `return` to preserve the Python return path and denies the explicit `raise` outcome; runtime and helper failures can still raise.
 - Denying outcomes does not require a fresh assignment. A permitted `pass` can retain an output's initial value. Use a deliberate default or an unbound annotated output, and validate the result before dependent work.
 - Each block starts a fresh model interaction without implicit message history. Carry essential inputs and results through Python parameters and return values.
 - Python lexical values and scoped task references supply context. Prefer explicit arguments for essential dependencies and `scope(task_references=...)` for intentionally shared policy. Parent working values are not copied into children. Child name rebinding stays local; explicitly shared mutable objects retain identity.
+
+A `decide` block requires one explicit answer and continues with the next Python statement.
+Its initial output value cannot substitute for a missing answer.
 
 The type boundary may sit inside a function: accept text that needs interpretation, then commit a typed result before deterministic work begins.
 Types constrain the result's shape and range; they do not prove that its meaning is correct.
@@ -146,7 +148,7 @@ def quote_batch(messages: list[str], unit_price_cents: int) -> list[int]:
     return totals
 ```
 
-Call `quote_batch` inside `nh.run(executor)`, using the executor setup above.
+Call `quote_batch` inside `nh.run(execution_model="openai-responses:gpt-5.6-luna")`, using the run setup above.
 For `["A dozen, please.", "Please send three."]` at 250 cents per item, the intended totals are `[3000, 750]`.
 The host supplies the price; the model does not calculate or choose it.
 The Python loop processes every input in order on success, while an unclear quantity stops the batch with an explicit error.
@@ -238,8 +240,8 @@ Keep the following principles in mind, and read the linked contract before imple
 | Change models or inject capabilities for part of a workflow | `nh.scope(...)` composes settings within a run and restores the parent on exit. `execution_model=...` and `decision_model=...` select models independently; replacing the full configuration has broader effects. | [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) |
 | Retry, fall back, vote, or cache | Compose policy around ordinary Python calls. Catch `nh.ExecutionError` for runtime failures and application exception types for direct application failures. Reconcile existing effects before repeating work; retrying record storage must not replay execution. | [Resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) |
 | Run concurrent judgments or enforce timeouts | Natural functions can be `async def`; Python owns concurrency and shared-state coordination. Cancellation is cooperative, and cleanup can extend waiting. A synchronous timeout does not stop its worker. | [Async Natural functions](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#async-natural-functions) and [timeouts](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#timeout) |
-| Refuse a function before its Python effects or record its completion | Host admission, block completion, and request observations are different boundaries. A completed block does not establish that its containing function succeeded. | [Execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) |
-| Track usage or admit work under a budget | Recorded usage can omit failed or hidden requests. Function-level budget checks are not a strict spending cap; concurrent or admitted work can overrun a threshold. | [Request usage and admission](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/#request-usage-and-admission) |
+| Refuse a function before its Python effects or record its completion | Host admission, block completion, and request observations are different boundaries. A completed block does not establish that its containing function succeeded. | [Host integration](https://kurusugawa-computer.github.io/nighthawk-python/host-integration/) |
+| Track usage or admit work under a budget | Recorded usage can omit failed or hidden requests. Function-level budget checks are not a strict spending cap; concurrent or admitted work can overrun a threshold. | [Request usage and admission](https://kurusugawa-computer.github.io/nighthawk-python/host-integration/#request-usage-and-admission) |
 | Give a block filesystem access, commands, or skills | Keep the task and output contract explicit. The host and backend own permissions, isolation, and external effects. | [Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/) |
 | Use an unfamiliar interface or extend an executor | Check the documented signature and runtime contract rather than guessing from a name. | [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) and [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) |
 

@@ -13,7 +13,7 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
 
     run_configuration = nh.StepExecutorConfiguration(
         execution_model="claude-code-sdk:sonnet",
-        model_settings=ClaudeCodeSdkModelSettings(
+        execution_model_settings=ClaudeCodeSdkModelSettings(
             working_directory=str(tmp_path.resolve()),
         ).model_dump(),
     )
@@ -48,7 +48,7 @@ def test_claude_skill() -> None:
 
         configuration = nh.StepExecutorConfiguration(
             execution_model="claude-code-sdk:sonnet",
-            model_settings=ClaudeCodeSdkModelSettings(
+            execution_model_settings=ClaudeCodeSdkModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
                 claude_allowed_tool_names=("Skill", "Bash"),
@@ -69,7 +69,7 @@ def test_claude_skill() -> None:
                 ---
                 Invoke the `hoge` skill exactly as written. It creates `test.txt` in the current working directory.
                 Then run the shell command `pwd` with the agent's shell tool (Bash), without changing the current working directory.
-                Do not use `nh_eval` or Python to determine the directory; the answer must come from the shell command output.
+                Do not use `nh_evaluate` or Python to determine the directory; the answer must come from the shell command output.
                 Return the printed path as a string with leading and trailing whitespace removed.
                 """
 
@@ -91,7 +91,7 @@ def test_claude_skill_calc() -> None:
 
     configuration = nh.StepExecutorConfiguration(
         execution_model="claude-code-sdk:haiku",
-        model_settings=ClaudeCodeSdkModelSettings(
+        execution_model_settings=ClaudeCodeSdkModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
             claude_allowed_tool_names=("Skill", "Bash"),
@@ -130,7 +130,7 @@ def test_claude_mcp_callback() -> None:
 
     configuration = nh.StepExecutorConfiguration(
         execution_model="claude-code-sdk:haiku",
-        model_settings=ClaudeCodeSdkModelSettings(
+        execution_model_settings=ClaudeCodeSdkModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
             claude_allowed_tool_names=("Bash",),

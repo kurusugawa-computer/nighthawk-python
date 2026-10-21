@@ -51,7 +51,7 @@ def test_resolved_executor_value_is_never_evaluated_as_python(asynchronous: bool
             assert request.binding_name_to_type == {"value": int}
             assert request.return_annotation is str
             assert request.allow_awaitable_return is asynchronous
-            assert request.allowed_step_kinds == ("pass", "return", "raise")
+            assert request.allowed_outcome_kinds == ("pass", "return", "raise")
             with pytest.raises(TypeError):
                 request.binding_name_to_type["value"] = str  # type: ignore[index]
             return StepCandidate(outcome=Return("raise_if_evaluated()"), binding_name_to_value={"value": "7"})
@@ -225,7 +225,7 @@ def test_finalization_reads_current_python_output_associations(nonlocal_output: 
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            nh.runtime.eval_expression(request.step_context, "change_value()" if nonlocal_output else "_change_global_output()")
+            nh.runtime.evaluate_expression(request.step_context, "change_value()" if nonlocal_output else "_change_global_output()")
             assert request.snapshot_output_bindings() == {"value" if nonlocal_output else "_global_output": 7}
             return StepCandidate(outcome=Pass())
 
@@ -261,7 +261,7 @@ def test_deleted_python_output_is_not_resurrected_at_finalization() -> None:
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            nh.runtime.eval_expression(request.step_context, "delete_value()")
+            nh.runtime.evaluate_expression(request.step_context, "delete_value()")
             assert request.snapshot_output_bindings() == {}
             return StepCandidate(outcome=Pass())
 

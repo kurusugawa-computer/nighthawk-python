@@ -146,16 +146,16 @@ def test_provider_and_content_boundary_preserve_nested_discovery_and_native_medi
         toolset = ToolResultWrapperToolset(FunctionToolset([definition.tool for definition in build_provided_tool_definitions()]))
         tool_name_to_tool = await toolset.get_tools(run_context)
         result: Any = await toolset.call_tool(
-            "nh_eval",
+            "nh_evaluate",
             {"expression": f"{{'discovery': [{context.environment.runtime_reference}.environment.discover(source='task')]}}"},
             run_context,
-            tool_name_to_tool["nh_eval"],
+            tool_name_to_tool["nh_evaluate"],
         )
         assert_continuation(result["discovery"][0], context.environment)
         value = [{"discovery": context.environment.discover(source="task")}, payload]
         normalized = _normalize_tool_success(value)["payload"]
         segments = resolve_tool_return_segments(
-            tool_name="nh_eval", payload=normalized, rendering_policy=ToolResultRenderingPolicy("o200k_base", 512, "default")
+            tool_name="nh_evaluate", payload=normalized, rendering_policy=ToolResultRenderingPolicy("o200k_base", 512, "default")
         )
         observed = json.loads(segments.response_text)
         # Pydantic AI encodes each non-media item as a JSON string when files

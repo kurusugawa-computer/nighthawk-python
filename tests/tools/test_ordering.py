@@ -62,7 +62,7 @@ def test_ordered_model_batch_remains_ordered_across_async_capability_hooks(rejec
         output_binding_names=(),
         binding_name_to_type={},
         return_annotation=object,
-        allowed_step_kinds=("pass",),
+        allowed_outcome_kinds=("pass",),
     )
     with (
         nh.run(executor),

@@ -7,7 +7,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepLifecycle
-from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepEnvironment, StepRequest, eval_expression_async, inspect_value
+from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepEnvironment, StepRequest, evaluate_expression_async, inspect_value
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context, build_user_prompt_text, locals_section
 
@@ -106,7 +106,7 @@ def test_runtime_inspection_and_discovery_are_one_evaluation_operation() -> None
     reference = context.environment.runtime_reference
     expression = f"({reference}.inspect(value), {reference}.environment.describe('value'))"
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished.append)):
-        result = asyncio.run(eval_expression_async(context, expression))
+        result = asyncio.run(evaluate_expression_async(context, expression))
         assert result[0]["preview"] == [1, 2]  # type: ignore[index]
         assert len(finished) == 1
         assert finished[0].request.expression == expression

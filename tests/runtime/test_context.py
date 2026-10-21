@@ -9,7 +9,7 @@ from pydantic_ai.messages import BinaryContent, CachePoint, UserContent
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import ContextRequest, DefaultContextBuilder, assign_tool_async
+from nighthawk.runtime import ContextRequest, DefaultContextBuilder, assign_expression_async
 
 
 @nh.function
@@ -27,7 +27,7 @@ class RecordingAgent:
 
     async def run(self, user_prompt: str | tuple[UserContent, ...], *, deps: nh.StepContext, **arguments: Any) -> Any:
         self.prompts.append(user_prompt)
-        await assign_tool_async(deps, "result", "7")
+        await assign_expression_async(deps, "result", "7")
 
         class Result:
             output = {"result": {"kind": "pass"}}

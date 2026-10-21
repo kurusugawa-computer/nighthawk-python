@@ -34,7 +34,7 @@ Change it only as a deliberate behavior change:
 
 - Natural docstrings (`"""execute ...`).
 - Docstrings of binding functions and tools, which LLMs may read.
-- Docstrings of Pydantic models that enter LLM-facing JSON schemas, such as `StepFinalResult`.
+- Docstrings of Pydantic models that enter LLM-facing JSON schemas, such as `ModelStepResponse`.
 - Fixture docstrings that tests assert on or expose to Natural blocks.
 
 Tool directives (`noqa`, `type: ignore`, `pyright: ignore`) are outside these rules.

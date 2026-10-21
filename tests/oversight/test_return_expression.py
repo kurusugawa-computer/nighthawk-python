@@ -12,7 +12,7 @@ import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
 from nighthawk.oversight import AbortStep, Accept, Oversight
 from nighthawk.runtime import OperationRequest
-from nighthawk.runtime.step_contract import ReturnStepOutcome
+from nighthawk.runtime.model_outcome import ModelReturn
 from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
@@ -52,7 +52,7 @@ def test_host_policy_can_limit_return_expression_syntax(expression: str, accepte
         """
         return value + previous
 
-    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression=expression), {"value": 4})
+    executor = ModelResponseExecutor(ModelReturn(kind="return", return_expression=expression), {"value": 4})
     with nh.run(executor), nh.scope(oversight=Oversight(inspect_operation=approve_name_expression)):
         if accepted:
             assert workflow() == (7 if expression == "previous" else 4)
@@ -81,7 +81,7 @@ def test_name_only_policy_does_not_skip_return_validation() -> None:
         """
         return value
 
-    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": 1})
+    executor = ModelResponseExecutor(ModelReturn(kind="return", return_expression="value"), {"value": 1})
     with (
         nh.run(executor),
         nh.scope(
@@ -122,7 +122,7 @@ def test_a_bare_name_can_still_trigger_await(reject_awaitable: bool) -> None:
             return AbortStep("Host disallows awaiting this expression")
         return approve_name_expression(request)
 
-    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": Pending()})
+    executor = ModelResponseExecutor(ModelReturn(kind="return", return_expression="value"), {"value": Pending()})
     with nh.run(executor), nh.scope(oversight=Oversight(inspect_operation=inspect_expression)):
         if reject_awaitable:
             with pytest.raises(nh.oversight.StepAbortedError):
@@ -144,7 +144,7 @@ def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
         """
         return value
 
-    executor = ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="value"), {"value": 4})
+    executor = ModelResponseExecutor(ModelReturn(kind="return", return_expression="value"), {"value": 4})
     with (
         nh.run(executor),
         nh.scope(

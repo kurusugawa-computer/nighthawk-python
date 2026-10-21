@@ -6,18 +6,15 @@ from typing import Any
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
+from ..runtime.expression import evaluate_expression_async
 from ..runtime.step_context import StepContext
-from .assignment import assign_tool_async, eval_expression_async
+from .assignment import assign_tool_async
 
 
 @dataclass(frozen=True)
 class ProvidedToolDefinition:
     name: str
     tool: Tool[StepContext]
-
-
-async def _eval_expression_or_raise_async(run_context: RunContext[StepContext], expression: str) -> object:
-    return await eval_expression_async(run_context.deps, expression)
 
 
 def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
@@ -32,8 +29,8 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
             expression,
         )
 
-    async def nh_eval(run_context: RunContext[StepContext], expression: str) -> object:
-        return await _eval_expression_or_raise_async(run_context, expression)
+    async def nh_evaluate(run_context: RunContext[StepContext], expression: str) -> object:
+        return await evaluate_expression_async(run_context.deps, expression)
 
     return [
         ProvidedToolDefinition(
@@ -46,10 +43,10 @@ def build_provided_tool_definitions() -> list[ProvidedToolDefinition]:
             ),
         ),
         ProvidedToolDefinition(
-            name="nh_eval",
+            name="nh_evaluate",
             tool=Tool(
-                nh_eval,
-                name="nh_eval",
+                nh_evaluate,
+                name="nh_evaluate",
                 metadata={"nighthawk.provided": True, "nighthawk.operation_kind": "evaluation"},
                 description="Evaluate a Python expression and return the result. Examples: len(items), data.get('key', 0), items.sort(), add(3, 7).",
             ),

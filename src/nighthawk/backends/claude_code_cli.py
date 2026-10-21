@@ -192,7 +192,7 @@ class ClaudeCodeCliModel(BackendModelBase):
                         "",
                         "Tool access:",
                         "- Nighthawk tools are exposed via MCP; tool names are prefixed with: mcp__nighthawk__",
-                        "- Example: to call nh_eval(...), use: mcp__nighthawk__nh_eval",
+                        "- Example: to call nh_evaluate(...), use: mcp__nighthawk__nh_evaluate",
                     ]
                 )
 

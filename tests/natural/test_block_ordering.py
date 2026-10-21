@@ -6,7 +6,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
-from nighthawk.runtime.step_contract import PassStepOutcome
+from nighthawk.runtime.model_outcome import ModelPass
 
 NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 
@@ -20,11 +20,11 @@ def test_docstring_step_executes_first_and_name_is_undefined() -> None:
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = processed_natural_program
             _ = step_context
             _ = binding_names
-            _ = allowed_step_kinds
+            _ = allowed_outcome_kinds
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     with nh.run(NoopExecutor()):
@@ -54,11 +54,11 @@ def test_missing_input_binding_raises_even_if_program_text_does_not_use_it() -> 
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = processed_natural_program
             _ = step_context
             _ = binding_names
-            _ = allowed_step_kinds
+            _ = allowed_outcome_kinds
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     with nh.run(NoopExecutor()):
@@ -85,16 +85,16 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.runtime.step_contract import StepFinalResult
-            from nighthawk.tools.assignment import assign_tool
+            from nighthawk.runtime import assign_expression
+            from nighthawk.runtime.model_outcome import ModelStepResponse
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
-            assign_tool(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
+            assign_expression(deps, "result", "NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER")
 
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
 
@@ -119,13 +119,13 @@ def test_agent_backend_commits_only_on_assignment() -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.runtime.step_contract import StepFinalResult
+            from nighthawk.runtime.model_outcome import ModelStepResponse
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
         from nighthawk.runtime.runner import Runner

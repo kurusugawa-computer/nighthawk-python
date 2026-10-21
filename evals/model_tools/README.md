@@ -24,7 +24,7 @@ Then apply the same collision presentation to both sides of the P-INSPECT-002
 comparison:
 
 1. Dedicated discovery through `nh_inspect`, alongside evaluation and assignment.
-2. Value inspection and environment APIs through `nh_eval`, alongside assignment.
+2. Value inspection and environment APIs through `nh_evaluate`, alongside assignment.
 
 Hold discovery behavior, fixtures, lookup, approval rules, budgets, and response
 content constant. Keep the assignment interface unchanged; the historical
@@ -53,9 +53,9 @@ tradeoffs and uncertainty; fewer tools alone do not justify selection.
 
 | Surface | Tools | Distinguishing behavior |
 | --- | --- | --- |
-| `original` | `nh_eval`, `nh_assign`, `nh_inspect` | Whole-expression environment selection; bounded inspection without continuation. Explicit environment mappings are documented upfront so mixed-environment tasks remain solvable. |
-| `refined` | `nh_eval`, `nh_assign`, `nh_inspect` | Effective evaluation; inspection returns composable reference expressions and continuation cursors; responses distinguish success, retained destinations, and whether failed evaluation started. |
-| `merged` | `nh_eval`, `nh_inspect` | Same discovery and response behavior as refined, but `nh_eval` takes an optional `target_path` to retain its value. |
+| `original` | `nh_evaluate`, `nh_assign`, `nh_inspect` | Whole-expression environment selection; bounded inspection without continuation. Explicit environment mappings are documented upfront so mixed-environment tasks remain solvable. |
+| `refined` | `nh_evaluate`, `nh_assign`, `nh_inspect` | Effective evaluation; inspection returns composable reference expressions and continuation cursors; responses distinguish success, retained destinations, and whether failed evaluation started. |
+| `merged` | `nh_evaluate`, `nh_inspect` | Same discovery and response behavior as refined, but `nh_evaluate` takes an optional `target_path` to retain its value. |
 
 The original surface is an executable interpretation of the original ideal
 design, not the existing production library. All three share the same lookup,
@@ -74,7 +74,7 @@ required domain calls, and control results, not a prescribed tool-call sequence.
 The refined signatures are:
 
 ```text
-nh_eval(expression: str)
+nh_evaluate(expression: str)
 nh_assign(target_path: str, expression: str)
 nh_inspect(name: str | None = None, environment="effective", cursor: str | None = None)
 ```

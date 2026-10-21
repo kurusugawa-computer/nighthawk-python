@@ -151,7 +151,7 @@ def test_backend_native_validation_preserves_records_and_control_signals(failure
 
 @pytest.mark.parametrize(
     ("tool_name", "arguments", "operation_kind"),
-    [("nh_eval", {}, "evaluation"), ("nh_assign", {"target_path": "answer"}, "assignment"), ("action", '{"value":', "native_tool")],
+    [("nh_evaluate", {}, "evaluation"), ("nh_assign", {"target_path": "answer"}, "assignment"), ("action", '{"value":', "native_tool")],
 )
 def test_invalid_tool_request_retains_failed_admission(tool_name: str, arguments: Any, operation_kind: str) -> None:
     operations: list[OperationFinished] = []

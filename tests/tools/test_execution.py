@@ -366,10 +366,10 @@ def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None
         toolset = ToolResultWrapperToolset(FunctionToolset([definition.tool for definition in build_provided_tool_definitions()]))
         tool_name_to_tool = await toolset.get_tools(run_context)
         result: Any = await toolset.call_tool(
-            "nh_eval",
+            "nh_evaluate",
             {"expression": f"{context.environment.runtime_reference}.environment.discover(source='task')"},
             run_context,
-            tool_name_to_tool["nh_eval"],
+            tool_name_to_tool["nh_evaluate"],
         )
         assert result["metadata_omitted"] is True
         namespace = context.environment.expression_namespace()

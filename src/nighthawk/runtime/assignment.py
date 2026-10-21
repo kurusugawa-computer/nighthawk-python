@@ -20,6 +20,12 @@ from .step_context import StepContext
 
 @dataclass(frozen=True)
 class AssignmentResult:
+    """The validated live value retained by one assignment operation.
+
+    ``retained_as`` distinguishes a pending output, a step temporary, and an immediate attribute mutation.
+    Output assignment here updates working state; final writeback to Python still requires step finalization.
+    """
+
     target_path: str
     value: object
     retained_as: Literal["temporary", "output", "attribute"]
@@ -117,7 +123,16 @@ def assign_value(
     return AssignmentResult(target_path, value, "attribute")
 
 
-async def assign_tool_async(step_context: StepContext, target_path: str, expression: str) -> AssignmentResult:
+async def assign_expression_async(step_context: StepContext, target_path: str, expression: str) -> AssignmentResult:
+    """Evaluate an expression once and assign its result through the operation boundary.
+
+    ``target_path`` selects a declared output, a new temporary name, or a standard Pydantic field with assignment validation.
+    The expression uses the context's live environment and awaits an awaitable result once.
+    Admission and oversight precede evaluation; validation and operation notification follow it.
+    Recoverable operation errors and rejections retain their structured diagnostics.
+    Application exceptions propagate, and earlier effects are not rolled back.
+    """
+
     request = new_operation_request(
         step_context,
         kind="assignment",
@@ -141,5 +156,6 @@ async def assign_tool_async(step_context: StepContext, target_path: str, express
     return cast(AssignmentResult, await execute_operation_async(step_context, request, admit=admit, execute=execute))
 
 
-def assign_tool(step_context: StepContext, target_path: str, expression: str) -> AssignmentResult:
-    return run_coroutine_synchronously(lambda: assign_tool_async(step_context, target_path, expression))
+def assign_expression(step_context: StepContext, target_path: str, expression: str) -> AssignmentResult:
+    """Synchronous counterpart of assign_expression_async, including its validation and effect boundaries."""
+    return run_coroutine_synchronously(lambda: assign_expression_async(step_context, target_path, expression))

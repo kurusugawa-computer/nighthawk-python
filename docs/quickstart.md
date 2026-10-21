@@ -19,17 +19,19 @@ Save as `quickstart.py`:
 ```py
 import nighthawk as nh
 
+
+@nh.function
+def interpret_quantities(items: str) -> list[int]:
+    quantities: list[int] = []
+    """execute
+    Read <items> and set <:quantities> to the quantity of each item mentioned.
+    Interpret number words and expressions such as a dozen.
+    """
+    return quantities
+
+
 with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
-
-    @nh.function
-    def calculate_total(items: str) -> int:
-        total = 0
-        """execute
-        Read <items> and set <:total> to the sum of all quantities mentioned.
-        """
-        return total
-
-    print(calculate_total("three apples, a dozen eggs, and 5 oranges"))
+    print(sum(interpret_quantities("three apples, a dozen eggs, and 5 oranges")))
 ```
 
 Run with your API key:
@@ -40,13 +42,18 @@ python quickstart.py
 # => 20
 ```
 
-In this example, `<items>` is a **read binding** (the LLM can see its value) and `<:total>` is a **write binding** (the LLM sets a new value, committed back into Python locals). See [Natural blocks](natural-blocks.md#providing-data-to-a-block) for details on bindings, functions, and composition.
+Natural interprets the quantities into a validated `list[int]`; Python computes their sum.
+The decorator prepares the function from its source, while `nh.run(...)` selects the model when you call it.
+Type validation does not establish whether the interpretation is correct.
+
+In this example, `<items>` is a **read binding** (the LLM can see its value) and `<:quantities>` is a **write binding** (the LLM sets a new value, committed back into Python locals). See [Natural blocks](natural-blocks.md#providing-data-to-a-block) for details on bindings, functions, and composition.
 
 ## Troubleshooting
 
 **`NighthawkError: StepExecutor is not set`**
 
-Run the function inside `with nh.run(step_executor):`, as in the example.
+Call the function inside `with nh.run(execution_model="openai-responses:gpt-5.6-luna"):`.
+Decorating the function does not start a run.
 
 **`OPENAI_API_KEY` not set**
 

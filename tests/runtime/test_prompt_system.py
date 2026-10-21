@@ -1,5 +1,5 @@
 import nighthawk as nh
-from nighthawk.runtime.prompt import build_system_prompt, resolve_step_system_prompt_template_text
+from nighthawk.runtime.prompt import build_system_prompt, resolve_system_prompt_template_text
 
 
 def test_step_system_prompt_omits_preview_budget_by_default() -> None:
@@ -37,7 +37,7 @@ def test_system_prompt_suffix_fragment_injects_tool_result_max_tokens() -> None:
         )
     )
 
-    resolved_fragment_text = resolve_step_system_prompt_template_text(
+    resolved_fragment_text = resolve_system_prompt_template_text(
         template_text="Preview budget: max $tool_result_max_tokens tokens.",
         tool_result_max_tokens=configuration.context_limits.tool_result_max_tokens,
     )

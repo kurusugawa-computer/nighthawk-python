@@ -1,5 +1,5 @@
 site_name: Nighthawk
-site_description: An experimental Python library that embeds Natural blocks inside Python functions and executes them using an LLM.
+site_description: Compose natural-language judgment with ordinary Python functions.
 site_url: https://kurusugawa-computer.github.io/nighthawk-python/
 repo_url: https://github.com/kurusugawa-computer/nighthawk-python
 repo_name: kurusugawa-computer/nighthawk-python
@@ -67,15 +67,17 @@ nav:
       - Natural blocks: natural-blocks.md
       - Typed decisions: decisions.md
       - Executors: executors.md
-      - Runtime configuration: runtime-configuration.md
-      - Operation feedback: operation-feedback.md
-      - Embedded execution: embedded-execution.md
   - Patterns & verification:
       - Patterns: patterns.md
       - Verification: verification.md
   - Configuration:
+      - Runtime configuration: runtime-configuration.md
       - Pydantic AI providers: pydantic-ai-providers.md
       - Coding agent backends: coding-agent-backends.md
+  - Host integration:
+      - Admission and completion: host-integration.md
+      - Operation feedback: operation-feedback.md
+      - Embedded execution: embedded-execution.md
   - Reference:
       - Specification: specification.md
       - API Reference: api.md

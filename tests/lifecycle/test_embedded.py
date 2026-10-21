@@ -11,13 +11,13 @@ import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
 from nighthawk.oversight import Accept, Oversight
 from nighthawk.runtime import Pass, Raise, StepCandidate, StepDefinition, StepRequest, execute_step_async
-from nighthawk.runtime.step_result import StepResult
+from nighthawk.runtime.step_outcome import StepOutcome
 from nighthawk.testing import ScriptedExecutor, pass_response
 from tests.support.executors import InspectingExecutor
 
 
 @pytest.mark.asyncio
-async def test_partial_write_failure_records_only_completed_writes(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_partial_write_failure_records_only_completed_writes(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     saved_name_to_value: dict[str, object] = {}
     events: list[StepFinished] = []
 
@@ -40,7 +40,7 @@ async def test_partial_write_failure_records_only_completed_writes(execute: Call
 
 
 @pytest.mark.asyncio
-async def test_final_raise_discards_invalid_output_and_delivers_before_propagating(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_final_raise_discards_invalid_output_and_delivers_before_propagating(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     events: list[StepFinished] = []
     saved_name_to_value: dict[str, object] = {}
 
@@ -57,7 +57,7 @@ async def test_final_raise_discards_invalid_output_and_delivers_before_propagati
 
 
 @pytest.mark.asyncio
-async def test_terminal_failure_preserves_successful_write_without_redelivery(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_terminal_failure_preserves_successful_write_without_redelivery(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     saved_name_to_value: dict[str, object] = {}
     events: list[StepFinished] = []
 
@@ -112,7 +112,7 @@ async def test_cancellation_during_write_joins_cleanup_and_records_completed_wri
 
 
 @pytest.mark.asyncio
-async def test_normal_and_embedded_execution_have_same_validation_and_lifecycle_order(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_normal_and_embedded_execution_have_same_validation_and_lifecycle_order(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     order: list[str] = []
     observed_events: list[StepFinished] = []
 

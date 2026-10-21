@@ -57,7 +57,7 @@
       Return <v>.
     input_bindings: '{"v": 42}'
     output_binding_names: '["v"]'
-    allowed_step_kinds: '["return"]'
+    allowed_outcome_kinds: '["return"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py
@@ -121,7 +121,7 @@
       Signal an error with message "forced".
     input_bindings: '{}'
     output_binding_names: '[]'
-    allowed_step_kinds: '["raise"]'
+    allowed_outcome_kinds: '["raise"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py

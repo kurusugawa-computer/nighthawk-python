@@ -42,15 +42,14 @@ from .scoping import (
 from .step_context import (
     step_context_scope,
 )
-from .step_contract import StepKind
 from .step_definition import BlockKind
 from .step_executor import AsyncStepExecutor, StepExecutor, SyncStepExecutor
+from .step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
 from .step_request import StepCandidate, StepRequest, _snapshot_output_bindings
-from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
 class StepEnvelope(TypedDict):
-    outcome: StepResult
+    outcome: StepOutcome
     input_bindings: dict[str, object]
     bindings: dict[str, object]
 
@@ -101,8 +100,8 @@ class Runner:
         self.preparation: PreparedStep | None = None
         self.validated_binding_name_to_value: dict[str, object] | None = None
         self.assigned_binding_name_to_value: dict[str, object] = {}
-        self.attempted_outcome: StepResult | None = None
-        self.outcome: StepResult | None = None
+        self.attempted_outcome: StepOutcome | None = None
+        self.outcome: StepOutcome | None = None
         self.raise_exception: BaseException | None = None
         self.commit_abort: StepAbortedError | None = None
         self.context_stack = ExitStack()
@@ -145,7 +144,7 @@ class Runner:
                 model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
-                allowed_step_kinds=self.preparation_state.allowed_step_kinds,
+                allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
                 failure_stage="oversight_abort" if rejection else self.failure_stage,
                 original_exception=original_exception,
@@ -162,7 +161,7 @@ class Runner:
                 model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
-                allowed_step_kinds=self.preparation_state.allowed_step_kinds,
+                allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
                 failure_stage=self.failure_stage,
                 original_exception=original_exception,
@@ -177,7 +176,7 @@ class Runner:
                 model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
-                allowed_step_kinds=self.preparation_state.allowed_step_kinds,
+                allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
                 outcome=self.outcome,
                 exception=self.raise_exception,
@@ -192,7 +191,7 @@ class Runner:
                 model_result=self.preparation.step_context.model_result if self.preparation else None,
                 processed_natural_program=self.preparation_state.processed_natural_program,
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
-                allowed_step_kinds=self.preparation_state.allowed_step_kinds,
+                allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
                 outcome=self.outcome,
             )
@@ -290,14 +289,14 @@ class Runner:
         self.failure_description = None
         return validated
 
-    def _require_allowed_step_kind(
+    def _require_allowed_outcome_kind(
         self,
         *,
-        step_outcome: StepResult,
-        allowed_step_kinds: tuple[StepKind, ...],
+        step_outcome: StepOutcome,
+        allowed_outcome_kinds: tuple[OutcomeKind, ...],
     ) -> None:
-        if step_outcome.kind not in allowed_step_kinds:
-            raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_step_kinds}")
+        if step_outcome.kind not in allowed_outcome_kinds:
+            raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_outcome_kinds}")
 
     def _validate_and_coerce_output_bindings(
         self,
@@ -317,7 +316,7 @@ class Runner:
         self,
         *,
         preparation: PreparedStep,
-        step_outcome: StepResult,
+        step_outcome: StepOutcome,
         bindings: Mapping[str, object] | UnsetType,
     ) -> dict[str, object]:
         if not isinstance(bindings, UnsetType):
@@ -337,10 +336,10 @@ class Runner:
         self,
         *,
         preparation: PreparedStep,
-        outcome: StepResult,
+        outcome: StepOutcome,
         bindings: dict[str, object],
         return_annotation: object,
-    ) -> tuple[StepResult, dict[str, object]]:
+    ) -> tuple[StepOutcome, dict[str, object]]:
         oversight = get_oversight()
         if oversight is None or oversight.inspect_step_commit is None:
             return outcome, bindings
@@ -351,7 +350,7 @@ class Runner:
             input_binding_name_to_value=preparation.input_binding_name_to_value,
             outcome=outcome,
             binding_name_to_value=bindings,
-            allowed_step_kinds=preparation.allowed_step_kinds,
+            allowed_outcome_kinds=preparation.allowed_outcome_kinds,
             output_binding_name_set=frozenset(preparation.output_binding_names),
             binding_name_to_type=preparation.binding_name_to_type,
         )
@@ -390,7 +389,7 @@ class Runner:
 
         self.failure_stage = "rewrite_validation"
         next_outcome = outcome if isinstance(decision.outcome, UnsetType) else decision.outcome
-        self._require_allowed_step_kind(step_outcome=next_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
+        self._require_allowed_outcome_kind(step_outcome=next_outcome, allowed_outcome_kinds=preparation.allowed_outcome_kinds)
         if not isinstance(decision.outcome, UnsetType) and isinstance(next_outcome, Return):
             next_outcome = Return(self._parse_and_coerce_return_value(next_outcome.value, return_annotation))
 
@@ -423,7 +422,7 @@ class Runner:
             raise ExecutionError("decide requires an explicit answer from the current invocation")
         step_outcome = candidate.outcome
         self.attempted_outcome = step_outcome
-        self._require_allowed_step_kind(step_outcome=step_outcome, allowed_step_kinds=preparation.allowed_step_kinds)
+        self._require_allowed_outcome_kind(step_outcome=step_outcome, allowed_outcome_kinds=preparation.allowed_outcome_kinds)
         self.failure_stage = "binding_validation"
         validated_bindings = self._validate_bindings_for_outcome(
             preparation=preparation,
@@ -523,7 +522,7 @@ class Runner:
             output_binding_names=tuple(output_binding_names),
             binding_name_to_type=preparation.binding_name_to_type,
             return_annotation=return_annotation,
-            allowed_step_kinds=preparation.allowed_step_kinds,
+            allowed_outcome_kinds=preparation.allowed_outcome_kinds,
             allow_awaitable_return=allow_awaitable_return,
         )
 

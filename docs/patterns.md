@@ -160,9 +160,9 @@ except InputError as error:
 
 ### Error types
 
-Public library errors inherit from `NighthawkError`; ordinary application/helper exceptions and explicit Natural raises retain their own types.
+Runtime, policy, and delivery failures use `NighthawkError` subclasses; ordinary application/helper exceptions and explicit Natural raises retain their own types.
 Expected domain failures that the model should act on can instead be returned as ordinary helper results.
-Recoverable tool failures, including invalid values supplied to `nh_assign`, return structured errors to the model rather than ending the block immediately.
+Recoverable operation failures, including invalid values supplied to an assignment, return structured errors to the model rather than ending the block immediately.
 Invalid outcomes and output values rejected during finalization raise `ExecutionError`, carrying the failure stage and original exception.
 
 Handle only the failure stage for which the application has a recovery policy:
@@ -559,7 +559,7 @@ result = safe_classify(text)
 An optional `estimate_usage` can reject predicted over-limit work before invocation, but an estimate does not reserve usage or guarantee the final cost.
 The meter records returned agent-run aggregates, so failed runs can consume unrecorded usage, and concurrent calls sharing a meter can contribute to the same measured delta.
 These checks do not stop requests within an unfinished block or guarantee a strict spending cap.
-For that earlier admission boundary, use [host request observations](runtime-configuration.md#request-usage-and-admission), keeping their accumulator separate from the meter.
+For that earlier admission boundary, use [host request observations](host-integration.md#request-usage-and-admission), keeping their accumulator separate from the meter.
 
 When a checked threshold is exceeded, `BudgetExceededError` is raised.
 Combine with `fallback` only when another execution is acceptable after any earlier effects and spending:

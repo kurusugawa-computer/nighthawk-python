@@ -11,18 +11,18 @@ from nighthawk.errors import ExecutionError
 from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.step_contract import StepOutcome
+from nighthawk.runtime.model_outcome import ModelOutcome
 
 
 @dataclass(frozen=True)
 class StubExecutor:
-    def _parse_response(self, request: StepRequest) -> tuple[StepOutcome, dict[str, object]]:
+    def _parse_response(self, request: StepRequest) -> tuple[ModelOutcome, dict[str, object]]:
         processed_natural_program = request.processed_natural_program
         step_context = request.step_context
         binding_names = list(request.output_binding_names)
-        allowed_step_kinds = request.allowed_step_kinds
+        allowed_outcome_kinds = request.allowed_outcome_kinds
         _ = step_context
-        _ = allowed_step_kinds
+        _ = allowed_outcome_kinds
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:
@@ -42,7 +42,7 @@ class StubExecutor:
             raise ExecutionError("Stub execution expected 'bindings' in envelope")
 
         try:
-            step_outcome = TypeAdapter(StepOutcome).validate_python(data["step_outcome"])
+            step_outcome = TypeAdapter(ModelOutcome).validate_python(data["step_outcome"])
         except Exception as e:
             raise ExecutionError(f"Stub execution has invalid step_outcome: {e}") from e
 
@@ -79,7 +79,7 @@ class InspectingExecutor:
 
 @dataclass
 class ModelResponseExecutor:
-    outcome: StepOutcome
+    outcome: ModelOutcome
     binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:

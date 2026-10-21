@@ -17,9 +17,8 @@ from pydantic_ai import AgentRunResult
 from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
 from .runtime.operation_contract import OperationFinished
-from .runtime.step_contract import StepKind
 from .runtime.step_definition import BlockKind
-from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
+from .runtime.step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
 
 type FailureStage = Literal[
     "preparation",
@@ -47,7 +46,7 @@ class _StepFinished:
     model_result: AgentRunResult[Any] | None = field(default=None, repr=False)
     processed_natural_program: str | None = None
     input_binding_name_to_value: Mapping[str, object] | None = None
-    allowed_step_kinds: tuple[StepKind, ...] | None = None
+    allowed_outcome_kinds: tuple[OutcomeKind, ...] | None = None
     assigned_binding_name_to_value: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -57,8 +56,8 @@ class _StepFinished:
             value = getattr(self, name, None)
             if value is not None:
                 object.__setattr__(self, name, MappingProxyType(dict(value)))
-        if self.allowed_step_kinds is not None:
-            object.__setattr__(self, "allowed_step_kinds", tuple(self.allowed_step_kinds))
+        if self.allowed_outcome_kinds is not None:
+            object.__setattr__(self, "allowed_outcome_kinds", tuple(self.allowed_outcome_kinds))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -84,7 +83,7 @@ class StepFailed(_StepFinished):
 
     failure_stage: FailureStage
     original_exception: Exception
-    attempted_outcome: StepResult | None = None
+    attempted_outcome: StepOutcome | None = None
     validated_binding_name_to_value: Mapping[str, object] | None = None
     inspection_subject: Literal["step_commit", "operation"] | None = None
     abort_reason: str | None = None

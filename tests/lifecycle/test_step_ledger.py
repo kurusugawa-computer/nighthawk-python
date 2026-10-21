@@ -284,7 +284,7 @@ def test_preparation_failure_has_identity_and_unknown_fields() -> None:
         workflow()
     event = caught.value.event
     assert isinstance(event, StepFailed) and event.failure_stage == "preparation"
-    assert event.allowed_step_kinds is None
+    assert event.allowed_outcome_kinds is None
     assert event.input_binding_name_to_value is None
     assert event.processed_natural_program is None
     assert event.execution_reference.step_execution_id is not None

@@ -363,24 +363,24 @@ def run(
     """
     from .step_executor import AgentStepExecutor
 
-    if isinstance(step_executor, UnsetType):
-        step_executor = AgentStepExecutor()
-    _validate_step_executor(step_executor)
-    selection = _model_selection(execution_model, decision_model, step_executor_configuration)
-    if selection is not None:
-        step_executor = _resolve_model_selection(step_executor, selection)
     if not isinstance(run_id, (str, UnsetType)):
         raise TypeError("run_id must be a nonempty string or UNSET")
     if isinstance(run_id, str) and not run_id:
         raise ValueError("run_id must not be empty")
+    if not isinstance(usage_meter, (UsageMeter, UnsetType)):
+        raise TypeError("usage_meter must be a UsageMeter or UNSET")
+    selection = _model_selection(execution_model, decision_model, step_executor_configuration)
+    if isinstance(step_executor, UnsetType):
+        step_executor = AgentStepExecutor()
+    _validate_step_executor(step_executor)
+    if selection is not None:
+        step_executor = _resolve_model_selection(step_executor, selection)
     execution_reference = ExecutionReference(
         run_id=generate_ulid() if isinstance(run_id, UnsetType) else run_id,
         scope_id=generate_ulid(),
         step_execution_id=None,
         source_location=None,
     )
-    if not isinstance(usage_meter, (UsageMeter, UnsetType)):
-        raise TypeError("usage_meter must be a UsageMeter or UNSET")
     run_usage_meter = UsageMeter() if isinstance(usage_meter, UnsetType) else usage_meter
 
     step_executor_token = _step_executor_var.set(step_executor)

@@ -25,7 +25,7 @@ def test_executor_rejects_invalid_configuration_before_creating_agent(invalid: o
     def unexpected(configuration):
         pytest.fail("Invalid configuration constructed an agent")
 
-    monkeypatch.setattr("nighthawk.runtime.step_executor._new_agent_step_executor", unexpected)
+    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", unexpected)
     with pytest.raises(TypeError, match="configuration"):
         nh.AgentStepExecutor(configuration=invalid)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="configuration"):
@@ -43,20 +43,21 @@ def test_executor_defaults_and_falsey_configuration_preserve_explicit_selection(
     second = nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=nh.UNSET)
     assert first.configuration == second.configuration
     assert first.configuration is not second.configuration
-    configuration = FalseyConfiguration(model_settings={"temperature": 0})
+    configuration = FalseyConfiguration(execution_model_settings={"temperature": 0})
     assert nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=configuration).configuration is configuration
     with pytest.raises(TypeError):
         nh.AgentStepExecutor.from_configuration(configuration=nh.UNSET)  # type: ignore[arg-type]
 
 
-def test_configuration_contains_concrete_settings_and_preserves_empty_and_none_values() -> None:
+@pytest.mark.parametrize("field_name", ["execution_model_settings", "decision_model_settings"])
+def test_configuration_contains_concrete_settings_and_preserves_empty_and_none_values(field_name: str) -> None:
     configuration = nh.StepExecutorConfiguration()
-    assert configuration.model_settings == {}
-    assert nh.StepExecutorConfiguration(model_settings={}).model_settings == {}
-    assert nh.StepExecutorConfiguration(model_settings={"stop": None}).model_settings == {"stop": None}
+    assert getattr(configuration, field_name) == {}
+    assert getattr(nh.StepExecutorConfiguration.model_validate({field_name: {}}), field_name) == {}
+    assert getattr(nh.StepExecutorConfiguration.model_validate({field_name: {"stop": None}}), field_name) == {"stop": None}
     for invalid in (None, nh.UNSET):
         with pytest.raises(ValidationError):
-            nh.StepExecutorConfiguration(model_settings=invalid)  # type: ignore[arg-type]
+            nh.StepExecutorConfiguration.model_validate({field_name: invalid})
 
 
 @pytest.mark.parametrize("invalid", [None, "", {}, False])
@@ -98,6 +99,23 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
             pytest.fail("Invalid scope entered")
         assert nh.get_execution_reference() is reference
         assert nh.get_step_executor() is executor
+    assert resolutions == []
+
+
+@pytest.mark.parametrize("argument_name, value", [("run_id", None), ("run_id", ""), ("usage_meter", None)])
+def test_invalid_run_input_does_not_call_model_resolver(argument_name: str, value: object) -> None:
+    resolutions: list[nh.ModelSelection] = []
+
+    class Executor:
+        def run_step(self, *, request):
+            raise AssertionError("No step expected")
+
+        def resolve_model_selection(self, selection):
+            resolutions.append(selection)
+            return self
+
+    with pytest.raises((TypeError, ValueError)), nh.run(Executor(), execution_model="test:model", **{argument_name: value}):  # type: ignore[arg-type]
+        pytest.fail("Invalid run entered")
     assert resolutions == []
 
 

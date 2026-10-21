@@ -10,8 +10,7 @@ from .composition import UNSET, UnsetType
 from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
 from .runtime.operation_contract import OperationRequest
-from .runtime.step_contract import StepKind
-from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
+from .runtime.step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
 
 
 def _reference_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, object]:
@@ -40,9 +39,9 @@ class StepCommit:
     execution_reference: ExecutionReference
     processed_natural_program: str
     input_binding_name_to_value: Mapping[str, object]
-    outcome: StepResult
+    outcome: StepOutcome
     binding_name_to_value: Mapping[str, object]
-    allowed_step_kinds: tuple[StepKind, ...]
+    allowed_outcome_kinds: tuple[OutcomeKind, ...]
     output_binding_name_set: frozenset[str]
     binding_name_to_type: Mapping[str, object]
 
@@ -109,13 +108,13 @@ class Rewrite:
     A resolved Raise cannot be paired with an explicit nonempty output mapping.
     """
 
-    outcome: StepResult | UnsetType = UNSET
+    outcome: StepOutcome | UnsetType = UNSET
     binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
     reason: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.outcome, (UnsetType, Pass, Return, Break, Continue, Raise)):
-            raise TypeError("Rewrite outcome must be a resolved StepResult or UNSET")
+            raise TypeError("Rewrite outcome must be a resolved StepOutcome or UNSET")
         if not isinstance(self.binding_name_to_value, UnsetType):
             if not isinstance(self.binding_name_to_value, Mapping) or any(not isinstance(name, str) for name in self.binding_name_to_value):
                 raise TypeError("Rewrite binding_name_to_value must be a string-keyed mapping or UNSET")
@@ -172,7 +171,7 @@ __all__ = [
     "Break",
     "Continue",
     "Raise",
-    "StepResult",
+    "StepOutcome",
     "Accept",
     "AbortStep",
     "OperationDecision",

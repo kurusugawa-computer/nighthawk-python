@@ -10,13 +10,13 @@ import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
 from nighthawk.oversight import AbortStep, Accept, Oversight, Rewrite
 from nighthawk.runtime import Pass, StepCandidate, StepDefinition
-from nighthawk.runtime.step_result import StepResult
+from nighthawk.runtime.step_outcome import StepOutcome
 from tests.support.executors import InspectingExecutor
 
 
 @pytest.mark.parametrize("rewrite", [False, True])
 @pytest.mark.asyncio
-async def test_initialized_output_finalization_and_empty_rewrite(execute: Callable[..., Awaitable[StepResult]], rewrite: bool) -> None:
+async def test_initialized_output_finalization_and_empty_rewrite(execute: Callable[..., Awaitable[StepOutcome]], rewrite: bool) -> None:
     saved_name_to_value: dict[str, object] = {}
     events: list[StepFinished] = []
     inspections: list[object] = []
@@ -43,7 +43,7 @@ async def test_initialized_output_finalization_and_empty_rewrite(execute: Callab
 
 @pytest.mark.parametrize("reject", [False, True])
 @pytest.mark.asyncio
-async def test_validation_and_commit_rejection_never_write(execute: Callable[..., Awaitable[StepResult]], reject: bool) -> None:
+async def test_validation_and_commit_rejection_never_write(execute: Callable[..., Awaitable[StepOutcome]], reject: bool) -> None:
     saved_name_to_value: dict[str, object] = {}
     events: list[StepFinished] = []
     with (

@@ -35,17 +35,17 @@ def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
 
+@nh.function
+def calculate_average(numbers: list[object]) -> float:
+    result: float = 0.0
+    """execute
+    Map each element of <numbers> to the number it represents,
+    then compute <:result> by calling <python_average> with the mapped list.
+    """
+    return result
+
+
 with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
-
-    @nh.function
-    def calculate_average(numbers: list[object]) -> float:
-        result: float = 0.0
-        """execute
-        Map each element of <numbers> to the number it represents,
-        then compute <:result> by calling <python_average> with the mapped list.
-        """
-        return result
-
     print(calculate_average([1, "2", "three", "cuatro"]))  # 2.5
 ```
 
@@ -58,7 +58,7 @@ See the **[Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/qu
 
 Hosts can admit whole function calls, select models without losing scoped controls, and observe block outcomes and model usage.
 See [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) for usage and [execution boundaries](https://kurusugawa-computer.github.io/nighthawk-python/specification/#embedded-execution-boundaries) for the guarantees.
-The [runtime configuration guide](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/#whole-function-admission) includes executable host-integration examples that run without credentials.
+The [runtime configuration guide](https://kurusugawa-computer.github.io/nighthawk-python/host-integration/#whole-function-admission) includes executable host-integration examples that run without credentials.
 
 ## Documentation
 

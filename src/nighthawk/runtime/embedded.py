@@ -8,7 +8,7 @@ from .async_bridge import run_coroutine_synchronously
 from .runner import Runner
 from .scoping import get_step_executor
 from .step_definition import StepDefinition
-from .step_result import StepResult
+from .step_outcome import StepOutcome
 
 type BindingWriter = Callable[[str, object], Awaitable[None] | None]
 
@@ -22,7 +22,7 @@ def execute_step(
     *,
     name_to_value: Mapping[str, object],
     write_binding: BindingWriter,
-) -> StepResult:
+) -> StepOutcome:
     """Execute and save one step under the active run and scope.
 
     The trusted program is a body without the ``execute`` sentinel; deny frontmatter is supported.
@@ -75,7 +75,7 @@ async def execute_step_async(
     *,
     name_to_value: Mapping[str, object],
     write_binding: BindingWriter,
-) -> StepResult:
+) -> StepOutcome:
     """Asynchronous counterpart of :func:`execute_step` with the same environment and writeback contract.
 
     Each writer is awaited before recording that assignment or starting the next write.

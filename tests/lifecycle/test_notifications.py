@@ -11,7 +11,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepStarted
-from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepRequest, eval_expression
+from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepRequest, evaluate_expression
 from nighthawk.runtime.notifications import await_notification
 from tests.support.executors import StubExecutor
 
@@ -239,7 +239,7 @@ def _exercise_interrupted_sync_notification(inside_event_loop: bool, operation_n
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             if operation_notification:
-                eval_expression(request.step_context, "interrupt()")
+                evaluate_expression(request.step_context, "interrupt()")
             raise original
 
     async def finished(event: StepFinished | OperationFinished) -> None:
@@ -334,7 +334,7 @@ def _exercise_repeated_async_cancellation(boundary: str, self_cancel: bool) -> N
         class Executor:
             async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
                 if boundary == "operation":
-                    await nh.runtime.eval_expression_async(request.step_context, "1")
+                    await nh.runtime.evaluate_expression_async(request.step_context, "1")
                 return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
         @nh.function

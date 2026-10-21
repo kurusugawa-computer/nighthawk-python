@@ -14,9 +14,9 @@ from .description import discover_type_alias_reference_names
 from .environment import StepEnvironment
 from .scoping import _current_task_references, get_execution_reference
 from .step_context import StepContext, ToolResultRenderingPolicy, get_python_cell_scope_stack
-from .step_contract import StepKind
 from .step_definition import BlockKind
 from .step_executor import StepExecutor
+from .step_outcome import OutcomeKind
 
 
 def _split_frontmatter(
@@ -27,17 +27,17 @@ def _split_frontmatter(
     except NaturalParseError as e:
         raise ExecutionError(str(e)) from e
     try:
-        denied_step_kinds = validate_frontmatter_deny(frontmatter)
+        denied_outcome_kinds = validate_frontmatter_deny(frontmatter)
     except NaturalParseError as e:
         raise ExecutionError(str(e)) from e
-    return program_without_frontmatter, denied_step_kinds
+    return program_without_frontmatter, denied_outcome_kinds
 
 
-def _compute_allowed_step_kinds(is_in_loop: bool, denied_step_kinds: tuple[str, ...]) -> tuple[StepKind, ...]:
-    base_allowed_kinds: list[StepKind] = ["pass", "return", "raise"]
+def _compute_allowed_outcome_kinds(is_in_loop: bool, denied_outcome_kinds: tuple[str, ...]) -> tuple[OutcomeKind, ...]:
+    base_allowed_kinds: list[OutcomeKind] = ["pass", "return", "raise"]
     if is_in_loop:
         base_allowed_kinds.extend(["break", "continue"])
-    return tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
+    return tuple(kind for kind in base_allowed_kinds if kind not in denied_outcome_kinds)
 
 
 def _build_step_globals(
@@ -53,7 +53,7 @@ def _build_step_globals(
 class PreparedStep:
     block_kind: BlockKind
     processed_program: str
-    allowed_step_kinds: tuple[StepKind, ...]
+    allowed_outcome_kinds: tuple[OutcomeKind, ...]
     step_context: StepContext
     input_binding_name_to_value: dict[str, object]
     output_binding_names: tuple[str, ...]
@@ -68,7 +68,7 @@ class StepPreparation:
         self.step_executor = step_executor
         self.runtime_name_set = runtime_name_set
         self.processed_natural_program: str | None = None
-        self.allowed_step_kinds: tuple[StepKind, ...] | None = None
+        self.allowed_outcome_kinds: tuple[OutcomeKind, ...] | None = None
         self.input_binding_name_to_value: dict[str, object] | None = None
 
     @staticmethod
@@ -179,18 +179,20 @@ class StepPreparation:
             raise ExecutionError("decide requires exactly one output binding")
         normalize_binding_names(input_binding_names)
         normalize_binding_names(output_binding_names)
-        processed_without_frontmatter, denied_step_kinds = _split_frontmatter(natural_program)
+        processed_without_frontmatter, denied_outcome_kinds = _split_frontmatter(natural_program)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
         self.processed_natural_program = processed_without_frontmatter
         if block_kind == "decide":
-            if denied_step_kinds:
+            if denied_outcome_kinds:
                 raise ExecutionError("decide does not accept control-flow frontmatter")
             if not processed_without_frontmatter.strip():
                 raise ExecutionError("decide requires a judgment instruction")
             if extract_bindings(processed_without_frontmatter)[1]:
                 raise ExecutionError("decide instructions cannot declare output bindings")
-        allowed_step_kinds: tuple[StepKind, ...] = ("pass",) if block_kind == "decide" else _compute_allowed_step_kinds(is_in_loop, denied_step_kinds)
-        self.allowed_step_kinds = allowed_step_kinds
+        allowed_outcome_kinds: tuple[OutcomeKind, ...] = (
+            ("pass",) if block_kind == "decide" else _compute_allowed_outcome_kinds(is_in_loop, denied_outcome_kinds)
+        )
+        self.allowed_outcome_kinds = allowed_outcome_kinds
         scoped_task_name_to_value = _current_task_references()
         if name_to_value is None:
             assert caller_frame is not None
@@ -239,7 +241,7 @@ class StepPreparation:
         return PreparedStep(
             block_kind=block_kind,
             processed_program=processed_without_frontmatter,
-            allowed_step_kinds=allowed_step_kinds,
+            allowed_outcome_kinds=allowed_outcome_kinds,
             step_context=step_context,
             input_binding_name_to_value=input_binding_name_to_value,
             output_binding_names=tuple(output_binding_names),

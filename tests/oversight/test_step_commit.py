@@ -15,8 +15,8 @@ from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
+from nighthawk.runtime.model_outcome import ModelRaise
 from nighthawk.runtime.scoping import get_oversight
-from nighthawk.runtime.step_contract import RaiseStepOutcome
 from tests.support.executors import StubExecutor
 
 
@@ -300,7 +300,7 @@ def test_rewrite_bindings_with_invalid_value_raises_execution_error() -> None:
             natural_value_function()
 
 
-def test_rewrite_to_disallowed_step_kind_raises_execution_error() -> None:
+def test_rewrite_to_disallowed_outcome_kind_raises_execution_error() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = step_commit
         return nh.oversight.Rewrite(outcome=nh.oversight.Return(value=5))
@@ -431,7 +431,7 @@ def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             request.step_context.record_assignment("result", "invalid")
-            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, RaiseStepOutcome(kind="raise", raise_message="failed")))
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, ModelRaise(kind="raise", raise_message="failed")))
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         assert commit.binding_name_to_value == {}
@@ -462,9 +462,7 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(
-                    request, RaiseStepOutcome(kind="raise", raise_message="original", raise_error_type="OriginalError"), {}
-                )
+                lambda: resolve_model_candidate(request, ModelRaise(kind="raise", raise_message="original", raise_error_type="OriginalError"), {})
             )
 
     @nh.function

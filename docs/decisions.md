@@ -1,5 +1,7 @@
 # Typed decisions
 
+> This page assumes you have completed [Quickstart](quickstart.md) and [Natural blocks](natural-blocks.md).
+
 Use `execute` to describe operations and intermediate assignments.
 Use `decide` to answer a typed question, then use Python to branch, retry, or act on its result.
 Both blocks live inside ordinary `@nh.function` functions and share validation, commit oversight, execution identity, and terminal delivery.
@@ -54,7 +56,7 @@ Tools make intermediate assignments, and the runtime validates the selected fina
 
 A `decide` header declares exactly one output.
 Its body contains the judgment and criteria, with `<name>` references to the evidence.
-Do not ask it to write a value, call `nh_assign`, select tools, or return from the Python function.
+State the question and its criteria; Python owns the subsequent action.
 Nighthawk passes the body as Pydantic AI instructions, obtains the typed answer, and commits it to the declared destination.
 A successful decision continues with the next Python statement.
 
@@ -120,7 +122,7 @@ with nh.run(step_executor_configuration=configuration):
         another_result = assess(document, summary)
 ```
 
-`model_settings` applies to execution models; `decision_model_settings` applies to decision models.
+`execution_model_settings` applies to execution models; `decision_model_settings` applies to decision models.
 A supplied decision model may retain its own provider settings and defaults.
 Scoped Pydantic AI capabilities still observe the model request.
 Decision requests reject action tools and non-decision model selections introduced by ordinary request hooks.

@@ -14,10 +14,9 @@ from pydantic import Field
 from .composition import UNSET, UnsetType
 from .runtime.execution_reference import ExecutionReference
 from .runtime.step_context import StepContext
-from .runtime.step_contract import StepKind
 from .runtime.step_definition import BlockKind
+from .runtime.step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
 from .runtime.step_request import StepCandidate, StepRequest
-from .runtime.step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
 @dataclass
@@ -29,10 +28,10 @@ class StepCall:
         input_binding_name_to_value: Complete explicitly referenced evidence.
         execution_reference: Invocation identity shared with oversight and terminal delivery.
         natural_program: The processed Natural block text (after frontmatter removal and interpolation).
-        binding_names: Write binding names (``<:name>`` targets) requested by the Natural function.
+        output_binding_names: Write binding names (``<:name>`` targets) requested by the Natural function.
         binding_name_to_type: Mapping from binding name to its expected type.
             Explicitly annotated bindings carry the declared type; unannotated bindings are inferred from the initial value at runtime.
-        allowed_step_kinds: Outcome kinds allowed for this step, determined by syntactic context and deny frontmatter.
+        allowed_outcome_kinds: Outcome kinds allowed for this step, determined by syntactic context and deny frontmatter.
         step_locals: Snapshot of step-local variables at the time of execution.
             Contains function parameters and local variables.
         step_globals: Shallow snapshot of module globals selected by read bindings,
@@ -42,9 +41,9 @@ class StepCall:
 
     execution_reference: ExecutionReference
     natural_program: str
-    binding_names: list[str]
+    output_binding_names: list[str]
     binding_name_to_type: dict[str, object]
-    allowed_step_kinds: tuple[StepKind, ...]
+    allowed_outcome_kinds: tuple[OutcomeKind, ...]
     step_locals: dict[str, object]
     step_globals: dict[str, object]
     task_name_to_value: dict[str, object]
@@ -62,14 +61,14 @@ class StepResponse(StepCandidate):
         outcome: Resolved Python control result. Strings are values, never expressions.
     """
 
-    outcome: StepResult = Field(default_factory=Pass)
+    outcome: StepOutcome = Field(default_factory=Pass)
 
 
 def _build_step_call(
     processed_natural_program: str,
     step_context: StepContext,
-    binding_names: list[str],
-    allowed_step_kinds: tuple[StepKind, ...],
+    output_binding_names: list[str],
+    allowed_outcome_kinds: tuple[OutcomeKind, ...],
     block_kind: BlockKind,
     input_binding_name_to_value: Mapping[str, object],
 ) -> StepCall:
@@ -82,9 +81,9 @@ def _build_step_call(
         natural_program=processed_natural_program,
         block_kind=block_kind,
         input_binding_name_to_value=dict(input_binding_name_to_value),
-        binding_names=list(binding_names),
+        output_binding_names=list(output_binding_names),
         binding_name_to_type=dict(step_context.binding_name_to_type),
-        allowed_step_kinds=allowed_step_kinds,
+        allowed_outcome_kinds=allowed_outcome_kinds,
         step_locals=dict(step_context.step_locals),
         step_globals=global_name_to_value,
         task_name_to_value=dict(step_context.environment.task_name_to_value),
@@ -119,7 +118,7 @@ class ScriptedExecutor:
             request.processed_natural_program,
             request.step_context,
             list(request.output_binding_names),
-            request.allowed_step_kinds,
+            request.allowed_outcome_kinds,
             request.block_kind,
             request.input_binding_name_to_value,
         )
@@ -162,7 +161,7 @@ class CallbackExecutor:
             request.processed_natural_program,
             request.step_context,
             list(request.output_binding_names),
-            request.allowed_step_kinds,
+            request.allowed_outcome_kinds,
             request.block_kind,
             request.input_binding_name_to_value,
         )

@@ -10,7 +10,7 @@
     natural_program: "次の反復へ進む。"
     input_bindings: '{}'
     output_binding_names: '[]'
-    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+    allowed_outcome_kinds: '["pass", "return", "raise", "break", "continue"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py

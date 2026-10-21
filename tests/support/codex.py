@@ -71,13 +71,13 @@ async def _run() -> None:
     async with streamable_http_client(mcp_url) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            response = await session.call_tool("nh_eval", arguments={"expression": "1 + 1"})
-            nh_eval_text = response.content[0].text
+            response = await session.call_tool("nh_evaluate", arguments={"expression": "1 + 1"})
+            nh_evaluate_text = response.content[0].text
 
     payload = {
         "prompt_received": prompt_text.strip() != "",
         "tool_names": allowed_tools,
-        "nh_eval_text": nh_eval_text,
+        "nh_evaluate_text": nh_evaluate_text,
     }
 
     agent_message_text = json.dumps(payload)

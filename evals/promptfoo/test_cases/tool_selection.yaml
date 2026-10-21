@@ -19,8 +19,8 @@
         expected_bindings:
           result: 100
 
-# P-TOOL-002: nh_eval for value inspection
-- description: "P-TOOL-002: nh_eval for inspection then assign"
+# P-TOOL-002: nh_evaluate for value inspection
+- description: "P-TOOL-002: nh_evaluate for inspection then assign"
   vars:
     natural_program: "Set <:result> to the length of <items>."
     input_bindings: '{"items": [10, 20, 30, 40]}'
@@ -32,8 +32,8 @@
         expected_bindings:
           result: 4
 
-# P-TOOL-003: nh_eval for in-place mutation
-- description: "P-TOOL-003: nh_eval for list sort"
+# P-TOOL-003: nh_evaluate for in-place mutation
+- description: "P-TOOL-003: nh_evaluate for list sort"
   vars:
     natural_program: "Sort <items> in ascending order."
     input_bindings: '{"items": [3, 1, 4, 1, 5]}'
@@ -50,7 +50,7 @@
         expected_bindings:
           items: [1, 1, 3, 4, 5]
 
-# P-TOOL-004: Function call via nh_eval then nh_assign
+# P-TOOL-004: Function call via nh_evaluate then nh_assign
 - description: "P-TOOL-004: Function call and assign"
   vars:
     natural_program: "Set <:result> to the result of calling <add>(3, 7)."
@@ -63,10 +63,10 @@
         expected_bindings:
           result: 10
 
-# --- nh_eval/nh_eval single use ---
+# --- nh_evaluate/nh_evaluate single use ---
 
-# P-TOOL-010: nh_eval for conditional logic
-- description: "P-TOOL-010: nh_eval for len check then conditional assign"
+# P-TOOL-010: nh_evaluate for conditional logic
+- description: "P-TOOL-010: nh_evaluate for len check then conditional assign"
   vars:
     natural_program: 'If <items> has more than 3 elements, set <:result> to "large", else set <:result> to "small".'
     input_bindings: '{"items": [1, 2, 3, 4]}'
@@ -78,8 +78,8 @@
         expected_bindings:
           result: "large"
 
-# P-TOOL-011: nh_eval for arithmetic expression
-- description: "P-TOOL-011: nh_eval for sum"
+# P-TOOL-011: nh_evaluate for arithmetic expression
+- description: "P-TOOL-011: nh_evaluate for sum"
   vars:
     natural_program: "Set <:result> to the sum of all elements in <numbers>."
     input_bindings: '{"numbers": [10, 20, 30]}'
@@ -91,8 +91,8 @@
         expected_bindings:
           result: 60
 
-# P-TOOL-012: nh_eval for list filtering
-- description: "P-TOOL-012: nh_eval to remove negative numbers"
+# P-TOOL-012: nh_evaluate for list filtering
+- description: "P-TOOL-012: nh_evaluate to remove negative numbers"
   vars:
     natural_program: "Remove all negative numbers from <data>."
     input_bindings: '{"data": [1, -2, 3, -4, 5]}'
@@ -109,8 +109,8 @@
         expected_bindings:
           data: [1, 3, 5]
 
-# P-TOOL-013: nh_eval for dict mutation
-- description: "P-TOOL-013: nh_eval to add dict key"
+# P-TOOL-013: nh_evaluate for dict mutation
+- description: "P-TOOL-013: nh_evaluate to add dict key"
   vars:
     natural_program: 'Add key "status" with value "active" to <record>.'
     input_bindings: '{"record": {"name": "test"}}'

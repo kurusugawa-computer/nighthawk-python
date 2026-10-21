@@ -48,7 +48,7 @@ Each block starts a fresh model interaction; neither a parent's working values n
 ## 3. Hard constraints
 
 - Python 3.13+.
-- Default and recommended models: see [Pydantic AI providers](pydantic-ai-providers.md).
+- Models are selected explicitly; provider installation and identifier examples are in [Pydantic AI providers](pydantic-ai-providers.md).
 - Coding agent backends are installed via extras: `claude-code-sdk`, `claude-code-cli`, `codex`. Pydantic AI provider dependencies are installed separately (see [Pydantic AI providers](pydantic-ai-providers.md)).
 - Threat model: Natural blocks and imported markdown are trusted and repository-managed.
 
@@ -66,7 +66,11 @@ Each block starts a fresh model interaction; neither a parent's working values n
     - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
 - Locals summary: a bounded presentation of selected working values and their provenance, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
-- Outcome: the single, unambiguous result of executing a Natural block.
+- Step: one invocation of a Natural block, with its own execution identity.
+- Block kind (`BlockKind`): `execute` for action-oriented instructions or `decide` for a typed judgment.
+- Model outcome (`ModelOutcome`): a model's proposed control flow for `execute`, which may contain unevaluated expressions.
+- Step outcome (`StepOutcome`): resolved Python control flow, represented by `Pass`, `Return`, `Break`, `Continue`, or `Raise`; values and exception classes are live Python objects.
+- Step candidate (`StepCandidate`): a step outcome plus the proposed output selection, pending runtime validation and commit inspection.
 - Outcome kind: the required `kind` field on an outcome object. The baseline kinds are `pass`, `return`, `break`, `continue`, and `raise`.
 - Allowed outcome set: the set of outcome types allowed for a specific Natural block instance, derived from syntactic context and deny-only frontmatter.
 - Frontmatter: optional YAML metadata at the start of a Natural program, delimited by `---` lines.
@@ -93,12 +97,12 @@ Each block starts a fresh model interaction; neither a parent's working values n
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
     - `decision_model`: Provider-qualified string or an existing Pydantic AI decision model, used by `decide`. Default: `None`. A missing model fails before a request for that block kind.
-    - `decision_model_settings`: Decision model settings, defaulting to an empty dictionary; accepts the same forms as `model_settings`.
-    - `model_settings`: execution model/backend overrides, defaulting to an empty dictionary. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict); rejects `None` and `UNSET`. An empty dictionary adds no overrides and preserves model-owned defaults. Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
+    - `decision_model_settings`: Decision model settings, defaulting to an empty dictionary; accepts the same forms as `execution_model_settings`.
+    - `execution_model_settings`: execution model/backend overrides, defaulting to an empty dictionary. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict); rejects `None` and `UNSET`. An empty dictionary adds no overrides and preserves model-owned defaults. Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
     - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
     - `prompts`: prompt templates used for execution.
-        - `step_system_prompt_template`: system prompt template that defines the step execution protocol.
-        - `step_user_prompt_template`: full user prompt template including section delimiters.
+        - `system_prompt_template`: system prompt template that defines the step execution protocol.
+        - `user_prompt_template`: full user prompt template including section delimiters.
     - `context_limits`: limits for rendering dynamic context into the prompt.
     - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and projected tool-result previews. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
@@ -119,8 +123,8 @@ External agents own model selection: both the constructor and `from_agent` rejec
 
 - `StepPromptTemplates`
     - Prompt templates used for step execution.
-    - `step_system_prompt_template`: system prompt template.
-    - `step_user_prompt_template`: user prompt template.
+    - `system_prompt_template`: system prompt template.
+    - `user_prompt_template`: user prompt template.
 - `StepContextLimits`
     - Limits for rendering dynamic context into the LLM prompt.
     - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
@@ -426,7 +430,7 @@ Rendering format:
     - Only explicitly referenced dotted paths are added this way.
     - This is a leaf-only rendering rule, not recursive object-graph extraction.
     - Dotted-path resolution is attribute-oriented only. Each segment after the top-level name is resolved against discovered object fields using the same safe field sources as object capability rendering.
-    - Dotted-path resolution does not treat `Mapping` keys as attribute segments. For mapping access, use Python expressions or helper functions (for example `nh_eval("payload['photo']")`) rather than `<payload.photo>`.
+    - Dotted-path resolution does not treat `Mapping` keys as attribute segments. For mapping access, use Python expressions or helper functions (for example `nh_evaluate("payload['photo']")`) rather than `<payload.photo>`.
     - `list` / `tuple` leaves follow the same hoisting rule as top-level bindings: the sequence is hoisted when every item is valid Pydantic AI `UserContent` and at least one item is multimodal.
     - Non-multimodal dotted references remain preview text inside object capability rendering.
     - When a dotted multimodal reference is rendered as a separate section line, the corresponding field is omitted from the owning object capability block to avoid duplication. The field still consumes a slot in the `object_max_fields` budget.
@@ -551,7 +555,7 @@ Direct Python calls to these helpers do not create an additional Natural operati
 
 Nighthawk exposes two paths for the LLM to call Python functions:
 
-1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_eval`.
+1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_evaluate`.
 2. **Scoped tools** (`nighthawk.scope(tools=...)`): Declared callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
@@ -605,9 +609,9 @@ Deferred execution outside the owning step is not a workspace-lifetime guarantee
 
 Eval tool:
 
-- `nh_eval(expression: str) -> object`
+- `nh_evaluate(expression: str) -> object`
     - Evaluate a Python expression and return the result. Use to inspect values, call functions, and mutate objects in-place.
-    - In-place mutations performed via `nh_eval` are not runtime-validated.
+    - In-place mutations performed via `nh_evaluate` are not runtime-validated.
     - If the evaluated expression is awaitable, it is awaited before returning.
     - Named assignment expressions such as `(value := 8)` are rejected; use `nh_assign` for tracked name assignment.
 
@@ -815,9 +819,9 @@ Implementation note:
 
 Natural functions may be declared `async`. Tool execution and the final return expression have distinct awaitable-handling rules:
 
-- Tool expression evaluation: if an `nh_eval` or `nh_assign` expression produces an awaitable, the host awaits it before returning the result to the model, including when the surrounding Natural function is synchronous.
+- Tool expression evaluation: if an `nh_evaluate` or `nh_assign` expression produces an awaitable, the host awaits it before returning the result to the model, including when the surrounding Natural function is synchronous.
 - Return validation: if a `return` outcome's `return_expression` evaluates to an awaitable and the surrounding function is async, the host awaits it before return type validation. If the surrounding function is sync and the evaluated value is awaitable, execution fails with `ExecutionError`.
-- Binding function calls: async binding functions called through `nh_eval` or `nh_assign` are auto-awaited in both sync and async Natural functions. The synchronous execution path bridges tool execution to an event loop; the awaitable-return restriction applies to the final `return_expression`, not to tool expressions.
+- Binding function calls: async binding functions called through `nh_evaluate` or `nh_assign` are auto-awaited in both sync and async Natural functions. The synchronous execution path bridges tool execution to an event loop; the awaitable-return restriction applies to the final `return_expression`, not to tool expressions.
 - Concurrency: async natural functions are ordinary coroutines. Concurrent execution via `asyncio.gather` is safe for Natural blocks that do not share mutable bindings, since each block executes with an independent step context.
 
 ## 9. Return value
@@ -838,7 +842,7 @@ The required runtime object for step execution is:
 
 Runtime execution identity is modeled separately in `ExecutionReference`:
 
-- `run_id`: the Id of the outermost run (trace root). This serves as the golden thread that connects distributed agent processes (e.g. parent, child, grandchild) across process boundaries in observability tools.
+- `run_id`: the Id of the active run. Every `run()` generates a fresh Id unless the caller supplies one; `scope()` retains it. Cross-process propagation and correlation belong to the host.
 - `scope_id`: the Id of the current (possibly nested) run scope. This serves as the identity of the current logical execution context.
 - `step_execution_id`: a fresh Id for each runtime invocation, including repeated loop iterations and concurrent calls. Executor retries retain this Id; executing the block again allocates another.
 - `parent_step_execution_id`: the active parent step Id for correlation, or `None`; it does not transfer workspace objects across processes.
@@ -849,7 +853,9 @@ Nighthawk does not own workspace filesystem concerns (such as include resolution
 Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When empty (default `""`), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:
 
-- `nighthawk.run(step_executor: StepExecutor, *, run_id: str | UnsetType = UNSET, usage_meter: UsageMeter | UnsetType = UNSET)`
+- `nighthawk.run(step_executor=UNSET, *, execution_model=UNSET, decision_model=UNSET, step_executor_configuration=UNSET, run_id=UNSET, usage_meter=UNSET)`
+    - Omitted `step_executor` creates a managed `AgentStepExecutor`. Independent model selections or a full configuration replacement are resolved through the selected executor before entering the run.
+    - Invalid run identifiers and usage meters fail before model resolution; rejected configuration shapes do not initialize a provider.
     - Validates the synchronous or asynchronous executor protocol before installing context; invalid executors raise `TypeError` and leave any parent context intact.
     - Replaces the current context step executor with the provided step executor.
     - Installs `usage_meter` as the run-level meter when given; omission or `UNSET` creates a fresh `UsageMeter`; `None` is invalid.
@@ -1058,7 +1064,7 @@ The public `nh.get_lifecycle()` returns the currently scoped configuration objec
 
 Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
 
-`StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`. All carry `execution_reference`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_step_kinds`, and `assigned_binding_name_to_value`. Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values. Runtime references require both step identity fields. Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity. Hosts must serialize or copy deliberately for durable records.
+`StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`. All carry `execution_reference`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, and `assigned_binding_name_to_value`. Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values. Runtime references require both step identity fields. Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity. Hosts must serialize or copy deliberately for durable records.
 
 `StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Model-selected exception expressions use the operation pipeline; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. An explicit `AbortStep` decision about this step additionally carries `inspection_subject` and `abort_reason`. Invalid hook decisions and exceptions raised by inspectors remain inspection failures.
 
@@ -1123,7 +1129,7 @@ Natural blocks often need to embed computed values (for example, paths or JSON e
 
 Note:
 
-- This interpolation mechanism is distinct from the `nh_eval` tool. f-string evaluation runs in the normal Python execution context, while `nh_eval` evaluates expressions inside the Natural execution environment (`StepEnvironment`).
+- This interpolation mechanism is distinct from the `nh_evaluate` tool. f-string evaluation runs in the normal Python execution context, while `nh_evaluate` evaluates expressions inside the Natural execution environment (`StepEnvironment`).
 
 Decision:
 
@@ -1134,21 +1140,23 @@ Decision:
 
 Nighthawk does not define a built-in persistence or memory model.
 
-If you want a long-lived object, define it yourself and expose it as an ordinary Python value through lexical state or scoped task references. Runtime expressions can read it and `nh_eval` can mutate it in place. Sharing a reference does not provide durable persistence.
+If you want a long-lived object, define it yourself and expose it as an ordinary Python value through lexical state or scoped task references. Runtime expressions can read it and `nh_evaluate` can mutate it in place. Sharing a reference does not provide durable persistence.
 
 ### 12.1. Carry pattern
 
-The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable Python object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in place via `nh_eval`. Rebinding an existing Python name requires an output declaration, so a read-only declaration preserves the caller's name association while allowing object mutations.
+The carry pattern is an idiomatic use of read bindings for cross-block context continuity. Pass a mutable Python object (e.g., `list[str]`) as a read binding (`<carry>`) and instruct the LLM to mutate it in place via `nh_evaluate`. Rebinding an existing Python name requires an output declaration, so a read-only declaration preserves the caller's name association while allowing object mutations.
 
 For practical examples and design tips, see [Patterns](patterns.md#cross-block-composition).
 
 ## 13. Error handling
 
-Nighthawk defines public library errors rooted at `NighthawkError`, plus an internal `ToolBoundaryError` signal for recoverable tool failures.
+Nighthawk execution, policy, and delivery failures derive from `NighthawkError`.
+Recoverable operation diagnostics use `OperationError`, a `ToolBoundaryError` subtype, so custom executors can handle them at the operation boundary.
+Invalid arguments can raise ordinary `TypeError`, `ValueError`, or Pydantic validation errors.
 
 Exception hierarchy:
 
-- `NighthawkError`: Base class for public Nighthawk library errors.
+- `NighthawkError`: Base class for Nighthawk execution, policy, and delivery failures.
     - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
 - `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
     - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
@@ -1160,6 +1168,8 @@ Exception hierarchy:
 - `NameConflictError(NighthawkError)`: Distinct declarations claim the same name.
 - `ToolNameConflictError(ToolDeclarationError, NameConflictError)`: Tool name collision, including reserved built-in names.
     - Raised when: a tool name is invalid, collides with a built-in tool, or is declared twice within the visible scope.
+- `CircuitOpenError(NighthawkError)`: The resilience circuit breaker refuses a call while open; the protected function does not run.
+- `BudgetExceededError(NighthawkError)`: A resilience usage check refuses or reports work beyond its configured limits; earlier effects remain.
 
 Exceptions propagated to the host can be caught with standard `try`/`except`. Recoverable tool failures are instead returned to the model as structured observations, as specified in [Section 8.3](#83-tools-available-to-the-llm). Internal step failures follow the `ExecutionError` and terminal-delivery rules in [Section 10.4](#104-terminal-delivery-and-host-ledgers).
 
@@ -1175,8 +1185,10 @@ Nighthawk defines two step executor protocols. Both are `@runtime_checkable`.
     - `run_step_async(*, request: StepRequest) -> StepCandidate`
 
 The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the union accepted by `nighthawk.run()`.
+Executor protocols, requests, candidates, resolved outcomes, and runtime operations are available from `nighthawk.runtime`.
+Its public exports participate in ordinary Python `dir()` and attribute inspection without requiring an active run.
 
-`StepRequest` holds `execution_reference`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `binding_name_to_type`, `return_annotation`, `allowed_step_kinds`, and `allow_awaitable_return`.
+`StepRequest` holds `block_kind`, `input_binding_name_to_value`, `execution_reference`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `binding_name_to_type`, `return_annotation`, `allowed_outcome_kinds`, and `allow_awaitable_return`.
 Its context owns the environment; no second namespace is assembled for the executor.
 Both methods return `StepCandidate(outcome=..., binding_name_to_value=...)` containing live values.
 `StepRequest.snapshot_output_bindings()` returns an independent dictionary of initialized declared outputs in declaration order using the automatic-selection rule.
@@ -1212,15 +1224,14 @@ Instance attributes:
 Any object implementing `SyncStepExecutor` or `AsyncStepExecutor` can serve as a backend. The protocol surface for `AsyncStepExecutor`:
 
 ```py
-from nighthawk.runtime import StepCandidate, StepRequest
-from nighthawk.runtime.step_executor import AsyncStepExecutor
+from nighthawk.runtime import AsyncStepExecutor, StepCandidate, StepRequest
 
 
 class MyExecutor(AsyncStepExecutor):
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
         # Read the program and selected contracts from request.
         # Use request.step_context.environment for live name resolution.
-        # Runtime eval_expression_async and assign_tool_async use the common
+        # Runtime evaluate_expression_async and assign_expression_async use the common
         # operation pipeline, including inspection and lifecycle delivery.
         # Return resolved live values; the runner validates the final candidate.
         ...
@@ -1230,7 +1241,7 @@ class MyExecutor(AsyncStepExecutor):
 
 For most custom backends, wrapping a Pydantic AI `Agent` via `AgentStepExecutor.from_agent` (see [Executors](executors.md#custom-backends)) is simpler than implementing the protocol directly. Direct implementation is appropriate when the backend does not use a Pydantic AI agent at all.
 
-See the [API Reference](api.md#base) for the full protocol definition.
+See the [API reference](api.md#runtime-executor-boundary) for the protocol definitions.
 
 ### 14.4. Nested execution acceptance example
 
@@ -1271,8 +1282,8 @@ The expected successful result is four `ordinary` entries, `fifth`, two `ordinar
 Deterministic executor tests establish the environment mechanics; model evaluations measure whether an LLM follows the ten-call instruction.
 The runtime must not claim that type validation of `list[str]` proves the count or contents.
 
-Custom executors materialize working names using `assign_tool_async` and call children with explicit arguments using `eval_expression_async`, both exported from `nighthawk.runtime`.
-Their synchronous counterparts are `assign_tool` and `eval_expression`.
+Custom executors materialize working names using `assign_expression_async` and call children with explicit arguments using `evaluate_expression_async`, both exported from `nighthawk.runtime`.
+Their synchronous counterparts are `assign_expression` and `evaluate_expression`.
 These entry points include admission, inspection, ordering, workspace updates, and lifecycle delivery; do not mutate environment views or build a second operation policy.
 Directly constructing a `StepCandidate` proposes final values but creates no intermediate operation or shared temporary state.
 
@@ -1294,7 +1305,7 @@ The contracts above own these semantics; this table collects review cases for im
 | Visible local `value=7` evaluated as `(lambda: value)()` | Return 7 using the same environment as direct lookup. |
 | Visible local `value=7` evaluated as `list(value + i for i in range(2))` | Return `[7, 8]`; the generator is consumed within one operation. |
 | Existing closure cell is rebound before the Natural call, or an explicit global/nonlocal output is committed | Observe the latest cell value, or update the declared module/cell destination; do not use a captured value copy. |
-| `nh_eval` receives `(value := 8)` | Reject the named assignment and direct the model to tracked assignment. |
+| `nh_evaluate` receives `(value := 8)` | Reject the named assignment and direct the model to tracked assignment. |
 | `nh_assign` targets an existing Python name not declared as an output, and its right-hand side calls a helper | Reject before invoking the helper; a new eligible temporary name is allowed. |
 | An initialized declared output is never assigned and the candidate omits its selection | Include it in non-Raise finalization; its validators may transform it or reject it. |
 | An executor explicitly supplies `{}` as its output selection | No final output value validation or writeback; do not supplement initial or tracked values. |

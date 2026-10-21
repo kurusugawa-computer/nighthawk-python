@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_tool_async, eval_expression_async
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_expression_async, evaluate_expression_async
 
 
 def test_every_source_helper_name_can_be_an_application_binding() -> None:
@@ -59,7 +59,7 @@ def test_every_source_helper_name_can_be_an_application_binding() -> None:
             assert environment.resolve("__nh_captured_values__") == 17
             assert set(environment.snapshot_working_state()) == {*expected_names, "__nh_captured_values__"}
             assert set(request.step_context.step_locals) == {*expected_names, "__nh_captured_values__"}
-            updated = await eval_expression_async(request.step_context, "__nh_execution__ + 1")
+            updated = await evaluate_expression_async(request.step_context, "__nh_execution__ + 1")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"__nh_execution__": updated})
 
     with nh.run(Executor()):
@@ -81,7 +81,7 @@ def test_factory_capture_names_preserve_live_nonlocal_cells() -> None:
 
     class Executor:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-            updated = await eval_expression_async(request.step_context, "__nh_captured_values__ + 1")
+            updated = await evaluate_expression_async(request.step_context, "__nh_captured_values__ + 1")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"__nh_captured_values__": updated})
 
     __nh_captured_values__ = 8
@@ -115,12 +115,12 @@ def test_child_receives_shared_application_binding_even_when_its_own_helper_has_
             if "shared" in request.processed_natural_program:
                 assert context.environment.resolve("__nh_execution__") == 7
                 assert context.environment.describe("__nh_execution__")["origin"] == "task"
-                await assign_tool_async(context, "result", "__nh_execution__ + 1")
+                await assign_expression_async(context, "result", "__nh_execution__ + 1")
             else:
                 with nh.scope(task_references={"__nh_execution__": context.environment.resolve("__nh_execution__")}):
-                    assert await eval_expression_async(context, "child()") == 8
+                    assert await evaluate_expression_async(context, "child()") == 8
                 assert context.environment.resolve("__nh_execution__") == 7
-                await assign_tool_async(context, "result", "__nh_execution__")
+                await assign_expression_async(context, "result", "__nh_execution__")
             return StepCandidate(outcome=Pass())
 
     with nh.run(Executor()):

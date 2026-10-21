@@ -18,8 +18,8 @@ from nighthawk.runtime import (
     Pass,
     StepCandidate,
     StepRequest,
-    assign_tool_async,
-    eval_expression_async,
+    assign_expression_async,
+    evaluate_expression_async,
 )
 from nighthawk.runtime.operation_contract import OperationDeliveryError
 from nighthawk.tools.execution import ToolResultWrapperToolset
@@ -42,7 +42,7 @@ def test_admission_failure_has_identity_and_prevents_inspection_and_effects() ->
         nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=finished.append)),
         pytest.raises(OperationError),
     ):
-        asyncio.run(assign_tool_async(context, "value", "effects.append(1)"))
+        asyncio.run(assign_expression_async(context, "value", "effects.append(1)"))
     assert inspected == [] and effects == []
     assert len(finished) == 1
     assert finished[0].request.operation_id
@@ -68,9 +68,9 @@ def test_awaited_inspection_serializes_operations_in_admission_order() -> None:
             return Accept()
 
         with nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=finished.append)):
-            first = asyncio.create_task(assign_tool_async(context, "i", "5"))
+            first = asyncio.create_task(assign_expression_async(context, "i", "5"))
             await entered.wait()
-            second = asyncio.create_task(eval_expression_async(context, "i"))
+            second = asyncio.create_task(evaluate_expression_async(context, "i"))
             await asyncio.sleep(0)
             assert events == ["inspect:assignment"]
             assert finished == []
@@ -102,10 +102,10 @@ def test_rejection_stops_queued_operations_and_preserves_completed_effects() -> 
             return Accept()
 
         with nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=finished.append)):
-            await eval_expression_async(context, "effects.append('approved')")
-            first = asyncio.create_task(eval_expression_async(context, "effects.append('reject')"))
+            await evaluate_expression_async(context, "effects.append('approved')")
+            first = asyncio.create_task(evaluate_expression_async(context, "effects.append('reject')"))
             await inspected.wait()
-            second = asyncio.create_task(eval_expression_async(context, "effects.append('queued')"))
+            second = asyncio.create_task(evaluate_expression_async(context, "effects.append('queued')"))
             await asyncio.sleep(0)
             release.set()
             outcomes = await asyncio.gather(first, second, return_exceptions=True)
@@ -130,12 +130,12 @@ def test_operation_notification_failure_keeps_successful_fact_and_stops_step() -
 
     async def execute() -> None:
         with pytest.raises(OperationDeliveryError) as caught:
-            await assign_tool_async(context, "value", "7")
+            await assign_expression_async(context, "value", "7")
         assert caught.value.finished is recorded[0]
         assert caught.value.delivery_cause is storage_error
         assert context.environment.resolve("value") == 7
         with pytest.raises(OperationDeliveryError):
-            await assign_tool_async(context, "next_value", "8")
+            await assign_expression_async(context, "next_value", "8")
         assert "next_value" not in context.environment.step_name_to_value
 
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished)):
@@ -155,7 +155,7 @@ def test_failed_operation_and_failed_notification_retain_both_causes() -> None:
 
     context = new_context(fail=fail)
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished)), pytest.raises(OperationDeliveryError) as caught:
-        asyncio.run(eval_expression_async(context, "fail()"))
+        asyncio.run(evaluate_expression_async(context, "fail()"))
     assert caught.value.finished.original_exception is body_error
     assert caught.value.__cause__ is body_error
     assert caught.value.delivery_cause is storage_error
@@ -174,7 +174,7 @@ def test_cancelled_approval_never_starts_pending_body() -> None:
             return Accept()
 
         with nh.scope(oversight=Oversight(inspect_operation=inspect), lifecycle=StepLifecycle(on_operation_finished=recorded.append)):
-            operation = asyncio.create_task(eval_expression_async(new_context(effects=effects), "effects.append(1)"))
+            operation = asyncio.create_task(evaluate_expression_async(new_context(effects=effects), "effects.append(1)"))
             await entered.wait()
             operation.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -287,8 +287,8 @@ def test_explicit_pydantic_retry_does_not_poison_step() -> None:
 
     async def execute() -> None:
         with pytest.raises(ModelRetry):
-            await eval_expression_async(context, "retry_once()")
-        assert await eval_expression_async(context, "retry_once()") == 7
+            await evaluate_expression_async(context, "retry_once()")
+        assert await evaluate_expression_async(context, "retry_once()") == 7
 
     asyncio.run(execute())
 
@@ -299,7 +299,7 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
     class Executor:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             with pytest.raises(StepAbortedError):
-                await eval_expression_async(request.step_context, "7")
+                await evaluate_expression_async(request.step_context, "7")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": 9})
 
     @nh.function

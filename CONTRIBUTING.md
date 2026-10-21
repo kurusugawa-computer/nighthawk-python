@@ -113,14 +113,14 @@ PFOO="cd evals/promptfoo && PROMPTFOO_PYTHON=\"$(uv python find)\" npx promptfoo
 
 #### Directory layout
 
-- `provider.py` — Custom provider wrapping `AgentStepExecutor`. Handles tool preset installation, backend-specific model settings, and callable fixture resolution.
+- `provider.py` -- Executes trusted fixtures through `StepDefinition` and `execute_step`, including validation, writeback, terminal records, and usage metering. Experimental tool and suffix variants are restored after each serialized call. Return reports contain resolved `return_value`; `step_locals` reports the explicit namespace after writes and in-place effects.
 - `prompts/` — System prompt variants (`eval_default.txt`, `eval_sequenced.txt`, `eval_mutation_aware.txt`, `eval_coding_agent.txt`, etc.).
 - `test_cases/` — YAML test suites: `binding_operations`, `tool_selection`, `outcome_kinds`, `edge_cases`, `loop_outcomes`, `multi_step`, `null_handling`, `tool_selection_core`.
 - `assertions/` — Custom Python assertions: `binding_value.py`, `outcome_kind.py`, `raise_message.py`.
 
 #### Adding tests
 
-Each test case YAML entry needs: `description` (with `P-SLUG-NNN` Id), `vars` (natural_program, input_bindings, output_binding_names), and `assert` list. Callable bindings use `"__callable:<key>"` resolved from `_CALLABLE_FIXTURE_REGISTRY` in `provider.py`.
+Each test case YAML entry needs: `description` (with `P-SLUG-NNN` Id), `vars` (natural_program, input_bindings, output_binding_names), and `assert` list. Callable bindings use `"__callable:<key>"` resolved from `_FIXTURE_NAME_TO_CALLABLE` in `provider.py`.
 
 #### Useful flags
 

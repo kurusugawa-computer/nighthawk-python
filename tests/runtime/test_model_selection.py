@@ -15,7 +15,7 @@ from tests.support.host_controls import PreservingExecutor, RecordingHandler, Re
 
 def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
     constructions: list[object] = []
-    monkeypatch.setattr("nighthawk.runtime.step_executor._new_agent_step_executor", lambda configuration: constructions.append(configuration))
+    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", lambda configuration: constructions.append(configuration))
 
     @nh.function
     def function() -> None:
@@ -46,7 +46,7 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
     first, second = deterministic_model("A"), deterministic_model("B")
     observer = RequestObserver()
     configuration = nh.StepExecutorConfiguration(
-        execution_model=first, model_settings={"temperature": 0.25}, user_prompt_suffix_fragments=("inherited",)
+        execution_model=first, execution_model_settings={"temperature": 0.25}, user_prompt_suffix_fragments=("inherited",)
     )
     executor = PreservingExecutor(nh.AgentStepExecutor.from_configuration(configuration=configuration), {"allowed:B": second}, observer)
     selected: list[Any] = []
@@ -69,7 +69,7 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
             assert isinstance(active, PreservingExecutor)
             selected.append(active.executor.configuration.execution_model)
             assert active.observer is observer
-            assert active.executor.configuration.model_settings == {"temperature": 0.25}
+            assert active.executor.configuration.execution_model_settings == {"temperature": 0.25}
             assert active.executor.configuration.user_prompt_suffix_fragments == ("inherited",)
             assert nh.get_usage_meter() is meter
             assert nh.get_capabilities() == (observer,)
@@ -97,7 +97,7 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
         with nh.scope(step_executor_configuration=replacement) as replaced:
             assert isinstance(replaced, PreservingExecutor)
             assert replaced.executor.configuration is replacement
-            assert replaced.executor.configuration.model_settings == {}
+            assert replaced.executor.configuration.execution_model_settings == {}
     assert selected == [second]
 
 
@@ -143,7 +143,9 @@ def test_rejected_model_and_explicit_executor_replacement() -> None:
 @pytest.mark.parametrize("asynchronous", [False, True])
 def test_full_function_configuration_replaces_defaults_and_restores(asynchronous: bool) -> None:
     first, second = deterministic_model("A"), deterministic_model("B")
-    parent = nh.StepExecutorConfiguration(execution_model=first, model_settings={"temperature": 0.5}, user_prompt_suffix_fragments=("parent",))
+    parent = nh.StepExecutorConfiguration(
+        execution_model=first, execution_model_settings={"temperature": 0.5}, user_prompt_suffix_fragments=("parent",)
+    )
     replacement = nh.StepExecutorConfiguration(execution_model=second)
     executor = nh.AgentStepExecutor.from_configuration(configuration=parent)
     handler = RecordingHandler()
@@ -153,7 +155,7 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
         assert isinstance(active, nh.AgentStepExecutor)
         assert active.configuration is replacement
         assert active.configuration.execution_model is second
-        assert active.configuration.model_settings == {}
+        assert active.configuration.execution_model_settings == {}
         assert active.configuration.user_prompt_suffix_fragments == ()
 
     @nh.function

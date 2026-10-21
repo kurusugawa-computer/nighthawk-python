@@ -38,8 +38,7 @@ from nighthawk.runtime import ContextRequest, OperationFinished, StepEnvironment
 from nighthawk.runtime.environment import EnvironmentSource
 from nighthawk.runtime.expression import compile_expression, evaluate_compiled_expression
 from nighthawk.runtime.operations import OperationExecution, execute_operation_async, new_operation_request
-from nighthawk.runtime.step_contract import StepKind
-from nighthawk.runtime.step_result import Return
+from nighthawk.runtime.step_outcome import OutcomeKind, Return
 
 from .cases import CASES, Case, make_workspace
 from .prototype import Workspace
@@ -305,7 +304,7 @@ class StudyContextBuilder:
                 "nh_inspect(expression='value') describes a value; nh_inspect(source='task') discovers names using the same implementation.\n"
             )
         if self.guidance == "examples":
-            instructions += f"Examples: nh_eval(\"{root}.inspect(record)\"); nh_eval(\"{root}.environment.discover(source='task')\"); nh_assign('result', 'fetch_numbers()[-1]').\n"
+            instructions += f"Examples: nh_evaluate(\"{root}.inspect(record)\"); nh_evaluate(\"{root}.environment.discover(source='task')\"); nh_assign('result', 'fetch_numbers()[-1]').\n"
         prompt = instructions + text
         self.state.prompts.append(prompt)
         return [prompt]
@@ -390,13 +389,13 @@ async def run_trial(
     state = make_trial(case)
     configuration = nh.StepExecutorConfiguration(
         execution_model=model,
-        model_settings=model_settings if model_settings is not None else {"max_tokens": 4096, "timeout": 90},
+        execution_model_settings=model_settings if model_settings is not None else {"max_tokens": 4096, "timeout": 90},
         context_limits=nh.StepContextLimits(tool_result_max_tokens=512),
         json_renderer_style="strict",
     )
     executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
     executor.agent = BoundedAgent(executor.agent)
-    allowed: tuple[StepKind, ...] = ("pass", "return", "raise", "break", "continue") if case.outcome == "continue" else ("pass", "return", "raise")
+    allowed: tuple[OutcomeKind, ...] = ("pass", "return", "raise", "break", "continue") if case.outcome == "continue" else ("pass", "return", "raise")
     request = StepRequest(
         execution_reference=state.context.execution_reference,
         processed_natural_program=case.instructions[phrasing],
@@ -404,7 +403,7 @@ async def run_trial(
         output_binding_names=("result",),
         binding_name_to_type=state.workspace.output_name_to_type,
         return_annotation=object,
-        allowed_step_kinds=allowed,
+        allowed_outcome_kinds=allowed,
         allow_awaitable_return=True,
     )
     outcome, value, exception_type = "error", None, None

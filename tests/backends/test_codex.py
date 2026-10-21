@@ -191,7 +191,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
             ModelSettings,
             {
                 "executable": str(codex_executable),
-                "allowed_tool_names": ("nh_eval",),
+                "allowed_tool_names": ("nh_evaluate",),
                 "working_directory": str(tmp_path.resolve()),
             },
         )
@@ -206,7 +206,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
         )
 
         result = agent.run_sync(
-            "Compute 1 + 1 via nh_eval.",
+            "Compute 1 + 1 via nh_evaluate.",
             deps=step_context,
             toolsets=[toolset],
             model_settings=model_settings,
@@ -214,9 +214,9 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
 
     payload = json.loads(result.output)
     assert payload["prompt_received"] is True
-    assert payload["tool_names"] == ["nh_eval"]
+    assert payload["tool_names"] == ["nh_evaluate"]
 
-    tool_result = json.loads(payload["nh_eval_text"])
+    tool_result = json.loads(payload["nh_evaluate_text"])
     assert tool_result == 2
 
 

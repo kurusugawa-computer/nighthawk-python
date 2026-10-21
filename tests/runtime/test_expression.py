@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from nighthawk.runtime import OperationError, eval_expression, eval_expression_async
+from nighthawk.runtime import OperationError, evaluate_expression, evaluate_expression_async
 from tests.support.contexts import new_context as context_for
 
 
@@ -14,17 +14,17 @@ def test_helper_failures_propagate_without_retry_conversion(exception_type: type
         raise error
 
     with pytest.raises(exception_type) as caught:
-        eval_expression(context_for(fail=fail), "fail()")
+        evaluate_expression(context_for(fail=fail), "fail()")
     assert caught.value is error
 
 
 def test_lookup_failure_is_recoverable_and_named_assignment_is_rejected() -> None:
     context = context_for()
     with pytest.raises(OperationError) as caught:
-        eval_expression(context, "missing")
+        evaluate_expression(context, "missing")
     assert caught.value.phase == "evaluation"
     with pytest.raises(OperationError) as caught:
-        eval_expression(context, "(value := 7)")
+        evaluate_expression(context, "(value := 7)")
     assert caught.value.phase == "admission"
     assert not caught.value.evaluation_started
 
@@ -138,24 +138,24 @@ def test_nested_awaitable_remains_application_value_after_one_dsl_await() -> Non
 
 
 @pytest.mark.asyncio
-async def test_eval_expression_async_supports_top_level_await() -> None:
+async def test_evaluate_expression_async_supports_top_level_await() -> None:
     async def calculate(a: int, b: int) -> int:
         return a + b * 8
 
     step_context = context_for()
     step_context.record_assignment("calculate", calculate)
 
-    result = await eval_expression_async(step_context, "await calculate(1, 2)")
+    result = await evaluate_expression_async(step_context, "await calculate(1, 2)")
     assert result == 17
 
 
 @pytest.mark.asyncio
-async def test_eval_expression_async_awaits_returned_awaitable_implicitly() -> None:
+async def test_evaluate_expression_async_awaits_returned_awaitable_implicitly() -> None:
     async def calculate(a: int, b: int) -> int:
         return a + b * 8
 
     step_context = context_for()
     step_context.record_assignment("calculate", calculate)
 
-    result = await eval_expression_async(step_context, "calculate(1, 2)")
+    result = await evaluate_expression_async(step_context, "calculate(1, 2)")
     assert result == 17

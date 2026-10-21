@@ -27,7 +27,7 @@ def scripted_calls(case_name: str, root: str) -> tuple[list[tuple[str, dict[str,
         calls.append(("nh_assign", {"target_path": target, "expression": expression}))
 
     def evaluate(expression: str) -> None:
-        calls.append(("nh_eval", {"expression": expression}))
+        calls.append(("nh_evaluate", {"expression": expression}))
 
     final: dict[str, Any] = {"kind": "pass"}
     match case_name:
@@ -118,7 +118,7 @@ def test_dedicated_and_helper_discovery_return_identical_bounded_content(inspect
         expression = f"{root}.environment.discover(source='task')" if inspection == "names" else f"{root}.inspect(record)"
         with nh.run(StubExecutor()):
             dedicated = await toolset.call_tool("nh_inspect", arguments, run_context, tool_name_to_tool["nh_inspect"])
-            helper = await toolset.call_tool("nh_eval", {"expression": expression}, run_context, tool_name_to_tool["nh_eval"])
+            helper = await toolset.call_tool("nh_evaluate", {"expression": expression}, run_context, tool_name_to_tool["nh_evaluate"])
         assert dedicated == helper
 
     asyncio.run(execute())

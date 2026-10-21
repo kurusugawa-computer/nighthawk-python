@@ -87,7 +87,7 @@ def test_explicit_tool_duplicates_and_namespace_independence() -> None:
         assert nh.get_tools() == (tool,)
         with pytest.raises(nh.ToolDeclarationError), nh.scope(tools=nh.Extend([lookup])):
             pass
-        with pytest.raises(nh.NameConflictError), nh.scope(tools=[Tool(lookup, name="nh_eval")]):
+        with pytest.raises(nh.NameConflictError), nh.scope(tools=[Tool(lookup, name="nh_evaluate")]):
             pass
     assert issubclass(nh.ToolNameConflictError, nh.ToolDeclarationError)
     assert issubclass(nh.ToolNameConflictError, nh.NameConflictError)

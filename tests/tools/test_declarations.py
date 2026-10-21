@@ -25,12 +25,12 @@ def read_step_execution_id(run_context: RunContext[StepContext]) -> str:
 
 
 def test_builtin_tools_are_always_visible() -> None:
-    assert {"nh_eval", "nh_assign"} <= _visible_tool_name_set()
+    assert {"nh_evaluate", "nh_assign"} <= _visible_tool_name_set()
 
     with nh.run(StubExecutor()):
-        assert {"nh_eval", "nh_assign"} <= _visible_tool_name_set()
+        assert {"nh_evaluate", "nh_assign"} <= _visible_tool_name_set()
         with nh.scope(tools=[]):
-            assert _visible_tool_name_set() == {"nh_eval", "nh_assign"}
+            assert _visible_tool_name_set() == {"nh_evaluate", "nh_assign"}
 
 
 def test_get_tools_requires_active_run() -> None:
@@ -109,7 +109,7 @@ def test_builtin_tool_name_cannot_be_shadowed() -> None:
     with (
         nh.run(StubExecutor()),
         pytest.raises(ToolDeclarationError, match="built-in"),
-        nh.scope(tools=[Tool(greet, name="nh_eval")]),
+        nh.scope(tools=[Tool(greet, name="nh_evaluate")]),
     ):
         pass
 

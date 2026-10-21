@@ -1,40 +1,54 @@
+"""Model-proposed control flow, before Python expressions have been evaluated.
+
+These transport schemas describe execute responses, not committed Python values.
+The runtime resolves a ModelOutcome into a StepCandidate with a StepOutcome.
+"""
+
 from __future__ import annotations
 
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-type StepKind = Literal["pass", "return", "break", "continue", "raise"]
-
-STEP_KINDS: tuple[StepKind, ...] = get_args(StepKind.__value__)
+from .step_outcome import OutcomeKind
 
 
-class PassStepOutcome(BaseModel):
+class ModelPass(BaseModel):
+    """Propose continuing with the next Python statement."""
+
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["pass"]
 
 
-class ReturnStepOutcome(BaseModel):
+class ModelReturn(BaseModel):
+    """Propose a Python expression to evaluate once as the return value."""
+
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["return"]
     return_expression: str
 
 
-class BreakStepOutcome(BaseModel):
+class ModelBreak(BaseModel):
+    """Propose exiting the enclosing Python loop."""
+
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["break"]
 
 
-class ContinueStepOutcome(BaseModel):
+class ModelContinue(BaseModel):
+    """Propose starting the next iteration of the enclosing Python loop."""
+
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["continue"]
 
 
-class RaiseStepOutcome(BaseModel):
+class ModelRaise(BaseModel):
+    """Propose an exception message and an optional exception-type expression."""
+
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["raise"]
@@ -42,27 +56,24 @@ class RaiseStepOutcome(BaseModel):
     raise_error_type: str | None = None
 
 
-type StepOutcome = Annotated[
-    PassStepOutcome | ReturnStepOutcome | BreakStepOutcome | ContinueStepOutcome | RaiseStepOutcome,
+type ModelOutcome = Annotated[
+    ModelPass | ModelReturn | ModelBreak | ModelContinue | ModelRaise,
     Field(discriminator="kind"),
 ]
 
 
 # OpenAI / Codex structured outputs require the root JSON schema to be a single object (no anyOf at root level).
-# StepOutcome is a discriminated union whose JSON schema produces anyOf at root, which is rejected by these providers.
+# ModelOutcome is a discriminated union whose JSON schema produces anyOf at root, which is rejected by these providers.
 # By placing the union inside a ``result`` field, the anyOf moves to a nested level where it is accepted.
 # Additionally, each variant uses ``additionalProperties: false`` so that kind-specific properties are enforced (e.g. ``kind: "return"`` cannot include ``raise_message``).
 
 
-class StepFinalResult(BaseModel):
-    """Envelope that wraps StepOutcome for LLM structured output."""
+class ModelStepResponse(BaseModel):
+    """Envelope that wraps ModelOutcome for LLM structured output."""
 
     model_config = ConfigDict(extra="forbid")
 
-    result: Annotated[
-        PassStepOutcome | ReturnStepOutcome | BreakStepOutcome | ContinueStepOutcome | RaiseStepOutcome,
-        Field(discriminator="kind"),
-    ]
+    result: ModelOutcome
 
 
 def _build_pass_variant_schema() -> dict[str, object]:
@@ -135,7 +146,7 @@ def _build_raise_variant_schema(
 
 
 def _build_variant_schema(
-    kind: StepKind,
+    kind: OutcomeKind,
     *,
     raise_error_type_binding_names: tuple[str, ...],
 ) -> dict[str, object]:
@@ -152,9 +163,9 @@ def _build_variant_schema(
             return _build_raise_variant_schema(raise_error_type_binding_names=raise_error_type_binding_names)
 
 
-def build_step_json_schema(
+def build_model_response_schema(
     *,
-    allowed_kinds: tuple[StepKind, ...],
+    allowed_kinds: tuple[OutcomeKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> dict[str, object]:
     if not allowed_kinds:
@@ -171,7 +182,7 @@ def build_step_json_schema(
 
     schema: dict[str, object] = {
         "type": "object",
-        "title": "StepFinalResult",
+        "title": "ModelStepResponse",
         "properties": {"result": result_schema},
         "required": ["result"],
         "additionalProperties": False,
@@ -180,9 +191,9 @@ def build_step_json_schema(
     return schema
 
 
-def build_step_system_prompt_suffix_fragment(
+def build_model_response_instructions(
     *,
-    allowed_kinds: tuple[StepKind, ...],
+    allowed_kinds: tuple[OutcomeKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> str:
     if not allowed_kinds:

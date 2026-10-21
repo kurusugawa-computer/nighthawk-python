@@ -46,7 +46,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         assert "configured-user" in prompt and "scoped-user" in prompt
         assert "<<<NH:PROGRAM>>>" in prompt
         assert "You are executing one Nighthawk Natural" in prompt
-        assert {tool.name for tool in information.function_tools} == {"nh_eval", "nh_assign", "custom_tool"}
+        assert {tool.name for tool in information.function_tools} == {"nh_evaluate", "nh_assign", "custom_tool"}
         assert information.model_settings is not None
         assert information.model_settings.get("temperature") == 0.1
         assert information.model_settings.get("max_tokens") == 77
@@ -54,8 +54,8 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         schema = json.dumps(output_tool.parameters_json_schema)
         completed = {part.tool_name for message in messages for part in message.parts if isinstance(part, ToolReturnPart)}
         observed.append((prompt, schema, dict(information.model_settings)))
-        if "nh_eval" not in completed:
-            parts = [ToolCallPart("nh_eval", {"expression": "invoked.append('eval')"}, "evaluate")]
+        if "nh_evaluate" not in completed:
+            parts = [ToolCallPart("nh_evaluate", {"expression": "invoked.append('eval')"}, "evaluate")]
         elif "custom_tool" not in completed:
             parts = [ToolCallPart("custom_tool", {}, "custom")]
         elif "nh_assign" not in completed:
@@ -81,7 +81,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
     monkeypatch.setattr(models, "infer_model", select)
     configuration = nh.StepExecutorConfiguration(
         execution_model="test:managed-local" if string_selection else model,
-        model_settings={"temperature": 0.1},
+        execution_model_settings={"temperature": 0.1},
         system_prompt_suffix_fragments=("configured-system",),
         user_prompt_suffix_fragments=("configured-user",),
     )
@@ -188,7 +188,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
             assert body["temperature"] == (0.1 if self.key == keys[0] else 0.2)
             assert all(key not in request.content.decode() for key in keys)
             requests.append((self.key, body))
-            output_tool = next(tool for tool in body["tools"] if tool["name"] not in {"nh_eval", "nh_assign"})
+            output_tool = next(tool for tool in body["tools"] if tool["name"] not in {"nh_evaluate", "nh_assign"})
             return httpx2.Response(
                 200,
                 json={
@@ -229,7 +229,9 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
             selected_models = [OpenAIResponsesModel("gpt-4o", provider=OpenAIProvider(openai_client=client)) for client in clients]
             configurations = [
                 nh.StepExecutorConfiguration(
-                    execution_model=model, model_settings={"openai_store": False, "temperature": 0.1 + index / 10}, tokenizer_encoding="o200k_base"
+                    execution_model=model,
+                    execution_model_settings={"openai_store": False, "temperature": 0.1 + index / 10},
+                    tokenizer_encoding="o200k_base",
                 )
                 for index, model in enumerate(selected_models)
             ]
@@ -257,9 +259,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                         assert isinstance(caught.value, nh.oversight.StepAbortedError)
                         assert caught.value.subject == "step_commit"
                     assert nh.get_step_executor() is parent
-                derived = configurations[0].model_copy(
-                    update={"prompts": nh.StepPromptTemplates(step_system_prompt_template="Replacement system prompt")}
-                )
+                derived = configurations[0].model_copy(update={"prompts": nh.StepPromptTemplates(system_prompt_template="Replacement system prompt")})
                 with nh.scope(step_executor_configuration=derived):
                     assert derived.execution_model is selected_models[0]
                     assert await workflow() == 7

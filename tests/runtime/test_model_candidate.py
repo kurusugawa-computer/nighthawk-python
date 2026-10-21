@@ -7,7 +7,7 @@ from nighthawk.errors import ExecutionError, NighthawkError
 from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.step_contract import PassStepOutcome, RaiseStepOutcome, ReturnStepOutcome
+from nighthawk.runtime.model_outcome import ModelPass, ModelRaise, ModelReturn
 from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
@@ -20,7 +20,7 @@ def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: n
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(request, RaiseStepOutcome(kind="raise", raise_message="failed", raise_error_type=error_type), {})
+                lambda: resolve_model_candidate(request, ModelRaise(kind="raise", raise_message="failed", raise_error_type=error_type), {})
             )
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
@@ -58,7 +58,7 @@ async def test_asynchronous_natural_awaits_model_return_expression() -> None:
                 return 17
 
             step_context.record_assignment("calculate", calculate)
-            return await resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="calculate()"), {})
+            return await resolve_model_candidate(request, ModelReturn(kind="return", return_expression="calculate()"), {})
 
     with nh.run(AssertingExecutor()):
 
@@ -83,9 +83,7 @@ def test_synchronous_natural_rejects_awaitable_model_return_expression():
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             step_context = request.step_context
             step_context.record_assignment("result", AwaitableInt())
-            return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="result"), {})
-            )
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, ModelReturn(kind="return", return_expression="result"), {}))
 
     with nh.run(AssertingExecutor()):
 
@@ -133,7 +131,7 @@ def test_model_return_expression_rejects_unbound_name():
 def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            outcome = RaiseStepOutcome(kind="raise", raise_message="failed") if raising else PassStepOutcome(kind="pass")
+            outcome = ModelRaise(kind="raise", raise_message="failed") if raising else ModelPass(kind="pass")
             return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, {"undeclared": 1}))
 
     @nh.function
@@ -166,7 +164,7 @@ def test_denied_return_never_calls_inspector_or_evaluator() -> None:
         return 0
 
     with (
-        nh.run(ModelResponseExecutor(ReturnStepOutcome(kind="return", return_expression="calls.append('evaluated')"))),
+        nh.run(ModelResponseExecutor(ModelReturn(kind="return", return_expression="calls.append('evaluated')"))),
         nh.scope(oversight=nh.oversight.Oversight(inspect_operation=inspect_expression)),
         pytest.raises(nh.ExecutionError),
     ):

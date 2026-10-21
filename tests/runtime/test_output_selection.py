@@ -7,7 +7,7 @@ from pydantic import AfterValidator, ValidationError
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle
 from nighthawk.oversight import Accept, Oversight, Rewrite
-from nighthawk.runtime import Pass, Raise, StepCandidate, StepDefinition, StepRequest, StepResult
+from nighthawk.runtime import Pass, Raise, StepCandidate, StepDefinition, StepOutcome, StepRequest
 from nighthawk.testing import CallbackExecutor, ScriptedExecutor, StepResponse, pass_response
 from tests.support.executors import InspectingExecutor
 
@@ -15,7 +15,7 @@ from tests.support.executors import InspectingExecutor
 @pytest.mark.parametrize("selection", ["omitted", "unset", "empty", "explicit", "snapshot"])
 @pytest.mark.asyncio
 async def test_candidate_selects_exact_outputs_before_validation_and_assignment(
-    execute: Callable[..., Awaitable[StepResult]], selection: str
+    execute: Callable[..., Awaitable[StepOutcome]], selection: str
 ) -> None:
     validated: list[int] = []
     assigned_binding_name_to_value: dict[str, object] = {}
@@ -81,7 +81,7 @@ async def test_candidate_selects_exact_outputs_before_validation_and_assignment(
 
 @pytest.mark.asyncio
 async def test_explicit_selection_excludes_invalid_initial_output_and_keeps_live_identity(
-    execute: Callable[..., Awaitable[StepResult]],
+    execute: Callable[..., Awaitable[StepOutcome]],
 ) -> None:
     shared = []
     assigned_binding_name_to_value: dict[str, object] = {}
@@ -121,7 +121,7 @@ def test_output_selection_rejects_invalid_shapes(factory, invalid) -> None:
 @pytest.mark.parametrize("empty", [False, True])
 @pytest.mark.asyncio
 async def test_testing_executors_preserve_omitted_and_empty_selection(
-    execute: Callable[..., Awaitable[StepResult]], callback: bool, empty: bool
+    execute: Callable[..., Awaitable[StepOutcome]], callback: bool, empty: bool
 ) -> None:
     response = pass_response(binding_name_to_value={}) if empty else pass_response()
     executor = CallbackExecutor(lambda call: response) if callback else ScriptedExecutor([response])

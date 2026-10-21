@@ -5,11 +5,10 @@ from typing import Any
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, evaluate_expression
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.step_contract import ReturnStepOutcome
-from nighthawk.tools.assignment import eval_expression
+from nighthawk.runtime.model_outcome import ModelReturn
 from tests.support.executors import StubExecutor
 
 _module_value = 99
@@ -95,9 +94,7 @@ def test_child_without_cells_does_not_borrow_parent_python_cells() -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             expression = "child()" if "Call the child" in request.processed_natural_program else "_module_value"
-            return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression=expression), {})
-            )
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, ModelReturn(kind="return", return_expression=expression), {}))
 
     with nh.run(Executor()):
         assert parent() == 99
@@ -178,9 +175,7 @@ def test_nested_decorated_function_owns_its_own_cells() -> None:
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            return run_coroutine_synchronously(
-                lambda: resolve_model_candidate(request, ReturnStepOutcome(kind="return", return_expression="value"), {})
-            )
+            return run_coroutine_synchronously(lambda: resolve_model_candidate(request, ModelReturn(kind="return", return_expression="value"), {}))
 
     with nh.run(Executor()):
         assert parent() == 8
@@ -203,7 +198,7 @@ def test_global_rebinding_during_an_operation_is_visible_to_nested_expressions()
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            assert eval_expression(request.step_context, "(change_global(), (lambda: _module_value)())[1]") == 11
+            assert evaluate_expression(request.step_context, "(change_global(), (lambda: _module_value)())[1]") == 11
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     try:

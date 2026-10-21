@@ -11,14 +11,14 @@ import nighthawk as nh
 from nighthawk.errors import ExecutionError
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
 from nighthawk.runtime import StepDefinition
-from nighthawk.runtime.step_result import StepResult
+from nighthawk.runtime.step_outcome import StepOutcome
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 
 
 @pytest.mark.parametrize("name", ["len", "injected", "caller_value"])
 @pytest.mark.asyncio
-async def test_missing_reads_do_not_fall_back(execute: Callable[..., Awaitable[StepResult]], name: str) -> None:
+async def test_missing_reads_do_not_fall_back(execute: Callable[..., Awaitable[StepOutcome]], name: str) -> None:
     caller_value = 99
     executor = ScriptedExecutor([])
     events: list[StepFinished] = []
@@ -38,7 +38,7 @@ async def test_missing_reads_do_not_fall_back(execute: Callable[..., Awaitable[S
 
 
 @pytest.mark.asyncio
-async def test_type_contracts_do_not_use_caller_types(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_type_contracts_do_not_use_caller_types(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     CallerOnlyType = int  # noqa: N806
     executor = ScriptedExecutor([])
     with nh.run(executor), pytest.raises(nh.ExecutionError, match="CallerOnlyType"):

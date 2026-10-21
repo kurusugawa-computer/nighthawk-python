@@ -85,7 +85,7 @@ def make_executor() -> nh.AgentStepExecutor:
         nonlocal requests
         requests += 1
         if requests == 1:
-            return ModelResponse(parts=[ToolCallPart("nh_eval", {"expression": "forbidden()"}, "proposal")])
+            return ModelResponse(parts=[ToolCallPart("nh_evaluate", {"expression": "forbidden()"}, "proposal")])
         assert requests == 2
         assert any(isinstance(part, ToolReturnPart) and part.outcome == "denied" for message in messages for part in message.parts)
         return ModelResponse(
@@ -135,24 +135,24 @@ This example extends the definitions above.
 The executor owns its choice of the next operation and does not inspect or modify private failure state.
 
 ```py
-from nighthawk.runtime import OperationRejectedError, Return, StepCandidate, StepRequest, eval_expression, eval_expression_async
+from nighthawk.runtime import OperationRejectedError, Return, StepCandidate, StepRequest, evaluate_expression, evaluate_expression_async
 
 
 class CorrectingExecutor:
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         try:
-            value = eval_expression(request.step_context, "forbidden()")
+            value = evaluate_expression(request.step_context, "forbidden()")
         except OperationRejectedError as refusal:
             assert refusal.rejection.reason == "This helper is unavailable."
-            value = eval_expression(request.step_context, "1 + 1")
+            value = evaluate_expression(request.step_context, "1 + 1")
         return StepCandidate(outcome=Return(value))
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
         try:
-            value = await eval_expression_async(request.step_context, "forbidden()")
+            value = await evaluate_expression_async(request.step_context, "forbidden()")
         except OperationRejectedError as refusal:
             assert refusal.rejection.reason == "This helper is unavailable."
-            value = await eval_expression_async(request.step_context, "1 + 1")
+            value = await evaluate_expression_async(request.step_context, "1 + 1")
         return StepCandidate(outcome=Return(value))
 
 
@@ -205,7 +205,7 @@ Function-tool refusals consume ordinary request/tool-call usage; rejected output
 Host stops and exhausted limits remain effective even if another output candidate was accepted earlier in that response.
 
 The aggregate `UsageMeter` is not an in-progress request gate.
-Use the existing [request usage and admission hooks](runtime-configuration.md#request-usage-and-admission) for controls between requests.
+Use the existing [request usage and admission hooks](host-integration.md#request-usage-and-admission) for controls between requests.
 Coding-agent internal inference calls retain the backend's own limits and observability; this feature does not claim to observe them individually.
 Unlimited configurations and arbitrary Python executor loops have no universal termination guarantee.
 

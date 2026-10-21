@@ -6,9 +6,8 @@ from types import CellType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_expression_async, evaluate_expression_async
 from nighthawk.runtime.environment import StepEnvironment
-from nighthawk.tools.assignment import assign_tool_async, eval_expression_async
 
 
 def test_precedence_and_explicit_source_selection() -> None:
@@ -161,9 +160,9 @@ def test_nested_natural_counter_proof() -> None:
             assert context.execution_reference.step_execution_id is not None
             parent_execution_id_list.append(context.execution_reference.step_execution_id)
             for i in range(1, 11):
-                await assign_tool_async(context, "i", str(i))
+                await assign_expression_async(context, "i", str(i))
                 with nh.scope(task_references={"i": context.environment.resolve("i")}):
-                    messages.append(await eval_expression_async(context, "block_two()"))
+                    messages.append(await evaluate_expression_async(context, "block_two()"))
             return StepCandidate(outcome=Pass(), binding_name_to_value={"messages": messages})
 
     with nh.run(Executor()):

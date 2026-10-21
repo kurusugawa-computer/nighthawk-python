@@ -303,7 +303,7 @@ def test_codex_mcp_executes_on_owner_loop_and_preserves_original_failure(tmp_pat
         agent = Agent(model=CodexModel(), deps_type=nh.StepContext, output_type=str)
         from typing import cast
 
-        settings = cast(ModelSettings, {"executable": str(executable), "allowed_tool_names": ("nh_eval",), "working_directory": str(tmp_path)})
+        settings = cast(ModelSettings, {"executable": str(executable), "allowed_tool_names": ("nh_evaluate",), "working_directory": str(tmp_path)})
         with nh.run(StubExecutor()):
             tools = FunctionToolset(get_visible_tools())
             if fail:
@@ -312,7 +312,7 @@ def test_codex_mcp_executes_on_owner_loop_and_preserves_original_failure(tmp_pat
                 assert caught.value is context.operation_failure is failure
             else:
                 result = await asyncio.wait_for(agent.run("Call application.", deps=context, toolsets=[tools], model_settings=settings), timeout=10)
-                assert "nh_eval_text" in result.output
+                assert "nh_evaluate_text" in result.output
 
     asyncio.run(execute())
     assert calls == ["application"]

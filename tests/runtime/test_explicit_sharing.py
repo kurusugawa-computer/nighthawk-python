@@ -15,9 +15,9 @@ from nighthawk.runtime import (
     StepCandidate,
     StepDefinition,
     StepEnvironment,
+    StepOutcome,
     StepRequest,
-    StepResult,
-    eval_expression_async,
+    evaluate_expression_async,
 )
 from tests.support.prompts import build_user_prompt_text
 
@@ -27,7 +27,7 @@ _module_value = object()
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asynchronous_child", [False, True])
 async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
-    execute: Callable[..., Awaitable[StepResult]], asynchronous_child: bool
+    execute: Callable[..., Awaitable[StepOutcome]], asynchronous_child: bool
 ) -> None:
     shared: list[int] = []
     child_cell = object()
@@ -106,13 +106,13 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
                 discovered_names.update(item["name"] for item in page["names"])
                 if page["next_cursor"] is None:
                     break
-                page = await eval_expression_async(context, page["continuation"])
+                page = await evaluate_expression_async(context, page["continuation"])
             assert not discovered_names & forbidden_names
             for expression in ("parent_input", "(lambda: parent_temporary)()", "list(parent_input for i in range(1))"):
                 with pytest.raises(OperationError) as caught:
-                    await eval_expression_async(context, expression)
+                    await evaluate_expression_async(context, expression)
                 assert isinstance(caught.value.__cause__, NameError)
-            assert await eval_expression_async(context, "(lambda: shared_value)()") is shared
+            assert await evaluate_expression_async(context, "(lambda: shared_value)()") is shared
             prompt = build_user_prompt_text(processed_natural_program=request.processed_natural_program, step_context=context)
             assert "PARENT_INPUT_MARKER" not in prompt
             assert "PARENT_TEMPORARY_MARKER" not in prompt

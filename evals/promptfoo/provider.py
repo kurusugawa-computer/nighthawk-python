@@ -1,14 +1,14 @@
 """Custom promptfoo provider wrapping Nighthawk AgentStepExecutor.
 
-Executes a Natural block via AgentStepExecutor.run_step() and returns
-structured output for promptfoo assertion evaluation.
+Executes a trusted evaluation fixture through the public embedded-step boundary.
+Reports committed values, resolved outcomes, and completed-run usage.
 
 Usage in promptfooconfig.yaml:
     providers:
       - id: file://provider.py
         config:
           model: "openai-responses:gpt-5.6-luna"
-          tool_preset: "baseline"  # or "eval_functional", "py_functional", etc.
+          tool_preset: "eval_examples"  # or "eval_functional", "eval_mutation_hint"
           suffix_variant: "control"  # or "legacy", "examples"
 """
 
@@ -17,8 +17,12 @@ from __future__ import annotations
 import builtins
 import json
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from threading import RLock
 from typing import Any
+from unittest.mock import patch
 
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
@@ -26,42 +30,23 @@ from pydantic_ai.tools import Tool
 import nighthawk as nh
 import nighthawk.runtime.step_executor as _step_executor_module
 import nighthawk.tools.declarations as _declarations_module
+from nighthawk.lifecycle import StepFinished, StepLifecycle, StepRaised
 from nighthawk.natural.blocks import parse_frontmatter, validate_frontmatter_deny
+from nighthawk.runtime import Return, StepDefinition, evaluate_expression, execute_step
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_contract import StepKind
-from nighthawk.runtime.step_executor import AgentStepExecutor
-from nighthawk.tools.assignment import assign_tool, eval_expression
-from nighthawk.tools.contracts import ToolBoundaryError
-from nighthawk.tools.declarations import _builtin_tool_name_to_tool
-
-# ---------------------------------------------------------------------------
-# Token usage capture — monkey-patch _run_agent to store RunUsage
-# ---------------------------------------------------------------------------
-
-_original_run_agent = AgentStepExecutor._run_agent
-
-
-async def _capturing_run_agent(self: AgentStepExecutor, **kwargs: Any) -> Any:  # type: ignore[override]
-    result = await _original_run_agent(self, **kwargs)
-    try:
-        self._last_run_usage = result.usage()  # type: ignore[attr-defined]
-    except Exception:
-        self._last_run_usage = None  # type: ignore[attr-defined]
-    return result
-
-
-AgentStepExecutor._run_agent = _capturing_run_agent  # type: ignore[assignment,method-assign]
+from nighthawk.runtime.step_outcome import OUTCOME_KINDS, OutcomeKind
+from nighthawk.tools.assignment import assign_tool
 
 # ---------------------------------------------------------------------------
 # Suffix fragment variant infrastructure
 # ---------------------------------------------------------------------------
 
-_original_suffix_builder = _step_executor_module.build_step_system_prompt_suffix_fragment
+_original_suffix_builder = _step_executor_module.build_model_response_instructions
 
 
 def _build_suffix_legacy(
     *,
-    allowed_kinds: tuple[StepKind, ...],
+    allowed_kinds: tuple[OutcomeKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> str:
     """Legacy production suffix text before schema-semantic shortening."""
@@ -92,12 +77,12 @@ def _build_suffix_legacy(
 
 def _build_suffix_examples(
     *,
-    allowed_kinds: tuple[StepKind, ...],
+    allowed_kinds: tuple[OutcomeKind, ...],
     raise_error_type_binding_names: tuple[str, ...],
 ) -> str:
     """Variant B — Example-per-kind: one JSON example per allowed kind."""
     sections: list[str] = [
-        'StepFinalResult: output {"result": {...}} with the correct kind.\n',
+        'ModelStepResponse: output {"result": {...}} with the correct kind.\n',
         "Examples:",
     ]
 
@@ -126,20 +111,10 @@ def _build_suffix_examples(
     return "\n".join(sections) + "\n"
 
 
-_SUFFIX_VARIANT_BUILDERS: dict[str, Any] = {
+_SUFFIX_NAME_TO_BUILDER: dict[str, Any] = {
     "legacy": _build_suffix_legacy,
     "examples": _build_suffix_examples,
 }
-
-
-def _install_suffix_variant(variant_name: str) -> None:
-    """Install a suffix fragment builder variant by monkey-patching the step_executor module."""
-    if variant_name == "control":
-        _step_executor_module.build_step_system_prompt_suffix_fragment = _original_suffix_builder
-    elif variant_name in _SUFFIX_VARIANT_BUILDERS:
-        _step_executor_module.build_step_system_prompt_suffix_fragment = _SUFFIX_VARIANT_BUILDERS[variant_name]
-    else:
-        raise ValueError(f"Unknown suffix_variant: {variant_name!r}. Available: control, {', '.join(_SUFFIX_VARIANT_BUILDERS)}")
 
 
 # ---------------------------------------------------------------------------
@@ -147,21 +122,14 @@ def _install_suffix_variant(variant_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _eval_expression_or_raise(run_context: RunContext[StepContext], expression: str) -> object:
-    try:
-        return eval_expression(run_context.deps, expression)
-    except Exception as exception:
-        raise ToolBoundaryError(kind="execution", message=str(exception), guidance="Fix the expression and retry.") from exception
-
-
-def _build_eval_tool(*, name: str, description: str) -> Tool[StepContext]:
+def _build_evaluation_tool(*, name: str, description: str) -> Tool[StepContext]:
     """Build a Python expression evaluation tool with a given name and description."""
 
     def tool_function(run_context: RunContext[StepContext], expression: str) -> object:
-        return _eval_expression_or_raise(run_context, expression)
+        return evaluate_expression(run_context.deps, expression)
 
     tool_function.__name__ = name
-    return Tool(tool_function, name=name, metadata={"nighthawk.provided": True}, description=description)
+    return Tool(tool_function, name=name, metadata={"nighthawk.provided": True, "nighthawk.operation_kind": "evaluation"}, description=description)
 
 
 def _build_assign_tool(*, name: str, description: str) -> Tool[StepContext]:
@@ -171,17 +139,17 @@ def _build_assign_tool(*, name: str, description: str) -> Tool[StepContext]:
         return assign_tool(run_context.deps, target_path, expression)
 
     tool_function.__name__ = name
-    return Tool(tool_function, name=name, metadata={"nighthawk.provided": True}, description=description)
+    return Tool(tool_function, name=name, metadata={"nighthawk.provided": True, "nighthawk.operation_kind": "assignment"}, description=description)
 
 
 # Tool description variants
-_EVAL_DESCRIPTIONS = {
+_EVALUATION_STYLE_TO_DESCRIPTION = {
     "functional": "Evaluate a Python expression and return the result. Use for inspecting values, calling functions, and mutating objects in-place.",
     "examples": "Evaluate a Python expression and return the result. Examples: len(items), data.get('key', 0), items.sort(), add(3, 7).",
     "mutation_hint": "Evaluate a Python expression and return the result. Use for reading values, calling functions, and mutating objects IN-PLACE (e.g., items.sort(), data.update({...})).",
 }
 
-_ASSIGN_DESCRIPTIONS = {
+_ASSIGNMENT_STYLE_TO_DESCRIPTION = {
     "functional": "Rebind a name or set a nested field to a new value. target_path format: name(.field)*.",
     "examples": "Set a write binding to a new value. target_path: a name or dotted path (e.g., 'result', 'obj.field'). expression: evaluated as Python.",
     "mutation_hint": "Set a write binding (<:name>) to a new value. target_path: name or dotted path. expression: Python expression.",
@@ -199,64 +167,63 @@ def _build_tool_preset(preset_name: str) -> dict[str, Tool[StepContext]]:
     tool_name_key, description_style = parts
 
     if tool_name_key == "eval":
-        eval_name = "nh_eval"
-        descriptions = _EVAL_DESCRIPTIONS
+        evaluation_name = "nh_evaluate"
+        style_to_description = _EVALUATION_STYLE_TO_DESCRIPTION
     else:
         raise ValueError(f"Unknown tool name key in preset: {tool_name_key!r}")
 
-    if description_style not in descriptions:
+    if description_style not in style_to_description:
         raise ValueError(f"Unknown description style in preset: {description_style!r}")
 
-    eval_tool = _build_eval_tool(name=eval_name, description=descriptions[description_style])
-    assign_tool_obj = _build_assign_tool(
+    evaluation_tool = _build_evaluation_tool(name=evaluation_name, description=style_to_description[description_style])
+    assignment_tool = _build_assign_tool(
         name="nh_assign",
-        description=_ASSIGN_DESCRIPTIONS[description_style],
+        description=_ASSIGNMENT_STYLE_TO_DESCRIPTION[description_style],
     )
 
     return {
-        "nh_assign": assign_tool_obj,
-        eval_name: eval_tool,
+        "nh_assign": assignment_tool,
+        evaluation_name: evaluation_tool,
     }
 
 
-def _install_tool_preset(preset_name: str) -> None:
-    """Replace the built-in tool set with a specific tool preset."""
-    _builtin_tool_name_to_tool.clear()
-    _builtin_tool_name_to_tool.update(_build_tool_preset(preset_name))
-    _declarations_module._builtin_tools_registered = True  # noqa: SLF001
+_VARIANT_LOCK = RLock()
 
 
-# ---------------------------------------------------------------------------
-# Existing provider infrastructure
-# ---------------------------------------------------------------------------
+@contextmanager
+def _evaluation_variants(tool_preset: str, suffix_variant: str) -> Iterator[tuple[str, ...]]:
+    """Keep experimental module replacements local to one serialized evaluation."""
+    tool_name_to_tool = _build_tool_preset(tool_preset)
+    if suffix_variant == "control":
+        builder = _original_suffix_builder
+    else:
+        try:
+            builder = _SUFFIX_NAME_TO_BUILDER[suffix_variant]
+        except KeyError as exception:
+            raise ValueError(f"Unknown suffix_variant: {suffix_variant!r}") from exception
+    with (
+        _VARIANT_LOCK,
+        patch.object(_step_executor_module, "build_model_response_instructions", builder),
+        patch.object(_declarations_module, "_builtin_tool_name_to_tool", tool_name_to_tool),
+        patch.object(_declarations_module, "_builtin_tools_registered", True),
+    ):
+        yield tuple(tool_name_to_tool)
 
 
-def _compute_allowed_step_kinds(
-    denied_step_kinds: tuple[str, ...],
-    *,
-    is_in_loop: bool = False,
-) -> tuple[str, ...]:
-    """Compute allowed step kinds from denied kinds (mirrors runner._compute_allowed_step_kinds)."""
-    base_allowed_kinds: list[str] = ["pass", "return", "raise"]
-    if is_in_loop:
-        base_allowed_kinds.extend(["break", "continue"])
-    return tuple(kind for kind in base_allowed_kinds if kind not in denied_step_kinds)
-
-
-def _resolve_global_bindings(raw_global_bindings: dict[str, Any]) -> dict[str, object]:
+def _resolve_global_bindings(raw_global_name_to_value: dict[str, Any]) -> dict[str, object]:
     """Resolve global binding specifications to actual Python objects.
 
     Special value "__builtin__" resolves the name from Python builtins.
     """
-    resolved: dict[str, object] = {}
-    for name, value in raw_global_bindings.items():
+    resolved_name_to_value: dict[str, object] = {}
+    for name, value in raw_global_name_to_value.items():
         if value == "__builtin__":
             builtin_value = getattr(builtins, name, None)
             if builtin_value is not None:
-                resolved[name] = builtin_value
+                resolved_name_to_value[name] = builtin_value
         else:
-            resolved[name] = value
-    return resolved
+            resolved_name_to_value[name] = value
+    return resolved_name_to_value
 
 
 def _serialize_value(value: object) -> object:
@@ -266,16 +233,16 @@ def _serialize_value(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return [_serialize_value(item) for item in value]
     if isinstance(value, dict):
-        return {str(key): _serialize_value(val) for key, val in value.items()}
+        return {str(key): _serialize_value(value) for key, value in value.items()}
     return str(value)
 
 
 # Predefined callable fixtures for test cases that require function bindings.
 # Test YAML specifies "__callable:<key>" as the value; the provider resolves it here.
-_CALLABLE_FIXTURE_REGISTRY: dict[str, object] = {
-    "add": lambda a, b: a + b,
-    "multiply": lambda a, b: a * b,
-    "transform_upper": lambda s: s.upper(),
+_FIXTURE_NAME_TO_CALLABLE: dict[str, object] = {
+    "add": lambda first, second: first + second,
+    "multiply": lambda first, second: first * second,
+    "transform_upper": lambda text: text.upper(),
     "clamp": lambda value, low, high: max(low, min(high, value)),
     "format_name": lambda first, last: f"{first} {last}",
 }
@@ -285,8 +252,8 @@ def _resolve_input_binding_value(value: Any) -> Any:
     """Resolve special binding value markers to actual Python objects."""
     if isinstance(value, str) and value.startswith("__callable:"):
         fixture_key = value[len("__callable:") :]
-        if fixture_key in _CALLABLE_FIXTURE_REGISTRY:
-            return _CALLABLE_FIXTURE_REGISTRY[fixture_key]
+        if fixture_key in _FIXTURE_NAME_TO_CALLABLE:
+            return _FIXTURE_NAME_TO_CALLABLE[fixture_key]
         raise ValueError(f"Unknown callable fixture: {fixture_key!r}")
     return value
 
@@ -298,172 +265,106 @@ def _read_system_prompt_file(file_path: str) -> str:
     return resolved_path.read_text(encoding="utf-8")
 
 
-def call_api(prompt: str, options: dict, context: dict) -> dict:  # noqa: ARG001
-    """promptfoo custom provider entry point.
+def _run_evaluation(options: dict, context: dict) -> dict[str, Any]:
+    test_name_to_value = context.get("vars", {})
+    configuration_name_to_value = options.get("config", {})
+    natural_program = test_name_to_value["natural_program"]
+    raw_input_name_to_value = json.loads(test_name_to_value.get("input_bindings", "{}"))
+    input_name_to_value = {name: _resolve_input_binding_value(value) for name, value in raw_input_name_to_value.items()}
+    output_binding_names = json.loads(test_name_to_value.get("output_binding_names", "[]"))
+    global_name_to_value = _resolve_global_bindings(json.loads(test_name_to_value.get("global_bindings", "{}")))
+    name_to_value = {**global_name_to_value, **input_name_to_value}
 
-    Executes a Nighthawk Natural block and returns structured output.
+    program, frontmatter = parse_frontmatter(natural_program)
+    denied_outcome_kinds = set(validate_frontmatter_deny(frontmatter))
+    allowed_override = test_name_to_value.get("allowed_outcome_kinds")
+    is_in_loop = False
+    if allowed_override is not None:
+        allowed_outcome_kinds = json.loads(allowed_override)
+        if (
+            not isinstance(allowed_outcome_kinds, list)
+            or not allowed_outcome_kinds
+            or any(kind not in OUTCOME_KINDS for kind in allowed_outcome_kinds)
+        ):
+            raise ValueError("allowed_outcome_kinds must be a nonempty list of supported outcome kinds")
+        is_in_loop = any(kind in allowed_outcome_kinds for kind in ("break", "continue"))
+        denied_outcome_kinds.update(kind for kind in OUTCOME_KINDS if kind not in allowed_outcome_kinds)
+    if denied_outcome_kinds:
+        program = "---\ndeny: " + json.dumps(sorted(denied_outcome_kinds)) + "\n---\n" + program
 
-    Expected vars:
-        natural_program (str): Natural block text (may include frontmatter).
-        input_bindings (JSON str): Read binding name-to-value mapping.
-        output_binding_names (JSON str): Write binding names list.
-        global_bindings (JSON str, optional): Global name-to-value mapping.
-        allowed_step_kinds (JSON str, optional): Override for allowed step kinds.
+    definition = StepDefinition(
+        program,
+        input_binding_names=tuple(name_to_value),
+        output_binding_names=output_binding_names,
+        is_in_loop=is_in_loop,
+        source_location="<promptfoo>:0",
+    )
+    templates = nh.StepPromptTemplates()
+    if system_prompt_file := configuration_name_to_value.get("system_prompt_file"):
+        templates = nh.StepPromptTemplates(system_prompt_template=_read_system_prompt_file(system_prompt_file))
+    model = configuration_name_to_value.get("model", "openai-responses:gpt-5.6-luna")
+    tool_preset = configuration_name_to_value.get("tool_preset", "eval_examples")
+    suffix_variant = configuration_name_to_value.get("suffix_variant", "control")
+    meter = nh.UsageMeter()
+    records: list[StepFinished] = []
+    output_name_to_value: dict[str, object] = {}
 
-    Expected options.config:
-        model (str): Model identifier (e.g. "openai-responses:gpt-5.6-luna").
-        system_prompt_file (str, optional): Path to system prompt template file.
-        reasoning_effort (str, optional): Reasoning effort level.
-        tool_preset (str, optional): Tool preset name. Default: "eval_examples".
-            Available presets:
-              "eval_functional"   - 2 tools: nh_eval, nh_assign (functional descriptions)
-              "eval_examples"     - 2 tools: nh_eval, nh_assign (example-based descriptions)
-              "eval_mutation_hint" - 2 tools: nh_eval, nh_assign (mutation-focused descriptions)
-        suffix_variant (str, optional): Suffix fragment variant. Default: "control".
-            Available variants:
-              "control"     - Current production suffix text (no change)
-              "legacy"      - Previous production suffix text
-              "examples"    - One concrete JSON example per allowed kind
+    def write_binding(name: str, value: object) -> None:
+        output_name_to_value[name] = value
+        name_to_value[name] = value
+
+    with _evaluation_variants(tool_preset, suffix_variant) as installed_tool_names:
+        setting_name_to_value: dict[str, Any] = {}
+        if model.startswith("claude-code-cli:"):
+            setting_name_to_value = {"allowed_tool_names": installed_tool_names, "permission_mode": "bypassPermissions", "max_turns": 25}
+        elif model.startswith("codex:"):
+            setting_name_to_value = {"allowed_tool_names": installed_tool_names}
+        elif reasoning_effort := configuration_name_to_value.get("reasoning_effort"):
+            setting_name_to_value = {"openai_reasoning_effort": reasoning_effort}
+        configuration = nh.StepExecutorConfiguration(execution_model=model, execution_model_settings=setting_name_to_value, prompts=templates)
+        with nh.run(step_executor_configuration=configuration, usage_meter=meter), nh.scope(lifecycle=StepLifecycle(on_step_finished=records.append)):
+            try:
+                outcome = execute_step(definition, name_to_value=name_to_value, write_binding=write_binding)
+            except BaseException as exception:
+                if not records or not isinstance(records[-1], StepRaised) or records[-1].exception is not exception:
+                    raise
+                outcome = records[-1].outcome
+
+    output_name_to_data: dict[str, Any] = {
+        "outcome_kind": outcome.kind,
+        "bindings": {name: _serialize_value(value) for name, value in output_name_to_value.items()},
+        "step_locals": {name: _serialize_value(value) for name, value in name_to_value.items()},
+    }
+    if isinstance(outcome, Return):
+        output_name_to_data["return_value"] = _serialize_value(outcome.value)
+    elif isinstance(records[-1], StepRaised):
+        output_name_to_data["raise_message"] = records[-1].outcome.message
+        output_name_to_data["raise_error_type"] = records[-1].outcome.error_type.__name__
+    usage = meter.snapshot()
+    return {
+        "output": json.dumps(output_name_to_data),
+        "tokenUsage": {"prompt": usage.input_tokens, "completion": usage.output_tokens, "total": usage.total_tokens, "numRequests": usage.requests},
+    }
+
+
+def call_api(prompt: str, options: dict, context: dict) -> dict:
+    """Run one trusted promptfoo fixture through validation, writeback, and terminal delivery.
+
+    ``context["vars"]`` supplies natural_program and JSON-encoded input_bindings,
+    output_binding_names, optional global_bindings, and optional allowed_outcome_kinds.
+    ``options["config"]`` selects model, reasoning_effort, system_prompt_file,
+    tool_preset (eval_examples, eval_functional, eval_mutation_hint), and suffix_variant (control, legacy, examples).
+    Return values are resolved Python values, and DSL Raise is distinct from a runtime error.
+    ``step_locals`` reports the explicit namespace after writes and in-place effects, excluding private runtime temporaries.
+    Experimental tool and suffix replacements are restored after each evaluation; calls in this process are serialized.
     """
-    test_variables = context.get("vars", {})
-    provider_configuration = options.get("config", {})
-
-    # -- Install tool preset --
-    tool_preset = provider_configuration.get("tool_preset", "eval_examples")
-    _install_tool_preset(tool_preset)
-    installed_tool_names = tuple(_builtin_tool_name_to_tool.keys())
-
-    # -- Install suffix variant --
-    suffix_variant = provider_configuration.get("suffix_variant", "control")
-    _install_suffix_variant(suffix_variant)
-
-    # -- Extract test case variables --
-    natural_program = test_variables["natural_program"]
-    raw_input_bindings: dict[str, Any] = json.loads(test_variables.get("input_bindings", "{}"))
-    input_bindings: dict[str, Any] = {name: _resolve_input_binding_value(value) for name, value in raw_input_bindings.items()}
-    output_binding_names: list[str] = json.loads(test_variables.get("output_binding_names", "[]"))
-    raw_global_bindings: dict[str, Any] = json.loads(test_variables.get("global_bindings", "{}"))
-    allowed_step_kinds_override = test_variables.get("allowed_step_kinds", None)
-
-    # -- Handle frontmatter and compute allowed step kinds --
-    program_without_frontmatter, frontmatter = parse_frontmatter(natural_program)
-    denied_step_kinds = validate_frontmatter_deny(frontmatter)
-
-    if allowed_step_kinds_override is not None:
-        allowed_step_kinds = tuple(json.loads(allowed_step_kinds_override))
-    else:
-        allowed_step_kinds = _compute_allowed_step_kinds(denied_step_kinds)
-
-    processed_natural_program = program_without_frontmatter
-
-    # -- Resolve global bindings --
-    step_globals: dict[str, object] = _resolve_global_bindings(raw_global_bindings)
-    step_globals["__builtins__"] = builtins.__dict__
-
-    # -- Build configuration --
-    model = provider_configuration.get("model", "openai-responses:gpt-5.6-luna")
-
-    prompt_templates = nh.StepPromptTemplates()
-    system_prompt_file = provider_configuration.get("system_prompt_file", None)
-    if system_prompt_file is not None:
-        system_prompt_text = _read_system_prompt_file(system_prompt_file)
-        prompt_templates = nh.StepPromptTemplates(
-            step_system_prompt_template=system_prompt_text,
-        )
-
-    model_settings_dict: dict[str, Any] | None = None
-    if model.startswith("claude-code-cli:"):
-        model_settings_dict = {
-            "allowed_tool_names": installed_tool_names,
-            "permission_mode": "bypassPermissions",
-            "max_turns": 25,
-        }
-    elif model.startswith("codex:"):
-        model_settings_dict = {
-            "allowed_tool_names": installed_tool_names,
-        }
-    else:
-        reasoning_effort = provider_configuration.get("reasoning_effort", None)
-        if reasoning_effort is not None:
-            model_settings_dict = {"openai_reasoning_effort": reasoning_effort}
-
-    configuration = nh.StepExecutorConfiguration(
-        execution_model=model,
-        model_settings=model_settings_dict,
-        prompts=prompt_templates,
-    )
-
-    step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=configuration,
-    )
-
-    # -- Build step context --
-    read_binding_names = frozenset(name for name in input_bindings if name not in output_binding_names)
-    step_locals = dict(input_bindings)
-
-    step_context = StepContext(
-        step_id="promptfoo-eval",
-        step_globals=step_globals,
-        step_locals=step_locals,
-        binding_commit_targets=set(output_binding_names),
-        read_binding_names=read_binding_names,
-        task_name_to_value={},
-    )
-
-    # -- Execute --
-    start_time = time.time()
+    started_at = time.monotonic()
     try:
-        with nh.run(step_executor):
-            step_outcome, bindings = step_executor.run_step(
-                processed_natural_program=processed_natural_program,
-                step_context=step_context,
-                binding_names=output_binding_names,
-                allowed_step_kinds=allowed_step_kinds,
-            )
-
-        elapsed_milliseconds = int((time.time() - start_time) * 1000)
-
-        # Build structured output
-        output_data: dict[str, Any] = {
-            "outcome_kind": step_outcome.kind,
-            "bindings": {name: _serialize_value(value) for name, value in bindings.items()},
-            "step_locals": {name: _serialize_value(value) for name, value in step_context.step_locals.items() if not name.startswith("__")},
-        }
-
-        # Add kind-specific fields
-        if step_outcome.kind == "return":
-            output_data["return_expression"] = step_outcome.return_expression  # type: ignore[union-attr]
-        elif step_outcome.kind == "raise":
-            output_data["raise_message"] = step_outcome.raise_message  # type: ignore[union-attr]
-            output_data["raise_error_type"] = step_outcome.raise_error_type  # type: ignore[union-attr]
-
-        # Extract token usage from the monkey-patched _run_agent
-        run_usage = getattr(step_executor, "_last_run_usage", None)
-        token_usage: dict[str, int] = {}
-        if run_usage is not None:
-            token_usage = {
-                "prompt": run_usage.input_tokens,
-                "completion": run_usage.output_tokens,
-                "total": run_usage.input_tokens + run_usage.output_tokens,
-                "numRequests": run_usage.requests,
-            }
-
-        return {
-            "output": json.dumps(output_data),
-            "latencyMs": elapsed_milliseconds,
-            "tokenUsage": token_usage,
-        }
-
+        result = _run_evaluation(options, context)
     except Exception as exception:
-        elapsed_milliseconds = int((time.time() - start_time) * 1000)
-        return {
-            "output": json.dumps(
-                {
-                    "outcome_kind": "error",
-                    "error": str(exception),
-                    "error_type": type(exception).__name__,
-                }
-            ),
-            "latencyMs": elapsed_milliseconds,
+        result = {
+            "output": json.dumps({"outcome_kind": "error", "error": str(exception), "error_type": type(exception).__name__}),
             "error": str(exception),
         }
+    result["latencyMs"] = int((time.monotonic() - started_at) * 1000)
+    return result

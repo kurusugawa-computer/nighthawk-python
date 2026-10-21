@@ -27,9 +27,9 @@ from nighthawk.runtime import (
     Pass,
     StepCandidate,
     StepRequest,
-    assign_tool_async,
-    eval_expression,
-    eval_expression_async,
+    assign_expression_async,
+    evaluate_expression,
+    evaluate_expression_async,
 )
 from tests.support.contexts import new_context
 from tests.support.executors import StubExecutor
@@ -60,19 +60,19 @@ def test_custom_executor_recovers_without_restarting_the_step(asynchronous_execu
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            eval_expression(request.step_context, "effects.append('first')")
+            evaluate_expression(request.step_context, "effects.append('first')")
             with pytest.raises(OperationRejectedError) as caught:
-                eval_expression(request.step_context, "forbidden()")
+                evaluate_expression(request.step_context, "forbidden()")
             refusals.append(caught.value)
-            value = eval_expression(request.step_context, "7")
+            value = evaluate_expression(request.step_context, "7")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": value})
 
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-            await eval_expression_async(request.step_context, "effects.append('first')")
+            await evaluate_expression_async(request.step_context, "effects.append('first')")
             with pytest.raises(OperationRejectedError) as caught:
-                await eval_expression_async(request.step_context, "forbidden()")
+                await evaluate_expression_async(request.step_context, "forbidden()")
             refusals.append(caught.value)
-            value = await eval_expression_async(request.step_context, "7")
+            value = await evaluate_expression_async(request.step_context, "7")
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": value})
 
     @nh.function
@@ -122,9 +122,9 @@ def test_rejected_assignment_never_evaluates_or_mutates_the_target() -> None:
 
     async def execute() -> None:
         with pytest.raises(OperationRejectedError):
-            await assign_tool_async(context, "record.value", "(effects.append('evaluated'), 9)[1]")
+            await assign_expression_async(context, "record.value", "(effects.append('evaluated'), 9)[1]")
         with nh.scope(oversight=None):
-            assert await eval_expression_async(context, "record") is record
+            assert await evaluate_expression_async(context, "record") is record
 
     with nh.run(StubExecutor()), nh.scope(oversight=Oversight(inspect_operation=lambda request: RejectOperation("Do not update this item."))):
         asyncio.run(execute())
@@ -147,9 +147,9 @@ def test_inspection_failures_never_become_recoverable_feedback(failure_kind: str
 
     async def execute() -> None:
         with pytest.raises(Exception) as caught:
-            await eval_expression_async(context, "7")
+            await evaluate_expression_async(context, "7")
         with nh.scope(oversight=None), pytest.raises(type(caught.value)) as repeated:
-            await eval_expression_async(context, "8")
+            await evaluate_expression_async(context, "8")
         assert repeated.value is caught.value
 
     with (
@@ -181,12 +181,12 @@ def test_rejection_delivery_failure_stops_the_step_and_retains_the_rejection(del
     async def execute() -> None:
         expected = asyncio.CancelledError if delivery_failure == "cancellation" else OperationDeliveryError
         with pytest.raises(expected) as caught:
-            await eval_expression_async(context, "7")
+            await evaluate_expression_async(context, "7")
         if isinstance(caught.value, OperationDeliveryError):
             assert caught.value.finished is operations[0]
             assert isinstance(caught.value.__cause__, OperationRejectedError)
         with pytest.raises(expected) as repeated:
-            await eval_expression_async(context, "8")
+            await evaluate_expression_async(context, "8")
         assert repeated.value is caught.value
 
     with (
@@ -232,7 +232,7 @@ def test_standard_model_receives_refusal_and_corrects_the_same_step(route: str) 
             if route == "native":
                 return ModelResponse(parts=[ToolCallPart("forbidden", {}, "refused")])
             if route == "evaluation":
-                return ModelResponse(parts=[ToolCallPart("nh_eval", {"expression": "forbidden()"}, "refused")])
+                return ModelResponse(parts=[ToolCallPart("nh_evaluate", {"expression": "forbidden()"}, "refused")])
             if route == "assignment":
                 return ModelResponse(parts=[ToolCallPart("nh_assign", {"target_path": "temporary", "expression": "forbidden()"}, "refused")])
             return ModelResponse(
@@ -483,7 +483,7 @@ def test_cancellation_while_waiting_for_correction_prevents_another_model_reques
         async def respond(messages: Any, information: Any) -> ModelResponse:
             nonlocal requests
             requests += 1
-            return ModelResponse(parts=[ToolCallPart("nh_eval", {"expression": "7"}, "refused")])
+            return ModelResponse(parts=[ToolCallPart("nh_evaluate", {"expression": "7"}, "refused")])
 
         @nh.function
         async def workflow() -> None:
@@ -534,10 +534,10 @@ def test_child_abort_stays_terminal_while_python_controls_parent_recovery(catch_
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             if "Child execution" in request.processed_natural_program:
                 with pytest.raises(StepAbortedError):
-                    await eval_expression_async(request.step_context, "forbidden")
+                    await evaluate_expression_async(request.step_context, "forbidden")
                 # Suppression inside the child's executor cannot make the child succeed.
                 return StepCandidate(outcome=Pass())
-            await eval_expression_async(request.step_context, "invoke_child()")
+            await evaluate_expression_async(request.step_context, "invoke_child()")
             return StepCandidate(outcome=Pass())
 
     @nh.function
@@ -675,8 +675,8 @@ def test_corrected_operation_does_not_bypass_commit_abort() -> None:
     class Executor:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             with pytest.raises(OperationRejectedError):
-                await eval_expression_async(request.step_context, "forbidden()")
-            assert await eval_expression_async(request.step_context, "7") == 7
+                await evaluate_expression_async(request.step_context, "forbidden()")
+            assert await evaluate_expression_async(request.step_context, "7") == 7
             return StepCandidate(outcome=Pass())
 
     @nh.function

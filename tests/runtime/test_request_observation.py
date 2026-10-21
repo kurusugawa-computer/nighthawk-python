@@ -149,7 +149,7 @@ def test_budget_stops_third_request_inside_one_unfinished_block() -> None:
         async def request(self, messages: Any, model_settings: Any, model_request_parameters: Any) -> ModelResponse:
             self.requests += 1
             return ModelResponse(
-                parts=[ToolCallPart("nh_eval", {"expression": "1"}, str(self.requests))], usage=RequestUsage(input_tokens=50, output_tokens=10)
+                parts=[ToolCallPart("nh_evaluate", {"expression": "1"}, str(self.requests))], usage=RequestUsage(input_tokens=50, output_tokens=10)
             )
 
     model = MultiRequestModel("success")

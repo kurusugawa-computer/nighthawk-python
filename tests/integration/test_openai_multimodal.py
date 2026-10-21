@@ -77,7 +77,7 @@ def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content(
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-5.6-luna",
-            model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
+            execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )
 
@@ -117,7 +117,7 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-5.6-luna",
-            model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
+            execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )
 
@@ -152,7 +152,7 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
             third="green",
         )
         """execute
-        Call the tool `load_pixel_color_gallery()` directly. Do not use `nh_eval` to access it.
+        Call the tool `load_pixel_color_gallery()` directly. Do not use `nh_evaluate` to access it.
         The tool result contains three labeled images in this order: first, second, third.
         Determine the colors from the actual returned images, not from defaults.
         Set <:result> so that `first`, `second`, and `third` are the lowercase color names of those images.

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from nighthawk.runtime.step_contract import build_step_system_prompt_suffix_fragment
+from nighthawk.runtime.model_outcome import build_model_response_instructions
 
 
 def test_fragment_omits_raise_when_not_allowed() -> None:
-    fragment = build_step_system_prompt_suffix_fragment(
+    fragment = build_model_response_instructions(
         allowed_kinds=("pass", "return"),
         raise_error_type_binding_names=("ValueError",),
     )
@@ -15,7 +15,7 @@ def test_fragment_omits_raise_when_not_allowed() -> None:
 
 
 def test_fragment_includes_raise_without_raise_error_type_enum_when_no_bindings() -> None:
-    fragment = build_step_system_prompt_suffix_fragment(
+    fragment = build_model_response_instructions(
         allowed_kinds=("pass", "raise"),
         raise_error_type_binding_names=(),
     )
@@ -26,7 +26,7 @@ def test_fragment_includes_raise_without_raise_error_type_enum_when_no_bindings(
 
 
 def test_fragment_includes_break_and_continue_only_when_allowed() -> None:
-    fragment = build_step_system_prompt_suffix_fragment(
+    fragment = build_model_response_instructions(
         allowed_kinds=("continue",),
         raise_error_type_binding_names=(),
     )
@@ -38,7 +38,7 @@ def test_fragment_includes_break_and_continue_only_when_allowed() -> None:
 
 
 def test_fragment_includes_raise_error_type_enum_when_bindings_present() -> None:
-    fragment = build_step_system_prompt_suffix_fragment(
+    fragment = build_model_response_instructions(
         allowed_kinds=("raise",),
         raise_error_type_binding_names=("ValueError", "TypeError"),
     )
@@ -48,7 +48,7 @@ def test_fragment_includes_raise_error_type_enum_when_bindings_present() -> None
 
 
 def test_fragment_mentions_result_field_and_conditions_default_pass() -> None:
-    fragment = build_step_system_prompt_suffix_fragment(
+    fragment = build_model_response_instructions(
         allowed_kinds=("pass",),
         raise_error_type_binding_names=(),
     )
@@ -59,7 +59,7 @@ def test_fragment_mentions_result_field_and_conditions_default_pass() -> None:
 
 
 def test_fragment_omits_default_pass_when_pass_is_not_allowed() -> None:
-    fragment = build_step_system_prompt_suffix_fragment(
+    fragment = build_model_response_instructions(
         allowed_kinds=("return",),
         raise_error_type_binding_names=(),
     )

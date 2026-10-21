@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepDefinition, StepResult
+from nighthawk.runtime import Pass, StepDefinition, StepOutcome
 from nighthawk.testing import (
     CallbackExecutor,
     ScriptedExecutor,
@@ -66,7 +66,7 @@ class TestScriptedExecutorPassOutcome:
         call = executor.calls[0]
         assert "query" in call.step_locals
         assert call.step_locals["query"] == "test"
-        assert "result" in call.binding_names
+        assert "result" in call.output_binding_names
         assert "_module_level_helper" in call.step_globals
         assert call.step_globals["_module_level_helper"] is _module_level_helper
 
@@ -131,7 +131,7 @@ class TestScriptedExecutorPassOutcome:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response_count", [0, 1])
-async def test_unexpected_invocation_fails_without_committing_outputs(execute: Callable[..., Awaitable[StepResult]], response_count: int) -> None:
+async def test_unexpected_invocation_fails_without_committing_outputs(execute: Callable[..., Awaitable[StepOutcome]], response_count: int) -> None:
     executor = ScriptedExecutor([pass_response(binding_name_to_value={"value": 7}) for _ in range(response_count)])
     definition = StepDefinition("Set <:value>.", output_binding_names=("value",), binding_name_to_type={"value": int})
     writes: list[tuple[str, object]] = []
@@ -298,8 +298,8 @@ async def test_resolved_return_preserves_values_without_expression_effects(callb
     assert len(executor.calls) == 1
 
 
-class TestScriptedExecutorAllowedStepKinds:
-    def test_records_allowed_step_kinds_in_loop(self) -> None:
+class TestScriptedExecutorAllowedOutcomeKinds:
+    def test_records_allowed_outcome_kinds_in_loop(self) -> None:
         executor = ScriptedExecutor(responses=[break_response()])
 
         @nh.function
@@ -313,10 +313,10 @@ class TestScriptedExecutorAllowedStepKinds:
             f()
 
         call = executor.calls[0]
-        assert "break" in call.allowed_step_kinds
-        assert "continue" in call.allowed_step_kinds
+        assert "break" in call.allowed_outcome_kinds
+        assert "continue" in call.allowed_outcome_kinds
 
-    def test_records_allowed_step_kinds_outside_loop(self) -> None:
+    def test_records_allowed_outcome_kinds_outside_loop(self) -> None:
         executor = ScriptedExecutor(responses=[pass_response()])
 
         @nh.function
@@ -329,8 +329,8 @@ class TestScriptedExecutorAllowedStepKinds:
             f()
 
         call = executor.calls[0]
-        assert "break" not in call.allowed_step_kinds
-        assert "continue" not in call.allowed_step_kinds
+        assert "break" not in call.allowed_outcome_kinds
+        assert "continue" not in call.allowed_outcome_kinds
 
 
 class TestScriptedExecutorBindingFiltering:

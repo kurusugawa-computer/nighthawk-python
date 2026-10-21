@@ -7,7 +7,7 @@ import pytest
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 import nighthawk as nh
-from nighthawk.runtime import OperationError, assign_tool
+from nighthawk.runtime import OperationError, assign_expression
 from tests.support.contexts import new_context as context_for
 
 
@@ -17,11 +17,11 @@ def test_assignment_preserves_model_constraints_and_target_identity() -> None:
 
     finding = Finding(confidence=0.5)
     context = context_for(finding=finding)
-    result = assign_tool(context, "finding.confidence", "'0.75'")
+    result = assign_expression(context, "finding.confidence", "'0.75'")
     assert result.value == finding.confidence == 0.75
     assert context.environment.resolve("finding") is finding
     with pytest.raises(OperationError) as caught:
-        assign_tool(context, "finding.confidence", "2.0")
+        assign_expression(context, "finding.confidence", "2.0")
     assert isinstance(caught.value.__cause__, ValidationError)
     assert caught.value.phase == "validation"
     assert caught.value.evaluation_started
@@ -47,7 +47,7 @@ def test_standard_assignment_runs_field_and_model_validators_once() -> None:
 
     record = Record()
     calls.clear()
-    result = assign_tool(context_for(record=record), "record.value", "'7'")
+    result = assign_expression(context_for(record=record), "record.value", "'7'")
     assert calls == ["field", "model"]
     assert result.value == record.value == 8
 
@@ -64,7 +64,7 @@ def test_failed_model_validator_can_leave_earlier_mutation() -> None:
 
     record = Record()
     with pytest.raises(OperationError) as caught:
-        assign_tool(context_for(record=record), "record.value", "7")
+        assign_expression(context_for(record=record), "record.value", "7")
     assert record.value == 7
     assert "effects may remain" in (caught.value.guidance or "")
 
@@ -76,7 +76,7 @@ def test_frozen_restrictions_are_preserved(frozen_model: bool) -> None:
 
     record = Record()
     with pytest.raises(OperationError):
-        assign_tool(context_for(record=record), "record.value", "7")
+        assign_expression(context_for(record=record), "record.value", "7")
     assert record.value == 0
 
 
@@ -123,7 +123,7 @@ def test_unsupported_attribute_routes_require_python_helpers(route: str) -> None
     effects: list[str] = []
     context = context_for(target=route_to_instance[route], effects=effects)
     with pytest.raises(OperationError) as caught:
-        assign_tool(context, "target.value", "(effects.append('right'), 7)[1]")
+        assign_expression(context, "target.value", "(effects.append('right'), 7)[1]")
     assert effects == ["right"]
     assert caught.value.phase == "target_resolution"
     assert "Python helper" in (caught.value.guidance or "")
@@ -151,7 +151,7 @@ def test_right_side_changes_target_before_single_intermediate_traversal() -> Non
         container.selected = second
         return 7
 
-    assign_tool(context_for(container=container, change_target=change_target), "container.child.value", "change_target()")
+    assign_expression(context_for(container=container, change_target=change_target), "container.child.value", "change_target()")
     assert accesses == ["right", "get"]
     assert first.value == 0 and second.value == 7
 
@@ -161,7 +161,7 @@ def test_admission_rejection_prevents_right_side_effects() -> None:
     context = context_for(value=0, effects=effects)
     for target in ("value", "missing.field", "value[0]", "__private", "len"):
         with pytest.raises(OperationError) as caught:
-            assign_tool(context, target, "effects.append('right')")
+            assign_expression(context, target, "effects.append('right')")
         assert not caught.value.evaluation_started
     assert effects == []
 
@@ -177,9 +177,9 @@ def test_assignment_validation_failure_preserves_pending_value_and_right_side_ef
         task_name_to_value={},
         binding_name_to_type={"value": Annotated[int, Field(ge=0)]},
     )
-    assign_tool(context, "value", "'7'")
+    assign_expression(context, "value", "'7'")
     with pytest.raises(OperationError):
-        assign_tool(context, "value", "(effects.append('right'), -1)[1]")
+        assign_expression(context, "value", "(effects.append('right'), -1)[1]")
     assert context.environment.resolve("value") == 7
     assert effects == ["right"]
 
@@ -190,7 +190,7 @@ def test_validation_failure_does_not_close_nested_application_awaitable() -> Non
 
     import pytest
 
-    from nighthawk.runtime import OperationError, assign_tool_async
+    from nighthawk.runtime import OperationError, assign_expression_async
     from tests.support.contexts import new_context
 
     async def inner() -> int:
@@ -213,7 +213,7 @@ def test_validation_failure_does_not_close_nested_application_awaitable() -> Non
     )
     try:
         with pytest.raises(OperationError):
-            asyncio.run(assign_tool_async(context, "result", "outer()"))
+            asyncio.run(assign_expression_async(context, "result", "outer()"))
         assert inspect.getcoroutinestate(retained) == inspect.CORO_CREATED
     finally:
         retained.close()

@@ -31,8 +31,12 @@ Public API documentation layering:
 | `index.md` | First-time visitors | Landing page | Value proposition, one runnable example, entry path routing. No API, no how-to. |
 | `quickstart.md` | New users | First success | Minimal setup, minimal example, minimal troubleshooting, explicit next-step link. |
 | `natural-blocks.md` | Learners | What Natural blocks are | Natural block anatomy, prompt structure, read/write bindings, Pydantic model bindings, f-string injection, functions and discoverability, binding function design (principles and basic examples), responsibility split, structured output design. |
+| `decisions.md` | Learners | Typed judgments | Explicit evidence, decision model selection, typed answers, and per-step evidence. |
 | `executors.md` | Learners / evaluators | Choose an execution backend | Capability / cost / latency matrix, decision tree, `StepExecutorConfiguration` basics, and routing to side references and `runtime-configuration.md`. |
-| `runtime-configuration.md` | Learners | Configure execution | `nh.run()`, `nh.scope()`, configuration patching, prompt suffix fragments, context limits, JSON rendering style, and runtime execution identity. |
+| `runtime-configuration.md` | Learners | Configure execution | `nh.run()`, `nh.scope()`, configuration replacement, prompt suffix fragments, context limits, JSON rendering style, and runtime execution identity. |
+| `host-integration.md` | Host implementors | Admit and observe execution | Function admission, preservation of host model policy, request accounting, and interruption cleanup. |
+| `operation-feedback.md` | Host implementors | Respond to operation refusals | Recoverable feedback, step abortion, and executor recovery. |
+| `embedded-execution.md` | Host implementors | Execute explicit programs | Immutable definitions, explicit namespaces, binding validation, and host writeback. |
 | `patterns.md` | Practitioners | Apply Natural blocks in workflows | Outcomes, deny frontmatter, error handling, custom exception types, async, carry pattern, cross-block composition, resilience patterns, and common mistakes. |
 | `verification.md` | Practitioners | Verify and debug | Mock tests, integration tests, prompt inspection, diagnosing snipped markers, OpenTelemetry span hierarchy, step events, local trace inspection. |
 | `pydantic-ai-providers.md` | Model configurers | Pydantic AI provider reference | Provider list, installation, model identifiers, credentials, model settings, provider-specific troubleshooting. No chooser. No custom backends. |
@@ -50,7 +54,8 @@ List only topics that commonly drift across multiple files or are easy to mispla
 
 - **Credentials** -> `quickstart.md` (minimal first run), `pydantic-ai-providers.md` (Pydantic AI providers), `coding-agent-backends.md` (backend prerequisites)
 - **Executor selection** -> `executors.md` (capability and cost tradeoffs), `coding-agent-backends.md` (backend behavior and constraints), `for-coding-agents.md` (block-level operational guidance), `quickstart.md` (minimal entry example only)
-- **Runtime setup and scoping** (`nh.run()`, `nh.scope()`, configuration patching) -> `runtime-configuration.md` (canonical), `patterns.md` (usage-only references), `for-coding-agents.md` (condensed)
+- **Runtime setup and scoping** (`nh.run()`, `nh.scope()`, configuration replacement) -> `runtime-configuration.md` (canonical), `patterns.md` (usage-only references), `for-coding-agents.md` (condensed)
+- **Function admission / host model policy / request accounting / completion cleanup** -> `host-integration.md` (canonical examples), `specification.md` (formal contracts), `for-coding-agents.md` (condensed routing)
 - **Context limits / JSON rendering / execution identity** -> `runtime-configuration.md` (canonical), `verification.md` (`<snipped>` diagnosis only), `specification.md` (formal semantics), `for-coding-agents.md` (condensed)
 - **Bindings** -> `natural-blocks.md` (canonical), `specification.md` (formal definition), `for-coding-agents.md` (condensed)
 - **Binding function design** -> `natural-blocks.md` (principles and basic examples), `patterns.md` (only when binding functions participate in multi-block patterns), `for-coding-agents.md` (condensed)
@@ -76,7 +81,7 @@ List only topics that commonly drift across multiple files or are easy to mispla
 - Cross-references: relative links. Exception: `for-coding-agents.md` uses absolute URLs from `site_url`.
 - Terminology: "task" = structural unit (contract), "judgment" = cognitive act. Use "one task per block".
 - Code examples: self-contained and understandable without surrounding prose.
-- Built-in tools (`nh_eval`, `nh_assign`): implementation details. Only `specification.md` may expose them.
+- Built-in tools (`nh_evaluate`, `nh_assign`): implementation details. `specification.md` owns their protocol; host integration, operation feedback, and backend guides may name them in executable adapter examples or explicit tool configuration. Learner-facing guidance uses Python helpers and bindings.
 - Native tools (`nh.scope(tools=...)`): `specification.md` documents as spec, `runtime-configuration.md` documents usage and the role split with `task_references`, `natural-blocks.md` may mention it with a "prefer binding functions" note, all others must not reference it.
 - Package name: always `nighthawk-python` in `pip install` commands.
 - When renaming a document or changing its role, update all inbound references, routing rules here, relevant `tests/docs`, and navigation metadata if applicable.
@@ -87,7 +92,7 @@ List only topics that commonly drift across multiple files or are easy to mispla
 
 ### Prerequisite notes
 
-Pages in the Getting started, Patterns & verification, and Configuration nav groups must open with a short prerequisite note. This supports non-linear readers who jump directly to a topic. The note should be one sentence naming the assumed prior reading. Pages in Reference, Background, and Project groups (`specification.md`, `philosophy.md`, `roadmap.md`, `api.md`) are exempt -- they serve independent audiences that do not follow the learning path.
+Pages in the Getting started, Patterns & verification, Configuration, and Host integration nav groups must open with a short prerequisite note. This supports non-linear readers who jump directly to a topic. The note should be one sentence naming the assumed prior reading. Pages in Reference, Background, and Project groups (`specification.md`, `philosophy.md`, `roadmap.md`, `api.md`) are exempt -- they serve independent audiences that do not follow the learning path.
 
 ## Per-file rules
 
@@ -123,15 +128,22 @@ Pages in the Getting started, Patterns & verification, and Configuration nav gro
 - Capability matrix must include relative cost and latency columns.
 - Must include an explicit custom-backend routing subsection with a minimal `AgentStepExecutor.from_agent(agent=agent)` runnable example (3-5 lines). Direct `AsyncStepExecutor` implementation belongs in `specification.md`.
 - Ends with routing: side trips to `pydantic-ai-providers.md` and `coding-agent-backends.md`, then next-step link to `runtime-configuration.md`.
-- Runtime configuration topics (`nh.run()`, `nh.scope()`, configuration patching, prompt suffix, context limits, JSON rendering, execution identity) belong in `runtime-configuration.md`, not here.
+- Runtime configuration topics (`nh.run()`, `nh.scope()`, configuration replacement, prompt suffix, context limits, JSON rendering, execution identity) belong in `runtime-configuration.md`, not here.
 
 **`runtime-configuration.md`**
 
 - Prerequisite note: "This page assumes you have completed [Executors](executors.md)."
-- Owns all runtime configuration: `nh.run()`, `nh.scope()`, configuration patching, prompt suffix fragments, context limits, JSON rendering style, and runtime execution identity.
+- Owns all runtime configuration: `nh.run()`, `nh.scope()`, configuration replacement, prompt suffix fragments, context limits, JSON rendering style, and runtime execution identity.
 - These topics are independent of executor choice. The page applies equally to Pydantic AI providers and coding agent backends.
 - Cross-reference `specification.md` for formal semantics.
 - Ends with next-step link to `patterns.md`.
+
+**`host-integration.md`**
+
+- Assumes `runtime-configuration.md` and owns complete host-policy examples.
+- Keep ordinary run and scope setup in `runtime-configuration.md`.
+- Distinguish function, block, operation, and model-request boundaries; the specification owns guarantees.
+- Keep runnable examples covered by `tests/docs/test_runtime_examples.py`.
 
 **`patterns.md`**
 
@@ -179,7 +191,7 @@ Pages in the Getting started, Patterns & verification, and Configuration nav gro
 
 - Reader is a coding agent. Write for immediate applicability with runnable templates and decision rules.
 - Information flows from human-oriented docs only; never introduce new product behavior here first.
-- May derive from `natural-blocks.md`, `patterns.md`, `runtime-configuration.md`, `verification.md`, `specification.md`, `pydantic-ai-providers.md`, and `coding-agent-backends.md`.
+- May derive from `natural-blocks.md`, `patterns.md`, `runtime-configuration.md`, `host-integration.md`, `verification.md`, `specification.md`, `pydantic-ai-providers.md`, and `coding-agent-backends.md`.
 - Self-contained with absolute URLs from `site_url` (`https://kurusugawa-computer.github.io/nighthawk-python/`).
 - Prefer decision rules over encyclopedic coverage.
 - Recommend provider-backed executors by default and coding agent backends only for blocks that need autonomous long-horizon work.
@@ -194,7 +206,8 @@ Pages in the Getting started, Patterns & verification, and Configuration nav gro
   - Bindings, block anatomy, responsibility split, binding function design -> `/natural-blocks/`
   - Carry, deny, async, resilience, multi-block composition -> `/patterns/`
   - Executor selection, `StepExecutorConfiguration` basics -> `/executors/`
-  - `nh.run()`, `nh.scope()`, configuration patching, context limits, JSON rendering, execution identity -> `/runtime-configuration/`
+  - `nh.run()`, `nh.scope()`, configuration replacement, context limits, JSON rendering, execution identity -> `/runtime-configuration/`
+  - Function admission, host model policy, request accounting, completion cleanup -> `/host-integration/`
   - Provider-specific setup -> `/pydantic-ai-providers/`
   - Coding agent backend config -> `/coding-agent-backends/`
   - Spec references -> `/specification/`
@@ -224,7 +237,7 @@ Pages in the Getting started, Patterns & verification, and Configuration nav gro
 - When a docs change invalidates an existing test, first decide whether the docs or the test is the canonical truth for that claim, then update both sides to match.
 - `tests/docs/test_integrity.py` checks the shared README/index example, navigation targets, and explicit API member inventories.
 - `tests/docs/test_links.py` builds the published site and checks internal links and anchors against rendered HTML, including absolute links to this documentation site.
-- `tests/docs/test_runtime_examples.py` executes marked examples from runtime configuration, embedded execution, and verification, including against the installed wheel.
+- `tests/docs/test_runtime_examples.py` executes marked examples from runtime configuration, host integration, embedded execution, and verification, including against the installed wheel.
 - Test current links and executable claims; do not maintain lists of obsolete API names, document paths, or exact governance prose.
 - `mkdocs build` must succeed without `--strict`. Warnings are acceptable.
 - All internal relative links must resolve.

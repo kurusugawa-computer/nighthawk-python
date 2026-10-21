@@ -26,7 +26,7 @@ from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
 from ..configuration import TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT
-from ..runtime.prompt import resolve_step_system_prompt_template_text
+from ..runtime.prompt import resolve_system_prompt_template_text
 from .tool_bridge import ToolHandler, prepare_allowed_tools, resolve_current_tool_result_rendering_policy
 from .tool_transport import ToolTransport
 
@@ -99,7 +99,7 @@ def append_text_projected_tool_result_preview_prompt(*, system_prompt_text: str)
     tool will actually be exposed to the model. If no tool is exposed, the
     preview-loss caveat is irrelevant and adds prompt noise.
     """
-    fragment = resolve_step_system_prompt_template_text(
+    fragment = resolve_system_prompt_template_text(
         template_text=TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT,
         tool_result_max_tokens=_resolve_current_tool_result_max_tokens(),
     )

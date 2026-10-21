@@ -189,7 +189,7 @@ def test_user_prompt_template_can_inject_tool_result_max_tokens() -> None:
     )
     configuration = nh.StepExecutorConfiguration(
         prompts=nh.StepPromptTemplates(
-            step_user_prompt_template=(
+            user_prompt_template=(
                 "<<<NH:PROGRAM>>>\n"
                 "$program\n"
                 "<<<NH:END_PROGRAM>>>\n\n"
@@ -297,7 +297,7 @@ def test_custom_user_prompt_template_preserves_multimodal_placeholder_order() ->
         python_locals={"photo": BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png")},
     )
     configuration = nh.StepExecutorConfiguration(
-        prompts=nh.StepPromptTemplates(step_user_prompt_template=("before\n$locals\nbetween\n$program\nafter\n$globals\n"))
+        prompts=nh.StepPromptTemplates(user_prompt_template=("before\n$locals\nbetween\n$program\nafter\n$globals\n"))
     )
 
     prompt_content = build_user_prompt_content(

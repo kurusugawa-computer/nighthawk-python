@@ -116,12 +116,12 @@ def test_natural_traceback_includes_location_on_executor_exception(tmp_path):
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = (
                 processed_natural_program,
                 step_context,
                 binding_names,
-                allowed_step_kinds,
+                allowed_outcome_kinds,
             )
             raise RuntimeError("Executor failed")
 

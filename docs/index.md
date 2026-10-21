@@ -18,17 +18,17 @@ def python_average(numbers: list[float]) -> float:
     return sum(numbers) / len(numbers)
 
 
+@nh.function
+def calculate_average(numbers: list[object]) -> float:
+    result: float = 0.0
+    """execute
+    Map each element of <numbers> to the number it represents,
+    then compute <:result> by calling <python_average> with the mapped list.
+    """
+    return result
+
+
 with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
-
-    @nh.function
-    def calculate_average(numbers: list[object]) -> float:
-        result: float = 0.0
-        """execute
-        Map each element of <numbers> to the number it represents,
-        then compute <:result> by calling <python_average> with the mapped list.
-        """
-        return result
-
     print(calculate_average([1, "2", "three", "cuatro"]))  # 2.5
 ```
 
@@ -59,6 +59,12 @@ See [Philosophy](philosophy.md) for the design rationale.
 - **[Specification](specification.md)** -- Runtime contracts and boundaries.
 - **[API Reference](api.md)** -- Auto-generated API documentation from source docstrings.
 - **[For coding agents](for-coding-agents.md)** -- Condensed, decision-oriented development reference for coding agents (LLMs) building Python projects with Nighthawk.
+
+## Host integration
+
+- **[Admission and completion](host-integration.md)** -- Function admission, model policy, request accounting, and interruption cleanup.
+- **[Operation feedback](operation-feedback.md)** -- Recoverable refusals, step abortion, and feedback delivered to the model.
+- **[Embedded execution](embedded-execution.md)** -- Execute trusted programs with explicit namespaces and host-owned writeback.
 
 ## Background and project
 

@@ -11,15 +11,18 @@ configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:g
 ```
 
 The configuration also accepts a borrowed Pydantic AI `Model` instance; the host retains its client lifetime.
-For per-function or lexical model-only selection that preserves other configuration fields and scoped controls, see [model selection and function admission](runtime-configuration.md#model-selection-and-function-admission).
+For per-function or lexical model-only selection that preserves other configuration fields and scoped controls, see [model selection and function admission](runtime-configuration.md#model-selection).
 Request capabilities observe the Pydantic AI request boundary; provider SDK retries or individual HTTP attempts can remain hidden inside it.
-See [request usage and admission](runtime-configuration.md#request-usage-and-admission) before treating observations as a transport ledger or strict budget cap.
+See [request usage and admission](host-integration.md#request-usage-and-admission) before treating observations as a transport ledger or strict budget cap.
 
 Models are selected explicitly; both model fields default to `None`. See [Typed decisions](decisions.md) for `decision_model` and OpenAI Decisions.
 
 ## Pydantic AI providers
 
-Any provider that [Pydantic AI supports](https://ai.pydantic.dev/models/overview/) works with Nighthawk. The model identifier is passed directly to a Pydantic AI `Agent` -- Nighthawk has no provider-specific code for these.
+For `execute`, Nighthawk passes provider-qualified selections to a Pydantic AI `Agent`.
+Choose a model supporting the block's tool use and structured output contract, and install its [provider dependency](https://ai.pydantic.dev/models/overview/).
+Provider support alone does not establish that every model accepts every request configuration.
+`decide` instead requires a decision model; see [Typed decisions](decisions.md).
 
 Examples:
 
@@ -80,16 +83,16 @@ pip install pydantic-ai-slim[groq]
 
 See the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for the full list of providers, required extras, and credential setup.
 
-Nighthawk transparently forwards all provider-specific configuration (temperature, top_p, streaming, tool_choice, etc.) to Pydantic AI via `model_settings`. Because provider-specific options are numerous and vary across providers, Nighthawk does not document them individually -- refer to the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for provider-specific settings.
+Nighthawk transparently forwards all provider-specific configuration (temperature, top_p, streaming, tool_choice, etc.) to Pydantic AI via `execution_model_settings`. Because provider-specific options are numerous and vary across providers, Nighthawk does not document them individually -- refer to the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for provider-specific settings.
 
 ### Model settings
 
-Pydantic AI providers accept standard Pydantic AI model settings via the `model_settings` field:
+Pydantic AI providers accept standard Pydantic AI model settings via the `execution_model_settings` field:
 
 ```py
 configuration = nh.StepExecutorConfiguration(
     execution_model="openai-responses:gpt-5.6-luna",
-    model_settings={"temperature": 0.5},
+    execution_model_settings={"temperature": 0.5},
 )
 ```
 

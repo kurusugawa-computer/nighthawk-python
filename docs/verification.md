@@ -96,7 +96,7 @@ def test_helper_is_discoverable():
     call = executor.calls[0]
     assert "helper" in call.step_globals  # referenced module helper
     assert "query" in call.step_locals  # parameter available in the environment
-    assert "result" in call.binding_names  # write binding registered
+    assert "result" in call.output_binding_names  # write binding registered
 ```
 
 **Callback executor.** When the mock response depends on the input, use `CallbackExecutor`:
@@ -207,7 +207,7 @@ print("prompt_sections=PROGRAM,LOCALS,GLOBALS; helper_visible=True")
 
 Inspect `prompt_text`, or print it, to see the captured text.
 Multimodal message parts also need their native content inspected; this text-only example does not project images or files.
-For observation during real execution, use a scoped Pydantic AI capability as in [request observations](runtime-configuration.md#request-usage-and-admission).
+For observation during real execution, use a scoped Pydantic AI capability as in [request observations](host-integration.md#request-usage-and-admission).
 
 ## Diagnosing `<snipped>` markers
 
@@ -276,10 +276,10 @@ Use [lifecycle recording](runtime-configuration.md#record-completed-executions) 
 
 The runtime configuration guide contains complete, independently executable examples for:
 
-- [Whole-function admission](runtime-configuration.md#whole-function-admission): refusal before body effects or model resolution, followed by accepted synchronous and asynchronous calls.
-- [Preserving host model policy](runtime-configuration.md#preserve-host-model-policy): model selection retains its wrapper and restores the parent executor.
-- [Request usage and admission](runtime-configuration.md#request-usage-and-admission): a host accumulator refuses a request within an unfinished block, independently of aggregate metering.
-- [Completion and interruption](runtime-configuration.md#completion-and-interruption): a cancelled function waits for owned notification cleanup.
+- [Whole-function admission](host-integration.md#whole-function-admission): refusal before body effects or model resolution, followed by accepted synchronous and asynchronous calls.
+- [Preserving host model policy](host-integration.md#preserve-host-model-policy): model selection retains its wrapper and restores the parent executor.
+- [Request usage and admission](host-integration.md#request-usage-and-admission): a host accumulator refuses a request within an unfinished block, independently of aggregate metering.
+- [Completion and interruption](host-integration.md#completion-and-interruption): a cancelled function waits for owned notification cleanup.
 
 These examples use scripted or simulated model responses and need no credentials.
 `tests/docs/test_runtime_examples.py` extracts the marked code blocks directly from the guide, writes real Python files for Natural source inspection, and executes each in a subprocess with a 30-second timeout.

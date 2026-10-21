@@ -21,20 +21,10 @@
         - FunctionCallError
         - function_call_scope
         - get_function_call
-        - ModelSelection
-        - ConfigurableStepExecutor
         - run
         - scope
-        - AgentStepExecutor
-        - StepExecutor
-        - StepExecutorConfiguration
-        - StepPromptTemplates
-        - StepContextLimits
-        - JsonableValue
-        - to_jsonable_value
         - ExecutionReference
         - get_capabilities
-        - get_step_context
         - get_usage_meter
         - get_execution_reference
         - get_oversight
@@ -43,10 +33,7 @@
         - get_system_prompt_suffix_fragments
         - get_tools
         - get_user_prompt_suffix_fragments
-        - resilience
         - UsageMeter
-        - oversight
-        - lifecycle
 
 ## Errors
 
@@ -55,19 +42,35 @@
 ## Configuration
 
 ::: nighthawk.configuration
+    options:
+      members:
+        - ModelSelection
+        - StepExecutorConfiguration
+        - StepPromptTemplates
+        - StepContextLimits
+
+## Value rendering
+
+::: nighthawk.json_renderer
+    options:
+      members:
+        - JsonableValue
+        - JsonRendererStyle
+        - to_jsonable_value
 
 ## Backends
 
 ### Base
 
 ::: nighthawk.backends.base
-
-### Backend settings base
-
-::: nighthawk.backends.base
     options:
       members:
+        - BackendModelBase
         - BackendModelSettings
+        - PreparedRequestParts
+        - PreparedTextProjectedRequest
+        - RequestPromptPart
+        - RequestPromptPartList
 
 ### Claude Code shared settings
 
@@ -104,7 +107,7 @@
         - SandboxMode
         - ModelReasoningEffort
 
-## Step Context
+## Step context
 
 ::: nighthawk.runtime.step_context
     options:
@@ -114,20 +117,20 @@
         - get_step_context
         - step_context_scope
 
-## Step Contracts
+## Model response contracts
 
-::: nighthawk.runtime.step_contract
+::: nighthawk.runtime.model_outcome
     options:
       members:
-        - StepKind
-        - StepOutcome
-        - PassStepOutcome
-        - ReturnStepOutcome
-        - BreakStepOutcome
-        - ContinueStepOutcome
-        - RaiseStepOutcome
+        - ModelStepResponse
+        - ModelOutcome
+        - ModelPass
+        - ModelReturn
+        - ModelBreak
+        - ModelContinue
+        - ModelRaise
 
-## Tool Contracts
+## Tool contracts
 
 ::: nighthawk.tools.contracts
     options:
@@ -136,6 +139,11 @@
         - ToolBoundaryError
         - ToolError
         - ErrorKind
+
+::: nighthawk.tools.declarations
+    options:
+      members:
+        - ToolEntry
 
 ::: nighthawk.tools.execution
     options:
@@ -174,6 +182,8 @@
         - raise_response
         - break_response
         - continue_response
+
+## Oversight
 
 ::: nighthawk.oversight
     options:
@@ -235,10 +245,16 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
 ::: nighthawk.runtime.step_executor
     options:
       members:
+        - AgentStepExecutor
+        - StepExecutor
+        - ConfigurableStepExecutor
+        - StepExecutionAgent
+        - SyncExecutionAgent
+        - AsyncExecutionAgent
         - SyncStepExecutor
         - AsyncStepExecutor
 
-::: nighthawk.runtime.step_result
+::: nighthawk.runtime.step_outcome
     options:
       members:
         - Pass
@@ -246,7 +262,8 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
         - Break
         - Continue
         - Raise
-        - StepResult
+        - StepOutcome
+        - OutcomeKind
 
 ::: nighthawk.runtime.step_request
     options:
@@ -264,19 +281,21 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
         - OperationRejectedError
         - OperationDeliveryError
         - OperationStatus
+        - OperationKind
+        - OperationPhase
 
 ::: nighthawk.runtime.expression
     options:
       members:
-        - eval_expression
-        - eval_expression_async
+        - evaluate_expression
+        - evaluate_expression_async
 
 ::: nighthawk.runtime.assignment
     options:
       members:
         - AssignmentResult
-        - assign_tool
-        - assign_tool_async
+        - assign_expression
+        - assign_expression_async
 
 ::: nighthawk.runtime.context
     options:

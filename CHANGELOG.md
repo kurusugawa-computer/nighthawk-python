@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Breaking: `execution_model_settings` names execution overrides explicitly alongside `decision_model_settings`. `StepPromptTemplates` uses `system_prompt_template` and `user_prompt_template`.
+- Breaking: runtime operations are `evaluate_expression` and `assign_expression`, with matching asynchronous entry points. The model-facing evaluation tool is `nh_evaluate`, including coding-agent MCP names.
+- Breaking: resolved Python control flow is `StepOutcome` in `runtime.step_outcome`; model-proposed control flow is `ModelOutcome` in `runtime.model_outcome`, with `ModelPass`, `ModelReturn`, `ModelBreak`, `ModelContinue`, `ModelRaise`, and `ModelStepResponse` transport types. `OutcomeKind` and `allowed_outcome_kinds` distinguish control flow from `BlockKind`. No legacy aliases remain.
+- `StepCall.output_binding_names` explicitly identifies requested writes. Runtime executor protocols and outcome kinds are exported through `nighthawk.runtime`, and its lazy public symbols are discoverable with ordinary Python inspection.
+- Invalid run identifiers and usage meters fail before model resolution. Promptfoo evaluations now use the public embedded execution boundary, report resolved values and completed-run usage, and restore experimental overrides after each call.
+- `CircuitOpenError` now derives from `NighthawkError`, consistently with other library policy failures. Recoverable operation diagnostics keep their separate `ToolBoundaryError` hierarchy.
+- Reorganize host admission, model policies, request accounting, and cleanup into the host integration guide. Entry examples define reusable functions outside model scopes and distinguish Natural interpretation from Python computation.
 - Breaking: `@nh.function` replaces `@nh.natural_function`; Natural action blocks start with `execute` instead of `natural`.
 - Breaking: select `execution_model` and `decision_model` independently through `nh.run(...)`, `nh.scope(...)`, or `StepExecutorConfiguration`. Reusable functions no longer carry model configuration. No model is selected by default.
 - `FunctionDefinition` and `get_function_definition` replace the Natural-prefixed names. Function call records no longer carry decorator model selections.

@@ -9,14 +9,14 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, Return, StepCandidate, StepDefinition, StepRequest, eval_expression, execute_step
-from nighthawk.runtime.step_result import StepResult
+from nighthawk.runtime import Pass, Return, StepCandidate, StepDefinition, StepRequest, evaluate_expression, execute_step
+from nighthawk.runtime.step_outcome import StepOutcome
 from nighthawk.testing import ScriptedExecutor, pass_response
 from tests.support.executors import InspectingExecutor, ModelResponseExecutor
 
 
 @pytest.mark.asyncio
-async def test_explicit_environment_is_shared_by_reads_evaluation_discovery_and_types(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_explicit_environment_is_shared_by_reads_evaluation_discovery_and_types(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     value = "caller"
     CallerType = int  # noqa: N806
     shared: list[int] = []
@@ -30,8 +30,8 @@ async def test_explicit_environment_is_shared_by_reads_evaluation_discovery_and_
         assert environment.resolve("shared") is shared
         assert request.binding_name_to_type == {"result": str}
         assert request.return_annotation == list[str]
-        assert eval_expression(request.step_context, "(lambda: value)()") == 7
-        assert eval_expression(request.step_context, "list(value + i for i in range(2))") == [7, 8]
+        assert evaluate_expression(request.step_context, "(lambda: value)()") == 7
+        assert evaluate_expression(request.step_context, "list(value + i for i in range(2))") == [7, 8]
         assert environment.describe("value")["origin"] == "python"
         with pytest.raises(NameError):
             environment.resolve("saved_name_to_value")
@@ -62,10 +62,10 @@ async def test_explicit_environment_is_shared_by_reads_evaluation_discovery_and_
 
 
 @pytest.mark.asyncio
-async def test_empty_namespace_keeps_builtins_and_scoped_references(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_empty_namespace_keeps_builtins_and_scoped_references(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     def inspect(request: StepRequest) -> StepCandidate:
         assert request.step_context.step_locals == {}
-        assert eval_expression(request.step_context, "len([injected])") == 1
+        assert evaluate_expression(request.step_context, "len([injected])") == 1
         return StepCandidate(outcome=Pass())
 
     with nh.run(InspectingExecutor(inspect)), nh.scope(task_references={"injected": 42}):
@@ -73,7 +73,7 @@ async def test_empty_namespace_keeps_builtins_and_scoped_references(execute: Cal
 
 
 @pytest.mark.asyncio
-async def test_type_contracts_respect_explicit_and_scoped_names(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_type_contracts_respect_explicit_and_scoped_names(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     saved_name_to_value: dict[str, object] = {}
     definition = StepDefinition(
         "Resolve types in the effective environment.",
@@ -102,7 +102,7 @@ async def test_type_contracts_respect_explicit_and_scoped_names(execute: Callabl
 
 
 @pytest.mark.asyncio
-async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     events: list[StepFinished] = []
 
     @nh.function
@@ -115,7 +115,7 @@ async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callab
 
     def inspect(request: StepRequest) -> StepCandidate:
         if request.processed_natural_program == "parent":
-            assert eval_expression(request.step_context, "child(99)") == 99
+            assert evaluate_expression(request.step_context, "child(99)") == 99
             assert request.step_context.environment.resolve("value") == 7
             return StepCandidate(outcome=Pass())
         assert request.step_context.environment.resolve("value") == 99
@@ -136,7 +136,7 @@ async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callab
 
 
 @pytest.mark.asyncio
-async def test_explicit_step_cannot_inherit_parent_temporary(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_explicit_step_cannot_inherit_parent_temporary(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     def inspect(request: StepRequest) -> StepCandidate:
         request.step_context.record_assignment("parent_only", 10)
         with pytest.raises(nh.ExecutionError, match="parent_only"):
@@ -148,14 +148,14 @@ async def test_explicit_step_cannot_inherit_parent_temporary(execute: Callable[.
 
 
 @pytest.mark.asyncio
-async def test_callable_keeps_its_closure(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_callable_keeps_its_closure(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     captured = 41
 
     def helper() -> int:
         return captured + 1
 
     def inspect(request: StepRequest) -> StepCandidate:
-        assert eval_expression(request.step_context, "helper()") == 42
+        assert evaluate_expression(request.step_context, "helper()") == 42
         return StepCandidate(outcome=Pass())
 
     with nh.run(InspectingExecutor(inspect)):
@@ -163,7 +163,7 @@ async def test_callable_keeps_its_closure(execute: Callable[..., Awaitable[StepR
 
 
 @pytest.mark.asyncio
-async def test_application_model_and_explicit_types(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_application_model_and_explicit_types(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     class Selection(BaseModel):
         label: str
 
@@ -180,7 +180,7 @@ async def test_application_model_and_explicit_types(execute: Callable[..., Await
 
 
 @pytest.mark.asyncio
-async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     order: list[str] = []
 
     async def write(name: str, value: object) -> None:
@@ -196,16 +196,16 @@ async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[...,
 
 
 @pytest.mark.asyncio
-async def test_exception_expression_resolves_explicit_type(execute: Callable[..., Awaitable[StepResult]]) -> None:
-    from nighthawk.runtime.step_contract import RaiseStepOutcome
+async def test_exception_expression_resolves_explicit_type(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
+    from nighthawk.runtime.model_outcome import ModelRaise
 
-    executor = ModelResponseExecutor(RaiseStepOutcome(kind="raise", raise_message="expected", raise_error_type="SelectedError"))
+    executor = ModelResponseExecutor(ModelRaise(kind="raise", raise_message="expected", raise_error_type="SelectedError"))
     with nh.run(executor), pytest.raises(LookupError, match="expected"):
         await execute(StepDefinition("raise"), name_to_value={"SelectedError": LookupError}, write_binding=lambda name, value: None)
 
 
 @pytest.mark.asyncio
-async def test_preparation_freezes_associations_but_keeps_objects_live(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_preparation_freezes_associations_but_keeps_objects_live(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     shared: list[int] = []
     name_to_value: dict[str, object] = {"result": 0, "shared": shared}
     output_binding_names = ["result"]
@@ -231,7 +231,7 @@ async def test_preparation_freezes_associations_but_keeps_objects_live(execute: 
 
 @pytest.mark.parametrize("outcome", [nh.runtime.Break(), nh.runtime.Continue(), Return("12")])
 @pytest.mark.asyncio
-async def test_control_results_are_returned_after_saving(execute: Callable[..., Awaitable[StepResult]], outcome: StepResult) -> None:
+async def test_control_results_are_returned_after_saving(execute: Callable[..., Awaitable[StepOutcome]], outcome: StepOutcome) -> None:
     saved_name_to_value: dict[str, object] = {}
     with nh.run(InspectingExecutor(lambda request: StepCandidate(outcome=outcome, binding_name_to_value={"result": 7}))):
         result = await execute(
@@ -244,7 +244,7 @@ async def test_control_results_are_returned_after_saving(execute: Callable[..., 
 
 
 @pytest.mark.asyncio
-async def test_deny_frontmatter_applies_before_saving(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_deny_frontmatter_applies_before_saving(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     saved_name_to_value: dict[str, object] = {}
     with nh.run(InspectingExecutor(lambda request: StepCandidate(outcome=Pass()))), pytest.raises(nh.ExecutionError, match="not allowed"):
         await execute(StepDefinition("---\ndeny: [pass]\n---\nReturn."), name_to_value={}, write_binding=saved_name_to_value.__setitem__)

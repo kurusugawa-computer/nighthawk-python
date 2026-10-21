@@ -11,6 +11,8 @@ from typing import Any, cast
 
 from opentelemetry.trace import get_current_span
 
+from ..errors import NighthawkError
+
 _logger = logging.getLogger("nighthawk.resilience")
 
 
@@ -22,7 +24,7 @@ class CircuitState(Enum):
     HALF_OPEN = "half_open"
 
 
-class CircuitOpenError(Exception):
+class CircuitOpenError(NighthawkError):
     """Raised when a call is rejected because the circuit is open."""
 
     def __init__(self, reset_timeout: float, time_remaining: float) -> None:

@@ -19,10 +19,10 @@ Do the work described in <<<NH:PROGRAM>>>.
 Bindings:
 - `<name>`: read binding. The value is visible but the name will not be rebound after this block.
 - `<:name>`: write binding. Use nh_assign to set it; the new value is committed back into Python locals.
-- Mutable read bindings (lists, dicts, etc.) can be mutated in-place with nh_eval. Do not create a separate local when the program asks to change them.
+- Mutable read bindings (lists, dicts, etc.) can be mutated in-place with nh_evaluate. Do not create a separate local when the program asks to change them.
 
 Tool selection:
-- To evaluate an expression, call a function, or mutate an object in-place: nh_eval.
+- To evaluate an expression, call a function, or mutate an object in-place: nh_evaluate.
 - To rebind a write binding (<:name>): nh_assign.
 
 Execution order:
@@ -36,7 +36,7 @@ Trust boundaries:
 
 Notes:
 - Expressions may use `await`.
-- To preserve large or structured intermediate state across steps, persist it via nh_assign and re-read with focused nh_eval expressions.
+- To preserve large or structured intermediate state across steps, persist it via nh_assign and re-read with focused nh_evaluate expressions.
 """
 
 
@@ -69,22 +69,22 @@ def _validate_model_identifier(model: str) -> str:
 
 
 class StepPromptTemplates(BaseModel):
-    """Prompt templates for step execution.
+    """Prompt templates for execute blocks; decide uses typed questions and explicit evidence.
 
     Attributes:
-        step_system_prompt_template: System prompt template sent to the LLM.
-        step_user_prompt_template: User prompt template with $program, $locals,
+        system_prompt_template: System prompt template sent to the LLM.
+        user_prompt_template: User prompt template with $program, $locals,
             and $globals placeholders.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    step_system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
-    step_user_prompt_template: str = DEFAULT_STEP_USER_PROMPT_TEMPLATE
+    system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
+    user_prompt_template: str = DEFAULT_STEP_USER_PROMPT_TEMPLATE
 
 
 class StepContextLimits(BaseModel):
-    """Limits for rendering dynamic context into the LLM prompt.
+    """Presentation limits for execute blocks; decide sends complete explicit evidence.
 
     Attributes:
         locals_max_tokens: Maximum tokens for the locals section.
@@ -123,11 +123,11 @@ class StepExecutorConfiguration(BaseModel):
             Configuration representations omit the model to avoid traversing credentials.
         decision_model: Model for typed decisions; omitted models fail when their block is executed.
         decision_model_settings: Settings for the decision model.
-        model_settings: Execution model provider-specific overrides. Defaults to an empty dict;
+        execution_model_settings: Execution model provider-specific overrides. Defaults to an empty dict;
             accepts a dict or a backend-specific BaseModel (converted to dict).
             None and UNSET are invalid. An empty dict preserves model-owned defaults.
-        prompts: Prompt templates for step execution.
-        context_limits: Token and item limits for context rendering.
+        prompts: Prompt templates for execute blocks.
+        context_limits: Token and item limits for execute context previews, not decision evidence.
         json_renderer_style: Headson rendering style for JSON summarization.
         tokenizer_encoding: Explicit tiktoken encoding name. If not set, inferred
             from the model.
@@ -141,9 +141,9 @@ class StepExecutorConfiguration(BaseModel):
     execution_model: str | InstanceOf[Model] | None = Field(default=None, repr=False)
     decision_model: str | InstanceOf[Model] | None = Field(default=None, repr=False)
     decision_model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
-    model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
+    execution_model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
 
-    @field_validator("model_settings", "decision_model_settings", mode="before")
+    @field_validator("execution_model_settings", "decision_model_settings", mode="before")
     @classmethod
     def _normalize_model_settings(cls, value: Any) -> dict[str, Any]:
         if isinstance(value, BaseModel):

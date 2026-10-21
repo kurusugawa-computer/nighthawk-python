@@ -55,7 +55,7 @@ def test_application_validation_failure_stops_before_another_model_request(route
         model_calls += 1
         if model_calls == 1:
             selected = (
-                ToolCallPart("action", {}, "operation") if route == "native" else ToolCallPart("nh_eval", {"expression": "action()"}, "operation")
+                ToolCallPart("action", {}, "operation") if route == "native" else ToolCallPart("nh_evaluate", {"expression": "action()"}, "operation")
             )
             return ModelResponse(parts=[selected])
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])

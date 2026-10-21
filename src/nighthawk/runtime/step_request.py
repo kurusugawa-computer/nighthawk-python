@@ -9,9 +9,8 @@ from ..composition import UNSET, UnsetType
 from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
 from .step_context import StepContext
-from .step_contract import StepKind
 from .step_definition import BlockKind
-from .step_result import Raise, StepResult
+from .step_outcome import OutcomeKind, Raise, StepOutcome
 
 
 def _snapshot_output_bindings(environment: StepEnvironment, output_binding_names: Sequence[str]) -> dict[str, object]:
@@ -44,7 +43,7 @@ class StepRequest(BaseModel):
     output_binding_names: tuple[str, ...]
     binding_name_to_type: Mapping[str, object]
     return_annotation: object
-    allowed_step_kinds: tuple[StepKind, ...]
+    allowed_outcome_kinds: tuple[OutcomeKind, ...]
     allow_awaitable_return: bool = False
 
     def snapshot_output_bindings(self) -> dict[str, object]:
@@ -71,9 +70,9 @@ class StepRequest(BaseModel):
             raise ValueError("StepRequest output names must be unique")
         if set(self.binding_name_to_type) != set(self.output_binding_names):
             raise ValueError("StepRequest requires one contract for each declared output")
-        if self.block_kind == "decide" and (len(self.output_binding_names) != 1 or self.allowed_step_kinds != ("pass",)):
+        if self.block_kind == "decide" and (len(self.output_binding_names) != 1 or self.allowed_outcome_kinds != ("pass",)):
             raise ValueError("decide requires one output and only the pass outcome")
-        if not self.allowed_step_kinds:
+        if not self.allowed_outcome_kinds:
             raise ValueError("StepRequest requires at least one allowed outcome kind")
         return self
 
@@ -89,7 +88,7 @@ class StepCandidate(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid", validate_default=True)
 
-    outcome: StepResult
+    outcome: StepOutcome
     binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
 
     @field_validator("binding_name_to_value", mode="after")

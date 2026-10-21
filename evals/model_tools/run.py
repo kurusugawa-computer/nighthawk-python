@@ -21,7 +21,7 @@ from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.openai import OpenAIChatModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from nighthawk.runtime.step_contract import build_step_json_schema, build_step_system_prompt_suffix_fragment
+from nighthawk.runtime.model_outcome import build_model_response_instructions, build_model_response_schema
 
 from .cases import CASES, Case, check_outcome, make_workspace
 from .prototype import ApprovalRejectedError, build_tools, system_prompt, user_prompt
@@ -74,8 +74,8 @@ async def run_trial(
 ) -> dict[str, Any]:
     workspace = make_workspace(case, surface)
     allowed = ("pass", "return", "raise", "break", "continue") if case.outcome == "continue" else ("pass", "return", "raise")
-    schema = build_step_json_schema(allowed_kinds=allowed, raise_error_type_binding_names=())
-    instructions = system_prompt(workspace) + build_step_system_prompt_suffix_fragment(allowed_kinds=allowed, raise_error_type_binding_names=())
+    schema = build_model_response_schema(allowed_kinds=allowed, raise_error_type_binding_names=())
+    instructions = system_prompt(workspace) + build_model_response_instructions(allowed_kinds=allowed, raise_error_type_binding_names=())
     tools = build_tools(workspace, guidance)
     agent = Agent(
         model,

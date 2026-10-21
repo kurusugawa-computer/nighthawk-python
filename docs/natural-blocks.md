@@ -15,11 +15,7 @@ All examples assume the [Quickstart](quickstart.md) setup:
 ```py
 import nighthawk as nh
 
-step_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
-)
-
-with nh.run(step_executor):
+with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
     ...  # Call natural functions here
 ```
 
@@ -27,7 +23,7 @@ See [Executors](executors.md) for model identifiers and backend options.
 
 ## Anatomy of a Natural block
 
-Every Natural block execution follows the same pattern: Nighthawk assembles a prompt, sends it to the LLM, and the LLM responds with tool calls and a final outcome. Understanding the prompt structure is the key to writing effective Natural blocks.
+Each `execute` block follows this pattern: Nighthawk assembles a prompt, sends it to the LLM, and the LLM responds with tool calls and a final outcome. Understanding the prompt structure is the key to writing effective Natural blocks.
 
 ### What the LLM receives
 
@@ -71,9 +67,9 @@ text: str = "Server is on fire!"
 
 Three sections:
 
-- **`<<<NH:PROGRAM>>>`** -- your Natural block text (after sentinel removal and `textwrap.dedent`).
+- **`<<<NH:PROGRAM>>>`** -- your Natural block text (after header removal and `textwrap.dedent`).
 - **`<<<NH:LOCALS>>>`** -- bounded working context, with origins and output contracts.
-  Explicit references and outputs take priority, followed by Python working locals and inherited state, with alphabetical ordering within each priority class.
+  Explicit references and outputs take priority, followed by other Python working locals, with alphabetical ordering within each priority class.
 - **`<<<NH:GLOBALS>>>`** -- referenced globals and builtins, plus scoped task capabilities not already presented as working state.
 
 Design the locals at the block boundary to show what matters for the task.
@@ -94,7 +90,7 @@ Use **f-string injection** only for trusted program fragments; interpolation cha
 ### Read bindings (`<name>`)
 
 A read binding resolves a required value and prioritizes it in the prompt.
-It does not restrict access to other lexical, inherited, or scoped task values.
+It does not restrict access to other Python lexical or scoped task values.
 An existing Python name can be rebound only if also declared as an output.
 
 ```py
@@ -476,7 +472,7 @@ Design guidelines for structured output models:
 - **Keep models flat.** Nested models add LLM cognitive load. Prefer `approved: bool, reason: str, risk_level: str` over a model-within-a-model hierarchy.
 - **Use descriptive field names.** The LLM sees the model schema; field names are the primary signal for what to produce.
 - **Constrain field types.** Use `Literal["low", "medium", "high"]` instead of `str` where possible. This enables both LLM guidance and host-side validation.
-- **Handle validation failures at their boundary.** A recoverable `nh_assign` validation failure is returned to the model as a tool error so it can correct the value. Invalid output bindings at finalization instead raise `ExecutionError`, whose `step_failed.failure_stage` is `"binding_validation"` and whose cause is the original validation exception. See [Error handling](patterns.md#error-handling) for executable examples. Choose retry or fallback only when repeating earlier helper calls, mutations, and other effects is acceptable; validation failure does not roll them back.
+- **Handle validation failures at their boundary.** A recoverable assignment validation failure is returned to the model so it can correct the value. Invalid output bindings at finalization instead raise `ExecutionError`, whose `step_failed.failure_stage` is `"binding_validation"` and whose cause is the original validation exception. See [Error handling](patterns.md#error-handling) for executable examples. Choose retry or fallback only when repeating earlier helper calls, mutations, and other effects is acceptable; validation failure does not roll them back.
 
 ## Designing binding functions
 

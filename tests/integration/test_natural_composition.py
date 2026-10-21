@@ -133,7 +133,7 @@ def executor(request: pytest.FixtureRequest) -> nh.AgentStepExecutor:
     return nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
             execution_model=f"openai-responses:{request.param}",
-            model_settings=settings_class(openai_reasoning_effort="medium", max_tokens=8192, timeout=90),
+            execution_model_settings=settings_class(openai_reasoning_effort="medium", max_tokens=8192, timeout=90),
         )
     )
 

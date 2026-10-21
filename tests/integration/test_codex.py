@@ -11,7 +11,7 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
 
     run_configuration = nh.StepExecutorConfiguration(
         execution_model="codex:gpt-5.6-luna",
-        model_settings={
+        execution_model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
     )
@@ -39,7 +39,7 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
 
     run_configuration = nh.StepExecutorConfiguration(
         execution_model="codex:gpt-5.6-luna",
-        model_settings={
+        execution_model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
     )
@@ -77,7 +77,7 @@ def test_codex_skill() -> None:
 
         configuration = nh.StepExecutorConfiguration(
             execution_model="codex:default",
-            model_settings=CodexModelSettings(
+            execution_model_settings=CodexModelSettings(
                 working_directory=str(working_directory.resolve()),
             ).model_dump(),
         )
@@ -95,7 +95,7 @@ def test_codex_skill() -> None:
                 ---
                 Invoke the `hoge` skill exactly as written. It creates `test.txt` in the current working directory.
                 Then run the shell command `pwd` with the agent's shell tool (Bash), without changing the current working directory.
-                Do not use `nh_eval` or Python to determine the directory; the answer must come from the shell command output.
+                Do not use `nh_evaluate` or Python to determine the directory; the answer must come from the shell command output.
                 Return the printed path as a string with leading and trailing whitespace removed.
                 """
 
@@ -117,7 +117,7 @@ def test_codex_skill_calc() -> None:
 
     configuration = nh.StepExecutorConfiguration(
         execution_model="codex:default",
-        model_settings=CodexModelSettings(
+        execution_model_settings=CodexModelSettings(
             working_directory=str(working_directory.resolve()),
         ).model_dump(),
     )

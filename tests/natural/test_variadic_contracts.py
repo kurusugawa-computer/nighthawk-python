@@ -7,7 +7,7 @@ import pytest
 from pydantic import Field
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_tool
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_expression
 from nighthawk.runtime.operation_contract import OperationError
 
 
@@ -23,7 +23,7 @@ class CandidateExecutor:
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         if self.use_assignment:
-            assign_tool(request.step_context, "values", repr(self.value))
+            assign_expression(request.step_context, "values", repr(self.value))
             return StepCandidate(outcome=Pass())
         return StepCandidate(outcome=Pass(), binding_name_to_value={"values": self.value})
 

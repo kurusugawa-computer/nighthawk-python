@@ -5,20 +5,20 @@ from collections.abc import Mapping
 from ..composition import UNSET, UnsetType
 from ..errors import ExecutionError
 from .expression import evaluate_expression_operation
+from .model_outcome import ModelOutcome, ModelRaise, ModelReturn
 from .operation_contract import OperationError
-from .step_contract import RaiseStepOutcome, ReturnStepOutcome, StepOutcome
+from .step_outcome import Break, Continue, Pass, Raise, Return, StepOutcome
 from .step_request import StepCandidate, StepRequest
-from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 
 async def resolve_model_candidate(
     request: StepRequest,
-    outcome: StepOutcome,
+    outcome: ModelOutcome,
     binding_name_to_value: Mapping[str, object] | UnsetType = UNSET,
 ) -> StepCandidate:
     """Resolve a provider response once; leave commit validation to the runner."""
-    if outcome.kind not in request.allowed_step_kinds:
-        raise ExecutionError(f"Step '{outcome.kind}' is not allowed for this step. Allowed kinds: {request.allowed_step_kinds}")
+    if outcome.kind not in request.allowed_outcome_kinds:
+        raise ExecutionError(f"Step '{outcome.kind}' is not allowed for this step. Allowed kinds: {request.allowed_outcome_kinds}")
     if not isinstance(binding_name_to_value, UnsetType) and (
         not isinstance(binding_name_to_value, Mapping) or any(not isinstance(name, str) for name in binding_name_to_value)
     ):
@@ -27,10 +27,10 @@ async def resolve_model_candidate(
     undeclared = supplied_name_to_value.keys() - set(request.output_binding_names)
     if undeclared:
         raise ExecutionError(f"Undeclared output binding names: {sorted(undeclared)}")
-    if isinstance(outcome, RaiseStepOutcome) and supplied_name_to_value:
+    if isinstance(outcome, ModelRaise) and supplied_name_to_value:
         raise ExecutionError("Raise cannot include output bindings")
-    resolved: StepResult
-    if isinstance(outcome, ReturnStepOutcome):
+    resolved: StepOutcome
+    if isinstance(outcome, ModelReturn):
         value = await evaluate_expression_operation(
             request.step_context,
             outcome.return_expression,
@@ -40,7 +40,7 @@ async def resolve_model_candidate(
             override_name_to_value=supplied_name_to_value,
         )
         resolved = Return(value)
-    elif isinstance(outcome, RaiseStepOutcome):
+    elif isinstance(outcome, ModelRaise):
         error_type: object = Exception
         if outcome.raise_error_type is not None:
             try:

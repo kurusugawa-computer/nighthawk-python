@@ -38,7 +38,7 @@ def _get_tool_function(name: str):  # type: ignore[no-untyped-def]
     raise ValueError(f"Tool {name!r} not found")
 
 
-def test_nh_eval_awaits_async_expression() -> None:
+def test_nh_evaluate_awaits_async_expression() -> None:
     async def calculate(a: int, b: int) -> int:
         return a + b * 8
 
@@ -46,22 +46,22 @@ def test_nh_eval_awaits_async_expression() -> None:
     step_context.record_assignment("calculate", calculate)
     run_context = _new_run_context(step_context)
 
-    nh_eval = _get_tool_function("nh_eval")
-    result = asyncio.run(nh_eval(run_context, expression="calculate(1, 2)"))
+    nh_evaluate = _get_tool_function("nh_evaluate")
+    result = asyncio.run(nh_evaluate(run_context, expression="calculate(1, 2)"))
     assert result == 17
 
 
-def test_nh_eval_handles_sync_expression() -> None:
+def test_nh_evaluate_handles_sync_expression() -> None:
     step_context = _new_step_context()
     step_context.record_assignment("x", 10)
     run_context = _new_run_context(step_context)
 
-    nh_eval = _get_tool_function("nh_eval")
-    result = asyncio.run(nh_eval(run_context, expression="x + 5"))
+    nh_evaluate = _get_tool_function("nh_evaluate")
+    result = asyncio.run(nh_evaluate(run_context, expression="x + 5"))
     assert result == 15
 
 
-def test_nh_eval_supports_top_level_await() -> None:
+def test_nh_evaluate_supports_top_level_await() -> None:
     async def fetch(key: str) -> str:
         return f"value-{key}"
 
@@ -69,8 +69,8 @@ def test_nh_eval_supports_top_level_await() -> None:
     step_context.record_assignment("fetch", fetch)
     run_context = _new_run_context(step_context)
 
-    nh_eval = _get_tool_function("nh_eval")
-    result = asyncio.run(nh_eval(run_context, expression="await fetch('abc')"))
+    nh_evaluate = _get_tool_function("nh_evaluate")
+    result = asyncio.run(nh_evaluate(run_context, expression="await fetch('abc')"))
     assert result == "value-abc"
 
 

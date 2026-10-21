@@ -5,8 +5,8 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
+from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 from nighthawk.runtime.scoping import get_usage_meter
-from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
 
 
 def test_agent_step_executor_constructor_supports_standard_path_with_agent() -> None:
@@ -36,14 +36,14 @@ def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.tools.assignment import assign_tool
+            from nighthawk.runtime import assign_expression
 
             assert deps is not None
             _ = user_prompt
             _ = kwargs
 
-            assign_tool(deps, "result.value", "9")
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            assign_expression(deps, "result.value", "9")
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
 
@@ -61,7 +61,7 @@ def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
 
 def test_agent_executor_records_run_result_usage() -> None:
     class FakeRunResult:
-        output = StepFinalResult(result=PassStepOutcome(kind="pass"))
+        output = ModelStepResponse(result=ModelPass(kind="pass"))
         usage = RunUsage(input_tokens=11, output_tokens=7)
 
     class FakeAgent:
@@ -98,7 +98,7 @@ def test_agent_executor_passes_plain_string_to_text_only_custom_agent() -> None:
             assert deps is not None
             _ = kwargs
             self.seen_prompt_type_list.append(type(user_prompt))
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     recording_agent = RecordingAgent()
 
@@ -128,7 +128,7 @@ def test_agent_executor_passes_multimodal_tuple_to_custom_agent() -> None:
             assert deps is not None
             _ = kwargs
             self.seen_prompt_list.append(user_prompt)
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     recording_agent = RecordingAgent()
     image = BinaryContent(data=b"\x89PNG\r\n\x1a\n", media_type="image/png", identifier="img")
@@ -159,8 +159,8 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
             self.seen_model_identifiers: list[str] = []
 
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime.step_contract import PassStepOutcome, StepFinalResult
-            from nighthawk.tools.assignment import assign_tool
+            from nighthawk.runtime import assign_expression
+            from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 
             assert deps is not None
             _ = user_prompt
@@ -171,9 +171,9 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
             current_model_identifier = current_step_executor.configuration.execution_model
             assert isinstance(current_model_identifier, str)
             self.seen_model_identifiers.append(current_model_identifier)
-            assign_tool(deps, "observed_model_identifier", repr(current_model_identifier))
+            assign_expression(deps, "observed_model_identifier", repr(current_model_identifier))
 
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     initial_model_identifier = "openai-responses:gpt-5.6-luna"
     recording_agent = RecordingAgent()
@@ -246,7 +246,7 @@ def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
             _ = (user_prompt, deps, kwargs)
             assert toolsets is not None
             self.seen_tool_names.append(",".join(sorted(toolsets[0].tools.keys())))
-            return FakeRunResult(StepFinalResult(result=PassStepOutcome(kind="pass")))
+            return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
     agent = FakeAgent()
 
@@ -263,7 +263,7 @@ def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
         natural_pass_function()
 
     assert agent.seen_tool_names == [
-        "nh_assign,nh_eval",
-        "greet,nh_assign,nh_eval",
-        "nh_assign,nh_eval",
+        "nh_assign,nh_evaluate",
+        "greet,nh_assign,nh_evaluate",
+        "nh_assign,nh_evaluate",
     ]

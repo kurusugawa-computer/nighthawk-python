@@ -4,7 +4,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .assignment import AssignmentResult, assign_tool, assign_tool_async
+    from .assignment import AssignmentResult, assign_expression, assign_expression_async
     from .bindings import (
         MISSING_ANNOTATION,
         BindingDeclarationError,
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .context import ContextBuilder, ContextRequest, DefaultContextBuilder
     from .embedded import BindingWriter, execute_step, execute_step_async
     from .environment import StepEnvironment
-    from .expression import eval_expression, eval_expression_async
+    from .expression import evaluate_expression, evaluate_expression_async
     from .inspection import inspect_value
     from .operation_contract import (
         OperationDeliveryError,
@@ -27,11 +27,17 @@ if TYPE_CHECKING:
         OperationRequest,
     )
     from .step_definition import BlockKind, StepDefinition
+    from .step_executor import AsyncStepExecutor, ConfigurableStepExecutor, StepExecutor, SyncStepExecutor
+    from .step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
     from .step_request import StepCandidate, StepRequest
-    from .step_result import Break, Continue, Pass, Raise, Return, StepResult
 
 _name_to_module = {
-    "StepResult": "step_result",
+    "OutcomeKind": "step_outcome",
+    "AsyncStepExecutor": "step_executor",
+    "ConfigurableStepExecutor": "step_executor",
+    "StepExecutor": "step_executor",
+    "SyncStepExecutor": "step_executor",
+    "StepOutcome": "step_outcome",
     "StepDefinition": "step_definition",
     "BlockKind": "step_definition",
     "BindingDeclarationError": "bindings",
@@ -49,10 +55,10 @@ _name_to_module = {
     "StepRequest": "step_request",
     "StepCandidate": "step_request",
     "AssignmentResult": "assignment",
-    "assign_tool": "assignment",
-    "assign_tool_async": "assignment",
-    "eval_expression": "expression",
-    "eval_expression_async": "expression",
+    "assign_expression": "assignment",
+    "assign_expression_async": "assignment",
+    "evaluate_expression": "expression",
+    "evaluate_expression_async": "expression",
     "StepEnvironment": "environment",
     "inspect_value": "inspection",
     "OperationError": "operation_contract",
@@ -61,15 +67,20 @@ _name_to_module = {
     "OperationRejection": "operation_contract",
     "OperationFinished": "operation_contract",
     "OperationRequest": "operation_contract",
-    "Pass": "step_result",
-    "Return": "step_result",
-    "Break": "step_result",
-    "Continue": "step_result",
-    "Raise": "step_result",
+    "Pass": "step_outcome",
+    "Return": "step_outcome",
+    "Break": "step_outcome",
+    "Continue": "step_outcome",
+    "Raise": "step_outcome",
 }
 
 __all__ = [
-    "StepResult",
+    "OutcomeKind",
+    "AsyncStepExecutor",
+    "ConfigurableStepExecutor",
+    "StepExecutor",
+    "SyncStepExecutor",
+    "StepOutcome",
     "StepDefinition",
     "BlockKind",
     "BindingDeclarationError",
@@ -87,10 +98,10 @@ __all__ = [
     "StepCandidate",
     "StepRequest",
     "AssignmentResult",
-    "assign_tool",
-    "assign_tool_async",
-    "eval_expression",
-    "eval_expression_async",
+    "assign_expression",
+    "assign_expression_async",
+    "evaluate_expression",
+    "evaluate_expression_async",
     "StepEnvironment",
     "inspect_value",
     "OperationError",
@@ -109,5 +120,9 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     if name not in _name_to_module:
-        raise AttributeError(name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     return getattr(import_module(f".{_name_to_module[name]}", __name__), name)
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

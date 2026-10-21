@@ -1,4 +1,4 @@
-# Nighthawk StepFinalResult Suffix Fragment A/B Testing
+# Nighthawk ModelStepResponse Suffix Fragment A/B Testing
 #
 # Tests different suffix fragment text variants that guide LLM outcome selection.
 # All variants use the same base system prompt and tool preset to isolate the

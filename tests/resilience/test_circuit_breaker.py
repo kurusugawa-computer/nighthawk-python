@@ -16,6 +16,19 @@ from nighthawk.runtime import scoping as runtime_scoping
 from tests.support.executors import StubExecutor
 
 
+def test_open_circuit_can_be_caught_as_a_library_failure() -> None:
+    @circuit_breaker(fail_threshold=1, on=ValueError)
+    def failing() -> None:
+        raise ValueError("unavailable")
+
+    with pytest.raises(ValueError):
+        failing()
+    with pytest.raises(nh.NighthawkError) as caught:
+        failing()
+    assert isinstance(caught.value, CircuitOpenError)
+    assert caught.value.time_remaining > 0
+
+
 @pytest.fixture
 def run_span_exporter() -> Generator[InMemorySpanExporter]:
     span_exporter = InMemorySpanExporter()

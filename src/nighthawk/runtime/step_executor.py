@@ -27,9 +27,15 @@ from ._user_content import try_project_user_prompt_value
 from .async_bridge import run_coroutine_synchronously
 from .context import DefaultContextBuilder, build_context_content, build_context_request
 from .model_candidate import resolve_model_candidate
+from .model_outcome import (
+    ModelOutcome,
+    ModelStepResponse,
+    build_model_response_instructions,
+    build_model_response_schema,
+)
 from .model_response import get_response_rejection, record_response_rejection
 from .operation_contract import OperationRejectedError
-from .prompt import build_system_prompt, extract_references_and_program, resolve_step_system_prompt_template_text
+from .prompt import build_system_prompt, extract_references_and_program, resolve_system_prompt_template_text
 from .scoping import (
     _context_builder_var,
     _current_capabilities,
@@ -44,16 +50,8 @@ from .step_context import (
     resolve_name_in_step_context,
     step_context_scope,
 )
-from .step_contract import (
-    STEP_KINDS,
-    StepFinalResult,
-    StepKind,
-    StepOutcome,
-    build_step_json_schema,
-    build_step_system_prompt_suffix_fragment,
-)
+from .step_outcome import OUTCOME_KINDS, OutcomeKind, Pass
 from .step_request import StepCandidate, StepRequest
-from .step_result import Pass
 
 
 def _require_decision_model(model: Model) -> None:
@@ -102,7 +100,7 @@ class _StepOutputBoundary(_OperationFailureGuard):
         if rejection is not None:
             raise ModelRetry(json.dumps(rejection.model_feedback(), ensure_ascii=False))
         try:
-            return await resolve_model_candidate(self.request, _parse_step_outcome(output))
+            return await resolve_model_candidate(self.request, _parse_model_outcome(output))
         except OperationRejectedError as exception:
             if ctx.deps.operation_failure is not None:
                 raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
@@ -110,13 +108,13 @@ class _StepOutputBoundary(_OperationFailureGuard):
             raise ModelRetry(json.dumps(exception.rejection.model_feedback(), ensure_ascii=False)) from exception
 
 
-def _parse_step_outcome(raw_output: Any) -> StepOutcome:
+def _parse_model_outcome(raw_output: Any) -> ModelOutcome:
     try:
-        if isinstance(raw_output, StepFinalResult):
+        if isinstance(raw_output, ModelStepResponse):
             return raw_output.result
         if isinstance(raw_output, dict) and "result" in raw_output:
-            return TypeAdapter(StepOutcome).validate_python(raw_output["result"])
-        return TypeAdapter(StepOutcome).validate_python(raw_output)
+            return TypeAdapter(ModelOutcome).validate_python(raw_output["result"])
+        return TypeAdapter(ModelOutcome).validate_python(raw_output)
     except Exception as exception:
         raise ExecutionError(f"Step produced invalid step outcome: {exception}") from exception
 
@@ -166,7 +164,7 @@ class ConfigurableStepExecutor(Protocol):
     def resolve_model_selection(self, selection: ModelSelection) -> StepExecutor: ...
 
 
-def _new_agent_step_executor(
+def _create_execution_agent(
     configuration: StepExecutorConfiguration,
 ) -> StepExecutionAgent:
     model_identifier = configuration.execution_model
@@ -196,10 +194,10 @@ def _new_agent_step_executor(
 
     agent = Agent(
         model=model,
-        output_type=StepFinalResult,
+        output_type=ModelStepResponse,
         deps_type=StepContext,
         system_prompt=system_prompt_text,
-        model_settings=cast(ModelSettings, configuration.model_settings),
+        model_settings=cast(ModelSettings, configuration.execution_model_settings),
     )
 
     @agent.system_prompt(dynamic=True)
@@ -211,7 +209,7 @@ def _new_agent_step_executor(
         if not suffix_fragments:
             return None
         return "\n\n".join(
-            resolve_step_system_prompt_template_text(
+            resolve_system_prompt_template_text(
                 template_text=fragment,
                 tool_result_max_tokens=configuration.context_limits.tool_result_max_tokens,
             )
@@ -248,7 +246,7 @@ class AgentStepExecutor:
             raise NighthawkError("The external agent owns model selection; configuration.execution_model must be a string")
         self.agent_is_managed = agent is None
         self.agent = (
-            agent if agent is not None else (_new_agent_step_executor(self.configuration) if self.configuration.execution_model is not None else None)
+            agent if agent is not None else (_create_execution_agent(self.configuration) if self.configuration.execution_model is not None else None)
         )
         self.token_encoding = self.configuration.resolve_token_encoding()
         self.tool_result_rendering_policy = ToolResultRenderingPolicy(
@@ -376,14 +374,14 @@ class AgentStepExecutor:
         *,
         processed_natural_program: str,
         step_context: StepContext,
-        allowed_step_kinds: tuple[StepKind, ...],
+        allowed_outcome_kinds: tuple[OutcomeKind, ...],
     ) -> tuple[object, str]:
-        unknown_kinds = set(allowed_step_kinds).difference(STEP_KINDS)
+        unknown_kinds = set(allowed_outcome_kinds).difference(OUTCOME_KINDS)
         if unknown_kinds:
-            raise ExecutionError(f"Internal error: allowed_step_kinds contains unknown kinds: {tuple(sorted(unknown_kinds))}")
+            raise ExecutionError(f"Internal error: allowed_outcome_kinds contains unknown kinds: {tuple(sorted(unknown_kinds))}")
 
-        allowed_kinds_deduplicated = tuple(dict.fromkeys(allowed_step_kinds))
-        allowed_kinds_typed = cast(tuple[StepKind, ...], allowed_kinds_deduplicated)
+        allowed_kinds_deduplicated = tuple(dict.fromkeys(allowed_outcome_kinds))
+        allowed_kinds_typed = cast(tuple[OutcomeKind, ...], allowed_kinds_deduplicated)
 
         referenced_names, _ = extract_references_and_program(processed_natural_program)
 
@@ -403,16 +401,16 @@ class AgentStepExecutor:
 
         raise_error_type_binding_names = tuple(error_type_binding_name_list)
 
-        step_system_prompt_fragment = build_step_system_prompt_suffix_fragment(
+        step_system_prompt_fragment = build_model_response_instructions(
             allowed_kinds=allowed_kinds_typed,
             raise_error_type_binding_names=raise_error_type_binding_names,
         )
 
-        outcome_json_schema = build_step_json_schema(
+        outcome_json_schema = build_model_response_schema(
             allowed_kinds=allowed_kinds_typed,
             raise_error_type_binding_names=raise_error_type_binding_names,
         )
-        structured_output_type = StructuredDict(outcome_json_schema, name="StepFinalResult")
+        structured_output_type = StructuredDict(outcome_json_schema, name="ModelStepResponse")
 
         return structured_output_type, step_system_prompt_fragment
 
@@ -427,7 +425,7 @@ class AgentStepExecutor:
             raise NighthawkError("execute requires execution_model in run or scope")
         step_context = request.step_context
         processed_natural_program = request.processed_natural_program
-        allowed_step_kinds = request.allowed_step_kinds
+        allowed_outcome_kinds = request.allowed_outcome_kinds
         if step_context.tool_result_rendering_policy is None:
             step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
 
@@ -443,7 +441,7 @@ class AgentStepExecutor:
         structured_output_type, step_system_prompt_fragment = self._build_structured_output_and_prompt_fragment(
             processed_natural_program=processed_natural_program,
             step_context=step_context,
-            allowed_step_kinds=allowed_step_kinds,
+            allowed_outcome_kinds=allowed_outcome_kinds,
         )
 
         with (
@@ -477,7 +475,7 @@ class AgentStepExecutor:
         if isinstance(result.output, StepCandidate):
             return result.output
         # Protocol agents that do not execute Pydantic AI capabilities own their model loop.
-        return await resolve_model_candidate(request, _parse_step_outcome(result.output))
+        return await resolve_model_candidate(request, _parse_model_outcome(result.output))
 
     def run_step(
         self,

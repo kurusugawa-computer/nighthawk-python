@@ -11,7 +11,7 @@ def test_claude_code_cli_natural_step_uses_tool(tmp_path: Path) -> None:
 
     run_configuration = nh.StepExecutorConfiguration(
         execution_model="claude-code-cli:haiku",
-        model_settings=ClaudeCodeCliModelSettings(
+        execution_model_settings=ClaudeCodeCliModelSettings(
             working_directory=str(tmp_path.resolve()),
         ).model_dump(),
     )
@@ -46,7 +46,7 @@ def test_claude_code_cli_skill() -> None:
 
         configuration = nh.StepExecutorConfiguration(
             execution_model="claude-code-cli:sonnet",
-            model_settings=ClaudeCodeCliModelSettings(
+            execution_model_settings=ClaudeCodeCliModelSettings(
                 permission_mode="bypassPermissions",
                 setting_sources=["project"],
                 working_directory=str(working_directory.resolve()),
@@ -66,7 +66,7 @@ def test_claude_code_cli_skill() -> None:
                 ---
                 Invoke the `hoge` skill exactly as written. It creates `test.txt` in the current working directory.
                 Then run the shell command `pwd` with the agent's shell tool (Bash), without changing the current working directory.
-                Do not use `nh_eval` or Python to determine the directory; the answer must come from the shell command output.
+                Do not use `nh_evaluate` or Python to determine the directory; the answer must come from the shell command output.
                 Return the printed path as a string with leading and trailing whitespace removed.
                 """
 
@@ -88,7 +88,7 @@ def test_claude_code_cli_skill_calc() -> None:
 
     configuration = nh.StepExecutorConfiguration(
         execution_model="claude-code-cli:haiku",
-        model_settings=ClaudeCodeCliModelSettings(
+        execution_model_settings=ClaudeCodeCliModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
             working_directory=str(working_directory.resolve()),
@@ -126,7 +126,7 @@ def test_claude_code_cli_mcp_callback() -> None:
 
     configuration = nh.StepExecutorConfiguration(
         execution_model="claude-code-cli:haiku",
-        model_settings=ClaudeCodeCliModelSettings(
+        execution_model_settings=ClaudeCodeCliModelSettings(
             permission_mode="bypassPermissions",
             setting_sources=["project"],
         ).model_dump(),

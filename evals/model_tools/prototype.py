@@ -305,7 +305,7 @@ def build_tools(workspace: Workspace, guidance: Literal["short", "examples"]) ->
         tools.append(
             Tool(
                 evaluate_merged,
-                name="nh_eval",
+                name="nh_evaluate",
                 sequential=True,
                 description=evaluation_description
                 + " Supply target_path to retain the value; omit it for evaluation only. "
@@ -316,9 +316,9 @@ def build_tools(workspace: Workspace, guidance: Literal["short", "examples"]) ->
         description = evaluation_description
         if workspace.surface == "original":
             description += " environment selects the namespace for the whole expression; the default is effective."
-            evaluation_tool = Tool(evaluate_original, name="nh_eval", sequential=True, description=description)
+            evaluation_tool = Tool(evaluate_original, name="nh_evaluate", sequential=True, description=description)
         else:
-            evaluation_tool = Tool(evaluate_refined, name="nh_eval", sequential=True, description=description)
+            evaluation_tool = Tool(evaluate_refined, name="nh_evaluate", sequential=True, description=description)
         tools.extend(
             [
                 evaluation_tool,

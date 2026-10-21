@@ -57,7 +57,7 @@ Eval prompts are experimental copies of production code. Keep them in sync; dive
 |---|---|
 | `evals/promptfoo/prompts/eval_default.txt` | `configuration.py:DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE` |
 | `evals/promptfoo/prompts/eval_coding_agent.txt` | No single counterpart; coding agent backends receive this prompt via `system_prompt_file` config. |
-| Suffix variants in `evals/promptfoo/provider.py` (`_build_suffix_*`) | `step_contract.py:build_step_system_prompt_suffix_fragment` |
+| Suffix variants in `evals/promptfoo/provider.py` (`_build_suffix_*`) | `model_outcome.py:build_model_response_instructions` |
 | Tool presets in `evals/promptfoo/provider.py` (`_build_tool_preset`) | `tools/provided.py` (names and descriptions) + `tools/declarations.py` (registration) |
 
 ## Eval evidence

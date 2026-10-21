@@ -23,14 +23,14 @@ configuration = nh.StepExecutorConfiguration(execution_model="codex:default")
 
 The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-5.6-luna`). Available aliases depend on the backend CLI version.
 
-Backend-specific settings are configured via the `model_settings` field of `StepExecutorConfiguration`. Each backend provides a settings class (`ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`, `CodexModelSettings`) that can be passed directly — `StepExecutorConfiguration` auto-converts `BaseModel` instances to dicts internally.
+Backend-specific settings are configured via the `execution_model_settings` field of `StepExecutorConfiguration`. Each backend provides a settings class (`ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`, `CodexModelSettings`) that can be passed directly — `StepExecutorConfiguration` auto-converts `BaseModel` instances to dicts internally.
 
 ## Shared capabilities
 
 All three backends provide capabilities not available with Pydantic AI providers. See the [capability matrix](executors.md#capability-matrix) for a summary.
 
 Pydantic AI capabilities observe the backend's exposed request, which may contain multiple internal model calls.
-Per-internal-request admission requires backend-specific support; see [request observation](runtime-configuration.md#request-usage-and-admission).
+Per-internal-request admission requires backend-specific support; see [request observation](host-integration.md#request-usage-and-admission).
 
 - **Skill execution:** The CLI loads and executes skills from its standard skill directories. See [Skills](#skills) below.
 - **MCP tool exposure:** Nighthawk tools are exposed to the CLI via an embedded MCP server started automatically.
@@ -74,8 +74,8 @@ from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
 configuration = nh.StepExecutorConfiguration(
     execution_model="claude-code-sdk:default",
-    model_settings=ClaudeCodeSdkModelSettings(
-        allowed_tool_names=("nh_eval", "nh_assign"),
+    execution_model_settings=ClaudeCodeSdkModelSettings(
+        allowed_tool_names=("nh_evaluate", "nh_assign"),
     ),
 )
 ```
@@ -126,7 +126,7 @@ from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
 
 configuration = nh.StepExecutorConfiguration(
     execution_model="claude-code-cli:sonnet",
-    model_settings=ClaudeCodeCliModelSettings(
+    execution_model_settings=ClaudeCodeCliModelSettings(
         permission_mode="bypassPermissions",
         setting_sources=["project"],
         max_turns=50,
@@ -171,7 +171,7 @@ from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
 
 configuration = nh.StepExecutorConfiguration(
     execution_model="claude-code-sdk:sonnet",
-    model_settings=ClaudeCodeSdkModelSettings(
+    execution_model_settings=ClaudeCodeSdkModelSettings(
         permission_mode="bypassPermissions",
         setting_sources=["project"],
         claude_allowed_tool_names=("Skill", "Bash"),
@@ -219,7 +219,7 @@ from nighthawk.backends.codex import CodexModelSettings
 
 configuration = nh.StepExecutorConfiguration(
     execution_model="codex:default",
-    model_settings=CodexModelSettings(
+    execution_model_settings=CodexModelSettings(
         working_directory="/abs/path/to/project",
     ),
 )

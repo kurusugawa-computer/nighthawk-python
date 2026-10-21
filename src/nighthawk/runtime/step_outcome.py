@@ -1,8 +1,12 @@
 """Resolved Python outcomes at the host commit boundary."""
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
+
+type OutcomeKind = Literal["pass", "return", "break", "continue", "raise"]
+
+OUTCOME_KINDS: tuple[OutcomeKind, ...] = get_args(OutcomeKind.__value__)
 
 
 class _Outcome(BaseModel):
@@ -54,4 +58,4 @@ class Raise(_Outcome):
         super().__init__(**data)
 
 
-type StepResult = Annotated[Pass | Return | Break | Continue | Raise, Field(discriminator="kind")]
+type StepOutcome = Annotated[Pass | Return | Break | Continue | Raise, Field(discriminator="kind")]

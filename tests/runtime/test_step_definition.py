@@ -5,7 +5,7 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle
-from nighthawk.runtime import BindingDeclarationError, Pass, Return, StepCandidate, StepDefinition, StepRequest, StepResult
+from nighthawk.runtime import BindingDeclarationError, Pass, Return, StepCandidate, StepDefinition, StepOutcome, StepRequest
 from tests.support.executors import InspectingExecutor
 
 
@@ -45,7 +45,7 @@ def test_definition_freezes_declarations_and_preserves_annotation_objects() -> N
 
 
 @pytest.mark.asyncio
-async def test_reused_definition_resolves_each_invocations_environment(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_reused_definition_resolves_each_invocations_environment(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     definition = StepDefinition(
         "write", output_binding_names=("result", "inferred"), binding_name_to_type={"result": "OutputType"}, return_annotation="OutputType"
     )
@@ -70,7 +70,7 @@ async def test_reused_definition_resolves_each_invocations_environment(execute: 
 
 
 @pytest.mark.asyncio
-async def test_failed_invocation_does_not_poison_reusable_definition(execute: Callable[..., Awaitable[StepResult]]) -> None:
+async def test_failed_invocation_does_not_poison_reusable_definition(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     definition = StepDefinition("write", output_binding_names=("result",), binding_name_to_type={"result": "OutputType"})
     observed: list[StepRequest] = []
 

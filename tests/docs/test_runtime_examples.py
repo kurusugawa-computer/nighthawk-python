@@ -53,7 +53,8 @@ def example_python(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture
 def example_name_to_path(tmp_path: Path) -> dict[str, Path]:
     document = "\n".join(
-        (_REPOSITORY_ROOT / "docs" / name).read_text() for name in ("runtime-configuration.md", "embedded-execution.md", "verification.md")
+        (_REPOSITORY_ROOT / "docs" / name).read_text()
+        for name in ("runtime-configuration.md", "host-integration.md", "embedded-execution.md", "verification.md")
     )
     examples = re.findall(
         r"<!-- runnable-example:([a-z_]+) -->\s*```py\n(.*?)```\s*<!-- /runnable-example:\1 -->",

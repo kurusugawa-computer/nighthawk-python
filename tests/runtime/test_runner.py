@@ -61,10 +61,10 @@ def test_sync_step_execution_sets_execution_reference_step_execution_id() -> Non
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = processed_natural_program
             _ = binding_names
-            _ = allowed_step_kinds
+            _ = allowed_outcome_kinds
             observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
             assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
             return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 11})
@@ -95,10 +95,10 @@ def test_natural_function_updates_output_binding_via_docstring_step():
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = processed_natural_program
             _ = binding_names
-            _ = allowed_step_kinds
+            _ = allowed_outcome_kinds
 
             assert step_context.step_locals["x"] == 10
             return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 11})
@@ -193,10 +193,10 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = processed_natural_program
             _ = binding_names
-            _ = allowed_step_kinds
+            _ = allowed_outcome_kinds
             observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
             assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
             return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 13})
@@ -287,10 +287,10 @@ def test_docstring_step_is_literal_no_implicit_interpolation():
             processed_natural_program = request.processed_natural_program
             step_context = request.step_context
             binding_names = list(request.output_binding_names)
-            allowed_step_kinds = request.allowed_step_kinds
+            allowed_outcome_kinds = request.allowed_outcome_kinds
             _ = step_context
             _ = binding_names
-            _ = allowed_step_kinds
+            _ = allowed_outcome_kinds
             self.seen_programs.append(processed_natural_program)
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 

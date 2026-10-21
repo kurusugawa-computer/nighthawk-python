@@ -6,7 +6,7 @@
     natural_program: "Break out of the loop."
     input_bindings: '{}'
     output_binding_names: '[]'
-    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+    allowed_outcome_kinds: '["pass", "return", "raise", "break", "continue"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py
@@ -19,7 +19,7 @@
     natural_program: "Skip to the next iteration."
     input_bindings: '{}'
     output_binding_names: '[]'
-    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+    allowed_outcome_kinds: '["pass", "return", "raise", "break", "continue"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py
@@ -32,7 +32,7 @@
     natural_program: "Set <:result> to <x> + 1."
     input_bindings: '{"x": 10}'
     output_binding_names: '["result"]'
-    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+    allowed_outcome_kinds: '["pass", "return", "raise", "break", "continue"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py
@@ -50,7 +50,7 @@
     natural_program: "If <x> is greater than 10, break out of the loop. Otherwise continue to the next iteration."
     input_bindings: '{"x": 15}'
     output_binding_names: '[]'
-    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+    allowed_outcome_kinds: '["pass", "return", "raise", "break", "continue"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py
@@ -63,7 +63,7 @@
     natural_program: "Append <x> to <items>, then continue to the next iteration."
     input_bindings: '{"x": 7, "items": [1, 2, 3]}'
     output_binding_names: '[]'
-    allowed_step_kinds: '["pass", "return", "raise", "break", "continue"]'
+    allowed_outcome_kinds: '["pass", "return", "raise", "break", "continue"]'
   assert:
     - type: python
       value: file://assertions/outcome_kind.py

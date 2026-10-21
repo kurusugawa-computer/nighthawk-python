@@ -7,7 +7,11 @@ if TYPE_CHECKING:
 
 
 class NighthawkError(Exception):
-    """Base exception for all Nighthawk errors."""
+    """Base exception for Nighthawk execution, policy, and delivery failures.
+
+    Invalid arguments may raise ordinary Python or Pydantic validation errors.
+    Recoverable operation diagnostics use ToolBoundaryError instead.
+    """
 
 
 class NaturalParseError(NighthawkError):
