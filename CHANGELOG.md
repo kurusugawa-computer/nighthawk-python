@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve Python name resolution and host admission for recursive Natural functions, including global rebinding.
+- Interpret Natural blocks in loop `else` clauses in their enclosing control context, so `break` and `continue` apply only to a surrounding active loop.
 - Preserve Python composition across resilience transformers: synchronous timeout inherits caller context, circuit breakers preserve coroutine detection and method binding, and nested breakers retain independent state.
 - Restrict circuit recovery to one probe, release probes after cancellation or excluded failures, and ignore stale outcomes after opening or manual reset.
 - Preserve upstream timeout exceptions without false deadline events, and give nested or concurrent timeout contexts independent deadlines.
@@ -26,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Breaking: runtime operations are `evaluate_expression` and `assign_expression`, with matching asynchronous entry points. The model-facing evaluation tool is `nh_evaluate`, including coding-agent MCP names.
 - Breaking: resolved Python control flow is `StepOutcome` in `runtime.step_outcome`; model-proposed control flow is `ModelOutcome` in `runtime.model_outcome`, with `ModelPass`, `ModelReturn`, `ModelBreak`, `ModelContinue`, `ModelRaise`, and `ModelStepResponse` transport types. `OutcomeKind` and `allowed_outcome_kinds` distinguish control flow from `BlockKind`. No legacy aliases remain.
 - `StepCall.output_binding_names` explicitly identifies requested writes. Runtime executor protocols and outcome kinds are exported through `nighthawk.runtime`, and its lazy public symbols are discoverable with ordinary Python inspection.
-- Invalid run identifiers and usage meters fail before model resolution. Promptfoo evaluations now use the public embedded execution boundary, report resolved values and completed-run usage, and restore experimental overrides after each call.
+- Invalid run identifiers and usage meters fail before model resolution.
+- Evaluate the production runtime directly through promptfoo, including resolved return values, requested Python calls, and explicit mutations. Binding assertions distinguish missing values from null; completed experiments retain evidence without dormant implementations or dedicated tests.
 - `CircuitOpenError` now derives from `NighthawkError`, consistently with other library policy failures. Recoverable operation diagnostics keep their separate `ToolBoundaryError` hierarchy.
 - Reorganize host admission, model policies, request accounting, and cleanup into the host integration guide. Entry examples define reusable functions outside model scopes and distinguish Natural interpretation from Python computation.
 - Breaking: `@nh.function` replaces `@nh.natural_function`; Natural action blocks start with `execute` instead of `natural`.

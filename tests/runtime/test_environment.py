@@ -29,6 +29,13 @@ def test_precedence_and_explicit_source_selection() -> None:
     assert environment.describe("i")["shadowed_sources"] == ["python", "task"]
 
 
+def test_unknown_source_is_rejected() -> None:
+    environment = StepEnvironment(python_name_to_value={"value": 1}, python_globals={})
+    with pytest.raises(ValueError, match="Unknown environment source"):
+        environment.resolve("value", source="unknown")  # type: ignore[arg-type]
+    assert "error" in environment.discover(source="unknown")  # type: ignore[arg-type]
+
+
 def test_unbound_local_and_cell_stop_fallback() -> None:
     environment = StepEnvironment(
         python_name_to_value={},

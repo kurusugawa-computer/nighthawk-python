@@ -15,7 +15,6 @@ Choose a test owner by the behavior that would break, including when a test call
 | `resilience/` | Retry, fallback, voting, timeout, circuit breaker, budget, and their composition. |
 | `docs/` | Published examples executed or compared against actual runtime output, navigation, anchors, and API inventories. |
 | `evals/test_promptfoo_*.py` | Production evaluation execution, fixture call evidence, cancellation, concurrent configuration, and assertion correctness. |
-| `evals/model_tools/` | Deterministic checks of the evaluation workspace prototype, study treatments, and semantic oracles. |
 | `integration/` | Opt-in tests using real providers or coding agent executables. |
 | `support/` | Shared executors, contexts, prompt helpers, tool fixtures, and backend stubs; never collected as tests. |
 

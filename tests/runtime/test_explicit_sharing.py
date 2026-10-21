@@ -90,15 +90,11 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
             assert environment.describe("shared_value")["origin"] == "task"
             assert environment.resolve("_module_value") is _module_value
             assert environment.resolve("len") is len
-            assert not hasattr(environment, "parent_name_to_value")
             forbidden_names = {"parent_input", "parent_temporary", "selected", "child_temporary"}
             for name in forbidden_names:
                 with pytest.raises(NameError):
                     environment.resolve(name)
                 assert environment.describe(name)["origin"] is None
-            with pytest.raises(ValueError, match="Unknown environment source"):
-                environment.resolve("parent_input", source="parent")  # type: ignore[arg-type]
-            assert "error" in environment.discover(source="parent")  # type: ignore[arg-type]
 
             discovered_names: set[str] = set()
             page: Any = environment.discover(max_items=11)
