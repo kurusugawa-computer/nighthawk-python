@@ -65,4 +65,4 @@ Python 3.13+, `uv` for dependencies, `pytest` for tests. Prefer LSP-based toolin
 
 Environment: `OPENAI_API_KEY` (OpenAI), `CODEX_API_KEY` (Codex).
 
-Promptfoo evaluation details (commands, configs, directory layout, flags): see `CONTRIBUTING.md` "Prompt evaluation with promptfoo".
+Model evaluation commands, repeated trials, and evidence: see `CONTRIBUTING.md` "Model evaluations with pytest".

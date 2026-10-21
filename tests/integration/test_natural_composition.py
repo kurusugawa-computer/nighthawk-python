@@ -14,7 +14,7 @@ from pydantic_ai.messages import UserContent
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle, StepStarted
 from nighthawk.runtime import ContextRequest, DefaultContextBuilder, Return
-from tests.integration.skip_helpers import requires_openai_integration
+from tests.support.model_evaluation import ModelEvaluation
 
 
 @nh.function
@@ -101,6 +101,7 @@ async def block_one() -> list[str]:
 
 @dataclass
 class CompositionObserver:
+    evaluation: ModelEvaluation
     requests: list[ContextRequest] = field(default_factory=list)
     task_name_to_value_list: list[dict[str, object]] = field(default_factory=list)
     events: list[StepStarted | StepFinished] = field(default_factory=list)
@@ -109,6 +110,10 @@ class CompositionObserver:
         self.requests.append(request)
         self.task_name_to_value_list.append(dict(request.environment.task_name_to_value))
         return DefaultContextBuilder().build(request)
+
+    def finished(self, event: StepFinished) -> None:
+        self.events.append(event)
+        self.evaluation.steps.append(event)
 
     def completed(self) -> list[StepCompleted]:
         completed = [event for event in self.events if isinstance(event, StepCompleted)]
@@ -130,30 +135,18 @@ class CompositionObserver:
         return completed
 
 
-@pytest.fixture(params=["gpt-5.6-luna", "gpt-5.6-sol"])
-def executor(request: pytest.FixtureRequest) -> nh.AgentStepExecutor:
-    settings_class = requires_openai_integration()
-    return nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(
-            execution_model=f"openai-responses:{request.param}",
-            execution_model_settings=settings_class(openai_reasoning_effort="medium", max_tokens=8192, timeout=90),
-        )
-    )
-
-
 def completed_value(event: StepCompleted, binding_name: str) -> object:
     return event.outcome.value if isinstance(event.outcome, Return) else event.assigned_binding_name_to_value[binding_name]
 
 
 @pytest.mark.asyncio
-async def test_python_iteration_assesses_each_generated_summary_line(executor: nh.AgentStepExecutor) -> None:
+async def test_python_iteration_assesses_each_generated_summary_line(model_evaluation: ModelEvaluation) -> None:
     document = "The Willow team completed 12 tickets. The Birch team completed 18 tickets."
-    observer = CompositionObserver()
+    observer = CompositionObserver(model_evaluation)
     with (
-        nh.run(executor),
         nh.scope(
             context_builder=observer,
-            lifecycle=StepLifecycle(on_step_started=observer.events.append, on_step_finished=observer.events.append),
+            lifecycle=StepLifecycle(on_step_started=observer.events.append, on_step_finished=observer.finished),
         ),
     ):
         async with asyncio.timeout(360):
@@ -179,7 +172,7 @@ async def test_python_iteration_assesses_each_generated_summary_line(executor: n
 
 
 @pytest.mark.asyncio
-async def test_model_selected_children_receive_explicit_review_policy(executor: nh.AgentStepExecutor) -> None:
+async def test_model_selected_children_receive_explicit_review_policy(model_evaluation: ModelEvaluation) -> None:
     document = (
         "Twenty volunteers received an experimental treatment. "
         "Their average symptom score declined afterwards, but there was no control group. "
@@ -188,12 +181,11 @@ async def test_model_selected_children_receive_explicit_review_policy(executor: 
     supported_claim = "Twenty volunteers received the treatment."
     unsupported_claim = "The treatment caused the improvement."
     excluded_claim = "The report has a short title."
-    observer = CompositionObserver()
+    observer = CompositionObserver(model_evaluation)
     with (
-        nh.run(executor),
         nh.scope(
             context_builder=observer,
-            lifecycle=StepLifecycle(on_step_started=observer.events.append, on_step_finished=observer.events.append),
+            lifecycle=StepLifecycle(on_step_started=observer.events.append, on_step_finished=observer.finished),
         ),
     ):
         async with asyncio.timeout(360):
@@ -227,13 +219,12 @@ async def test_model_selected_children_receive_explicit_review_policy(executor: 
 
 
 @pytest.mark.asyncio
-async def test_model_materializes_parent_counter_before_ten_real_children(executor: nh.AgentStepExecutor) -> None:
-    observer = CompositionObserver()
+async def test_model_materializes_parent_counter_before_ten_real_children(model_evaluation: ModelEvaluation) -> None:
+    observer = CompositionObserver(model_evaluation)
     with (
-        nh.run(executor),
         nh.scope(
             context_builder=observer,
-            lifecycle=StepLifecycle(on_step_started=observer.events.append, on_step_finished=observer.events.append),
+            lifecycle=StepLifecycle(on_step_started=observer.events.append, on_step_finished=observer.finished),
         ),
     ):
         async with asyncio.timeout(600):

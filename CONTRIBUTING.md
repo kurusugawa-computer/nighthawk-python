@@ -86,66 +86,67 @@ NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhos
 
 Traces appear in the otel-tui terminal UI in real time.
 
-### Prompt evaluation with promptfoo
+### Model evaluations with pytest
 
-The shared suite evaluates production Natural execution, requested Python calls, and their results and effects.
-The [Python provider](https://www.promptfoo.dev/docs/providers/python/) passes configuration directly to `StepExecutorConfiguration` and executes each trusted fixture through `execute_step_async`.
-Production prompts and built-in tools are used without private replacements.
+Model evaluations use ordinary Python fixtures, production execution, and direct pytest assertions.
+`tests/integration/test_model_behavior.py` checks embedded values, Python object identity, requested calls, mutations, exceptions, and control outcomes.
+`tests/integration/test_natural_composition.py` checks actual Natural parent/child calls, inherited policy, and Python iteration around model judgments.
+The synthetic inputs assess these tasks; their scores do not establish broad application reliability or a security boundary.
 
-Node.js and the project development environment are required.
-From the repository root, define this shell helper:
+Select a model explicitly to enable these tests; loading credentials or enabling a provider's separate integration gate does not enable them.
+From the repository root:
 
 ```bash
-promptfoo() (
-  cd evals/promptfoo || exit
-  uv run --env-file ../../.env env \
-    PROMPTFOO_PYTHON="$(uv python find)" \
-    PYDANTIC_AI_NO_BANNER=1 \
-    npx --yes promptfoo@0.124.1 "$@"
-)
+uv run --env-file .env pytest -q tests/integration/ -m model_evaluation \
+  --evaluation-model openai-responses:gpt-5.6-luna \
+  --evaluation-repeat 3
 ```
 
-`uv` loads credentials from `.env`; the helper leaves the caller's directory unchanged.
-The CLI version is pinned to the version used for the recorded evaluation.
-`promptfooconfig.yaml` contains all providers and one shared test list.
-Select providers explicitly for the credentials and executables available:
-
-| Command | Purpose |
+| Option | Purpose |
 | --- | --- |
-| `promptfoo eval --filter-providers "^openai-responses:"` | Full OpenAI regression suite. |
-| `promptfoo eval --filter-providers "^openai-responses:" --repeat 3 -o outputs/production.json` | Repeated evaluation with raw results. |
-| `promptfoo eval --filter-providers "^codex:"` | Same suite through the configured Codex executable. |
-| `promptfoo eval --filter-providers "^claude-code-cli:"` | Same suite through the configured Claude Code executable. |
-| `promptfoo eval --filter-providers "^openai-responses:" --filter-pattern "P-BIND-001"` | One fixture. |
-| `promptfoo view` | Inspect local evaluation results. |
+| `--evaluation-model MODEL` | Select a production model identifier. Repeat the option to compare models on the same cases. |
+| `--evaluation-repeat N` | Run each selected case/model N times with fresh fixture state; defaults to one. |
+| `--evaluation-settings JSON` | Supply `execution_model_settings` as a JSON object; defaults to production defaults. Applies to every selected model. |
+| `--evaluation-output DIRECTORY` | Write to a new directory. Defaults to a timestamped directory under ignored `evals/outputs/`. Existing directories are rejected. |
+| `-k EXPRESSION` | Select ordinary pytest test names or parameter Ids. |
+| `--collect-only` | Inspect the selected matrix without execution or result files. |
 
-The configuration disables result caching because runtime, adapter, and assertion changes must be executed.
-Provider filters are regular expressions matched against labels.
-See the [CLI reference](https://www.promptfoo.dev/docs/usage/command-line/) for additional options.
-OpenAI requires `OPENAI_API_KEY`; coding-agent executables and authentication follow the [backend guide](docs/coding-agent-backends.md).
+For example, compare two models by supplying both `--evaluation-model openai-responses:gpt-5.6-luna` and `--evaluation-model openai-responses:gpt-5.6-sol`.
+For a quick check, add `-k python_call_preserves_identity`.
+For a provider-specific setting, add `--evaluation-settings '{"openai_reasoning_effort":"medium"}'`.
+Run backends separately when their settings differ.
+Coding-agent identifiers, executables, and authentication follow the [backend guide](docs/coding-agent-backends.md); their configuration is not replaced by evaluation-specific tools or prompts.
 
-#### Fixtures and reports
+Execution is sequential and every requested repetition runs, including after a failed trial.
+Pytest's `-x` and `--maxfail` can stop early; remaining trials are recorded as `not_run`.
+There is no success-seeking retry or result cache.
+Ordinary pytest failure reporting and exit status remain authoritative.
 
-`test_cases/` contains trusted programs with stable `P-SLUG-NNN` descriptions, JSON-encoded input bindings, ordered output names, and assertions.
-Optional `global_bindings` exposes named builtins through `"__builtin__"`.
-Optional `allowed_outcome_kinds` selects the fixture's loop context and restricts outcomes while retaining its frontmatter denials.
+#### Evidence
 
-Callable values use `"__callable:<name>"`, resolved by `_FIXTURE_NAME_TO_CALLABLE` in `provider.py`.
-Calls are recorded with arguments bound to their parameter names, so equivalent positional and keyword calls compare equally.
-The record describes an attempted invocation; it is not a transaction or a success guarantee.
+Each run writes:
 
-Reports contain committed `bindings`, the explicit namespace after writes and mutations in `step_locals`, resolved `return_value`, DSL raise details, and `function_calls`.
-Runtime failures remain errors and retain already observed effects.
-`tokenUsage` is the completed-agent-run aggregate, including when later value validation fails; it may not expose usage from an interrupted or failed provider run.
+- `manifest.json`: selected tests, start time, Git revision, source-file hashes, and Python/package versions.
+- `trial-*.json`: model/settings, case parameters, repetition, pytest phase results, observations, lifecycle results, available model transcripts, elapsed time, and completed-agent usage.
+- `summary.json`: counts and per-case/model pass rates, elapsed time, and observed usage totals.
 
-The [Python assertions](https://www.promptfoo.dev/docs/configuration/expected-outputs/python/) check values, outcomes, raise details, and requested function calls.
-Binding assertions require committed values by default.
-Set `check_step_locals: true` when a fixture intentionally checks an in-place mutation.
-Return fixtures specify `expected_return_value` as well as the control result.
+The summary distinguishes `passed`, assertion `failed`, execution/setup/teardown `error`, `interrupted`, `skipped`, and `not_run`.
+Pass rates include failed, errored, and interrupted attempts; skipped and unattempted trials remain visible outside the denominator.
+Inspect both counts and rates before comparing runs.
+Completed-agent usage can omit interrupted or failed provider requests and is not a billing record.
+Missing transcripts and zero observed usage do not establish that no provider work occurred.
+Records are updated after pytest phases; abrupt process termination can leave a `running` record and no final summary.
 
-Run adapter and assertion tests with `uv run pytest -q tests/evals/`.
-Keep raw results in ignored `outputs/` and record decisions and limitations in dated Markdown under `evidence/`.
-For active experiments, add explicit public configuration overrides beside the production control and follow [.claude/rules/promptfoo.md](.claude/rules/promptfoo.md).
+The `model_evaluation` fixture supplies the run, production configuration, usage meter, and lifecycle collection.
+Keep mutable inputs and callable effects local to each trial.
+Store references to useful state in `model_evaluation.name_to_observation` before execution so failed attempts retain diagnostic effects.
+Tests that replace lifecycle handlers forward terminal records to `model_evaluation.steps`.
+Assertions inspect live Python values directly; serialization is only for evidence.
+Opaque values become type markers and unsupported cyclic data records a serialization diagnostic.
+
+Keep reviewed decisions and limitations in dated Markdown under `evals/evidence/`.
+Keep raw artifacts ignored and preserve the recorded distinction between older experiments and current behavior.
+Follow [.claude/rules/evals.md](.claude/rules/evals.md) when changing evaluation cases or model-facing behavior.
 
 ### Environment variables
 

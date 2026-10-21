@@ -9,6 +9,8 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from nighthawk.runtime import StepOutcome, execute_step, execute_step_async
 from nighthawk.runtime import scoping as runtime_scoping
 
+pytest_plugins = ("tests.support.model_evaluation",)
+
 
 @pytest.fixture
 def step_span_exporter() -> Generator[InMemorySpanExporter]:

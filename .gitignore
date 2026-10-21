@@ -26,8 +26,4 @@ htmlcov/
 
 # Rendered documentation and transient evaluation output
 /site/
-evals/model_tools/outputs/
-evals/promptfoo/outputs/
-evals/promptfoo/*.json
-evals/promptfoo/*.html
-evals/promptfoo/*.csv
+evals/**/outputs/

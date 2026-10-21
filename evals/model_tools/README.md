@@ -10,4 +10,4 @@ The [specification](../../docs/specification.md) owns current runtime guarantees
 | Natural function composition | [Initial integration investigation](evidence/20260910-natural-composition.md) and [Python composition assessment](evidence/20261021-python-composition.md). |
 | Completed experiment retention | [Removal decision and source provenance](evidence/20261021-retire-completed-tool-experiments.md). |
 
-For current production model regression, use the [promptfoo workflow](../../CONTRIBUTING.md#prompt-evaluation-with-promptfoo).
+For current production model regression, use the [pytest evaluation workflow](../../CONTRIBUTING.md#model-evaluations-with-pytest).

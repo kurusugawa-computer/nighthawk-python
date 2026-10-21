@@ -14,9 +14,13 @@ Choose a test owner by the behavior that would break, including when a test call
 | `backends/` | Backend settings and protocols, text and MCP projection, callback transport, and process cleanup using local stubs. |
 | `resilience/` | Retry, fallback, voting, timeout, circuit breaker, budget, and their composition. |
 | `docs/` | Published examples executed or compared against actual runtime output, navigation, anchors, and API inventories. |
-| `evals/test_promptfoo_*.py` | Production evaluation execution, fixture call evidence, cancellation, concurrent configuration, and assertion correctness. |
-| `integration/` | Opt-in tests using real providers or coding agent executables. |
+| `test_model_evaluation.py` | Model-evaluation selection, trial isolation, failure/interruption accounting, and evidence recording through actual pytest subprocesses. |
+| `integration/` | Opt-in tests using real providers or coding agent executables, including repeated model-behavior and Python-composition evaluations. |
 | `support/` | Shared executors, contexts, prompt helpers, tool fixtures, and backend stubs; never collected as tests. |
+
+Model behavior and Natural composition use the `model_evaluation` fixture and explicit `--evaluation-model` selection.
+The fixture records repeated trials through `tests/support/model_evaluation.py`; see [contributor commands](../CONTRIBUTING.md#model-evaluations-with-pytest).
+Provider-specific transport and feature smoke tests retain their documented environment gates.
 
 Within `runtime/`, use these owners:
 
