@@ -55,6 +55,9 @@ def vote(
     Calls the wrapped function *count* times and aggregates results using the *decide* function.
 
     For async functions, all calls execute concurrently via :func:`asyncio.gather`. For sync functions, calls execute sequentially.
+    Raised :class:`Exception` instances count as failed votes; returned exception objects are ordinary values.
+    Cancellation and other :class:`BaseException` subclasses propagate, even when enough votes succeeded.
+    Async calls are joined before propagating a failure or cancellation.
 
     Args:
         count: Number of times to call the function.
@@ -82,16 +85,18 @@ def vote(
             @wraps(function)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tasks = [asyncio.create_task(_call_async(function, args, kwargs)) for _ in range(count)]
-                gathered = await asyncio.gather(*tasks, return_exceptions=True)
+                gathered = await asyncio.gather(*tasks)
 
                 results: list[Any] = []
-                last_exception: BaseException | None = None
-                for outcome in gathered:
-                    if isinstance(outcome, BaseException):
-                        last_exception = outcome
-                        _logger.info("Vote: call to %s failed: %s", function.__name__, outcome)
+                last_exception: Exception | None = None
+                for result, exception in gathered:
+                    if exception is None:
+                        results.append(result)
+                    elif isinstance(exception, Exception):
+                        last_exception = exception
+                        _logger.info("Vote: call to %s failed: %s", function.__name__, exception)
                     else:
-                        results.append(outcome)
+                        raise exception
 
                 if len(results) < effective_min_success:
                     if last_exception is not None:
@@ -130,5 +135,8 @@ async def _call_async(
     function: Callable[..., Any],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
-) -> Any:
-    return await function(*args, **kwargs)
+) -> tuple[Any, BaseException | None]:
+    try:
+        return await function(*args, **kwargs), None
+    except BaseException as exception:
+        return None, exception

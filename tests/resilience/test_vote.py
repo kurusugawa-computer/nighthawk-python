@@ -7,6 +7,74 @@ import pytest
 from nighthawk.resilience import plurality, vote
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_exception_values_are_successful_results(asynchronous: bool) -> None:
+    value = ValueError("a value, not a raised failure")
+
+    def result() -> ValueError:
+        return value
+
+    async def async_result() -> ValueError:
+        return value
+
+    if asynchronous:
+        assert asyncio.run(vote(count=3)(async_result)()) is value
+    else:
+        assert vote(count=3)(result)() is value
+
+
+@pytest.mark.parametrize("exception_type", [asyncio.CancelledError, BaseException, KeyboardInterrupt, SystemExit])
+@pytest.mark.asyncio
+async def test_child_interruption_is_not_masked_by_successful_votes(exception_type: type[BaseException]) -> None:
+    call_count = 0
+    finished: list[int] = []
+    original_exception = exception_type("stop")
+
+    async def operation() -> str:
+        nonlocal call_count
+        call_count += 1
+        call_number = call_count
+        try:
+            if call_number == 1:
+                raise original_exception
+            await asyncio.sleep(0)
+            return "ok"
+        finally:
+            finished.append(call_number)
+
+    with pytest.raises(exception_type) as caught:
+        await vote(count=3)(operation)()
+    assert caught.value is original_exception
+    assert sorted(finished) == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_caller_cancellation_joins_every_vote() -> None:
+    started: list[int] = []
+    finished: list[int] = []
+    all_started = asyncio.Event()
+    pending = asyncio.Event()
+
+    async def operation() -> str:
+        call_number = len(started)
+        started.append(call_number)
+        if len(started) == 3:
+            all_started.set()
+        try:
+            await pending.wait()
+            return "ok"
+        finally:
+            await asyncio.sleep(0)
+            finished.append(call_number)
+
+    task = asyncio.create_task(vote(count=3)(operation)())
+    await asyncio.wait_for(all_started.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert sorted(finished) == [0, 1, 2]
+
+
 class TestPlurality:
     def test_simple_majority(self) -> None:
         assert plurality(["a", "b", "a"]) == "a"

@@ -530,6 +530,9 @@ label = voting_classify(text)
 ```
 
 Async functions run concurrently via `asyncio.gather`. Sync functions run sequentially. Partial failures are tolerated: only successful results go to the `decide` function (default: `plurality` -- most common result). If fewer than `min_success` calls succeed (default: `ceil(count/2)`), the last exception is raised.
+Only raised `Exception` instances count as failed votes; exception objects returned as values are successful results.
+Cancellation and other `BaseException` subclasses propagate even if enough other calls succeed.
+Async voting joins every call before returning or propagating an exception, including cancellation cleanup.
 
 ### Timeout
 
@@ -545,14 +548,17 @@ result = timed_classify(text)
 For async functions, `asyncio.timeout` requests cooperative cancellation.
 Natural notification cleanup is still joined, so cancellation-resistant cleanup can delay the timeout's propagation indefinitely.
 For sync functions, the wrapper runs the function in a `ThreadPoolExecutor`; timeout does not stop the worker, and executor shutdown waits for it before `TimeoutError` reaches the caller.
-The synchronous wrapper does not copy the caller's context variables: a worker executing Natural blocks must establish its own `nh.run()` and host scopes.
-Use async Natural functions with the async timeout form when the caller's scoped controls should propagate normally.
+The synchronous wrapper copies the caller's context variables, so Natural functions inherit the active `nh.run()` and host scopes.
+Worker context variable rebindings do not flow back to the caller; referenced objects remain shared, and hosts must support their use from the worker thread.
+An upstream `TimeoutError` is preserved without recording a wrapper deadline event unless the wrapper's own deadline expired.
 The async context manager form is:
 
 ```py
 async with timeout(seconds=30):
     result = await slow_operation()
 ```
+
+The same timeout handle can be nested or shared by concurrent tasks; each entry has its own deadline.
 
 ### Budget
 
@@ -613,6 +619,13 @@ protected_api.reset()  # manual reset
 ```
 
 This is a **stateful** transformer (like `functools.lru_cache`). Each `circuit_breaker(...)` call creates independent state.
+Reusing one decorator shares its state across the functions it wraps; decorating a method shares that method's circuit across instances.
+Asynchronous functions remain recognizable as coroutine functions, including through bound methods and other resilience transformers.
+
+While the recovery probe runs, additional calls raise `CircuitOpenError` with `probe_in_progress=True`.
+Success closes the circuit; a failure matching `on` starts a new cooldown.
+An exception excluded by `on` releases the probe for another attempt without restarting the cooldown; the default `on=Exception` excludes cancellation.
+Calls already admitted before opening or a manual reset keep running and return or raise normally, but their late results cannot alter the new circuit state.
 
 ### Composition
 

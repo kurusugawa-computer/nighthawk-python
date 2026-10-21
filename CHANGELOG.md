@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve Python composition across resilience transformers: synchronous timeout inherits caller context, circuit breakers preserve coroutine detection and method binding, and nested breakers retain independent state.
+- Restrict circuit recovery to one probe, release probes after cancellation or excluded failures, and ignore stale outcomes after opening or manual reset.
+- Preserve upstream timeout exceptions without false deadline events, and give nested or concurrent timeout contexts independent deadlines.
+- Distinguish returned exception values from failed votes and propagate cancellation even when other votes succeed.
 - Preserve the declared block kind in failure and interruption records before preparation, including started-delivery errors, f-string rendering failures, and invalid embedded arguments.
 - Protect the execution-to-decision guide's assessment with an explicit denied return and test the published composition directly.
 - Include the `py.typed` marker in distributions so installed consumers can use the library's annotations and signature-preserving decorators without inferring types from untyped library source.
