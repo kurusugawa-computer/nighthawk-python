@@ -7,7 +7,7 @@ def test_carry_continuity_across_blocks():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="medium"),
         ),
     )
@@ -49,7 +49,7 @@ def test_carry_branching():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
@@ -108,7 +108,7 @@ def test_carry_with_fstring_injection():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )

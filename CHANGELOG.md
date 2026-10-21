@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Standardize current OpenAI test models and documentation examples on `gpt-6-luna` and `gpt-6.1-sol`, including explicit Codex integration model selection.
 - Breaking: `execution_model_settings` names execution overrides explicitly alongside `decision_model_settings`. `StepPromptTemplates` uses `system_prompt_template` and `user_prompt_template`.
 - Breaking: runtime operations are `evaluate_expression` and `assign_expression`, with matching asynchronous entry points. The model-facing evaluation tool is `nh_evaluate`, including coding-agent MCP names.
 - Breaking: resolved Python control flow is `StepOutcome` in `runtime.step_outcome`; model-proposed control flow is `ModelOutcome` in `runtime.model_outcome`, with `ModelPass`, `ModelReturn`, `ModelBreak`, `ModelContinue`, `ModelRaise`, and `ModelStepResponse` transport types. `OutcomeKind` and `allowed_outcome_kinds` distinguish control flow from `BlockKind`. No legacy aliases remain.

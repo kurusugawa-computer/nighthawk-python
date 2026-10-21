@@ -76,7 +76,7 @@ def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content(
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )
@@ -116,7 +116,7 @@ def test_provider_backed_executor_accepts_native_multimodal_tool_result_content(
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )

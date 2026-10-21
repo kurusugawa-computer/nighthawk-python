@@ -93,7 +93,7 @@ Each block starts a fresh model interaction; neither a parent's working values n
 
 - `StepExecutorConfiguration`
     - `execution_model`: Provider-qualified string or an existing Pydantic AI `Model`, used by `execute`. Default: `None`.
-        - Examples: `openai-responses:gpt-5.6-luna`, `openai-responses:gpt-5.6-terra`.
+        - Examples: `openai-responses:gpt-6-luna`, `openai-responses:gpt-6.1-sol`.
         - Special cases:
             - `claude-code-sdk:default`, `claude-code-cli:default`, and `codex:default` select the backend/provider default model (no explicit model selection is sent to the backend).
     - `decision_model`: Provider-qualified string or an existing Pydantic AI decision model, used by `decide`. Default: `None`. A missing model fails before a request for that block kind.

@@ -15,7 +15,7 @@ All examples assume the [Quickstart](quickstart.md) setup:
 ```py
 import nighthawk as nh
 
-with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
+with nh.run(execution_model="openai-responses:gpt-6-luna"):
     ...  # Call natural functions here
 ```
 

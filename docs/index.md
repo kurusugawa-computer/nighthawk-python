@@ -28,7 +28,7 @@ def calculate_average(numbers: list[object]) -> float:
     return result
 
 
-with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
+with nh.run(execution_model="openai-responses:gpt-6-luna"):
     print(calculate_average([1, "2", "three", "cuatro"]))  # 2.5
 ```
 

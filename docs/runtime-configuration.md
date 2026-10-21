@@ -387,7 +387,7 @@ A host can receive credentials in memory and construct a Pydantic AI Model befor
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-model = OpenAIResponsesModel("gpt-5.6-luna", provider=OpenAIProvider(api_key=credentials.api_key))
+model = OpenAIResponsesModel("gpt-6-luna", provider=OpenAIProvider(api_key=credentials.api_key))
 configuration = nh.StepExecutorConfiguration(
     execution_model=model,
     execution_model_settings={"openai_store": False},
@@ -411,11 +411,11 @@ Use `nh.scope(step_executor=...)` to switch executors within a single run. This 
 
 ```py
 fast_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
+    configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
 )
 
 deep_executor = nh.AgentStepExecutor.from_configuration(
-    configuration=nh.StepExecutorConfiguration(execution_model="codex:default"),
+    configuration=nh.StepExecutorConfiguration(execution_model="codex:gpt-6.1-sol"),
 )
 
 with nh.run(fast_executor):
@@ -442,7 +442,7 @@ The LOCALS and GLOBALS sections are bounded by token and item limits configured 
 
 ```py
 configuration = nh.StepExecutorConfiguration(
-    execution_model="openai-responses:gpt-5.6-luna",
+    execution_model="openai-responses:gpt-6-luna",
     context_limits=nh.StepContextLimits(
         locals_max_tokens=4096,
         locals_max_items=50,
@@ -503,7 +503,7 @@ Unsupported executors fail before model requests, and custom `AgentStepExecutor`
 ```python
 @nh.function
 async def child() -> int:
-    with nh.scope(execution_model="openai-responses:gpt-5.6-luna"):
+    with nh.scope(execution_model="openai-responses:gpt-6-luna"):
         """execute
         Return the integer 17.
         """

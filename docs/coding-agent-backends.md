@@ -18,10 +18,10 @@ configuration = nh.StepExecutorConfiguration(execution_model="claude-code-cli:de
 
 Codex:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="codex:default")
+configuration = nh.StepExecutorConfiguration(execution_model="codex:gpt-6-luna")
 ```
 
-The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-5.6-luna`). Available aliases depend on the backend CLI version.
+The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-6-luna`). Available aliases depend on the backend CLI version.
 
 Backend-specific settings are configured via the `execution_model_settings` field of `StepExecutorConfiguration`. Each backend provides a settings class (`ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`, `CodexModelSettings`) that can be passed directly — `StepExecutorConfiguration` auto-converts `BaseModel` instances to dicts internally.
 
@@ -218,7 +218,7 @@ The `codex` CLI must be installed separately (it is a system tool, not a Python 
 from nighthawk.backends.codex import CodexModelSettings
 
 configuration = nh.StepExecutorConfiguration(
-    execution_model="codex:default",
+    execution_model="codex:gpt-6-luna",
     execution_model_settings=CodexModelSettings(
         working_directory="/abs/path/to/project",
     ),

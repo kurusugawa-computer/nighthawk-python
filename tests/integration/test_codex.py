@@ -10,7 +10,7 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
     requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
-        execution_model="codex:gpt-5.6-luna",
+        execution_model="codex:gpt-6-luna",
         execution_model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
@@ -38,7 +38,7 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
     requires_codex_integration()
 
     run_configuration = nh.StepExecutorConfiguration(
-        execution_model="codex:gpt-5.6-luna",
+        execution_model="codex:gpt-6-luna",
         execution_model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
@@ -76,7 +76,7 @@ def test_codex_skill() -> None:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
         configuration = nh.StepExecutorConfiguration(
-            execution_model="codex:default",
+            execution_model="codex:gpt-6-luna",
             execution_model_settings=CodexModelSettings(
                 working_directory=str(working_directory.resolve()),
             ).model_dump(),
@@ -116,7 +116,7 @@ def test_codex_skill_calc() -> None:
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     configuration = nh.StepExecutorConfiguration(
-        execution_model="codex:default",
+        execution_model="codex:gpt-6-luna",
         execution_model_settings=CodexModelSettings(
             working_directory=str(working_directory.resolve()),
         ).model_dump(),

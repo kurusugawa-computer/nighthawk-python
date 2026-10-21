@@ -255,7 +255,7 @@ def test_function_scope_requires_a_model_selection_resolver() -> None:
 
         @nh.function
         def f() -> None:
-            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")):
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")):
                 pass
 
         with pytest.raises(nh.NighthawkError, match="ConfigurableStepExecutor"):

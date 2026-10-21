@@ -185,6 +185,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
             assert request.headers["authorization"] == f"Bearer {self.key}"
             body = json.loads(request.content)
             assert body["store"] is False
+            assert body["reasoning"]["effort"] == "none"
             assert body["temperature"] == (0.1 if self.key == keys[0] else 0.2)
             assert all(key not in request.content.decode() for key in keys)
             requests.append((self.key, body))
@@ -196,7 +197,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                     "object": "response",
                     "created_at": 1,
                     "status": "completed",
-                    "model": "gpt-4o",
+                    "model": "gpt-6-luna",
                     "output": [
                         {
                             "type": "function_call",
@@ -226,11 +227,11 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
             AsyncOpenAI(api_key=key, base_url="https://mock.invalid/v1", http_client=httpx2.AsyncClient(transport=Transport(key))) for key in keys
         ]
         try:
-            selected_models = [OpenAIResponsesModel("gpt-4o", provider=OpenAIProvider(openai_client=client)) for client in clients]
+            selected_models = [OpenAIResponsesModel("gpt-6-luna", provider=OpenAIProvider(openai_client=client)) for client in clients]
             configurations = [
                 nh.StepExecutorConfiguration(
                     execution_model=model,
-                    execution_model_settings={"openai_store": False, "temperature": 0.1 + index / 10},
+                    execution_model_settings={"openai_store": False, "openai_reasoning_effort": "none", "temperature": 0.1 + index / 10},
                     tokenizer_encoding="o200k_base",
                 )
                 for index, model in enumerate(selected_models)

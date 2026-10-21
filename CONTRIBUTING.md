@@ -88,6 +88,10 @@ Traces appear in the otel-tui terminal UI in real time.
 
 ### Model evaluations with pytest
 
+Use `gpt-6-luna` for routine OpenAI tests and examples, and `gpt-6.1-sol` for higher-capability comparisons.
+Pin Codex integration tests to an explicit model so local CLI defaults do not change the selected model.
+Historical evaluation records retain the model identifiers used in their original runs.
+
 Model evaluations use ordinary Python fixtures, production execution, and direct pytest assertions.
 `tests/integration/test_model_behavior.py` checks embedded values, Python object identity, requested calls, mutations, exceptions, and control outcomes.
 `tests/integration/test_natural_composition.py` checks actual Natural parent/child calls, inherited policy, and Python iteration around model judgments.
@@ -98,7 +102,7 @@ From the repository root:
 
 ```bash
 uv run --env-file .env pytest -q tests/integration/ -m model_evaluation \
-  --evaluation-model openai-responses:gpt-5.6-luna \
+  --evaluation-model openai-responses:gpt-6-luna \
   --evaluation-repeat 3
 ```
 
@@ -111,7 +115,7 @@ uv run --env-file .env pytest -q tests/integration/ -m model_evaluation \
 | `-k EXPRESSION` | Select ordinary pytest test names or parameter Ids. |
 | `--collect-only` | Inspect the selected matrix without execution or result files. |
 
-For example, compare two models by supplying both `--evaluation-model openai-responses:gpt-5.6-luna` and `--evaluation-model openai-responses:gpt-5.6-sol`.
+For example, compare two models by supplying both `--evaluation-model openai-responses:gpt-6-luna` and `--evaluation-model openai-responses:gpt-6.1-sol`.
 For a quick check, add `-k python_call_preserves_identity`.
 For a provider-specific setting, add `--evaluation-settings '{"openai_reasoning_effort":"medium"}'`.
 Run backends separately when their settings differ.

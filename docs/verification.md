@@ -133,7 +133,7 @@ import nighthawk as nh
 @pytest.mark.integration
 def test_classify_with_real_llm():
     step_executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna"),
+        configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
     )
     with nh.run(step_executor):
         result = classify("Great product, highly recommend!")

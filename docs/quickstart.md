@@ -30,7 +30,7 @@ def interpret_quantities(items: str) -> list[int]:
     return quantities
 
 
-with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
+with nh.run(execution_model="openai-responses:gpt-6-luna"):
     print(sum(interpret_quantities("three apples, a dozen eggs, and 5 oranges")))
 ```
 
@@ -52,7 +52,7 @@ In this example, `<items>` is a **read binding** (the LLM can see its value) and
 
 **`NighthawkError: StepExecutor is not set`**
 
-Call the function inside `with nh.run(execution_model="openai-responses:gpt-5.6-luna"):`.
+Call the function inside `with nh.run(execution_model="openai-responses:gpt-6-luna"):`.
 Decorating the function does not start a run.
 
 **`OPENAI_API_KEY` not set**

@@ -40,14 +40,14 @@ def test_live_model_identity_and_nested_serialization_barrier() -> None:
     container.model_dump_json(exclude={"configuration": {"execution_model"}})
 
 
-@pytest.mark.parametrize("value", [1, {}, {"model_name": "gpt-4o"}, object()])
+@pytest.mark.parametrize("value", [1, {}, {"model_name": "gpt-6-luna"}, object()])
 def test_only_existing_models_or_qualified_strings_are_accepted(value: object) -> None:
     with pytest.raises(ValidationError):
         nh.StepExecutorConfiguration(execution_model=value)  # type: ignore[arg-type]
 
 
 def test_string_configuration_round_trip_and_schema() -> None:
-    configuration = nh.StepExecutorConfiguration(execution_model="openai:gpt-4o")
+    configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
     assert nh.StepExecutorConfiguration.model_validate_json(configuration.model_dump_json()) == configuration
     assert nh.StepExecutorConfiguration.model_json_schema()["properties"]["execution_model"]["anyOf"] == [{"type": "string"}, {"type": "null"}]
 
@@ -72,10 +72,10 @@ def test_run_configuration_model_requires_provider_model_format():
         nh.StepExecutorConfiguration(execution_model="openai-responses")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(execution_model=":gpt-5.6-luna")
+        nh.StepExecutorConfiguration(execution_model=":gpt-6-luna")
 
     with pytest.raises(ValueError, match="provider:model"):
         nh.StepExecutorConfiguration(execution_model="openai-responses:")
 
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna:extra")
+        nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna:extra")

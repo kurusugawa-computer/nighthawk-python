@@ -65,7 +65,7 @@ def classify_ticket(text: str) -> Literal["bug", "feature", "question"]:
 
 
 if __name__ == "__main__":
-    with nh.run(execution_model="openai-responses:gpt-5.6-luna"):
+    with nh.run(execution_model="openai-responses:gpt-6-luna"):
         print(classify_ticket("The application crashes when opening a file."))
 ```
 
@@ -148,7 +148,7 @@ def quote_batch(messages: list[str], unit_price_cents: int) -> list[int]:
     return totals
 ```
 
-Call `quote_batch` inside `nh.run(execution_model="openai-responses:gpt-5.6-luna")`, using the run setup above.
+Call `quote_batch` inside `nh.run(execution_model="openai-responses:gpt-6-luna")`, using the run setup above.
 For `["A dozen, please.", "Please send three."]` at 250 cents per item, the intended totals are `[3000, 750]`.
 The host supplies the price; the model does not calculate or choose it.
 The Python loop processes every input in order on success, while an unclear quantity stops the batch with an explicit error.

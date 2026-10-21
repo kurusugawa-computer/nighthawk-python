@@ -27,7 +27,7 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
 
     executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
+            execution_model="openai-responses:gpt-6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
         )
     )
     program = "---\ndeny: [return, raise]\n---\nCall <calculate> with <first> and <second>. Assign its result to <:result>."
@@ -64,7 +64,7 @@ async def test_async_function_call():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
     )
@@ -90,7 +90,7 @@ def test_multiple_blocks_one_call_scope():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
@@ -118,7 +118,7 @@ def test_provided_tools_smoke():
 
     step_executor = nh.AgentStepExecutor.from_configuration(
         configuration=nh.StepExecutorConfiguration(
-            execution_model="openai-responses:gpt-5.6-luna",
+            execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
     )
@@ -147,12 +147,12 @@ async def test_embedded_selection_and_request_observation():
     observer = RequestObserver(threshold=100_000)
     handler = RecordingHandler()
     configuration = nh.StepExecutorConfiguration(
-        execution_model="openai-responses:gpt-5.6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
+        execution_model="openai-responses:gpt-6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
     )
 
     @nh.function
     async def child() -> int:
-        with nh.scope(execution_model="openai-responses:gpt-5.6-luna"):
+        with nh.scope(execution_model="openai-responses:gpt-6-luna"):
             """execute
             ---
             deny: [pass, raise]

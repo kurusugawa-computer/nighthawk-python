@@ -175,7 +175,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
 
             return FakeRunResult(ModelStepResponse(result=ModelPass(kind="pass")))
 
-    initial_model_identifier = "openai-responses:gpt-5.6-luna"
+    initial_model_identifier = "openai-responses:gpt-6-luna"
     recording_agent = RecordingAgent()
     step_executor_configuration = nh.StepExecutorConfiguration(execution_model=initial_model_identifier)
     step_executor = nh.AgentStepExecutor.from_agent(
@@ -193,7 +193,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
             """
             first_model_identifier = observed_model_identifier  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-terra")):
+            with nh.scope(step_executor_configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6.1-sol")):
                 """execute
                 <:observed_model_identifier>
                 Record the current model identifier.

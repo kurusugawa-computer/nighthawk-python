@@ -7,7 +7,7 @@ Nighthawk delegates Natural block execution to an LLM. The model is selected thr
 ```py
 import nighthawk as nh
 
-configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")
+configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
 ```
 
 The configuration also accepts a borrowed Pydantic AI `Model` instance; the host retains its client lifetime.
@@ -28,7 +28,7 @@ Examples:
 
 OpenAI:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")
+configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
 ```
 
 Anthropic (direct API):
@@ -91,8 +91,8 @@ Pydantic AI providers accept standard Pydantic AI model settings via the `execut
 
 ```py
 configuration = nh.StepExecutorConfiguration(
-    execution_model="openai-responses:gpt-5.6-luna",
-    execution_model_settings={"temperature": 0.5},
+    execution_model="openai-responses:gpt-6-luna",
+    execution_model_settings={"openai_reasoning_effort": "low"},
 )
 ```
 
@@ -104,7 +104,7 @@ Install the required provider package. For example: `pip install pydantic-ai-sli
 
 **`ValueError: Invalid model identifier`**
 
-The model identifier must be in `provider:model` format (e.g., `openai-responses:gpt-5.6-luna`). Check for typos or a missing provider prefix. See the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for valid provider prefixes.
+The model identifier must be in `provider:model` format (e.g., `openai-responses:gpt-6-luna`). Check for typos or a missing provider prefix. See the [Pydantic AI documentation](https://ai.pydantic.dev/models/overview/) for valid provider prefixes.
 
 **Provider authentication errors**
 

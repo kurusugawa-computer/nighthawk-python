@@ -34,7 +34,7 @@ See [Philosophy](philosophy.md) for the purpose and composition principles, and 
 ```py
 import nighthawk as nh
 
-configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-5.6-luna")
+configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
 step_executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
 ```
 
@@ -56,7 +56,7 @@ from pydantic_ai import Agent
 
 import nighthawk as nh
 
-agent = Agent(model="openai-responses:gpt-5.6-luna")
+agent = Agent(model="openai-responses:gpt-6-luna")
 executor = nh.AgentStepExecutor.from_agent(agent=agent)
 ```
 
