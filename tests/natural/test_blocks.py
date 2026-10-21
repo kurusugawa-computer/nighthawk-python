@@ -64,7 +64,7 @@ def test_inline_ast_shape_must_be_literal_or_fstring():
     src = textwrap.dedent(
         """
         def f(x):
-            ("natural\\nMake <:y> be 1.\\n").format(x=x)
+            ("execute\\nMake <:y> be 1.\\n").format(x=x)
             return y
         """
     )
@@ -77,7 +77,7 @@ def test_natural_sentinel_rejects_leading_blank_line_docstring():
         '''
         def f():
             """
-            natural
+            execute
             Make <:y> be 1.
             """
             return y
@@ -91,7 +91,7 @@ def test_natural_sentinel_rejects_leading_whitespace_docstring():
     src = textwrap.dedent(
         '''
         def f():
-            """ natural
+            """ execute
             Make <:y> be 1.
             """
             return y
@@ -116,7 +116,7 @@ def test_natural_sentinel_rejects_trailing_whitespace_on_sentinel_line_docstring
 
 
 def test_is_natural_sentinel_rejects_trailing_whitespace_line():
-    assert is_natural_sentinel("natural \nrest") is False
+    assert is_natural_sentinel("execute \nrest") is False
 
 
 def test_natural_inline_parentheses_do_not_matter():

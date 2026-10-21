@@ -6,10 +6,9 @@ from ..runtime.step_definition import BlockKind
 from ._names import _RuntimeNames
 from .blocks import (
     _joined_string_is_natural_sentinel,
-    _joined_string_scan_text,
-    _validate_joined_string_bindings_do_not_span_formatted_values,
     is_natural_sentinel,
     parse_block,
+    parse_joined_block,
 )
 
 
@@ -205,12 +204,10 @@ class NaturalTransformer(ast.NodeTransformer):
                 return [_copy_generated_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
 
         if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
-            _validate_joined_string_bindings_do_not_span_formatted_values(value)
             return_annotation = self._current_return_annotation_expression()
             is_in_loop = self._loop_depth > 0
 
-            scan_text = _joined_string_scan_text(value, formatted_value_placeholder="")
-            block_kind, program, input_bindings, output_bindings = parse_block(scan_text)
+            block_kind, _, input_bindings, output_bindings = parse_joined_block(value)
             binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
 
             extracted_program_call = ast.Call(

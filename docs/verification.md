@@ -311,5 +311,7 @@ NIGHTHAWK_DISTRIBUTION_PYTHON="$validation_directory/environment/bin/python" \
 The test runner extracts code from the documentation, while the fresh environment executes it with `python -I` from a temporary directory.
 It verifies that `nighthawk.__file__` belongs to that environment rather than an editable source checkout.
 The child processes need only the wheel and its declared dependencies; they do not import the repository's test helpers.
+The distribution check also runs Pyright on a separate consumer with library-source inference disabled, verifying exported types and synchronous/asynchronous decorator signatures through the installed package's `py.typed` marker.
+Pyright runs from the development environment while resolving imports from the fresh distribution environment.
 CI runs this check after building the distribution.
 A source-tree test alone is not installed-distribution evidence.

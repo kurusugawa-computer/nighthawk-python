@@ -361,6 +361,24 @@ def test_decision_header_is_static_and_fstring_body_keeps_binding_contract(decis
             """
 
 
+def test_decision_escaped_markers_are_literal_instructions_without_evidence_lookup(decision_backend) -> None:
+    model, transport = decision_backend
+
+    @nh.function
+    def judge() -> bool:
+        result = False
+        r"""decide <:result>
+        Are \<missing>, \<:result>, and \<module.field> examples of angle-bracket syntax?
+        """
+        return result
+
+    with nh.run(decision_model=model):
+        assert judge() is True
+    request = transport.requests[0]
+    assert "No input bindings." in request["input"]
+    assert "Are <missing>, <:result>, and <module.field>" in request["questions"][0]["instructions"]
+
+
 def test_concurrent_decision_scopes_and_nested_runs_restore_selection(decision_backend) -> None:
     model, _ = decision_backend
 

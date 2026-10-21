@@ -282,7 +282,11 @@ def generate(config: Config, topic: str) -> str:
     return output
 ```
 
-**Note:** To use literal angle brackets in program text without creating a binding, escape with a backslash: `\<name>` renders as `<name>` in the prompt without binding resolution. See [Specification Section 8.2.3](specification.md#823-globals-summary) for details.
+To show binding syntax literally, escape the marker: `\<name>` and `\<:name>` render without the backslash and declare no input or output.
+Use a raw Python string (`r"""..."""` or `rf"""..."""`) or double the backslash in an ordinary string.
+This works in both `execute` and `decide` blocks.
+Headers and binding declarations must be static; a declaration cannot cross an f-string expression.
+An entire decision instruction may come from a trusted interpolated string, but its rendered body must remain nonempty.
 
 ### Choosing between bindings and injection
 

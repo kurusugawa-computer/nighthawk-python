@@ -12,7 +12,7 @@ from ..errors import NaturalParseError
 from ..runtime.bindings import BindingDeclarationError, normalize_binding_names
 from ..runtime.step_definition import BlockKind
 
-_BINDING_PATTERN = re.compile(r"<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
+_BINDING_PATTERN = re.compile(r"(?<!\\)<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ def is_natural_sentinel(text: str) -> bool:
     return text.startswith(("execute\n", "decide ", "decide\t", "decide\n"))
 
 
-def parse_block(text: str) -> tuple[BlockKind, str, tuple[str, ...], tuple[str, ...]]:
+def parse_block(text: str, *, has_interpolated_instruction: bool = False) -> tuple[BlockKind, str, tuple[str, ...], tuple[str, ...]]:
     header, separator, body = text.partition("\n")
     if not separator:
         raise NaturalParseError("Block header must end with a newline")
@@ -42,7 +42,7 @@ def parse_block(text: str) -> tuple[BlockKind, str, tuple[str, ...], tuple[str, 
         raise NaturalParseError("Expected execute or decide <:output> block header")
     if outputs:
         raise NaturalParseError("decide output must be declared only in its header")
-    if not program.strip():
+    if not program.strip() and not has_interpolated_instruction:
         raise NaturalParseError("decide requires a judgment instruction")
     _, declared_outputs = extract_bindings(match.group(0))
     return "decide", program, inputs, declared_outputs
@@ -69,9 +69,6 @@ def extract_bindings(program: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         raise NaturalParseError(str(exception)) from exception
 
 
-_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER = "\x00"
-
-
 def _joined_string_first_literal_or_none(joined_string: ast.JoinedStr) -> str | None:
     if not joined_string.values:
         return None
@@ -88,35 +85,29 @@ def _joined_string_is_natural_sentinel(joined_string: ast.JoinedStr) -> bool:
     return is_natural_sentinel(first_literal)
 
 
-def _joined_string_scan_text(joined_string: ast.JoinedStr, *, formatted_value_placeholder: str) -> str:
+def parse_joined_block(joined_string: ast.JoinedStr) -> tuple[BlockKind, str, tuple[str, ...], tuple[str, ...]]:
+    first_literal = _joined_string_first_literal_or_none(joined_string)
+    if first_literal is None or "\n" not in first_literal:
+        raise NaturalParseError("Block header must be static")
+
     parts: list[str] = []
+    interpolation_offsets: list[int] = []
+    offset = 0
     for part in joined_string.values:
         if isinstance(part, ast.Constant) and isinstance(part.value, str):
             parts.append(part.value)
+            offset += len(part.value)
         else:
-            parts.append(formatted_value_placeholder)
-    return "".join(parts)
+            interpolation_offsets.append(offset)
+            # Keep literal tokens separated; offsets, not a reserved character, identify interpolation.
+            parts.append(" ")
+            offset += 1
+    scan_text = "".join(parts)
+    for match in re.finditer(r"(?<!\\)<[^>]*>", scan_text):
+        if any(match.start() < offset < match.end() for offset in interpolation_offsets):
+            raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
 
-
-def _validate_joined_string_bindings_do_not_span_formatted_values(joined_string: ast.JoinedStr) -> None:
-    boundary_marked_text = _joined_string_scan_text(
-        joined_string,
-        formatted_value_placeholder=_JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER,
-    )
-
-    if _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER in boundary_marked_text.partition("\n")[0]:
-        raise NaturalParseError("Block header must be static")
-
-    if re.search(r"<[^>]*" + _JOINED_STRING_FORMATTED_VALUE_PLACEHOLDER + r"[^>]*>", boundary_marked_text):
-        raise NaturalParseError("Binding marker must not span formatted value boundary in inline f-string Natural block")
-
-
-def _extract_program_and_bindings_from_joined_string(joined_string: ast.JoinedStr) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
-    _validate_joined_string_bindings_do_not_span_formatted_values(joined_string)
-
-    scan_text = _joined_string_scan_text(joined_string, formatted_value_placeholder="")
-    _, program, input_bindings, output_bindings = parse_block(scan_text)
-    return program, input_bindings, output_bindings
+    return parse_block(scan_text, has_interpolated_instruction=bool(interpolation_offsets))
 
 
 def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
@@ -177,8 +168,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
                 )
 
         if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
-            _validate_joined_string_bindings_do_not_span_formatted_values(value)
-            block_kind, program, input_bindings, output_bindings = parse_block(_joined_string_scan_text(value, formatted_value_placeholder=""))
+            block_kind, program, input_bindings, output_bindings = parse_joined_block(value)
             blocks.append(
                 NaturalBlock(
                     kind="inline",

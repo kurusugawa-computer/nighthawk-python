@@ -30,8 +30,11 @@ async def assess_line(document: str, line: str) -> float:
 
 @nh.function
 async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
-    summary = ""
+    summary: str = ""
     """execute
+    ---
+    deny: [return]
+    ---
     Summarize <document> in <:summary>, with one factual claim per line.
     Produce exactly two nonempty lines, one for each named team and its completed ticket count.
     Preserve each team's name and numerical count, using decimal digits.

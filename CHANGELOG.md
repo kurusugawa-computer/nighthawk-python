@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Include the `py.typed` marker in distributions so installed consumers can use the library's annotations and signature-preserving decorators without inferring types from untyped library source.
+- Escaped Natural markers declare neither reads nor writes and render literally in both execution and decision instructions.
+- F-string validation tracks interpolation boundaries without reserving a character in author text, preserves escaped interpolated markers, and accepts decision instructions supplied entirely through interpolation while rejecting empty rendered instructions.
+- Protect the documented summary-assessment pipeline with an explicit `deny: [return]` contract, preventing model-selected early return from bypassing Python assessment work.
+
 ### Changed
 
 - Breaking: `execution_model_settings` names execution overrides explicitly alongside `decision_model_settings`. `StepPromptTemplates` uses `system_prompt_template` and `user_prompt_template`.

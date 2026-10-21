@@ -187,6 +187,21 @@ The deterministic evidence covers absent parent bindings, preparation failures, 
 It does not establish that separating names prevents repeated model calls or improves judgments.
 Assess those hypotheses through application evaluations, including independent reuse and the effort needed to declare shared dependencies.
 
+## Preserving Python work after Natural generation
+
+**Status:** Experimentally evaluated on synthetic inputs, with one successful corrected run for each of three scenarios on two models.
+The [2026-10-21 composition investigation](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20261021-python-composition.md) records the initial failure, correction, configuration, results, and limitations.
+
+A reporting function generates summary lines and then uses Python to assess each line.
+An execution block that permits `return` can bypass that later work.
+In the observed failure, the model returned the intermediate summary string, and Core rejected it against the outer function's list return contract.
+The intermediate value's valid type did not establish task completion.
+
+The existing `deny: [return]` contract adequately expresses the required boundary.
+The corrected fixture and [composition guide](patterns.md#python-iteration-with-natural-judgment) apply it before the Python loop.
+This finding calls for explicit application contracts and verified guidance, without an additional Core primitive.
+The small model sample does not establish broad reliability, lower authoring effort, or comparative advantage.
+
 ## Correcting refused operations within a Natural step
 
 **Status:** Execution contracts have deterministic coverage in `tests/runtime/test_operation_recovery.py` and `tests/backends/test_rejection_feedback.py`, with executable [model and custom-executor examples](operation-feedback.md).

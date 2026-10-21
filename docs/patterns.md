@@ -6,7 +6,9 @@ This page covers how to apply Natural blocks in real workflows: outcomes, deny f
 
 ## Control flow and error handling
 
-Natural blocks can drive Python control flow when the surrounding syntax allows it. The LLM returns a final outcome that determines what happens next. Full coverage requirements (e.g., processing every item in a list) are enforced by Python loops, not by Natural block instructions.
+Execution blocks can select a control outcome permitted by the surrounding Python syntax and their `deny` frontmatter.
+Use Python loops for full coverage requirements, and deny `return`, `break`, or `continue` wherever those outcomes would bypass required work.
+Decision blocks produce a value and continue; Python determines the subsequent control flow.
 
 ### Outcomes
 
@@ -56,7 +58,10 @@ def route_message(message: str) -> str:
 
 ### Deny frontmatter
 
-All outcomes are allowed by default. A Natural block can start with YAML frontmatter to selectively disallow outcomes that the LLM should not choose.
+An `execute` block allows every syntactically available outcome by default.
+It can start with YAML frontmatter to disallow outcomes that would bypass required Python work.
+This restricts accepted control outcomes; runtime and helper exceptions can still interrupt execution.
+Decision blocks only complete with `pass` and do not accept control-flow frontmatter.
 
 There are two standard patterns:
 
@@ -303,8 +308,11 @@ async def assess_line(document: str, line: str) -> float:
 
 @nh.function
 async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
-    summary = ""
+    summary: str = ""
     """execute
+    ---
+    deny: [return]
+    ---
     Summarize <document> in <:summary>, with one claim per line.
     """
     assessments: list[tuple[str, float]] = []
@@ -313,6 +321,9 @@ async def summarize_and_assess(document: str) -> list[tuple[str, float]]:
         assessments.append((line, confidence))
     return assessments
 ```
+
+The summarization block denies `return` because returning its string would skip the assessment loop and violate the outer function's list contract.
+The typed output `summary: str` and the function's return annotation describe different boundaries.
 
 ### Natural selects follow-up assessments
 

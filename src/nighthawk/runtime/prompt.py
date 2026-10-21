@@ -516,7 +516,7 @@ def extract_reference_data_and_program(text: str) -> ExtractedReferenceData:
     reference_path_pattern = r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
 
     unescaped_token_pattern = re.compile(r"(?<!\\)<(" + reference_path_pattern + r")>")
-    escaped_token_pattern = re.compile(r"\\<(" + reference_path_pattern + r")>")
+    escaped_token_pattern = re.compile(r"\\<(:?" + reference_path_pattern + r")>")
 
     reference_paths: set[str] = set()
     references: set[str] = set()

@@ -321,7 +321,7 @@ class AgentStepExecutor:
             model=model,
             output_type=cast(Any, output_type),
             deps_type=StepContext,
-            instructions=request.processed_natural_program,
+            instructions=extract_references_and_program(request.processed_natural_program)[1],
             model_settings=cast(ModelSettings, self.configuration.decision_model_settings),
         )
         with step_context_scope(request.step_context):

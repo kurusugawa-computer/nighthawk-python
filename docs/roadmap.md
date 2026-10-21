@@ -84,12 +84,6 @@ Explore explicit serialization of host data and correlation metadata for multi-p
 
 Investigate propagating selected context-variable rebindings back from bridge threads while preserving [shared-value and expression-lifetime boundaries](specification.md#813-shared-values-and-expression-lifetime).
 
-## Implementation hardening
-
-### f-string binding validation robustness
-
-Use source positions to identify interpolated spans without sentinel characters.
-
 ## Coding agent backends
 
 ### Backend-agnostic structured output

@@ -170,7 +170,7 @@ Recommended form:
 
 Inside a function body, a standalone expression statement whose AST is syntactically a string literal begins with:
 
-- `execute\n`
+- `execute\n` or `decide <:name>\n`
 
 The expression value must be either:
 
@@ -241,6 +241,8 @@ Resolution note:
 Constraints:
 
 - `name` is a simple identifier (no dotted paths).
+- Prefix a marker with a backslash to make it literal: `\<name>` and `\<:name>` declare neither reads nor writes.
+  The backslash is removed when either block kind presents the instructions to its model.
 - `<:name>` does not require prior declaration.
     - Practical note: if subsequent Python code reads a variable that has not been assigned yet, Python will raise before any LLM behavior can help. Initialize variables in Python when needed.
 
@@ -1126,6 +1128,11 @@ Natural blocks often need to embed computed values (for example, paths or JSON e
 - Interpolation follows standard Python f-string semantics.
     - Expression evaluation rules are those of Python.
     - Brace escaping uses `{{` and `}}` in the f-string source to produce literal `{` and `}` in the rendered text.
+- Headers and binding declarations are static.
+  An unescaped angle-bracket marker cannot span an interpolated expression; write the complete declaration in a literal segment.
+  Escaped literal markers may contain interpolated text.
+- A decision instruction may be supplied entirely through interpolation.
+  Its rendered body must still be nonempty and satisfy the decision-block restrictions before executor admission.
 
 Note:
 
