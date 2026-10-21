@@ -213,17 +213,4 @@ Interruption does not authorize detached processing or skipped cleanup.
 Core retains its existing operation/terminal notification and asynchronous bridge responsibilities.
 Application callbacks remain responsible for correctly shielding their own asynchronous cleanup under their execution framework's cancellation rules.
 
-## Migration from 0.16
-
-| Previous API | Replacement |
-| --- | --- |
-| Terminal `Reject(reason)` in either inspector | `AbortStep(reason)`. |
-| `OversightRejectedError` | `StepAbortedError`. |
-| Commit rejection caught as `ExecutionError` | Catch `StepAbortedError` for an explicit `AbortStep`; arbitrary commit-inspector failures retain the ordinary terminal error contract. |
-| Operation rejection intended to permit another choice | Return `RejectOperation(reason, guidance=...)`; direct executors catch `OperationRejectedError`. |
-| Terminal `failure_stage="oversight_rejection"` and `rejection_reason` | `failure_stage="oversight_abort"` and `abort_reason`. |
-| Operation status `"rejected"` for a host termination | `"aborted"`; `"rejected"` now specifically identifies a recoverable operation refusal. |
-| Assuming every operation record represents an attempted body | Check `status`, `phase`, and `evaluation_started`; later model calls may be `"skipped"`. |
-
-The old symbols are removed; there is no compatibility mode that silently changes their meaning.
 Operation and terminal records are host-owned evidence, not automatic snapshots of a mutable object graph or durable exactly-once storage.

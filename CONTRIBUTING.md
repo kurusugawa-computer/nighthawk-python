@@ -12,13 +12,10 @@
 uv sync --all-extras --all-groups
 ```
 
-`uv` manages the project virtual environment in `.venv`. Do not create or
-activate a separate virtual environment; run project commands through `uv run`.
-The `.venv` directory is generated and ignored by Git. It can be deleted to
-rebuild the local environment, and the next `uv sync` or `uv run` recreates it.
+`uv` manages the project virtual environment in `.venv`; run project commands through `uv run`.
+The generated `.venv` directory is ignored by Git and recreated by `uv sync` or `uv run` when missing.
 
-Declare project dependencies in `pyproject.toml` through `uv add`, rather than
-installing them directly into `.venv` with `uv pip install`.
+Declare project dependencies in `pyproject.toml` through `uv add`.
 
 If you see a `uv` warning about hardlinking (common in containers or cross-filesystem workspaces), suppress it with:
 
@@ -73,8 +70,8 @@ Their executables and authentication must be available in the test environment.
 
 ### Trace inspection with otel-tui
 
-Nighthawk emits OpenTelemetry traces for step execution. You can inspect them
-locally using [otel-tui](https://github.com/ymtdzzz/otel-tui):
+Nighthawk emits OpenTelemetry traces for step execution.
+You can inspect them locally using [otel-tui](https://github.com/ymtdzzz/otel-tui):
 
 ```bash
 docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
@@ -83,7 +80,8 @@ docker run --rm -it -p 4318:4318 --name otel-tui ymtdzzz/otel-tui:latest
 Then run integration tests with the collector endpoint:
 
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run pytest -q tests/integration/
+NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  uv run --env-file .env pytest -q tests/integration/
 ```
 
 Traces appear in the otel-tui terminal UI in real time.
@@ -118,7 +116,7 @@ PFOO="cd evals/promptfoo && PROMPTFOO_PYTHON=\"$(uv python find)\" npx promptfoo
 
 - `provider.py` -- Executes trusted fixtures through `StepDefinition` and `execute_step`, including validation, writeback, terminal records, and usage metering. Experimental tool and suffix variants are restored after each serialized call. Return reports contain resolved `return_value`; `step_locals` reports the explicit namespace after writes and in-place effects.
 - `prompts/` — System prompt variants (`eval_default.txt`, `eval_sequenced.txt`, `eval_mutation_aware.txt`, `eval_coding_agent.txt`, etc.).
-- `test_cases/` — YAML test suites: `binding_operations`, `tool_selection`, `outcome_kinds`, `edge_cases`, `loop_outcomes`, `multi_step`, `null_handling`, `tool_selection_core`.
+- `test_cases/` -- YAML suites for bindings, tool selection, outcomes, loops, multi-step execution, and edge cases.
 - `assertions/` — Custom Python assertions: `binding_value.py`, `outcome_kind.py`, `raise_message.py`.
 
 #### Adding tests
@@ -139,77 +137,20 @@ Each test case YAML entry needs: `description` (with `P-SLUG-NNN` Id), `vars` (n
 
 ## Docstring Guide
 
-This guide defines the docstring conventions for the Nighthawk codebase.
+Document the public API rendered by `docs/api.md` using Google-style docstrings.
+Follow [.claude/rules/python.md](.claude/rules/python.md) for comments and internal docstrings.
 
-### Style
+Start with a concise summary of the operation, using imperative mood for functions.
+Describe the contract and any non-obvious consequences; do not repeat annotations or narrate the implementation.
+Keep examples in `docs/`, where they can be executed and checked against the runtime.
 
-Use [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) docstrings. This is the default style parsed by mkdocstrings.
+| Section | Content |
+| --- | --- |
+| `Args` | Parameter meaning and constraints beyond its type. |
+| `Returns` / `Yields` | The returned value's meaning when not clear from the signature. |
+| `Raises` | Exceptions callers are expected to handle. |
+| `Attributes` | Public model fields and their semantics. |
 
-### Scope
-
-This guide covers the public API: the objects rendered by `docs/api.md`.
-
-Other docstrings, including those for names prefixed with `_`, are written only for facts the code does not convey and stay compact.
-See `.claude/rules/python.md` for the rules that apply to all comments and docstrings.
-
-### Structure
-
-#### Summary line
-
-Required. Use imperative mood ("Return ...", "Start ...", "Register ..."). Keep it on one line.
-
-#### Sections
-
-| Section | When to include |
-|---|---|
-| `Args` | One or more parameters exist. Do not repeat type information already present in annotations. |
-| `Returns` / `Yields` | Return value is not `None`, or carries meaning that is not obvious from the type alone. |
-| `Raises` | The function raises exceptions that callers are expected to catch. |
-
-Do not add an `Example` section; examples live in `docs/`.
-
-#### Classes
-
-Write the docstring on the class body, not on `__init__`. mkdocstrings merges `__init__` parameters automatically (`merge_init_into_class: true`).
-
-For Pydantic models, describe fields in an `Attributes` section:
-
-```python
-class StepExecutorConfiguration(BaseModel):
-    """Configuration for a step executor.
-
-    Attributes:
-        model: Model identifier in "provider:model" format (e.g. "openai:gpt-4o").
-        prompts: Prompt templates for step execution.
-        context_limits: Token and item limits for context rendering.
-    """
-```
-
-### What not to write
-
-- Do not duplicate type annotations in `Args` descriptions.
-- Do not add docstrings just to satisfy a linter; omit them when the signature alone is self-explanatory.
-- Do not document internal implementation details in public docstrings.
-
-### Full example
-
-```python
-def run(
-    step_executor: StepExecutor,
-    *,
-    run_id: str | None = None,
-) -> Iterator[None]:
-    """Start an execution run with the given step executor.
-
-    Establishes a run-scoped context that makes the step executor
-    available to all Natural blocks executed within this scope.
-
-    Args:
-        step_executor: The step executor to use for Natural block execution.
-        run_id: Optional identifier for the run. If not provided, a ULID is
-            generated automatically.
-
-    Raises:
-        RuntimeError: If called while another run is already active.
-    """
-```
+Put class documentation on the class body.
+MkDocstrings merges constructor parameters through `merge_init_into_class: true`.
+Use semantic line breaks and keep internal docstrings only for facts not conveyed by the code.
