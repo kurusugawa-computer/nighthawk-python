@@ -344,7 +344,7 @@ def build_runtime_call_and_assignments(
             return_annotation,
             ast.Constant(is_in_loop),
         ],
-        keywords=[ast.keyword(arg="block_kind", value=ast.Constant(block_kind))],
+        keywords=[],
     )
     envelope_value: ast.expr = ast.Await(value=call_expression) if is_async_function else call_expression
 
@@ -359,9 +359,9 @@ def build_runtime_call_and_assignments(
         )
 
     guard_source = (
-        f"async with {runner_name}.execution_async() as {execution_name}:\n    pass\n"
+        f"async with {runner_name}.execution_async(block_kind={block_kind!r}) as {execution_name}:\n    pass\n"
         if is_async_function
-        else f"with {runner_name}.execution() as {execution_name}:\n    pass\n"
+        else f"with {runner_name}.execution(block_kind={block_kind!r}) as {execution_name}:\n    pass\n"
     )
     guarded = ast.parse(guard_source).body[0]
     assert isinstance(guarded, (ast.With, ast.AsyncWith))

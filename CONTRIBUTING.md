@@ -41,6 +41,9 @@ uv run ruff check --fix .
 # Type check
 uv run pyright
 
+# Build documentation, treating warnings as failures
+uv run mkdocs build --strict
+
 # Run tests
 uv run pytest -q       # quiet output
 ```

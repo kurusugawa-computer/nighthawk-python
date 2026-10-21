@@ -63,8 +63,10 @@ class PreparedStep:
 class StepPreparation:
     """Own preparation and the partial facts available for failure reporting."""
 
-    def __init__(self, step_executor: StepExecutor, runtime_name_set: frozenset[str]) -> None:
-        self.block_kind: BlockKind = "execute"
+    def __init__(self, step_executor: StepExecutor, runtime_name_set: frozenset[str], *, block_kind: BlockKind) -> None:
+        if block_kind not in ("execute", "decide"):
+            raise ValueError("block_kind must be execute or decide")
+        self.block_kind: BlockKind = block_kind
         self.step_executor = step_executor
         self.runtime_name_set = runtime_name_set
         self.processed_natural_program: str | None = None
@@ -168,13 +170,10 @@ class StepPreparation:
         binding_name_to_type: dict[str, object],
         is_in_loop: bool,
         *,
-        block_kind: BlockKind = "execute",
         caller_frame: FrameType | None,
         name_to_value: Mapping[str, object] | None,
     ) -> PreparedStep:
-        self.block_kind = block_kind
-        if block_kind not in ("execute", "decide"):
-            raise ExecutionError("Unknown block kind")
+        block_kind = self.block_kind
         if block_kind == "decide" and len(output_binding_names) != 1:
             raise ExecutionError("decide requires exactly one output binding")
         normalize_binding_names(input_binding_names)

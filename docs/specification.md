@@ -1066,7 +1066,14 @@ The public `nh.get_lifecycle()` returns the currently scoped configuration objec
 
 Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
 
-`StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`. All carry `execution_reference`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, and `assigned_binding_name_to_value`. Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values. Runtime references require both step identity fields. Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity. Hosts must serialize or copy deliberately for durable records.
+`StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`.
+All carry `execution_reference`, `block_kind`, `model_result`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, and `assigned_binding_name_to_value`.
+The declared `block_kind` is known on entry, including failures or interruptions in started delivery, f-string rendering, and embedded argument validation before preparation.
+Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values.
+`model_result` is absent until a managed model run returns its native result.
+Runtime references require both step identity fields.
+Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity.
+Hosts must serialize or copy deliberately for durable records.
 
 `StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Model-selected exception expressions use the operation pipeline; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. An explicit `AbortStep` decision about this step additionally carries `inspection_subject` and `abort_reason`. Invalid hook decisions and exceptions raised by inspectors remain inspection failures.
 

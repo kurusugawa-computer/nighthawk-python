@@ -30,7 +30,7 @@ class _RenderedPage(HTMLParser):
 def test_published_internal_links_and_anchors_resolve(tmp_path: Path) -> None:
     site_directory = tmp_path / "site"
     completed = subprocess.run(
-        [sys.executable, "-m", "mkdocs", "build", "--site-dir", str(site_directory)],
+        [sys.executable, "-m", "mkdocs", "build", "--strict", "--site-dir", str(site_directory)],
         cwd=_REPOSITORY_ROOT,
         capture_output=True,
         text=True,

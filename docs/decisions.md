@@ -17,6 +17,7 @@ The host retains ownership of supplied clients.
 
 ## One function, two kinds of work
 
+<!-- decision-example:summary_assessment -->
 ```python
 from typing import Annotated
 
@@ -30,6 +31,9 @@ async def summarize_and_assess(document: str) -> tuple[str, float]:
     claims: list[str] = []
     summary: str = ""
     """execute
+    ---
+    deny: [return]
+    ---
     Extract the factual claims from <document> into <:claims>.
     Summarize <claims> in <:summary>.
     Check <summary> against <document> and revise <:summary> as needed.
@@ -49,10 +53,12 @@ async def main(document: str) -> tuple[str, float]:
     ):
         return await summarize_and_assess(document)
 ```
+<!-- /decision-example:summary_assessment -->
 
 An `execute` body can reference multiple outputs and assign the same output repeatedly.
 Each `<:name>` authorizes that output; it does not itself perform an assignment.
 Tools make intermediate assignments, and the runtime validates the selected final values before writing them back into Python.
+The execution block denies `return` so a proposed summary cannot bypass the following assessment.
 
 A `decide` header declares exactly one output.
 Its body contains the judgment and criteria, with `<name>` references to the evidence.
@@ -152,6 +158,7 @@ Each loop iteration and nested decision has its own `step_execution_id`.
 The native result remains on terminal records if later commit inspection or writeback fails.
 A model failure before an `AgentRunResult` exists leaves `model_result=None`.
 The usage meter aggregates completed model runs and does not invent usage for failed calls.
+The terminal `block_kind` identifies the declared block even when interpolation, initial notification, or preparation fails before any model call.
 
 Commit oversight can accept, reject, or replace a validated decision under the common runtime contract.
 A successful decision commit must retain its one output.
@@ -168,3 +175,4 @@ Deterministic tests in `tests/runtime/test_decisions.py` exercise the real OpenA
 They cover typed questions, full evidence, multiple execution assignments, settings, missing/refused/invalid answers, and detailed results after writeback failure.
 The opt-in live test is `NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run pytest -q tests/integration/test_openai_decisions.py` and requires credentials and Decisions API access.
 These tests establish runtime contracts; they do not measure judgment quality or establish access to the live beta API.
+`tests/docs/test_decision_examples.py` extracts the composition above and checks its Python result, explicit evidence, and refusal of a return that would bypass assessment using a scripted executor.

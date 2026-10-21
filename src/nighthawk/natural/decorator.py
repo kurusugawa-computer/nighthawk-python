@@ -19,6 +19,7 @@ from ..runtime.bindings import MISSING_ANNOTATION
 from ..runtime.runner import Runner
 from ..runtime.scoping import get_step_executor
 from ..runtime.step_context import python_cell_scope
+from ..runtime.step_definition import BlockKind
 from ._names import _RuntimeNames
 from .blocks import extract_program
 from .definition import FunctionDefinition, _register_definition
@@ -31,14 +32,14 @@ class _RunnerProxy:
     def __init__(self) -> None:
         self.runtime_name_set: frozenset[str] = frozenset()
 
-    def execution(self) -> AbstractContextManager[Runner]:
+    def execution(self, *, block_kind: BlockKind) -> AbstractContextManager[Runner]:
         caller_frame = sys._getframe(1)
-        runner = Runner(get_step_executor(), runtime_name_set=self.runtime_name_set)
+        runner = Runner(get_step_executor(), block_kind=block_kind, runtime_name_set=self.runtime_name_set)
         return runner.execution(caller_frame=caller_frame)
 
-    def execution_async(self) -> AbstractAsyncContextManager[Runner]:
+    def execution_async(self, *, block_kind: BlockKind) -> AbstractAsyncContextManager[Runner]:
         caller_frame = sys._getframe(1)
-        runner = Runner(get_step_executor(), runtime_name_set=self.runtime_name_set)
+        runner = Runner(get_step_executor(), block_kind=block_kind, runtime_name_set=self.runtime_name_set)
         return runner.execution_async(caller_frame=caller_frame)
 
 

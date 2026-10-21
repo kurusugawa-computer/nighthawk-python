@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve the declared block kind in failure and interruption records before preparation, including started-delivery errors, f-string rendering failures, and invalid embedded arguments.
+- Protect the execution-to-decision guide's assessment with an explicit denied return and test the published composition directly.
 - Include the `py.typed` marker in distributions so installed consumers can use the library's annotations and signature-preserving decorators without inferring types from untyped library source.
 - Escaped Natural markers declare neither reads nor writes and render literally in both execution and decision instructions.
 - F-string validation tracks interpolation boundaries without reserving a character in author text, preserves escaped interpolated markers, and accepts decision instructions supplied entirely through interpolation while rejecting empty rendered instructions.

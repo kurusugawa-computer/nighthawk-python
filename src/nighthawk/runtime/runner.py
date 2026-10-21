@@ -92,9 +92,9 @@ def _build_source_location(*, caller_frame: FrameType) -> str:
 
 
 class Runner:
-    def __init__(self, step_executor: StepExecutor, *, runtime_name_set: frozenset[str] = frozenset()) -> None:
+    def __init__(self, step_executor: StepExecutor, *, block_kind: BlockKind = "execute", runtime_name_set: frozenset[str] = frozenset()) -> None:
         self.step_executor = step_executor
-        self.preparation_state = StepPreparation(step_executor, runtime_name_set)
+        self.preparation_state = StepPreparation(step_executor, runtime_name_set, block_kind=block_kind)
         self.failure_stage: FailureStage = "preparation"
         self.failure_description: str | None = None
         self.preparation: PreparedStep | None = None
@@ -466,7 +466,6 @@ class Runner:
         is_in_loop: bool,
         caller_frame: FrameType | None,
         name_to_value: Mapping[str, object] | None,
-        block_kind: BlockKind,
     ) -> PreparedStep:
         preparation = self.preparation_state.prepare(
             natural_program,
@@ -476,7 +475,6 @@ class Runner:
             is_in_loop,
             caller_frame=caller_frame,
             name_to_value=name_to_value,
-            block_kind=block_kind,
         )
         self.preparation = preparation
         self.context_stack.enter_context(step_context_scope(preparation.step_context))
@@ -537,13 +535,12 @@ class Runner:
         *,
         caller_frame: FrameType | None = None,
         name_to_value: Mapping[str, object] | None = None,
-        block_kind: BlockKind = "execute",
     ) -> StepEnvelope:
         if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
         preparation = self._prepare(
-            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value, block_kind
+            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value
         )
         self.failure_stage = "preparation"
         return_annotation = self.preparation_state.resolve_step_annotation(
@@ -577,13 +574,12 @@ class Runner:
         *,
         caller_frame: FrameType | None = None,
         name_to_value: Mapping[str, object] | None = None,
-        block_kind: BlockKind = "execute",
     ) -> StepEnvelope:
         if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
         preparation = self._prepare(
-            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value, block_kind
+            natural_program, input_binding_names, output_binding_names, binding_name_to_type, is_in_loop, caller_frame, name_to_value
         )
         self.failure_stage = "preparation"
         return_annotation = self.preparation_state.resolve_step_annotation(

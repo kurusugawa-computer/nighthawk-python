@@ -43,7 +43,7 @@ def execute_step(
     Return, Break, and Continue are values for the host to dispatch; a final Raise propagates its exception after notification.
     Synchronous executor and writer bodies run on the caller thread; awaitables use the usual synchronous bridge.
     """
-    runner = Runner(get_step_executor())
+    runner = Runner(get_step_executor(), block_kind=definition.block_kind)
     with runner.execution(source_location=definition.source_location):
         if not isinstance(name_to_value, Mapping):
             raise TypeError("name_to_value must be an explicit mapping")
@@ -57,7 +57,6 @@ def execute_step(
             definition.return_annotation,
             definition.is_in_loop,
             name_to_value=name_to_value,
-            block_kind=definition.block_kind,
         )
         for name in definition.output_binding_names:
             if name not in envelope["bindings"]:
@@ -82,7 +81,7 @@ async def execute_step_async(
     Cancellation propagates through the writer and its cleanup before terminal notification.
     Host writers own any effects performed before raising or before cancellation.
     """
-    runner = Runner(get_step_executor())
+    runner = Runner(get_step_executor(), block_kind=definition.block_kind)
     async with runner.execution_async(source_location=definition.source_location):
         if not isinstance(name_to_value, Mapping):
             raise TypeError("name_to_value must be an explicit mapping")
@@ -96,7 +95,6 @@ async def execute_step_async(
             definition.return_annotation,
             definition.is_in_loop,
             name_to_value=name_to_value,
-            block_kind=definition.block_kind,
         )
         for name in definition.output_binding_names:
             if name not in envelope["bindings"]:

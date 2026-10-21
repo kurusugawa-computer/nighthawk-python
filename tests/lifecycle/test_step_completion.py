@@ -330,10 +330,10 @@ def test_partial_assignment_failure_reports_only_completed_writes() -> None:
             super().__setitem__(name, value)
 
     class Proxy:
-        def execution(self):
+        def execution(self, *, block_kind):
             frame = inspect.currentframe()
             assert frame is not None and frame.f_back is not None
-            return Runner(nh.get_step_executor()).execution(caller_frame=frame.f_back)
+            return Runner(nh.get_step_executor(), block_kind=block_kind).execution(caller_frame=frame.f_back)
 
     statements = build_runtime_call_and_assignments(
         ast.Constant("Assign."), (), ("first", "second"), ast.Dict(keys=[], values=[]), ast.Constant(None), is_in_loop=False, is_async_function=False
