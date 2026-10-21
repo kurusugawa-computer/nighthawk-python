@@ -1,6 +1,3 @@
-# Category 1: Binding Operations (highest priority)
-
-# P-BIND-001: Simple arithmetic binding
 - description: "P-BIND-001: Simple arithmetic (v=10, set v to v+5)"
   vars:
     natural_program: "Set <:v> to <v> + 5."
@@ -17,7 +14,6 @@
         expected_bindings:
           v: 15
 
-# P-BIND-002: Multiple write bindings
 - description: "P-BIND-002: Multiple bindings (x=5, a=x*2, b=x*3)"
   vars:
     natural_program: "Set <:a> to <x> * 2 and <:b> to <x> * 3."
@@ -35,7 +31,6 @@
           a: 10
           b: 15
 
-# P-BIND-003: String operation (uppercase)
 - description: "P-BIND-003: String uppercase"
   vars:
     natural_program: "Set <:result> to the uppercase version of <text>."
@@ -52,7 +47,6 @@
         expected_bindings:
           result: "HELLO WORLD"
 
-# P-BIND-004: List mutation via nh_evaluate (in-place append)
 - description: "P-BIND-004: List append via nh_evaluate"
   vars:
     natural_program: "Append 42 to <items>."
@@ -70,7 +64,6 @@
         expected_bindings:
           items: [1, 2, 3, 42]
 
-# P-BIND-005: Dict value access
 - description: "P-BIND-005: Dict value access"
   vars:
     natural_program: "Set <:result> to the value of key 'name' in <data>."
@@ -87,7 +80,6 @@
         expected_bindings:
           result: "Alice"
 
-# P-BIND-020: Boolean result (empty list check)
 - description: "P-BIND-020: Boolean result from empty list check"
   vars:
     natural_program: "Set <:is_empty> to True if <items> is empty, otherwise False."
@@ -104,7 +96,6 @@
         expected_bindings:
           is_empty: true
 
-# P-BIND-021: Float division result
 - description: "P-BIND-021: Float division result"
   vars:
     natural_program: "Set <:result> to <a> divided by <b>."
@@ -121,7 +112,6 @@
         expected_bindings:
           result: 3.5
 
-# P-BIND-030: Free-form context extraction and arithmetic
 - description: "P-BIND-030: Extract value from free-form context text and compute"
   vars:
     natural_program: |

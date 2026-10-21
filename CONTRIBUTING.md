@@ -88,47 +88,64 @@ Traces appear in the otel-tui terminal UI in real time.
 
 ### Prompt evaluation with promptfoo
 
-System prompt, tool descriptions, and backend behavior are evaluated with [promptfoo](https://www.promptfoo.dev/). Requires Node.js (for `npx`). API keys must be loaded from `.env` first.
+The shared suite evaluates production Natural execution, requested Python calls, and their results and effects.
+The [Python provider](https://www.promptfoo.dev/docs/providers/python/) passes configuration directly to `StepExecutorConfiguration` and executes each trusted fixture through `execute_step_async`.
+Production prompts and built-in tools are used without private replacements.
+
+Node.js and the project development environment are required.
+From the repository root, define this shell helper:
 
 ```bash
-set -a; source .env; set +a
-PFOO="cd evals/promptfoo && PROMPTFOO_PYTHON=\"$(uv python find)\" npx promptfoo@latest"
+promptfoo() (
+  cd evals/promptfoo || exit
+  uv run --env-file ../../.env env \
+    PROMPTFOO_PYTHON="$(uv python find)" \
+    PYDANTIC_AI_NO_BANNER=1 \
+    npx --yes promptfoo@0.124.1 "$@"
+)
 ```
 
+`uv` loads credentials from `.env`; the helper leaves the caller's directory unchanged.
+The CLI version is pinned to the version used for the recorded evaluation.
+`promptfooconfig.yaml` contains all providers and one shared test list.
+Select providers explicitly for the credentials and executables available:
+
 | Command | Purpose |
-|---|---|
-| `eval $PFOO eval` | Full regression (all backends, all tests) |
-| `eval $PFOO eval -c promptfooconfig-prompt-ab.yaml` | Prompt A/B test (gpt-5.6-luna only) |
-| `eval $PFOO eval -c promptfooconfig-luna-sanity.yaml --no-cache` | Default-model sanity check (gpt-5.6-luna only) |
-| `eval $PFOO eval -c promptfooconfig-agents.yaml` | Coding agent backends (reduced test set) |
-| `eval $PFOO eval -c promptfooconfig.yaml --filter-pattern "P-BIND-001"` | Single test |
-| `eval $PFOO eval -c promptfooconfig.yaml --filter-providers "claude-code-cli"` | Single backend |
-| `eval $PFOO view` | Open results in browser |
+| --- | --- |
+| `promptfoo eval --filter-providers "^openai-responses:"` | Full OpenAI regression suite. |
+| `promptfoo eval --filter-providers "^openai-responses:" --repeat 3 -o outputs/production.json` | Repeated evaluation with raw results. |
+| `promptfoo eval --filter-providers "^codex:"` | Same suite through the configured Codex executable. |
+| `promptfoo eval --filter-providers "^claude-code-cli:"` | Same suite through the configured Claude Code executable. |
+| `promptfoo eval --filter-providers "^openai-responses:" --filter-pattern "P-BIND-001"` | One fixture. |
+| `promptfoo view` | Inspect local evaluation results. |
 
-#### Config files (`evals/promptfoo/`)
+The configuration disables result caching because runtime, adapter, and assertion changes must be executed.
+Provider filters are regular expressions matched against labels.
+See the [CLI reference](https://www.promptfoo.dev/docs/usage/command-line/) for additional options.
+OpenAI requires `OPENAI_API_KEY`; coding-agent executables and authentication follow the [backend guide](docs/coding-agent-backends.md).
 
-- `promptfooconfig.yaml` — Regression: winner prompt combo across openai-responses, claude-code-cli, and codex backends. All test cases.
-- `promptfooconfig-prompt-ab.yaml` — A/B testing: 4 prompt/tool variants on gpt-5.6-luna. All test cases.
-- `promptfooconfig-luna-sanity.yaml` — Default-model sanity check on openai-responses:gpt-5.6-luna. All test cases.
-- `promptfooconfig-agents.yaml` — Coding agent only: claude-code-cli and codex with reduced test set.
+#### Fixtures and reports
 
-#### Directory layout
+`test_cases/` contains trusted programs with stable `P-SLUG-NNN` descriptions, JSON-encoded input bindings, ordered output names, and assertions.
+Optional `global_bindings` exposes named builtins through `"__builtin__"`.
+Optional `allowed_outcome_kinds` selects the fixture's loop context and restricts outcomes while retaining its frontmatter denials.
 
-- `provider.py` -- Executes trusted fixtures through `StepDefinition` and `execute_step`, including validation, writeback, terminal records, and usage metering. Experimental tool and suffix variants are restored after each serialized call. Return reports contain resolved `return_value`; `step_locals` reports the explicit namespace after writes and in-place effects.
-- `prompts/` — System prompt variants (`eval_default.txt`, `eval_sequenced.txt`, `eval_mutation_aware.txt`, `eval_coding_agent.txt`, etc.).
-- `test_cases/` -- YAML suites for bindings, tool selection, outcomes, loops, multi-step execution, and edge cases.
-- `assertions/` — Custom Python assertions: `binding_value.py`, `outcome_kind.py`, `raise_message.py`.
+Callable values use `"__callable:<name>"`, resolved by `_FIXTURE_NAME_TO_CALLABLE` in `provider.py`.
+Calls are recorded with arguments bound to their parameter names, so equivalent positional and keyword calls compare equally.
+The record describes an attempted invocation; it is not a transaction or a success guarantee.
 
-#### Adding tests
+Reports contain committed `bindings`, the explicit namespace after writes and mutations in `step_locals`, resolved `return_value`, DSL raise details, and `function_calls`.
+Runtime failures remain errors and retain already observed effects.
+`tokenUsage` is the completed-agent-run aggregate, including when later value validation fails; it may not expose usage from an interrupted or failed provider run.
 
-Each test case YAML entry needs: `description` (with `P-SLUG-NNN` Id), `vars` (natural_program, input_bindings, output_binding_names), and `assert` list. Callable bindings use `"__callable:<key>"` resolved from `_FIXTURE_NAME_TO_CALLABLE` in `provider.py`.
+The [Python assertions](https://www.promptfoo.dev/docs/configuration/expected-outputs/python/) check values, outcomes, raise details, and requested function calls.
+Binding assertions require committed values by default.
+Set `check_step_locals: true` when a fixture intentionally checks an in-place mutation.
+Return fixtures specify `expected_return_value` as well as the control result.
 
-#### Useful flags
-
-- `--no-cache` — Skip cache (required after changing provider.py or prompts).
-- `--filter-pattern "<regex>"` — Run only matching test descriptions.
-- `--filter-providers "<regex>"` — Run only matching provider labels.
-- `-o <path>.json` — Write structured results to file for analysis.
+Run adapter and assertion tests with `uv run pytest -q tests/evals/`.
+Keep raw results in ignored `outputs/` and record decisions and limitations in dated Markdown under `evidence/`.
+For active experiments, add explicit public configuration overrides beside the production control and follow [.claude/rules/promptfoo.md](.claude/rules/promptfoo.md).
 
 ### Environment variables
 

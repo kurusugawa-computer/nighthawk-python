@@ -1,49 +1,34 @@
-# Nighthawk Natural Block System Prompt Evaluation — Regression
-#
-# Run:
-#   cd evals/promptfoo
-#   PROMPTFOO_PYTHON="$(uv python find)" OPENAI_API_KEY="$OPENAI_API_KEY" \
-#     npx promptfoo@latest eval
-#
-# View results:
-#   npx promptfoo@latest view
+description: Nighthawk production runtime and Python composition
 
-description: "Nighthawk regression: winner combo + all providers"
-
-# The prompt field is required by promptfoo but not used by the provider.
-# The provider constructs the actual LLM prompt internally.
 prompts:
   - "{{natural_program}}"
 
+commandLineOptions:
+  cache: false
+  maxConcurrency: 4
+
 providers:
-  # --- Winner: openai-responses + eval_default + eval_examples ---
   - id: file://provider.py
-    label: "gpt-5.6-luna + eval_default + examples"
+    label: "openai-responses:gpt-5.6-luna"
     config:
-      model: "openai-responses:gpt-5.6-luna"
-      system_prompt_file: prompts/eval_default.txt
-      tool_preset: "eval_examples"
-
-  # --- Coding agent: claude-code-cli ---
+      execution_model: "openai-responses:gpt-5.6-luna"
   - id: file://provider.py
-    label: "claude-code-cli:haiku + coding_agent + examples"
+    label: "claude-code-cli:haiku"
     config:
-      model: "claude-code-cli:haiku"
-      system_prompt_file: prompts/eval_coding_agent.txt
-      tool_preset: "eval_examples"
-
-  # --- Coding agent: codex ---
+      execution_model: "claude-code-cli:haiku"
+      execution_model_settings:
+        allowed_tool_names: [nh_evaluate, nh_assign]
+        max_turns: 25
+        permission_mode: bypassPermissions
   - id: file://provider.py
-    label: "codex:gpt-5.6-luna + coding_agent + examples"
+    label: "codex:gpt-5.6-luna"
     config:
-      model: "codex:gpt-5.6-luna"
-      system_prompt_file: prompts/eval_coding_agent.txt
-      tool_preset: "eval_examples"
-
+      execution_model: "codex:gpt-5.6-luna"
+      execution_model_settings:
+        allowed_tool_names: [nh_evaluate, nh_assign]
 
 defaultTest:
   assert:
-    # Every test must produce valid JSON with a valid outcome kind
     - type: is-json
     - type: python
       value: file://assertions/outcome_kind.py

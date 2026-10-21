@@ -19,6 +19,8 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
         data = json.loads(output)
     except json.JSONDecodeError:
         return {"pass": False, "score": 0.0, "reason": "Output is not valid JSON"}
+    if not isinstance(data, dict):
+        return {"pass": False, "score": 0.0, "reason": "Output must be an object"}
 
     outcome_kind = data.get("outcome_kind")
     if outcome_kind != "raise":
@@ -32,7 +34,6 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
     raise_message = data.get("raise_message", "")
     raise_error_type = data.get("raise_error_type", "")
 
-    # Check exact message match
     expected_raise_message = config.get("expected_raise_message")
     if expected_raise_message is not None and raise_message != expected_raise_message:
         return {
@@ -41,7 +42,6 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
             "reason": f"Expected raise_message {expected_raise_message!r}, got {raise_message!r}",
         }
 
-    # Check error type match
     expected_error_type = config.get("expected_error_type")
     if expected_error_type is not None and raise_error_type != expected_error_type:
         return {
@@ -50,7 +50,6 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
             "reason": f"Expected raise_error_type {expected_error_type!r}, got {raise_error_type!r}",
         }
 
-    # Check message contains
     expected_contains = config.get("expected_raise_message_contains")
     if expected_contains is not None and expected_contains not in raise_message:
         return {

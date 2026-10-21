@@ -17,6 +17,8 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
         data = json.loads(output)
     except json.JSONDecodeError:
         return {"pass": False, "score": 0.0, "reason": "Output is not valid JSON"}
+    if not isinstance(data, dict):
+        return {"pass": False, "score": 0.0, "reason": "Output must be an object"}
 
     outcome_kind = data.get("outcome_kind")
     valid_kinds = {"pass", "return", "raise", "break", "continue"}
@@ -29,7 +31,7 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
             "reason": f"Execution error: {error_message}",
         }
 
-    if outcome_kind not in valid_kinds:
+    if not isinstance(outcome_kind, str) or outcome_kind not in valid_kinds:
         return {
             "pass": False,
             "score": 0.0,
@@ -45,5 +47,10 @@ def get_assert(output: str, context: dict) -> dict[str, Any]:
             "score": 0.0,
             "reason": f"Expected outcome_kind {expected_outcome_kind!r}, got {outcome_kind!r}",
         }
+
+    if "expected_return_value" in config and (
+        outcome_kind != "return" or "return_value" not in data or data["return_value"] != config["expected_return_value"]
+    ):
+        return {"pass": False, "score": 0.0, "reason": f"Expected return value {config['expected_return_value']!r}, got {data.get('return_value')!r}"}
 
     return {"pass": True, "score": 1.0, "reason": f"outcome_kind: {outcome_kind}"}

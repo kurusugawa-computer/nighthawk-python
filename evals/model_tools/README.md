@@ -1,8 +1,6 @@
 # Model-facing tool experiments
 
-This evaluation prototype makes the ratified tool-design proposals executable
-without changing the production Natural runtime. It uses Pydantic AI directly;
-it does not depend on the legacy promptfoo provider's private runtime patches.
+This evaluation workspace compares model-facing tool designs through isolated prototypes and production-backed studies.
 
 The original/refined/merged surfaces below retain the 2026-09-09 experiment contracts.
 The production-backed dedicated-tool versus helper comparison is implemented separately in `inspection_study.py`.

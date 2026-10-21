@@ -1,6 +1,3 @@
-# Category: Null/None Handling
-
-# P-BIND-011: Assign None
 - description: "P-BIND-011: Assign None"
   vars:
     natural_program: "Set <:result> to None."
@@ -17,7 +14,6 @@
         expected_bindings:
           result: null
 
-# P-BIND-012: None conditional check
 - description: "P-BIND-012: None conditional check"
   vars:
     natural_program: "If <value> is None, set <:result> to \"missing\", otherwise set <:result> to \"present\"."
