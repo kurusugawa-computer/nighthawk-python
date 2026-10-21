@@ -4,26 +4,7 @@ import nighthawk as nh
 from tests.support.executors import StubExecutor
 
 
-def test_async_natural_function_allows_self_reference_freevar():
-    nh.StepExecutorConfiguration()
-
-    with nh.run(StubExecutor()):
-
-        @nh.function
-        async def f() -> int:
-            """execute
-            {"step_outcome": {"kind": "pass"}, "bindings": {}}
-            """
-            if False:
-                return await f()
-            return 17
-
-        assert asyncio.run(f()) == 17
-
-
 def test_natural_function_supports_instance_method():
-    nh.StepExecutorConfiguration()
-
     with nh.run(StubExecutor()):
 
         class NaturalMethodCarrier:
@@ -41,8 +22,6 @@ def test_natural_function_supports_instance_method():
 
 
 def test_natural_function_supports_staticmethod_for_both_decorator_orders():
-    nh.StepExecutorConfiguration()
-
     with nh.run(StubExecutor()):
 
         class NaturalStaticMethodCarrier:
@@ -73,8 +52,6 @@ def test_natural_function_supports_staticmethod_for_both_decorator_orders():
 
 
 def test_natural_function_supports_classmethod_for_both_decorator_orders():
-    nh.StepExecutorConfiguration()
-
     with nh.run(StubExecutor()):
 
         class NaturalClassMethodCarrier:
@@ -107,8 +84,6 @@ def test_natural_function_supports_classmethod_for_both_decorator_orders():
 
 
 def test_natural_function_supports_async_instance_method():
-    nh.StepExecutorConfiguration()
-
     with nh.run(StubExecutor()):
 
         class NaturalAsyncMethodCarrier:
@@ -126,8 +101,6 @@ def test_natural_function_supports_async_instance_method():
 
 
 def test_natural_function_supports_async_staticmethod_for_both_decorator_orders():
-    nh.StepExecutorConfiguration()
-
     with nh.run(StubExecutor()):
 
         class NaturalAsyncStaticMethodCarrier:
@@ -158,8 +131,6 @@ def test_natural_function_supports_async_staticmethod_for_both_decorator_orders(
 
 
 def test_natural_function_supports_async_classmethod_for_both_decorator_orders():
-    nh.StepExecutorConfiguration()
-
     with nh.run(StubExecutor()):
 
         class NaturalAsyncClassMethodCarrier:

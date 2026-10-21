@@ -40,6 +40,47 @@ class RecordingHandler:
             self.events.append("exit")
 
 
+@nh.function
+def module_recursive(depth: int) -> int:
+    return module_recursive(depth - 1) + 1 if depth else 0
+
+
+@nh.function
+async def module_recursive_async(depth: int) -> int:
+    return await module_recursive_async(depth - 1) + 1 if depth else 0
+
+
+@pytest.mark.parametrize("function", [module_recursive, module_recursive_async])
+def test_module_recursion_preserves_admission_and_parentage(function) -> None:
+    handler = RecordingHandler()
+    with nh.function_call_scope(handler):
+        result = function(2)
+        assert (asyncio.run(result) if inspect.iscoroutine(result) else result) == 2
+    assert [call.arguments for call in handler.calls] == [(2,), (1,), (0,)]
+    assert handler.calls[0].parent_call_id is None
+    for parent, child in zip(handler.calls, handler.calls[1:], strict=False):
+        assert child.parent_call_id == parent.call_id
+        assert child.call_id != parent.call_id
+
+
+def test_module_recursion_observes_rebound_global(monkeypatch: pytest.MonkeyPatch) -> None:
+    alias = module_recursive
+    monkeypatch.setitem(globals(), "module_recursive", lambda depth: 20)
+    assert alias(1) == 21
+
+
+def test_module_recursive_call_can_be_refused_before_body() -> None:
+    class RefusingHandler(RecordingHandler):
+        def enter(self, call: nh.FunctionCall) -> None:
+            self.refuse = call.arguments == (1,)
+            super().enter(call)
+
+    handler = RefusingHandler()
+    with nh.function_call_scope(handler), pytest.raises(PermissionError, match="refused"):
+        module_recursive(2)
+    assert [call.arguments for call in handler.calls] == [(2,), (1,)]
+
+
 def test_refusal_alias_arguments_and_finally_without_blocks() -> None:
     handler = RecordingHandler()
     effects: list[str] = []

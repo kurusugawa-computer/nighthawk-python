@@ -31,6 +31,12 @@ def test_original_unwrap_signature_and_transformed_accessor() -> None:
     transformed = nh.get_transformed_function(outer)
     assert transformed is not original
     assert transformed.__globals__ is original.__globals__
+    assert transformed.__name__ == original.__name__
+    assert transformed.__qualname__ == original.__qualname__
+    assert transformed.__code__.co_name == original.__code__.co_name
+    assert transformed.__code__.co_qualname == original.__code__.co_qualname
+    assert transformed.__doc__ == original.__doc__
+    assert inspect.signature(transformed) == inspect.signature(original)
     with nh.run(StubExecutor()):
         assert outer(5) == 6
 

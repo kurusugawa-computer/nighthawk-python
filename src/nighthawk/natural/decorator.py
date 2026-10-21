@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import inspect
-import logging
 import re
 import sys
 import textwrap
@@ -49,20 +48,10 @@ def _function_name_to_cell(function: FunctionType) -> dict[str, CellType]:
 
 def _build_transformed_factory_module(
     *,
-    transformed_module: ast.Module,
-    function_name: str,
+    transformed_function_def: ast.FunctionDef | ast.AsyncFunctionDef,
     name_to_value: dict[str, object],
     runtime_names: _RuntimeNames,
 ) -> ast.Module:
-    transformed_function_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
-    for node in transformed_module.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
-            transformed_function_def = node
-            break
-
-    if transformed_function_def is None:
-        raise RuntimeError("Transformed function not found in transformed module")
-
     # Defaults already ran when Python created the original function.
     # Compile placeholders and restore their original live values on the new body.
     transformed_function_def.args.defaults = [ast.Constant(None) for _ in transformed_function_def.args.defaults]
@@ -72,6 +61,9 @@ def _build_transformed_factory_module(
 
     captured_value_name = runtime_names.allocate("__nh_captured_values__")
     factory_name = runtime_names.allocate("__nh_factory__")
+    # Binding the original name here would capture global self-references and
+    # bypass the public wrapper on recursive calls.
+    transformed_function_def.name = runtime_names.allocate("__nh_body__")
 
     factory_body: list[ast.stmt] = []
     for name in sorted(name_to_value.keys()):
@@ -87,7 +79,7 @@ def _build_transformed_factory_module(
         )
 
     factory_body.append(transformed_function_def)
-    factory_body.append(ast.Return(value=ast.Name(id=function_name, ctx=ast.Load())))
+    factory_body.append(ast.Return(value=ast.Name(id=transformed_function_def.name, ctx=ast.Load())))
 
     factory_function_def = ast.FunctionDef(
         name=factory_name,
@@ -137,16 +129,16 @@ def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCall
         raise NighthawkError("Natural functions require available Python def or async def source") from exception
     source = textwrap.dedent("".join(lines))
 
-    try:
-        original_module = ast.parse(source)
-        for node in original_module.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func.__name__:
-                node.decorator_list = []
-                break
-        ast.increment_lineno(original_module, starting_line_number - 1)
-    except Exception as exception:
-        logging.getLogger("nighthawk").warning("Failed to parse original module AST for %s: %s", func.__name__, exception)
-        original_module = ast.Module(body=[], type_ignores=[])
+    filename = inspect.getsourcefile(func) or "<nighthawk>"
+    original_module = ast.parse(source, filename=filename)
+    function_definition = next(
+        (node for node in original_module.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func.__name__),
+        None,
+    )
+    if function_definition is None:
+        raise NighthawkError("Natural functions require available Python def or async def source")
+    function_definition.decorator_list = []
+    ast.increment_lineno(original_module, starting_line_number - 1)
 
     capture_name_set = set(func.__code__.co_freevars) | set(func.__code__.co_cellvars)
 
@@ -170,9 +162,7 @@ def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCall
         | func.__builtins__.keys()
     )
     runtime_names = _RuntimeNames(occupied_names)
-    transformed_module = transform_module_ast(original_module, captured_name_tuple=captured_name_tuple, runtime_names=runtime_names)
-
-    filename = inspect.getsourcefile(func) or "<nighthawk>"
+    transform_module_ast(original_module, captured_name_tuple=captured_name_tuple, runtime_names=runtime_names)
 
     # Runtime helpers referenced by the transformed body travel through the factory closure, not through
     # module globals. The transformed function therefore shares ``func.__globals__`` with the original
@@ -190,8 +180,7 @@ def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCall
     factory_name_to_value: dict[str, object] = {**name_to_value, **helper_name_to_value}
 
     factory_module = _build_transformed_factory_module(
-        transformed_module=transformed_module,
-        function_name=func.__name__,
+        transformed_function_def=function_definition,
         name_to_value=factory_name_to_value,
         runtime_names=runtime_names,
     )
@@ -200,51 +189,30 @@ def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCall
     module_namespace: dict[str, object] = {}
     exec(code, func.__globals__, module_namespace)
 
-    factory = module_namespace.get(runtime_names.allocate("__nh_factory__"))
-    if not callable(factory):
-        raise RuntimeError("Transformed factory not found after compilation")
-
+    factory = cast(Callable[[dict[str, object]], FunctionType], module_namespace[runtime_names.allocate("__nh_factory__")])
     transformed = factory(factory_name_to_value)
-    if not callable(transformed):
-        raise RuntimeError("Transformed function not found after factory execution")
-
-    if transformed.__closure__ is not None:
-        # Preserve original Python cells, including nonlocal writes and late rebinding.
-        transformed = FunctionType(
-            transformed.__code__,
-            transformed.__globals__,
-            transformed.__name__,
-            func.__defaults__,
-            tuple(
-                original_name_to_cell.get(name, cell)
-                for name, cell in zip(
-                    transformed.__code__.co_freevars,
-                    transformed.__closure__,
-                    strict=True,
-                )
-            ),
+    # Preserve original Python cells, including nonlocal writes and late rebinding.
+    transformed = FunctionType(
+        transformed.__code__.replace(co_name=func.__code__.co_name, co_qualname=func.__code__.co_qualname),
+        func.__globals__,
+        func.__name__,
+        func.__defaults__,
+        tuple(
+            original_name_to_cell.get(name, cell) for name, cell in zip(transformed.__code__.co_freevars, transformed.__closure__ or (), strict=True)
         )
-        transformed.__kwdefaults__ = func.__kwdefaults__
-        if sys.version_info >= (3, 14) and func.__annotate__ is not None:
-            transformed.__annotate__ = func.__annotate__
-        else:
-            transformed.__annotations__ = func.__annotations__
+        or None,
+    )
+    transformed.__kwdefaults__ = func.__kwdefaults__
+    transformed.__doc__ = func.__doc__
+    if sys.version_info >= (3, 14) and func.__annotate__ is not None:
+        transformed.__annotate__ = func.__annotate__
+    else:
+        transformed.__annotations__ = func.__annotations__
 
     transformed_freevar_name_set = set(transformed.__code__.co_freevars)
     runner_proxy.runtime_name_set = runtime_names.allocated_names & (
         transformed_freevar_name_set | set(transformed.__code__.co_varnames) | set(transformed.__code__.co_cellvars)
     )
-    captured_name_set = set(factory_name_to_value.keys())
-
-    unexpected_freevar_name_set = transformed_freevar_name_set - captured_name_set
-    allowed_unexpected_freevar_name_set = {func.__name__}
-    if not unexpected_freevar_name_set.issubset(allowed_unexpected_freevar_name_set):
-        raise RuntimeError(
-            f"Transformed function freevars do not match captured names. freevars={transformed.__code__.co_freevars!r} captured={tuple(sorted(name_to_value.keys()))!r}"
-        )
-
-    if transformed.__closure__ is None and transformed_freevar_name_set:
-        raise RuntimeError("Transformed function closure is missing for captured names")
 
     if inspect.iscoroutinefunction(func):
         transformed_async = cast(Callable[..., Awaitable[Any]], transformed)

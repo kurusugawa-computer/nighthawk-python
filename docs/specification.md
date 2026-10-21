@@ -345,6 +345,8 @@ The baseline is source-available ordinary `def` and `async def` functions on sup
 Natural text alone does not establish a Python closure, and arbitrary caller-frame reconstruction is unsupported.
 Use explicit inputs, a valid `nonlocal` declaration establishing a cell, or task injection for otherwise inaccessible outer values.
 Lexical value access does not imply recovery of an enclosing source annotation; Section 7 bounds annotation acquisition separately.
+Recursive calls retain ordinary Python name lookup, including later module-global rebinding and enclosing closure cells.
+Calling the public wrapper recursively enters the same function-admission boundary as any other call.
 
 #### 8.1.3. Shared values and expression lifetime
 
@@ -756,7 +758,8 @@ Outcome kinds:
 - `break` / `continue`:
     - Loop control.
     - Payload keys: `kind` only.
-    - These outcomes are valid only when the Natural block appears syntactically inside a Python `for` or `while` loop. If requested outside a loop, execution fails.
+    - These outcomes are valid only where Python permits `break` or `continue`, inside a `for`, `async for`, or `while` loop body. If requested outside a loop body, execution fails.
+    - A loop's `else` clause is outside that loop's body. If nested within another loop body, these outcomes control the enclosing loop.
 - `raise`:
     - Failure.
     - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.

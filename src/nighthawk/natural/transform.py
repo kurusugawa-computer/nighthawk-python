@@ -44,42 +44,6 @@ class NaturalTransformer(ast.NodeTransformer):
         saved_loop_depth = self._loop_depth
         self._loop_depth = 0
         try:
-            if node.body:
-                first_statement = node.body[0]
-                if (
-                    isinstance(first_statement, ast.Expr)
-                    and isinstance(first_statement.value, ast.Constant)
-                    and isinstance(first_statement.value.value, str)
-                ):
-                    docstring_text = first_statement.value.value
-                    if is_natural_sentinel(docstring_text):
-                        block_kind, program, input_bindings, output_bindings = parse_block(docstring_text)
-                        return_annotation = self._current_return_annotation_expression()
-                        binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
-                        injected = build_runtime_call_and_assignments(
-                            ast.Constant(program),
-                            input_bindings,
-                            output_bindings,
-                            binding_types_dict_expression,
-                            return_annotation,
-                            is_in_loop=self._loop_depth > 0,
-                            is_async_function=self._is_async_function_stack[-1],
-                            runtime_names=self._runtime_names,
-                            block_kind=block_kind,
-                        )
-
-                        # Preserve user-source location: the injected runtime call and its
-                        # subsequent assignments should point at the Natural docstring
-                        # sentinel line (the opening triple-quote line).
-                        sentinel_location = ast.copy_location(ast.Pass(), first_statement)
-                        sentinel_location.end_lineno = sentinel_location.lineno
-                        sentinel_location.end_col_offset = sentinel_location.col_offset
-
-                        injected_with_location = [_copy_generated_location(statement, sentinel_location) for statement in injected]
-
-                        body_without_docstring = node.body[1:]
-                        node.body = injected_with_location + body_without_docstring
-
             node = self.generic_visit(node)  # type: ignore[assignment]
 
             anchor_name = self._runtime_names.allocate("__nh_cell_anchor__")
@@ -153,88 +117,61 @@ class NaturalTransformer(ast.NodeTransformer):
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:  # noqa: N802
         return node
 
-    def visit_For(self, node: ast.For) -> ast.AST:
+    def _visit_loop(self, node: ast.For | ast.AsyncFor | ast.While) -> ast.AST:
+        else_module = ast.Module(body=node.orelse, type_ignores=[])
+        node.orelse = []
         self._loop_depth += 1
         try:
-            return self.generic_visit(node)
+            self.generic_visit(node)
         finally:
             self._loop_depth -= 1
+        # A loop's else clause can control an enclosing loop, not its own loop.
+        self.generic_visit(else_module)
+        node.orelse = else_module.body
+        return node
+
+    def visit_For(self, node: ast.For) -> ast.AST:
+        return self._visit_loop(node)
 
     def visit_AsyncFor(self, node: ast.AsyncFor) -> ast.AST:
-        self._loop_depth += 1
-        try:
-            return self.generic_visit(node)
-        finally:
-            self._loop_depth -= 1
+        return self._visit_loop(node)
 
     def visit_While(self, node: ast.While) -> ast.AST:
-        self._loop_depth += 1
-        try:
-            return self.generic_visit(node)
-        finally:
-            self._loop_depth -= 1
+        return self._visit_loop(node)
 
     def visit_Expr(self, node: ast.Expr) -> ast.AST | list[ast.stmt]:
         self.generic_visit(node)
         value = node.value
 
-        if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            text = value.value
-            if is_natural_sentinel(text):
-                block_kind, program, input_bindings, output_bindings = parse_block(text)
-                return_annotation = self._current_return_annotation_expression()
-                binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
-                is_in_loop = self._loop_depth > 0
-                statements = build_runtime_call_and_assignments(
-                    ast.Constant(program),
-                    input_bindings,
-                    output_bindings,
-                    binding_types_dict_expression,
-                    return_annotation,
-                    is_in_loop=is_in_loop,
-                    is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
-                    runtime_names=self._runtime_names,
-                    block_kind=block_kind,
-                )
-
-                sentinel_location = ast.copy_location(ast.Pass(), node)
-                sentinel_location.end_lineno = sentinel_location.lineno
-                sentinel_location.end_col_offset = sentinel_location.col_offset
-
-                return [_copy_generated_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
-
-        if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
-            return_annotation = self._current_return_annotation_expression()
-            is_in_loop = self._loop_depth > 0
-
+        if isinstance(value, ast.Constant) and isinstance(value.value, str) and is_natural_sentinel(value.value):
+            block_kind, program, input_bindings, output_bindings = parse_block(value.value)
+            program_expression: ast.expr = ast.Constant(program)
+        elif isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
             block_kind, _, input_bindings, output_bindings = parse_joined_block(value)
-            binding_types_dict_expression = self._current_binding_types_dict_expression(output_bindings)
-
-            extracted_program_call = ast.Call(
+            program_expression = ast.Call(
                 func=ast.Name(id=self._runtime_names.allocate("__nh_extract_program__"), ctx=ast.Load()),
                 args=[value],
                 keywords=[],
             )
+        else:
+            return node
 
-            statements = build_runtime_call_and_assignments(
-                extracted_program_call,
-                input_bindings,
-                output_bindings,
-                binding_types_dict_expression,
-                return_annotation,
-                is_in_loop=is_in_loop,
-                is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
-                runtime_names=self._runtime_names,
-                block_kind=block_kind,
-            )
+        statements = build_runtime_call_and_assignments(
+            program_expression,
+            input_bindings,
+            output_bindings,
+            self._current_binding_types_dict_expression(output_bindings),
+            self._current_return_annotation_expression(),
+            is_in_loop=self._loop_depth > 0,
+            is_async_function=self._is_async_function_stack[-1] if self._is_async_function_stack else False,
+            runtime_names=self._runtime_names,
+            block_kind=block_kind,
+        )
 
-            sentinel_location = ast.copy_location(ast.Pass(), node)
-            sentinel_location.end_lineno = sentinel_location.lineno
-            sentinel_location.end_col_offset = sentinel_location.col_offset
-
-            return [_copy_generated_location(statement, sentinel_location) for statement in statements]  # type: ignore[return-value]
-
-        return node
+        sentinel_location = ast.copy_location(ast.Pass(), node)
+        sentinel_location.end_lineno = sentinel_location.lineno
+        sentinel_location.end_col_offset = sentinel_location.col_offset
+        return [_copy_generated_location(statement, sentinel_location) for statement in statements]
 
     def _current_return_annotation_expression(self) -> ast.expr:
         if not self._return_annotation_stack:

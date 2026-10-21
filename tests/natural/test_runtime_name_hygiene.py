@@ -21,10 +21,11 @@ def test_every_source_helper_name_can_be_an_application_binding() -> None:
         __nh_source_annotation__ = 10  # noqa: F841 - read by Natural.
         __nh_missing_annotation__ = 11  # noqa: F841 - read by Natural.
         __nh_extract_program__ = 12  # noqa: F841 - read by Natural.
+        __nh_body__ = 13  # noqa: F841 - read by Natural.
         """execute
         Read <__nh_envelope__>, <__nh_bindings__>, <__nh_step_outcome__>, <__nighthawk_runner__>,
         <__nh_cell_anchor__>, <__nh_name_to_cell__>, <__nh_python_cell_scope__>, <__nh_function_name_to_cell__>,
-        <__nh_source_annotation__>, <__nh_missing_annotation__>, <__nh_extract_program__>, and <__nh_captured_values__>.
+        <__nh_source_annotation__>, <__nh_missing_annotation__>, <__nh_extract_program__>, <__nh_body__>, and <__nh_captured_values__>.
         Increment <:__nh_execution__>.
         """
         f"""execute
@@ -52,6 +53,7 @@ def test_every_source_helper_name_can_be_an_application_binding() -> None:
                 "__nh_source_annotation__",
                 "__nh_missing_annotation__",
                 "__nh_extract_program__",
+                "__nh_body__",
             )
             for i, name in enumerate(expected_names, start=1):
                 assert environment.resolve(name) == (len(requests) if i == 1 else i)
