@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve complete usage deltas in per-call budget checks and evaluate estimated cumulative costs from predicted total usage.
+- Leave the host environment unchanged during Claude SDK requests; child-process environment handling belongs to the pinned SDK.
+- Include cache reads and writes in Claude Code input-token totals through one shared CLI and SDK usage conversion.
 - Limit tokenizer fallback to unknown model names and propagate encoding data loading failures.
 - Preserve Python name resolution and host admission for recursive Natural functions, including global rebinding.
 - Interpret Natural blocks in loop `else` clauses in their enclosing control context, so `break` and `continue` apply only to a surrounding active loop.

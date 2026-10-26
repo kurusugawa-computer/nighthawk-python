@@ -34,10 +34,11 @@ def test_parse_json_output_extracts_usage() -> None:
         }
     )
     outcome = _parse_claude_code_json_output(output)
-    assert outcome["usage"].input_tokens == 100
+    assert outcome["usage"].input_tokens == 115
     assert outcome["usage"].output_tokens == 50
     assert outcome["usage"].cache_read_tokens == 10
     assert outcome["usage"].cache_write_tokens == 5
+    assert outcome["usage"].total_tokens == 165
 
 
 def test_parse_json_output_extracts_model_name_from_model_usage() -> None:

@@ -31,6 +31,8 @@ All three backends provide capabilities not available with Pydantic AI providers
 
 Pydantic AI capabilities observe the backend's exposed request, which may contain multiple internal model calls.
 Per-internal-request admission requires backend-specific support; see [request observation](host-integration.md#request-usage-and-admission).
+Claude Code usage includes cache reads and writes in Pydantic AI's `input_tokens` total, while retaining their separate `cache_read_tokens` and `cache_write_tokens` counters.
+The [Claude token breakdown](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#tracking-cache-performance) reports these categories separately.
 
 - **Skill execution:** The CLI loads and executes skills from its standard skill directories. See [Skills](#skills) below.
 - **MCP tool exposure:** Nighthawk tools are exposed to the CLI via an embedded MCP server started automatically.

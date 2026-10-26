@@ -16,6 +16,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from ..tools.declarations import get_visible_tools
+from ._claude_code_usage import normalize_claude_code_usage
 from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
 from .claude_code_settings import ClaudeCodeModelSettings
 from .mcp_server import mcp_server_if_needed
@@ -92,25 +93,6 @@ def _parse_claude_code_json_output(stdout_text: str) -> _ClaudeCodeCliTurnOutcom
         if not isinstance(result_text, str):
             raise UnexpectedModelBehavior("Claude Code CLI did not produce a result string")
 
-    usage = RequestUsage()
-    usage_value = output.get("usage")
-    if isinstance(usage_value, dict):
-        input_tokens = usage_value.get("input_tokens")
-        if isinstance(input_tokens, int):
-            usage.input_tokens = input_tokens
-
-        output_tokens = usage_value.get("output_tokens")
-        if isinstance(output_tokens, int):
-            usage.output_tokens = output_tokens
-
-        cache_read_input_tokens = usage_value.get("cache_read_input_tokens")
-        if isinstance(cache_read_input_tokens, int):
-            usage.cache_read_tokens = cache_read_input_tokens
-
-        cache_creation_input_tokens = usage_value.get("cache_creation_input_tokens")
-        if isinstance(cache_creation_input_tokens, int):
-            usage.cache_write_tokens = cache_creation_input_tokens
-
     model_name: str | None = None
     model_usage = output.get("modelUsage")
     if isinstance(model_usage, dict):
@@ -121,7 +103,7 @@ def _parse_claude_code_json_output(stdout_text: str) -> _ClaudeCodeCliTurnOutcom
     return {
         "output_text": result_text,
         "model_name": model_name,
-        "usage": usage,
+        "usage": normalize_claude_code_usage(output.get("usage")),
     }
 
 

@@ -573,7 +573,9 @@ result = safe_classify(text)
 ```
 
 `tokens` checks recorded cumulative usage before invocation and after normal return; `tokens_per_call` checks the meter delta after normal return.
-An optional `estimate_usage` can reject predicted over-limit work before invocation, but an estimate does not reserve usage or guarantee the final cost.
+Checks use the meter active at invocation; usage recorded into a separate meter in a nested scope is excluded.
+An optional `estimate_usage(arguments, keyword_name_to_value)` receives the call's positional-argument tuple and keyword-argument dictionary and returns a `RunUsage` estimate.
+It applies the same limits to the estimated call and predicted cumulative usage before invocation, without reserving usage or guaranteeing the final cost.
 The meter records returned agent-run aggregates, so failed runs can consume unrecorded usage, and concurrent calls sharing a meter can contribute to the same measured delta.
 These checks do not stop requests within an unfinished block or guarantee a strict spending cap.
 For that earlier admission boundary, use [host request observations](host-integration.md#request-usage-and-admission), keeping their accumulator separate from the meter.
@@ -591,7 +593,9 @@ composed = fallback(
 )
 ```
 
-For monetary budgets, supply a `cost_function` that converts `RunUsage` to a float:
+For monetary budgets, supply a `cost_function` that converts `RunUsage` to a float.
+Per-call cost receives the complete usage delta, including requests, tool calls, audio usage, provider counters, details, and available cost, using Pydantic AI's usage arithmetic.
+Cumulative cost receives the total usage, or the current usage plus the estimate during admission; the function need not be additive.
 
 ```py
 from pydantic_ai.usage import RunUsage
@@ -603,8 +607,6 @@ def dollar_cost(usage: RunUsage) -> float:
 
 budgeted = budget(cost=1.00, cost_function=dollar_cost)(classify)
 ```
-
-Outside a `nh.run()` context, the transformer is a no-op.
 
 ### Circuit breaker
 

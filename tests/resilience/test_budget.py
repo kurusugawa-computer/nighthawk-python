@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.metadata
+import inspect
 import logging
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from decimal import Decimal
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -47,8 +49,7 @@ def _make_function_that_records_usage(
 ) -> ...:
     def fn(text: str) -> str:
         meter = get_usage_meter()
-        if meter is not None:
-            meter.record(RunUsage(input_tokens=input_tokens, output_tokens=output_tokens))
+        meter.record(RunUsage(input_tokens=input_tokens, output_tokens=output_tokens))
         return f"result:{text}"
 
     return fn
@@ -61,8 +62,7 @@ def _make_async_function_that_records_usage(
 ) -> ...:
     async def fn(text: str) -> str:
         meter = get_usage_meter()
-        if meter is not None:
-            meter.record(RunUsage(input_tokens=input_tokens, output_tokens=output_tokens))
+        meter.record(RunUsage(input_tokens=input_tokens, output_tokens=output_tokens))
         return f"result:{text}"
 
     return fn
@@ -75,7 +75,6 @@ class TestBudgetPreCheck:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=30, output_tokens=30))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -98,7 +97,6 @@ class TestBudgetPreCheck:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=25, output_tokens=25))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -126,7 +124,6 @@ class TestBudgetPostCheck:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=25, output_tokens=25))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -161,7 +158,6 @@ class TestBudgetCombined:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=10, output_tokens=10))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -177,7 +173,6 @@ class TestBudgetAsync:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=30, output_tokens=30))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -320,8 +315,7 @@ class TestBudgetEstimate:
             nonlocal call_count
             call_count += 1
             meter = get_usage_meter()
-            if meter is not None:
-                meter.record(RunUsage(input_tokens=5, output_tokens=5))
+            meter.record(RunUsage(input_tokens=5, output_tokens=5))
             return f"result:{text}"
 
         def estimate_usage(*_: object) -> RunUsage:
@@ -331,7 +325,6 @@ class TestBudgetEstimate:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=15, output_tokens=15))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -378,7 +371,6 @@ class TestBudgetCostFunction:
 
         with nh.run(StubExecutor()):
             meter = get_usage_meter()
-            assert meter is not None
             meter.record(RunUsage(input_tokens=500, output_tokens=500))
 
             with pytest.raises(BudgetExceededError) as exception_info:
@@ -401,3 +393,152 @@ class TestBudgetCostFunction:
 
         assert len(received_usages) > 0
         assert any(u.total_tokens == 150 for u in received_usages)
+
+
+type _BudgetTarget = Callable[[Callable[..., object]], Callable[..., object]]
+
+
+@pytest.fixture(params=[False, True], ids=["synchronous", "asynchronous"])
+def budget_target(request: pytest.FixtureRequest) -> _BudgetTarget:
+    def decorate(function: Callable[..., object]) -> Callable[..., object]:
+        if request.param:
+
+            async def asynchronous(*arguments: object, **keywords: object) -> object:
+                return function(*arguments, **keywords)
+
+            return asynchronous
+        return function
+
+    return decorate
+
+
+@pytest.mark.asyncio
+async def test_cost_per_call_receives_complete_usage_delta(budget_target: _BudgetTarget) -> None:
+    previous = RunUsage(requests=3, tool_calls=5, input_tokens=100, details={"reasoning_tokens": 10}, cost=Decimal("0.50"))
+    recorded = RunUsage(
+        requests=2,
+        tool_calls=4,
+        input_tokens=20,
+        output_tokens=10,
+        cache_read_tokens=6,
+        cache_write_tokens=3,
+        input_audio_tokens=8,
+        cache_audio_read_tokens=2,
+        output_audio_tokens=5,
+        audio_seconds=1.5,
+        details={"reasoning_tokens": 7},
+        cost=Decimal("0.25"),
+        web_searches=3,
+    )
+    observed: list[RunUsage] = []
+
+    def request_cost(usage: RunUsage) -> float:
+        observed.append(usage)
+        return usage.requests * 0.1
+
+    @budget_target
+    def function() -> None:
+        get_usage_meter().record(recorded)
+
+    with nh.run(StubExecutor()):
+        meter = get_usage_meter()
+        meter.record(previous)
+        with pytest.raises(BudgetExceededError) as caught:
+            result = budget(cost_per_call=0.15, cost_function=request_cost)(function)()
+            if inspect.isawaitable(result):
+                await result
+        assert observed == [recorded]
+        assert caught.value.call_usage == recorded
+        assert caught.value.accumulated_usage == previous + recorded
+        observed[0].details["reasoning_tokens"] = 1000
+        assert meter.snapshot().details == {"reasoning_tokens": 17}
+        assert previous.details == {"reasoning_tokens": 10}
+        assert recorded.details == {"reasoning_tokens": 7}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cost_limit, allowed", [(3.0, False), (4.0, True)])
+async def test_estimated_cost_uses_predicted_total(budget_target: _BudgetTarget, cost_limit: float, allowed: bool) -> None:
+    calls: list[str] = []
+    estimates: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    @budget_target
+    def function(text: str, *, repetitions: int) -> str:
+        calls.append(text)
+        get_usage_meter().record(RunUsage(input_tokens=repetitions))
+        return text * repetitions
+
+    def estimate_usage(arguments: tuple[object, ...], keywords: dict[str, object]) -> RunUsage:
+        estimates.append((arguments, keywords))
+        return RunUsage(input_tokens=1)
+
+    wrapped = budget(cost=cost_limit, cost_function=lambda usage: float(usage.total_tokens**2), estimate_usage=estimate_usage)(function)
+    with nh.run(StubExecutor()):
+        get_usage_meter().record(RunUsage(input_tokens=1))
+        if allowed:
+            result = wrapped("text", repetitions=1)
+            if inspect.isawaitable(result):
+                result = await result
+            assert result == "text"
+        else:
+            with pytest.raises(BudgetExceededError) as caught:
+                result = wrapped("text", repetitions=1)
+                if inspect.isawaitable(result):
+                    await result
+            assert caught.value.limit_kind == "cost"
+            assert caught.value.accumulated_usage.total_tokens == 2
+        assert calls == (["text"] if allowed else [])
+        assert estimates == [(("text",), {"repetitions": 1})]
+        assert get_usage_meter().total_tokens == (2 if allowed else 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [ValueError("function failed"), asyncio.CancelledError("caller interrupted")])
+async def test_budget_preserves_failure_and_recorded_usage(budget_target: _BudgetTarget, failure: BaseException) -> None:
+    @budget_target
+    def function() -> None:
+        get_usage_meter().record(RunUsage(input_tokens=10))
+        raise failure
+
+    with nh.run(StubExecutor()):
+        with pytest.raises(type(failure)) as caught:
+            result = budget(tokens_per_call=1)(function)()
+            if inspect.isawaitable(result):
+                await result
+        assert caught.value is failure
+        assert get_usage_meter().total_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_budget_excludes_usage_in_a_separate_nested_meter(budget_target: _BudgetTarget) -> None:
+    nested_meter = nh.UsageMeter()
+
+    @budget_target
+    def function() -> str:
+        with nh.scope(usage_meter=nested_meter):
+            get_usage_meter().record(RunUsage(input_tokens=100))
+        get_usage_meter().record(RunUsage(input_tokens=1))
+        return "completed"
+
+    with nh.run(StubExecutor()):
+        result = budget(tokens_per_call=1)(function)()
+        if inspect.isawaitable(result):
+            result = await result
+        assert result == "completed"
+        assert get_usage_meter().total_tokens == 1
+        assert nested_meter.total_tokens == 100
+
+
+@pytest.mark.asyncio
+async def test_budget_skips_estimation_outside_a_run(budget_target: _BudgetTarget) -> None:
+    @budget_target
+    def function() -> str:
+        return "completed"
+
+    def estimate_usage(*arguments: object) -> RunUsage:
+        raise AssertionError("Estimation requires an active meter")
+
+    result = budget(tokens=0, estimate_usage=estimate_usage)(function)()
+    if inspect.isawaitable(result):
+        result = await result
+    assert result == "completed"

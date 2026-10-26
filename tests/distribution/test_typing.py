@@ -13,7 +13,7 @@ def test_installed_distribution_preserves_function_types(package_python: Path, t
     source_path.write_text(
         "from typing import assert_type\n"
         "import nighthawk as nh\n"
-        "from nighthawk.resilience import circuit_breaker, timeout\n"
+        "from nighthawk.resilience import budget, circuit_breaker, timeout\n"
         "from nighthawk.runtime import StepDefinition\n"
         "\n"
         "@nh.function\n"
@@ -28,6 +28,7 @@ def test_installed_distribution_preserves_function_types(package_python: Path, t
         "assert_type(nh.get_function_definition(label), nh.FunctionDefinition | None)\n"
         "assert_type(StepDefinition('Read the evidence.'), StepDefinition)\n"
         "assert_type(timeout(seconds=1)(circuit_breaker()(label))('ready'), str)\n"
+        "assert_type(budget(tokens=100)(label)('ready'), str)\n"
         "\n"
         "class Reader:\n"
         "    @circuit_breaker()\n"
@@ -44,6 +45,7 @@ def test_installed_distribution_preserves_function_types(package_python: Path, t
         "async def consume() -> None:\n"
         "    assert_type(await label_async('ready'), str)\n"
         "    assert_type(await timeout(seconds=1)(circuit_breaker()(label_async))('ready'), str)\n"
+        "    assert_type(await budget(tokens=100)(label_async)('ready'), str)\n"
         "    assert_type(await Reader().read_async('ready'), str)\n"
     )
     configuration_path = tmp_path / "pyrightconfig.json"
