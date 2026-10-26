@@ -8,7 +8,7 @@ sudo apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-uv sync
+UV_LINK_MODE=copy uv sync --locked --all-extras --all-groups
 
 npm install -g pyright
 
