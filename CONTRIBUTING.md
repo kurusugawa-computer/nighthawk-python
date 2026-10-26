@@ -49,10 +49,24 @@ Test ownership and helper conventions are documented in [tests/README.md](tests/
 
 ### Design and application evidence
 
-Use [Philosophy](docs/philosophy.md) for design principles and [Specification](docs/specification.md) for supported runtime contracts.
+Use [Philosophy](docs/philosophy.md) to evaluate proposed changes against Nighthawk's purpose and design principles, and [Specification](docs/specification.md) for supported runtime contracts.
 [Design drivers](docs/design-drivers.md) defines which application information belongs in this workspace and how to distinguish conceptual scenarios from verified behavior.
 When proposing Core changes, show the application composition that exposes the general execution need.
 Nighthawk-based development checks are an application of the library; adopting a local check does not make it a public feature or a requirement for library users.
+
+### Programs used in development
+
+Development tools are applications: they follow the [trusted-program contract](docs/specification.md#3-hard-constraints) and the [philosophy's invariants](docs/philosophy.md#invariants), with project-specific approval rules.
+Use repository-managed programs by default and pass task data through Python bindings.
+Generating or revising program assets during a development tool's execution, then executing those assets, requires an explicitly authorized experiment with a defined purpose, permissions, and environment.
+Program assets here include Natural instructions, declarations, and Python functions selected for execution.
+This restriction concerns authoring or revising those assets; ordinary source instrumentation, rendering of trusted templates, and model-selected expression evaluation remain part of executing an already authorized program under its existing contracts.
+Experiment authorization does not extend to unrelated files or wider execution authority.
+
+Preserve [revision evidence](docs/embedded-execution.md#record-revision-evidence) sufficient to assess the experiment's conclusions.
+If a proposed revision may change acceptance criteria or authorization policy beyond the delegated scope, resolve that uncertainty with the owner before proceeding.
+Permission to run an experiment does not authorize adopting its outputs into Nighthawk's implementation, built-in instructions, or distribution.
+Adoption follows the project's change, review, and validation workflow, including the applicable agent instructions; generated changes receive no automatic approval.
 
 ### Integration tests
 

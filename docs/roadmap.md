@@ -21,10 +21,10 @@ Bring back small examples, findings, and contract requirements, with an explicit
 Compare proposed abstractions with research, business, and simulator-backed workflows to assess generality.
 Evaluation and simulation systems remain connected through application functions and libraries.
 
-### Agent authorship and accumulated capability
+### Agent authorship and cumulative reuse
 
 Evaluate whether signatures, descriptions, context, results, and failure reports let agents discover, compose, and revise programs correctly.
-Use representative tasks to assess whether capabilities built for one task can be reused and improved for another.
+Use representative tasks to assess whether functions built for one task can be reused and improved for another.
 Compare construction and revision success, assessment of results and effects, and overall complexity with ordinary Python and model libraries.
 
 ### Development tooling as an application
@@ -52,7 +52,14 @@ Evaluate whether model-specific guidance improves judgment quality enough to jus
 
 ### Template preprocessing controls
 
-Provide conventions for limiting include paths and template access within trusted, repository-managed Natural sources.
+Provide conventions for limiting include paths and template access within authorized Natural sources, whether repository-managed or generated at runtime.
+
+### Support for program authorization and revision evidence
+
+Use the [in-task revision scenario](design-drivers.md#agents-revising-programs-during-a-task) to evaluate reusable helpers for host authorization and revision evidence under the [trusted-program contract](specification.md#3-hard-constraints).
+Evaluate whether reusable helpers reduce the work of maintaining [revision evidence](embedded-execution.md#record-revision-evidence) without prescribing an application's policy or storage.
+Exercise embedded execution without function interception, helper-only revisions, and changes of execution context.
+Start with existing boundaries and small examples; propose Core mechanisms only for shared execution needs those compositions cannot adequately meet.
 
 ### External isolation
 

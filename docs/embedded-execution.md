@@ -9,9 +9,16 @@ The definition is immutable and reusable across invocations; it contains no exec
 Each invocation resolves annotations and infers missing contracts in its own environment.
 
 Both entry points use the active `nh.run()` and `nh.scope()` configuration, the ordinary executor, commit inspection, and terminal notifications.
+They do not invoke `FunctionCallHandler`; `nh.function_call_scope(...)` alone does not admit or refuse embedded execution.
 They return a resolved `Pass`, `Return`, `Break`, or `Continue` after writeback and terminal delivery.
 The host interprets that control result; a final `Raise` instead propagates its constructed exception after terminal delivery.
 Setting `is_in_loop=True` permits `Break` and `Continue`; deny frontmatter can further restrict the permitted results.
+
+## Authorize the execution
+
+Embedded programs, whether repository-managed or generated at runtime, follow the [trusted-program contract](specification.md#3-hard-constraints).
+Apply the host's authorization policy to the program, its declarations, and its helpers at a host-controlled entry point before calling `execute_step` or `execute_step_async`; constructing a `StepDefinition` does not establish approval.
+An existing host policy may authorize a class of revisions in advance.
 
 ## Explicit names and contracts
 
@@ -128,6 +135,14 @@ Terminal delivery happens after writeback or failure, with the usual `StepComple
 Notification failure propagates without replaying execution or notification and without undoing completed writes.
 The optional `source_location` labels the trusted program for diagnostics; its default is `<embedded>:0`.
 Each invocation receives a distinct step execution Id.
+See the [terminal record contract](specification.md#104-terminal-delivery-and-host-ledgers) for the fields Core supplies and their limits.
+
+## Record revision evidence
+
+When an application needs revision provenance for assessment or reuse, retain the program source, declarations, relevant helper and dependency versions, and execution conditions in host records.
+Connect those records to the authorization, step execution Ids, and evaluation results so an assessment can be traced to the revision that ran.
+Choose enough detail to distinguish changes relevant to the assessment, including helper-only revisions that leave Natural text unchanged.
+The execution Id and `source_location` support correlation and diagnostics; the terminal record does not capture a complete program revision.
 
 ## Synchronous example
 

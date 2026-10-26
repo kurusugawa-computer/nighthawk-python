@@ -15,7 +15,7 @@ Task-oriented pages teach selected APIs rather than duplicating either reference
 
 | Page | Audience and responsibility |
 | --- | --- |
-| `index.md` | First-time visitors: value proposition, one runnable example, and navigation. |
+| `index.md` | First-time visitors: value proposition, one runnable example, when to use Nighthawk, and navigation. |
 | `quickstart.md` | New users: installation, credentials, first successful execution, minimal troubleshooting. |
 | `natural-blocks.md` | Learners: block anatomy, bindings, interpolation, discovery, helper design, and structured outputs. |
 | `decisions.md` | Learners: typed judgments, explicit evidence, decision models, and per-step results. |
@@ -29,7 +29,7 @@ Task-oriented pages teach selected APIs rather than duplicating either reference
 | `pydantic-ai-providers.md` | Provider users: dependencies, identifiers, credentials, settings, and troubleshooting. |
 | `coding-agent-backends.md` | Coding-agent users: prerequisites, settings, skills, tool transport, working directories, and limitations. |
 | `for-coding-agents.md` | Agent authors: condensed operational guidance derived from the task-oriented pages and specification. |
-| `philosophy.md` | Designers: purpose, Python composition, agent authorship, accumulated capability, evidence, and Core responsibility. |
+| `philosophy.md` | People and AI agents designing Nighthawk and programs built with it: explain what Nighthawk aims to make possible, why its foundational design choices serve that purpose, and how to evaluate tradeoffs and proposed changes. |
 | `design-drivers.md` | Designers: application needs, inclusion policy, evaluation evidence, and implications for Core. |
 | `roadmap.md` | Contributors: exploratory directions; remove completed items. |
 
@@ -54,13 +54,14 @@ Separate application evidence from runtime guarantees using `design-drivers.md`.
 
 ## Page-specific constraints
 
-- `index.md` and README share the same runnable Python/Natural example. Keep landing-page links consistent with navigation and link to the philosophy for design rationale.
+- `index.md` and README share the same value proposition, runnable Python/Natural example, and guidance on when to use Nighthawk. Keep landing-page links consistent with navigation and link to the philosophy for design rationale.
 - `quickstart.md` optimizes for copy-paste, states that Natural sources and included Markdown must be trusted, and ends with a link to Natural blocks. Route backend alternatives through Executors.
 - `natural-blocks.md` uses the Quickstart executor, links to formal binding contracts, and routes onward to Executors and Runtime configuration.
 - `executors.md` distinguishes capability, cost, and latency tradeoffs and includes a small `AgentStepExecutor.from_agent(agent=agent)` example. Direct executor protocol semantics belong in the specification.
 - `patterns.md` stays backend-agnostic and keeps provider setup in the provider/backend references.
 - `verification.md` explains observability usage; formal delivery guarantees belong in the specification.
-- `philosophy.md` states design principles without becoming a how-to guide. Link application evidence through Design drivers.
+- `philosophy.md` connects Nighthawk's purpose to its foundational design choices, their rationale and costs, and principles for evaluating tradeoffs and proposed changes. Keep those connections useful when APIs change, and distinguish Nighthawk's design commitments from application-owned goals and acceptable risks. Route behavior and guarantees to the specification, application workflows and evidence to Design drivers, usage to guides, development approval procedures to `CONTRIBUTING.md`, and guidance on when to use Nighthawk to `index.md` and README.
+  Give each principle one design decision, with a concise rule, rationale, and relevant conditions. Invariants hold in every design; each default states its preference and when another choice is better. Use enough explanation to make the decision clear without repeating other principles or their operational details.
 - `roadmap.md` contains ideas, with links to relevant existing contracts when useful; it does not promise behavior.
 - `api.md` uses explicit member filters to avoid duplicate rendering. Edit directive structure, keeping API prose in source docstrings.
 

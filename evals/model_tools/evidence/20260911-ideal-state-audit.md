@@ -147,7 +147,7 @@ Inspection exposure is settled by the assessment above; statement/iteration exte
 | P-ASSIGN-001 / P-AUDIT-001 / P-IDEAL-001 | Assignment order and validation boundaries: [Specification](../../../docs/specification.md#7-natural-dsl-bindings); attribute scope narrowed by P-VERIFY-001. |
 | P-REWRITE-001 | Return replacement through the outcome: [Host contracts](../../../docs/specification.md#102-host-commit-boundary). |
 | P-AUDIT-002 | Execution and writeback boundaries with contextual inputs: [Specification](../../../docs/specification.md#1-goals). |
-| P-AUDIT-003 / P-IDEAL-002 | Immediate evaluation required; deferred generated values excluded: [Specification](../../../docs/specification.md#813-parent-lifetime-and-expression-lifetime). |
+| P-AUDIT-003 / P-IDEAL-002 | Immediate evaluation required; deferred generated values excluded: [Specification](../../../docs/specification.md#813-shared-values-and-expression-lifetime). |
 | P-AUDIT-004 / P-IDEAL-004 | Required semantics and optional host detail: [Specification](../../../docs/specification.md#825-value-inspection-and-name-discovery) and [Host contracts](../../../docs/specification.md#104-terminal-delivery-and-host-ledgers). |
 | P-AUDIT-005 | Shared custom-executor operation entry points: [Specification](../../../docs/specification.md#144-nested-execution-acceptance-example). |
 | P-AUDIT-007 | Undeclared-output rejection and initialized-output validation: [Specification](../../../docs/specification.md#7-natural-dsl-bindings); roadmap alignment: [Specification](../../../docs/specification.md#0-document-scope-and-alignment-policy). |
@@ -156,7 +156,7 @@ Inspection exposure is settled by the assessment above; statement/iteration exte
 | P-IDEAL-006 | Semantic reliability before efficiency; simplicity breaks unresolved ties: [Evaluation criteria](../../../docs/verification.md#interface-evaluation-criteria). |
 | P-VERIFY-001 | Ordinary Pydantic fields with assignment validation enabled; typed local outputs remain validated: [Specification](../../../docs/specification.md#7-natural-dsl-bindings). |
 | P-VERIFY-002 | Explicit lexical support matrix and authorized preliminary investigation: [Specification](../../../docs/specification.md#812-supported-python-source-forms). |
-| P-VERIFY-003 | Parent inheritance limited to joined child calls: [Specification](../../../docs/specification.md#813-parent-lifetime-and-expression-lifetime). |
+| P-VERIFY-003 | Parent inheritance limited to joined child calls: [Specification](../../../docs/specification.md#813-shared-values-and-expression-lifetime). |
 | P-VERIFY-004 | Distinguish operation-delivery and terminal-delivery failures: [Host contracts](../../../docs/specification.md#1041-delivery-failure-cases). |
 | P-VERIFY-005 | Practical motivation and cost of inherited task policy: [Composition patterns](../../../docs/patterns.md#natural-selects-follow-up-assessments). |
 | P-STATE-001 / Q-STATE-001 | Bounded annotation acquisition, separate from lexical access: [Specification](../../../docs/specification.md#7-natural-dsl-bindings). |
@@ -164,4 +164,4 @@ Inspection exposure is settled by the assessment above; statement/iteration exte
 | P-STATE-002 / Q-STATE-002 / P-STATE-002A | Ordinary helper and child exceptions propagate; domain observations and explicit Pydantic AI control signals retain their roles: [Specification](../../../docs/specification.md#103-operation-inspection). |
 | P-STATE-003 | Executable target example of judgment-selected children inheriting review policy: [Composition patterns](../../../docs/patterns.md#natural-selects-follow-up-assessments). |
 | P-STATE-004 | Centralize historical evidence and comparison status; preserve acceptance and host failure tables. |
-| P-STATE-005 | Explain contextual input dependencies alongside explicit execution and writeback boundaries in [Philosophy](../../../docs/philosophy.md#nighthawk). |
+| P-STATE-005 | Explain contextual input dependencies alongside explicit execution and writeback boundaries in [Philosophy](../../../docs/philosophy.md#explicit-dependencies-over-ambient-context). |

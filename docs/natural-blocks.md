@@ -417,7 +417,7 @@ Use Natural for interpretation, classification, generation, and other judgments 
 Use Python for computation, control flow, I/O, validation, and recovery.
 If explicit rules can determine the answer, write those rules in Python.
 Each Natural invocation evaluates its input and context through a model interaction; Natural prose remains interpreted work (see [Specification](specification.md#1-goals)).
-Revisit the division between Natural and Python using evaluation evidence as requirements and model capabilities change (see [Philosophy](philosophy.md#judgment-guided-by-evidence)).
+Revisit the division between Natural and Python using evaluation evidence as requirements and model capabilities change (see [Philosophy](philosophy.md#explicit-rules-over-judgment-where-rules-suffice)).
 
 #### Type boundary placement
 

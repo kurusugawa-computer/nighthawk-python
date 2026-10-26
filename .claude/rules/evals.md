@@ -15,7 +15,7 @@ Commands, settings, artifacts, and usage limitations are owned by `CONTRIBUTING.
 ## Cases and assertions
 
 - Check requested values, object identity where relevant, actual calls, effects, and control results with direct Python assertions.
-- Use trusted repository-managed programs; supply task data through Python bindings.
+- Use trusted repository-managed programs by default and supply task data through Python bindings. Generating or revising program assets during execution, then executing them, follows the experiment policy and scope defined in `CONTRIBUTING.md` "Programs used in development".
 - Generate mutable inputs and effect-recording callables afresh for each trial.
 - Specify only ordering and call counts required by the task; permit equivalent model expressions.
 - Keep deterministic runtime mechanics with their test owners. Use live evaluations for model behavior and meaningful compositions.

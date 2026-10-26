@@ -123,6 +123,7 @@ The continuation may start once, only during its handler's active invocation and
 A handler can establish `nh.run(executor)` before proceeding; no run is required to refuse the call.
 Function completion includes Python `finally` processing and explicitly joined children.
 Generators are unsupported at this boundary.
+Direct `execute_step` and `execute_step_async` calls do not invoke this handler; hosts must authorize them at their own [embedded execution entry point](embedded-execution.md#authorize-the-execution).
 For context timing, exact definition lookup, and coroutine ownership, see [execution boundaries](specification.md#embedded-execution-boundaries).
 
 This complete example refuses an invocation before body effects or model resolution, then accepts synchronous and asynchronous judgments.

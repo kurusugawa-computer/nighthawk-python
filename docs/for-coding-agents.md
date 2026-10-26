@@ -98,11 +98,17 @@ Its initial output value cannot substitute for a missing answer.
 The type boundary may sit inside a function: accept text that needs interpretation, then commit a typed result before deterministic work begins.
 Types constrain the result's shape and range; they do not prove that its meaning is correct.
 
-Natural source, imported markdown, and prompt fragments are trusted, repository-managed program assets.
+Treat Natural source, imported Markdown, prompt fragments, and declarations as trusted program assets under the host's [trust contract](https://kurusugawa-computer.github.io/nighthawk-python/specification/#3-hard-constraints), regardless of how they were authored or stored.
+Revise and reuse programs within delegated authority; changing task acceptance criteria or execution policy requires authority to change those requirements.
 Pass user data as binding values.
 Inline f-string interpolation evaluates Python expressions before prompt construction and changes Natural source; reserve it for trusted configuration or program fragments.
+Binding values still influence model judgment; keeping them out of source does not guarantee that a model ignores instructions in data.
 Typed bindings do not sandbox a block or make execution transactional.
 Helpers and object mutations can have effects before output validation, and those effects can survive failure.
+
+For Natural text and declarations selected at runtime, follow [embedded authorization](https://kurusugawa-computer.github.io/nighthawk-python/embedded-execution/#authorize-the-execution): `execute_step` and `execute_step_async` do not invoke `FunctionCallHandler`.
+Applying `@nh.function` to a generated function still requires [available Python source](https://kurusugawa-computer.github.io/nighthawk-python/specification/#812-supported-python-source-forms).
+When an application needs revision provenance, follow [Record revision evidence](https://kurusugawa-computer.github.io/nighthawk-python/embedded-execution/#record-revision-evidence); terminal Natural text alone does not identify a complete revision.
 
 For direct Natural returns, loop outcomes, multimodal inputs, or template composition, read [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) and [control flow patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#control-flow-and-error-handling) before implementation.
 
@@ -255,5 +261,5 @@ Before considering an implementation complete, check:
 - State crosses blocks deliberately; output validation is not mistaken for isolation, rollback, or factual verification.
 - Tests demonstrate the Python contract, and real-model evidence supports claims about semantic behavior.
 
-When deciding between designs, ask: "Does this embody Nighthawk's philosophy?"
+When deciding between designs, apply the [philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/): satisfy its invariants, then follow its defaults unless evidence supports their stated exceptions.
 Prefer the design whose judgment boundary, Python guarantees, and verification are easiest to explain and maintain.

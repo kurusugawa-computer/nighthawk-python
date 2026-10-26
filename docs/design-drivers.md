@@ -2,7 +2,7 @@
 
 This page records application needs, hypotheses about Nighthawk's value, and evidence for decisions about the library and its Core design.
 It connects the philosophy's goals to tasks that can reveal whether agents construct, reuse, assess, and improve programs more effectively with Nighthawk.
-The [philosophy](philosophy.md) states the principles, the [specification](specification.md) defines supported behavior, and the [roadmap](roadmap.md) tracks exploratory work.
+The [philosophy](philosophy.md) explains the purpose and design rationale and provides principles for evaluating change, the [specification](specification.md) defines supported behavior, and the [roadmap](roadmap.md) tracks exploratory work.
 Application scenarios on this page describe intended compositions; they are not additional runtime guarantees or complete application implementations.
 
 ## Workspace information policy
@@ -12,7 +12,8 @@ The library package and its development workspace have different inclusion crite
 
 | Information | Ownership |
 |---|---|
-| Purpose, Python ecosystem integration, function composition, agent authorship, and accumulated capability | Core philosophy. |
+| Nighthawk's purpose, foundational design rationale, and principles for evaluating tradeoffs and proposed changes | Philosophy. |
+| Guidance on when to use Nighthawk | README and documentation home. |
 | Supported runtime behavior and guarantees | Core specification and API reference. |
 | Representative application purpose, expected benefit, success conditions, and design implications | Summaries on this page, linked to detailed application sources when available. |
 | Evidence about construction, reuse, assessment, improvement, and comparison with ordinary Python | Findings on this page, linked to evaluation records with methods, results, and limitations. |
@@ -24,7 +25,7 @@ The library package and its development workspace have different inclusion crite
 Keep one authoritative source for each subject.
 When citing external application evidence, identify the relevant version or revision when the conclusion depends on it.
 Label each claim as conceptual, experimentally evaluated, or supported by a documented contract, and link the evidence supporting that status.
-Runtime contract coverage establishes specific behavior; claims about task quality, accumulated capability, or comparative advantage need their own evidence.
+Runtime contract coverage establishes specific behavior; claims about task quality, cumulative reuse, or comparative advantage need their own evidence.
 Update the summary when its design implications change; detailed application changes remain with their owners.
 
 ## Evaluating Nighthawk's value
@@ -54,16 +55,15 @@ A useful design record connects the application need, attempted composition, obs
 Possible outcomes include:
 
 - Keep the existing composition when it adequately meets the need.
-- Improve documentation, examples, or discovery when an existing capability is difficult to use correctly.
+- Improve documentation, examples, or discovery when an existing feature is difficult to use correctly.
 - Extract a reusable library when applications share behavior that existing execution contracts can support.
 - Simplify an existing feature when its total burden exceeds its benefit.
 - Propose a Core change when a common execution requirement remains unmet.
 
-For a Core addition, apply the [Core inclusion criteria](philosophy.md#a-minimal-balanced-core): evidence from distinct applications, an inadequacy of application composition, clear guarantees, and little burden on applications that do not use it.
-Include complexity displaced into applications when weighing the total burden.
+For a Core addition, apply the [Core inclusion criteria](philosophy.md#core-inclusion-criteria) to the observed execution need and the limitations of existing composition.
 Reuse can justify a library without establishing a need for a new Core primitive.
 
-## Agents building and improving reusable capabilities
+## Agents building and improving reusable functions
 
 **Status:** Conceptual application direction; no evaluation of the complete construction, revision, and reuse cycle is recorded here.
 
@@ -82,11 +82,49 @@ The expected benefit is that meaningful function contracts and composable Natura
 
 Success requires correct construction and revision, useful results on the later task, and preservation of relevant earlier behavior.
 Use the shared comparison conditions to measure adaptation effort and total burden against ordinary Python and model libraries.
-Successful execution of an isolated function does not establish accumulated capability.
+Successful execution of an isolated function does not establish cumulative reuse.
 
 The design questions concern discoverability, understandable contracts, composition across task boundaries, and useful feedback about failures and effects.
 Findings may call for better descriptions or examples, a reusable library, simpler interfaces, or a general execution connection point.
-Applications own capability storage, evaluation records, revision selection, and improvement processes; this scenario does not require a Core registry, learning system, or self-modification mechanism.
+Applications own function storage, evaluation records, revision selection, and improvement processes; this scenario does not require a Core registry, learning system, or self-modification mechanism.
+
+## Agents revising programs during a task
+
+**Status:** Conceptual application direction; no implementation or evaluation is recorded here.
+Apply the philosophy's principles for [program authority](philosophy.md#program-text-is-code) and [acceptance ownership](philosophy.md#acceptance-criteria-belong-to-their-owner) throughout the revision workflow.
+The existing execution boundaries below support parts of the scenario; the complete workflow remains conceptual.
+
+An agent performing a task finds that a Natural function, judgment criterion, or Python helper is inadequate, revises it, and continues the task with the revision.
+Unlike [revision across tasks](#agents-building-and-improving-reusable-functions), the revision takes effect before the task completes.
+The expected benefit is recovery from an inadequate program without abandoning the task, while useful revisions remain candidates for later reuse.
+The risk is that material read during the task induces a harmful revision, which then persists and affects later tasks.
+
+### Representative workflow
+
+1. Run a composition and observe a result or effect that fails the task's acceptance criteria.
+2. Revise judgment instructions, examples, or helpers within the delegated implementation authority, preserving the task's acceptance criteria and authorization policy.
+3. Apply the application's authorization policy to the proposed revision and its intended purpose, permissions, and environment. Structural checks, semantic linting, tests, and human review can supply evidence for that policy; no single check proves correctness.
+4. Execute the authorized revision through the selected host entry point.
+5. Assess the revised result and its effects against the unchanged acceptance criteria, linking the assessment to the revision and execution through [host records](embedded-execution.md#record-revision-evidence).
+6. Retain a revision for later tasks when evaluation supports its intended reuse and preservation of required behavior, and host authorization covers that reuse.
+
+Success requires task completion with acceptable effects, execution within the authorized context, and records that distinguish the original program from its revisions.
+Evaluation cases should include material that attempts to induce a harmful revision, unauthorized changes to acceptance criteria, and helper-only revisions that leave Natural text unchanged.
+Compare with an ordinary Python implementation that generates, authorizes, and executes revised prompts and code under the same comparison conditions.
+
+### Questions this application asks of Core
+
+| Application need | General design question | Existing connection or boundary |
+|---|---|---|
+| Execute a revision within the running task | Which execution form can accept the revised program? | Applying `@nh.function` to a generated function requires [available Python source](specification.md#812-supported-python-source-forms); [embedded definitions](specification.md#explicit-embedded-steps) accept host-selected Natural text and declarations without Python function source inspection. |
+| Authorize the revision in its intended context | Which entry point applies host policy before effects can occur? | Embedded steps bypass `FunctionCallHandler`, so hosts supply an [authorization entry point](embedded-execution.md#authorize-the-execution) for that path. Isolation remains host and backend owned. |
+| Connect evidence to the executed revision | Can records distinguish the original program from its revisions? | [Terminal lifecycle records](specification.md#104-terminal-delivery-and-host-ledgers) supply execution evidence; [host records](embedded-execution.md#record-revision-evidence) supply revision provenance. |
+
+These questions guide small examples and evaluations.
+They do not require Core to adopt a revision store, promotion workflow, learning system, or self-modification mechanism.
+The application owns authorization policy, program storage and history, evaluation, and the decision to retain a revision.
+Reusable helpers or libraries can support recording revisions, applying host authorization, and connecting executions to evaluations.
+Begin with small examples using existing boundaries; use their limitations as evidence for any proposed Core addition.
 
 ## Markdown knowledge management
 
@@ -219,7 +257,7 @@ Visible model batches stop at refusal, while provider-internal batches remain a 
 
 Applications own the policy, alternative operations, acceptance criteria, and any durable evidence or improvement process.
 Core does not infer that a later accepted output means the task was completed, automatically retry an operation, or add a separate repair agent or policy engine.
-The deterministic tests establish execution behavior, not improved judgment, accumulated capability, or comparative advantage.
+The deterministic tests establish execution behavior, not improved judgment, cumulative reuse, or comparative advantage.
 Further application evidence should compare successful corrections, unacceptable effects, authoring and maintenance burden, and inference cost against ordinary Python/model-library compositions.
 
 ## Using Nighthawk to develop Nighthawk
@@ -231,6 +269,7 @@ For example, a semantic linter could assess documentation against the philosophy
 This is an exploratory use case, not a declaration that such checks are installed or required today.
 
 Keep development-specific rules and automation with their development workflow.
+The [development program policy](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/CONTRIBUTING.md#programs-used-in-development) defines authorization for experiments that generate or revise program assets and distinguishes experiment execution from adoption of its outputs.
 Evaluate their findings against reviewed examples, including false positives and missed violations.
 The expected benefit is reusable checks that agents can improve as documentation and design rules change.
 Success includes useful findings, acceptable review burden, and correct reuse on another document set.

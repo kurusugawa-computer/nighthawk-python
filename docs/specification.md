@@ -50,7 +50,18 @@ Each block starts a fresh model interaction; neither a parent's working values n
 - Python 3.13+.
 - Models are selected explicitly; provider installation and identifier examples are in [Pydantic AI providers](pydantic-ai-providers.md).
 - Coding agent backends are installed via extras: `claude-code-sdk`, `claude-code-cli`, `codex`. Pydantic AI provider dependencies are installed separately (see [Pydantic AI providers](pydantic-ai-providers.md)).
-- Threat model: Natural blocks and imported markdown are trusted and repository-managed.
+- Threat model: Natural source, imported Markdown, prompt fragments, and declarations are trusted program inputs authorized by the host for their intended purpose, permissions, and environment.
+
+This trust requirement applies whether a program is repository-managed or generated at runtime.
+The host owns authorization policy, which may be established in advance and applied automatically.
+Core accepts trusted program inputs; it does not verify their approval, prove their correctness, or isolate their execution.
+Authorship and repository storage alone do not establish authorization.
+Hosts must authorize the program and its execution path before program preparation or execution can produce effects.
+Generation, revision, and reuse do not implicitly grant additional authority; changed execution conditions must be covered by the host's policy.
+Untrusted task data belongs in binding values, not source interpolation or template preprocessing; this separation does not guarantee that a model will ignore instructions in data.
+
+Authorization does not change supported source forms.
+`@nh.function` requires [available Python function source](#812-supported-python-source-forms); [embedded steps](#explicit-embedded-steps) accept host-selected Natural text and declarations without Python function source inspection.
 
 ## 4. Terminology
 
@@ -331,6 +342,9 @@ An explicit working-state snapshot retains object identity and does not by itsel
 #### 8.1.2. Supported Python source forms
 
 The baseline is source-available ordinary `def` and `async def` functions on supported CPython 3.13+ versions.
+Functions generated at runtime and decorated with `@nh.function` must satisfy the same source-availability and lexical requirements.
+Ordinary Python type checkers and refactoring tools do not resolve references or infer assignments inside Natural text.
+Nighthawk resolves those references and validates selected output values at runtime; Natural bindings do not inform static analysis of the surrounding Python code.
 
 | Source form | Contract |
 | --- | --- |
@@ -1077,6 +1091,8 @@ Preparation-dependent fields are `None` when not established; empty mappings or 
 Runtime references require both step identity fields.
 Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity.
 Hosts must serialize or copy deliberately for durable records.
+The processed Natural program and execution identity do not identify the complete program revision: helper implementations, declarations, and dependency versions are not snapshotted as a revision record.
+See [Record revision evidence](embedded-execution.md#record-revision-evidence) for host records that supplement this execution evidence.
 
 `StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Model-selected exception expressions use the operation pipeline; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. An explicit `AbortStep` decision about this step additionally carries `inspection_subject` and `abort_reason`. Invalid hook decisions and exceptions raised by inspectors remain inspection failures.
 
@@ -1362,9 +1378,13 @@ Declarations must be ordered sequences of unique ASCII Python identifiers, exclu
 Malformed declarations or annotations for undeclared outputs raise `BindingDeclarationError` at construction, outside any execution lifecycle.
 `execute_step(definition, *, name_to_value, write_binding)` and its asynchronous counterpart execute one invocation using the explicit namespace and required `write_binding(name, value)` callback.
 Definitions retain no invocation state and may be reused with different namespaces, initial values, types, and writers; annotation resolution and inference occur on every invocation.
+Hosts may construct new definitions from authorized Natural text at runtime; these entry points do not inspect Python function source.
 They require an active run and use its configured executor and the ordinary preparation, operation, validation, commit-inspection, and lifecycle machinery.
 The program is a body without a block header. `block_kind="execute"` is the default and supports deny frontmatter; `block_kind="decide"` requires exactly one output and a judgment instruction.
 Declarations are authoritative host metadata; these entry points do not parse bindings from text, expand includes, or interpolate source.
+The embedded entry points do not invoke `FunctionCallHandler`; installing `function_call_scope` does not admit or refuse an embedded step.
+Hosts must authorize embedded programs through an application-controlled entry point before preparation and execution.
+The ordinary operation, commit-inspection, and lifecycle boundaries do not replace that authorization.
 The [embedded execution guide](embedded-execution.md) provides complete examples and the public API contract.
 
 The mapping is shallow-snapshotted during preparation, including when it is empty.

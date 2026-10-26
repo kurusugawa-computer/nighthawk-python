@@ -4,7 +4,7 @@
 
 ## Setup
 
-Prerequisites: Python 3.13+. Nighthawk assumes Natural DSL sources are trusted, repository-managed assets (see [Specification](specification.md#3-hard-constraints)).
+Prerequisites: Python 3.13+. Nighthawk assumes Natural source and included Markdown are trusted program assets authorized for their execution context (see [Specification](specification.md#3-hard-constraints)).
 
 Install Nighthawk and a provider:
 
