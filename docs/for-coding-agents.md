@@ -18,7 +18,7 @@ Before implementing a feature, identify what requires interpretation and what ca
 
 | Design question | Nighthawk approach |
 | --- | --- |
-| Can explicit rules determine the answer? | Write Python for computation, I/O, validation, and known procedures. Keep context-dependent interpretation, classification, generation, and selection in Natural. |
+| Can explicit rules determine the answer at acceptable maintenance burden? | Write Python for computation, I/O, validation, and known procedures. Use Natural for interpretation, classification, generation, and selection when rules are inadequate or too burdensome to maintain. |
 | Is the input ambiguous or loosely structured? | Let Natural interpret it into a typed intermediate. Keep already structured inputs typed; do not recreate semantic interpretation with an expanding Python parser. |
 | What must the application guarantee? | Enforce coverage, ordering, checks, retries, and effect handling in Python. For example, iterate over every item in Python when every item must be assessed. |
 | Which choices require judgment? | Natural can choose relevant evidence, helpers, or follow-up assessments within the host's contract. Expose deterministic operations as Python helpers. |
@@ -32,7 +32,7 @@ The host determines which results and effects are acceptable.
 
 Natural judgments run for each invocation using the current input and context.
 Do not replace an open-ended judgment with Python generated from a few examples merely to avoid model calls.
-When explicit rules really suffice, implement those rules directly in Python.
+When explicit rules suffice at acceptable maintenance burden, implement them directly in Python.
 Revisit this division using evaluation evidence as requirements and model capabilities change.
 See [Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) for the rationale and tradeoffs.
 
@@ -262,4 +262,5 @@ Before considering an implementation complete, check:
 - Tests demonstrate the Python contract, and real-model evidence supports claims about semantic behavior.
 
 When deciding between designs, apply the [philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/): satisfy its invariants, then follow its defaults unless evidence supports their stated exceptions.
+Its invariants are design obligations; the specification and evaluation evidence determine what behavior can be claimed.
 Prefer the design whose judgment boundary, Python guarantees, and verification are easiest to explain and maintain.

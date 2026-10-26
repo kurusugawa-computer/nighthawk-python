@@ -10,6 +10,7 @@
 </div>
 
 Nighthawk is a Python library that makes natural-language judgment composable with ordinary Python functions.
+It is designed for AI agents to construct and improve programs whose functions can be reused across tasks.
 
 Use Natural blocks for interpretation, classification, and other judgments; combine actions, constraints, and verification through Python functions and existing libraries.
 Python owns the surrounding control flow, state, and recovery.
@@ -66,7 +67,7 @@ Prefer another approach when:
 - You need the library itself to provide framework-managed routing, durable conversation state, or language-neutral orchestration: choose a runtime that supplies them and use Nighthawk functions within it where useful.
 - You need the library itself to isolate untrusted programs: choose a host or backend that supplies that boundary before using Nighthawk within it.
 
-[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) explains Nighthawk's purpose, design rationale, and principles for evaluating tradeoffs and proposed changes.
+[Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) explains the purpose and design principles; [Design drivers](https://kurusugawa-computer.github.io/nighthawk-python/design-drivers/) describes how to evaluate the expected benefits.
 
 ## Embedding in an application
 

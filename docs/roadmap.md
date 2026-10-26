@@ -2,19 +2,23 @@
 
 These are exploratory directions.
 The [specification](specification.md) defines supported behavior; Python owns orchestration, and hosts own isolation and durable records.
-The [philosophy](philosophy.md) guides design decisions, and [design drivers](design-drivers.md) record the application needs behind them.
+The [philosophy](philosophy.md) guides design decisions, and [design drivers](design-drivers.md) record application needs, findings, and evidence criteria.
+Each investigation should identify the uncertainty to resolve and evidence that would change a decision.
+Record findings with their scenario and evaluation evidence, then revise or retire the investigation here.
 
 ## Composition and application evidence
 
 ### Semantic checks composed with execution hooks
 
-Develop small examples that combine Natural findings, deterministic checks, and an application policy at an execution boundary.
+Can existing hooks support semantic checks with understandable failure and recursion behavior?
+Test small examples combining Natural findings, deterministic checks, and an application policy at an execution boundary.
 Start with existing function composition and oversight hooks.
 Investigate nested Natural checks, inherited policy, unintended hook recursion, rejection, and checker failures before proposing new runtime primitives.
 Distinguish applying a check from establishing the correctness of its judgment.
 
 ### Evidence from representative applications
 
+Where does Nighthawk reduce construction and revision burden, and where does it add complexity?
 Use the [Markdown knowledge-management scenario](design-drivers.md#markdown-knowledge-management) to identify concrete composition gaps.
 Keep its detailed design, knowledge collection, and operational rules in application-owned sources.
 Bring back small examples, findings, and contract requirements, with an explicit verification status.
@@ -23,13 +27,13 @@ Evaluation and simulation systems remain connected through application functions
 
 ### Agent authorship and cumulative reuse
 
-Evaluate whether signatures, descriptions, context, results, and failure reports let agents discover, compose, and revise programs correctly.
-Use representative tasks to assess whether functions built for one task can be reused and improved for another.
+Can agents reuse and improve functions from earlier tasks while preserving accepted behavior?
+Use the [construction and reuse scenario](design-drivers.md#agents-building-and-improving-reusable-functions) to assess discovery, contracts, context, and failure feedback across representative tasks.
 Compare construction and revision success, assessment of results and effects, and overall complexity with ordinary Python and model libraries.
 
 ### Development tooling as an application
 
-Explore semantic checks for Core documentation and development workflows using Nighthawk functions.
+Do semantic checks for documentation and development workflows produce useful findings at acceptable review burden?
 Assess false positives and missed violations before adopting them in the development process.
 Treat development automation and public library features as separate decisions.
 
@@ -59,7 +63,7 @@ Provide conventions for limiting include paths and template access within author
 Use the [in-task revision scenario](design-drivers.md#agents-revising-programs-during-a-task) to evaluate reusable helpers for host authorization and revision evidence under the [trusted-program contract](specification.md#3-hard-constraints).
 Evaluate whether reusable helpers reduce the work of maintaining [revision evidence](embedded-execution.md#record-revision-evidence) without prescribing an application's policy or storage.
 Exercise embedded execution without function interception, helper-only revisions, and changes of execution context.
-Start with existing boundaries and small examples; propose Core mechanisms only for shared execution needs those compositions cannot adequately meet.
+Start with existing boundaries and small examples; apply the [Core evidence criteria](design-drivers.md#from-findings-to-design-decisions) to any unmet execution need.
 
 ### External isolation
 

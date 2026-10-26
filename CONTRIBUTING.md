@@ -51,8 +51,12 @@ Test ownership and helper conventions are documented in [tests/README.md](tests/
 
 Use [Philosophy](docs/philosophy.md) to evaluate proposed changes against Nighthawk's purpose and design principles, and [Specification](docs/specification.md) for supported runtime contracts.
 [Design drivers](docs/design-drivers.md) defines which application information belongs in this workspace and how to distinguish conceptual scenarios from verified behavior.
-When proposing Core changes, show the application composition that exposes the general execution need.
+When proposing Core changes, show the application composition and apply the [evidence criteria](docs/design-drivers.md#from-findings-to-design-decisions) for additions, corrections, or simplifications.
 Nighthawk-based development checks are an application of the library; adopting a local check does not make it a public feature or a requirement for library users.
+
+### Documentation changes
+
+Verify documentation changes with `uv run pytest -q tests/docs/` and `uv run mkdocs build --strict`.
 
 ### Programs used in development
 

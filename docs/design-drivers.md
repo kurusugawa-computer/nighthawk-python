@@ -1,32 +1,12 @@
 # Design drivers
 
-This page records application needs, hypotheses about Nighthawk's value, and evidence for decisions about the library and its Core design.
-It connects the philosophy's goals to tasks that can reveal whether agents construct, reuse, assess, and improve programs more effectively with Nighthawk.
-The [philosophy](philosophy.md) explains the purpose and design rationale and provides principles for evaluating change, the [specification](specification.md) defines supported behavior, and the [roadmap](roadmap.md) tracks exploratory work.
+This page connects application needs and evidence to decisions about Nighthawk's value and design.
+The scenarios ask whether agents construct, reuse, assess, and improve programs more effectively with Nighthawk.
+The [philosophy](philosophy.md) supplies the principles and [Core boundary](philosophy.md#core-responsibility), the [specification](specification.md) defines supported behavior, and the [roadmap](roadmap.md) tracks investigations.
 Application scenarios on this page describe intended compositions; they are not additional runtime guarantees or complete application implementations.
 
-## Workspace information policy
-
-Keep information in this workspace when it improves a decision about Nighthawk's value, usability, design, implementation, or verification.
-The library package and its development workspace have different inclusion criteria: the workspace also needs rationale, representative applications, experiments, and development tooling.
-
-| Information | Ownership |
-|---|---|
-| Nighthawk's purpose, foundational design rationale, and principles for evaluating tradeoffs and proposed changes | Philosophy. |
-| Guidance on when to use Nighthawk | README and documentation home. |
-| Supported runtime behavior and guarantees | Core specification and API reference. |
-| Representative application purpose, expected benefit, success conditions, and design implications | Summaries on this page, linked to detailed application sources when available. |
-| Evidence about construction, reuse, assessment, improvement, and comparison with ordinary Python | Findings on this page, linked to evaluation records with methods, results, and limitations. |
-| General execution gaps and improvement opportunities discovered through application work | Design decisions and roadmap, with the originating scenario and evidence. |
-| Small examples or fixtures that exercise Core contracts | Core guides, tests, or evaluations, maintained with the contracts they exercise. |
-| Application architecture, document formats, operational rules, and product plans | Application-owned sources; summarize what a decision about Nighthawk needs. |
-| Live knowledge collections, user configuration, and operational history | Application-owned storage. |
-
-Keep one authoritative source for each subject.
-When citing external application evidence, identify the relevant version or revision when the conclusion depends on it.
 Label each claim as conceptual, experimentally evaluated, or supported by a documented contract, and link the evidence supporting that status.
 Runtime contract coverage establishes specific behavior; claims about task quality, cumulative reuse, or comparative advantage need their own evidence.
-Update the summary when its design implications change; detailed application changes remain with their owners.
 
 ## Evaluating Nighthawk's value
 
@@ -58,10 +38,19 @@ Possible outcomes include:
 - Improve documentation, examples, or discovery when an existing feature is difficult to use correctly.
 - Extract a reusable library when applications share behavior that existing execution contracts can support.
 - Simplify an existing feature when its total burden exceeds its benefit.
-- Propose a Core change when a common execution requirement remains unmet.
+- Propose a Core addition when a general execution requirement remains unmet.
 
-For a Core addition, apply the [Core inclusion criteria](philosophy.md#core-inclusion-criteria) to the observed execution need and the limitations of existing composition.
-Reuse can justify a library without establishing a need for a new Core primitive.
+For a Core addition, support the [Core inclusion criteria](philosophy.md#core-inclusion-criteria) with:
+
+1. A concrete execution need, shown by an application composition or a reproducible contract example.
+2. Evidence that existing composition and reusable libraries cannot meet that need correctly at acceptable total burden.
+3. A generality argument explaining why the required execution semantics remain useful when application-specific operations and policies change.
+
+Evidence from independent applications strengthens the case but is not a prerequisite.
+Distinguish demonstrated behavior from predicted reuse, and record uncertainties that further application work should resolve.
+For a correction to an existing contract, a reproducer and regression coverage can establish the need without another application.
+For a simplification, show how it reduces total burden while preserving required contracts, or identify any intentional contract change and its compatibility consequences.
+Reuse can justify a library without a Core addition; including a helper or backend policy in the package does not by itself make it part of Core.
 
 ## Agents building and improving reusable functions
 
@@ -251,6 +240,7 @@ Ordinary helper return values can communicate expected domain findings, but cann
 Reimplementing the operation pipeline in application executors would duplicate state, notification, and termination responsibilities.
 
 Core therefore separates `RejectOperation`, which refuses one body and exposes deliberate feedback, from `AbortStep`, which ends the inspected step.
+This requirement concerns the execution meaning of refusal, independently of the application policy that causes it.
 The same step retains its live environment, prior effects, model history, and request controls while the model or custom executor chooses another operation.
 Refusal records survive successful finalization; failed notifications and terminal stops cannot become ordinary feedback.
 Visible model batches stop at refusal, while provider-internal batches remain a documented backend boundary.
@@ -276,3 +266,25 @@ Success includes useful findings, acceptable review burden, and correct reuse on
 Compare construction and maintenance with ordinary Python and model libraries under the same evaluation conditions.
 An implementation's presence in this workspace does not make it part of the public runtime API or an obligation for library users.
 Use the [design decision process](#from-findings-to-design-decisions) to decide whether the evidence supports keeping the composition, improving guidance, extracting a library, simplifying a feature, or changing Core.
+
+## Workspace information policy
+
+Keep information in this workspace when it improves a decision about Nighthawk's value, usability, design, implementation, or verification.
+The library package and its development workspace have different inclusion criteria: the workspace also needs rationale, representative applications, experiments, and development tooling.
+
+| Information | Authoritative source |
+|---|---|
+| Purpose, foundational design rationale, and principles for evaluating tradeoffs | Philosophy. |
+| Guidance on when to use Nighthawk | README and documentation home, with concise summaries of the philosophy. |
+| Supported runtime behavior and public interfaces | Specification for behavior; API reference for signatures and symbols. |
+| Application needs, value hypotheses, findings, and resulting design decisions | Summaries on this page, linked to application sources and evaluation records with methods, results, and limitations. |
+| Open design questions and the evidence to seek next | Roadmap, linked to the originating scenario or finding. |
+| Application of supported contracts | Task-oriented guides and their executable examples; tests cover the contracts they exercise. |
+| Documentation responsibilities and editorial constraints | [Documentation rules](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/.claude/rules/docs.md). |
+| Development setup, change and review procedures, verification, and experiment authorization | [CONTRIBUTING](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/CONTRIBUTING.md). |
+| Application architecture, document formats, operational rules, and product plans | Application-owned sources; summarize what a decision about Nighthawk needs. |
+| Live knowledge collections, user configuration, and operational history | Application-owned storage. |
+
+Keep one authoritative source for each subject; standalone guides and entry pages may repeat concise summaries with links to it.
+When citing external application evidence, identify the relevant version or revision when the conclusion depends on it.
+Update a summary when its design implications change; detailed application changes remain with their owners.

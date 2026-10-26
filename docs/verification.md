@@ -211,11 +211,16 @@ For observation during real execution, use a scoped Pydantic AI capability as in
 
 ## Diagnosing `<snipped>` markers
 
-When the LOCALS or GLOBALS section is too large, Nighthawk truncates it and appends a `<snipped>` marker. The underlying data remains in Python memory and is still accessible through binding functions at runtime. A diagnostic log message is emitted on the `nighthawk` logger. To improve prompt coherence:
+Context budgets limit what appears in LOCALS and GLOBALS; a `<snipped>` marker indicates an abbreviated preview.
+The underlying values remain in Python memory and accessible through runtime discovery, inspection, and Python helpers.
+A diagnostic log message is emitted on the `nighthawk` logger.
+To improve prompt coherence:
 
-- Increase `locals_max_tokens` or `globals_max_tokens` in `StepContextLimits`.
-- Reduce the number of locals by moving stable values to module-level (GLOBALS).
-- Use f-string injection for pre-formatted context instead of large binding values.
+- Bind the relevant subset or a pre-formatted view as a Python value, retaining access to source data where the task needs it.
+- Provide focused retrieval helpers for large values and reduce incidental locals at the block boundary.
+- Increase `locals_max_tokens` or `globals_max_tokens` in `StepContextLimits` when the task needs a larger initial view.
+
+Keep task data in bindings; f-string injection changes program instructions and requires authorization under the [trust contract](specification.md#3-hard-constraints).
 
 ## Contract checks and model evaluations
 
@@ -236,6 +241,7 @@ Keep failed and duplicate effects in the results; efficiency cannot compensate f
 Use independent repetitions, varied formulations, and representative models/backends; report sample sizes, uncertainty, and unavoidable differences in guidance.
 When evidence does not distinguish acceptable alternatives, prefer lower implementation, explanation, and maintenance burden across the runtime, adapters, and guidance.
 Fewer tools alone do not establish a simpler or more reliable system.
+Use the [application comparison criteria](design-drivers.md#evaluating-nighthawks-value) when claiming benefits in construction, revision, or reuse; runtime contract tests do not establish those benefits.
 
 ## Observability
 

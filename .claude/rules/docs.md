@@ -7,6 +7,8 @@ paths:
 
 ## Ownership
 
+This file owns documentation responsibilities and editorial constraints.
+`CONTRIBUTING.md` owns development setup, change and review procedures, verification commands, and experiment authorization.
 Keep one canonical owner for each subject.
 Other pages may summarize it for their audience and link to the owner; they must not create independent guarantees.
 `api.md` owns the exhaustive public symbol inventory and rendered signatures/docstrings.
@@ -62,6 +64,9 @@ Separate application evidence from runtime guarantees using `design-drivers.md`.
 - `verification.md` explains observability usage; formal delivery guarantees belong in the specification.
 - `philosophy.md` connects Nighthawk's purpose to its foundational design choices, their rationale and costs, and principles for evaluating tradeoffs and proposed changes. Keep those connections useful when APIs change, and distinguish Nighthawk's design commitments from application-owned goals and acceptable risks. Route behavior and guarantees to the specification, application workflows and evidence to Design drivers, usage to guides, development approval procedures to `CONTRIBUTING.md`, and guidance on when to use Nighthawk to `index.md` and README.
   Give each principle one design decision, with a concise rule, rationale, and relevant conditions. Invariants hold in every design; each default states its preference and when another choice is better. Use enough explanation to make the decision clear without repeating other principles or their operational details.
+  Add a principle only when it remains useful across implementations and applications, informs a distinct design decision, and is not adequately covered by an existing principle.
+  Before adding content, consider integrating it with existing text, replacing weaker wording, or placing detail with its authoritative owner. Retain the explanation needed to understand the rationale and conditions.
+  Assess growth by the design decisions it improves. Word counts may help notice growth, but impose no fixed word limit, equal-length replacement rule, or automated word-count acceptance check.
 - `roadmap.md` contains ideas, with links to relevant existing contracts when useful; it does not promise behavior.
 - `api.md` uses explicit member filters to avoid duplicate rendering. Edit directive structure, keeping API prose in source docstrings.
 
@@ -89,4 +94,4 @@ Do not assert exact prose or retain tests solely to remember removed names and p
 
 Keep `prompt-example` anchors with their examples: `basic-binding`, `fstring-injection`, `local-function-signature`, and `global-function-reference` in Natural blocks; `carry-pattern` in Patterns.
 When an example changes, update its behavior checks as well.
-Run `uv run pytest -q tests/docs/` and `uv run mkdocs build --strict` for documentation changes.
+Follow the documentation verification commands in `CONTRIBUTING.md`.

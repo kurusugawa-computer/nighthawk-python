@@ -213,7 +213,9 @@ For the normative rendering and transport rules, including dotted-reference hois
 
 ### f-string injection
 
-Inline f-string blocks embed Python expressions directly into the Natural program text. The expression is evaluated when Python evaluates the f-string -- before the LLM sees the prompt.
+Inline f-string blocks embed Python expressions directly into the Natural program text.
+The expression is evaluated when Python evaluates the f-string, before the LLM sees the prompt.
+Use this for host-authorized program fragments and configuration; task data remains in bindings under the [trust contract](specification.md#3-hard-constraints).
 
 ```py
 PROJECT_POLICY = ["safety-first", "concise-output", "cite-assumptions"]
@@ -260,7 +262,8 @@ selected_policy: str = ""
 
 Notice: `{PROJECT_POLICY}` was evaluated into literal text in the PROGRAM section, while `post` and `selected_policy` appear as bindings in LOCALS.
 
-Member accesses and function results work too:
+Member accesses and function results work too, provided the resulting text is authorized as program instructions.
+In this example, the host supplies trusted style and length settings while `topic` remains task data:
 
 ```py
 from pydantic import BaseModel
@@ -297,7 +300,7 @@ An entire decision instruction may come from a trusted interpolated string, but 
 | Token control | Full -- you decide the exact text | Governed by `context_limits` ([Runtime configuration](runtime-configuration.md#context-limits)) |
 | LLM can mutate | No (text is baked in) | In-place only (e.g., `list.append()`) |
 | Brace escaping | `{{` / `}}` to produce literal `{` / `}` | N/A |
-| Best for | Static config, pre-formatted context, computed values | Mutable state, objects the LLM needs to inspect or modify |
+| Best for | Trusted program fragments and host-authorized configuration | Task data, pre-formatted data, and live objects to inspect or modify |
 
 ## Functions and discoverability
 
@@ -401,7 +404,9 @@ python_average: (numbers)
 
 ### Keep locals minimal
 
-Function parameters and working locals are candidates for LOCALS, and explicit module-level references are candidates for GLOBALS. The default builder prioritizes explicit references and outputs, followed by working locals, inherited state, and task capabilities, using stable ordering within each priority. Tight budgets can omit even an explicit reference; use the displayed discovery references to retrieve it.
+Function parameters and working locals are candidates for LOCALS, and explicit module-level references are candidates for GLOBALS.
+Explicit references and outputs take priority over other working locals; referenced globals and explicitly scoped task capabilities appear in GLOBALS.
+Tight budgets can omit even an explicit reference; use the displayed discovery references to retrieve it.
 
 Keep fewer incidental locals alive when they do not help the judgment. A callable passed through a parameter retains its live callable metadata even when the parameter annotation is `object`, `Any`, or absent. Signature and documentation acquisition are best-effort and do not execute application properties or annotation expressions.
 
@@ -415,15 +420,17 @@ Use explicit parameters for essential inputs and independent reuse. Module globa
 
 Use Natural for interpretation, classification, generation, and other judgments that depend on context.
 Use Python for computation, control flow, I/O, validation, and recovery.
-If explicit rules can determine the answer, write those rules in Python.
+Prefer explicit Python rules when they determine the answer with acceptable maintenance burden.
+Use Natural when rules inadequately capture the task or are too burdensome to maintain.
 Each Natural invocation evaluates its input and context through a model interaction; Natural prose remains interpreted work (see [Specification](specification.md#1-goals)).
 Revisit the division between Natural and Python using evaluation evidence as requirements and model capabilities change (see [Philosophy](philosophy.md#explicit-rules-over-judgment-where-rules-suffice)).
 
 #### Type boundary placement
 
-The responsibility split above determines *what* goes into a Natural block. A related question is *where* the typed input boundary sits.
+Choose input types from the data the function receives and the interpretation it must perform.
+Keep already structured inputs typed, including in functions that use Natural.
 
-For deterministic functions (no Natural blocks), the boundary is at the function entry point -- use typed inputs:
+For example, a deterministic calculation can accept a structured input:
 
 ```py
 from pydantic import BaseModel
@@ -439,7 +446,7 @@ def compute_score(score_input: ScoreInput) -> int:
     return int((score_input.base + score_input.bonus) * score_input.multiplier)
 ```
 
-For judgment-heavy functions (containing Natural blocks), the boundary moves *inside* the function. Accept flexible inputs at the entry point and let the Natural block interpret them into typed intermediates:
+When input needs interpretation, accept text or another suitable input type and use Natural to produce a typed result or intermediate value:
 
 `JsonableValue` is a type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`). See [Specification Section 5.3](specification.md#53-supporting-types) for the full definition.
 
@@ -463,9 +470,11 @@ def judge_review(review_data: str | JsonableValue) -> ReviewVerdict:
     return verdict
 ```
 
-Here, `review_data` accepts flexible input because the Natural block handles interpretation. The type boundary is at `<:verdict>` -- the write binding where the LLM commits a typed `ReviewVerdict`.
+Here, `review_data` accepts flexible input because the Natural block handles interpretation.
+Runtime output validation occurs at `<:verdict>` before Python receives the `ReviewVerdict`; its type does not establish that the assessment is correct.
 
-When designing function contracts, document where the type boundary lies. Do not assume it is always at the function signature.
+Document both the accepted input and the validated result.
+A Natural block does not require weakening an existing input contract, and Python annotations alone do not perform runtime input validation.
 
 ### Designing structured output models
 

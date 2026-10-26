@@ -1,38 +1,34 @@
 # Philosophy
 
 Nighthawk makes AI judgment an ordinary part of Python programs.
-The aim is to expand the work programs can carry out autonomously: within a task by composing judgments, and across tasks by accumulating reusable functions.
-Design for AI agents as the primary authors and maintainers of these programs; humans may supply goals and acceptance criteria or judge consequences.
+Its purpose is to expand the work programs can carry out autonomously, by composing judgments within tasks and accumulating reusable functions across tasks.
+Design for AI agents as the primary authors and maintainers; humans may supply goals and acceptance criteria or judge consequences.
 
-Ordinary Python and model libraries can also express this work.
-Nighthawk must earn its place by making such programs easier to construct and change correctly, their results and effects easier to assess, and their overall complexity lower.
-[Design drivers](design-drivers.md#evaluating-nighthawks-value) define how to compare it with those alternatives.
+Python composition makes existing operations reusable; explicit contracts make judgments and effects assessable; retained functions let improvements carry into later work.
+Nighthawk must earn its place alongside ordinary Python and model libraries through easier construction and revision, assessable results, and lower total complexity.
 
-This page connects Nighthawk's purpose to its foundational design choices and provides principles for evaluating tradeoffs and proposed changes.
-It guides people and AI agents designing Nighthawk and programs built with it; application owners set their own goals, acceptance criteria, and acceptable risks.
-[Core responsibility](#core-responsibility) describes the obligations of the library itself.
-The [specification](specification.md) defines runtime behavior and guarantees, and [design drivers](design-drivers.md) connect application evidence to design decisions.
+These principles guide library and application design.
+The [specification](specification.md) defines runtime guarantees; [design drivers](design-drivers.md) connect application needs and evidence to decisions.
 
 ## Applying the principles
 
-Evaluate proposed changes by whether they help agents construct, reuse, assess, and improve programs.
-Choose only designs that satisfy the invariants and application acceptance criteria, using the defaults unless evidence supports their stated exceptions.
-Compare choices, including the scope of delegation, by whole-task quality, assessability, maintenance burden, cost, and latency.
+Satisfy the invariants and the application owner's acceptance criteria; follow the defaults unless evidence supports their exceptions.
+Among acceptable designs, compare whole-task quality, assessability, maintenance burden, cost, and latency, including the scope of delegation.
 Match the strength of evidence and the detail of records to the decision's impact, uncertainty, and reversibility.
 
 ## Invariants
 
+These are design obligations, not promises that a model will succeed on every task.
+
 ### Python composition is the foundation
 
 Python owns execution structure; Natural supplies judgment within it, from a small interpretation to an extended investigation.
-Keep every execution interface composable through Python calls and existing libraries, including when an application uses an external orchestration framework.
-This makes existing computation, domain operations, and verification reusable alongside model judgment.
+Keep execution interfaces composable through Python calls and existing libraries so computation, domain operations, and verification remain reusable alongside judgment.
 
 ### Agents can understand and revise programs
 
-Design for AI agents to discover, compose, assess, and revise programs without relying on development history.
-Make intent, dependencies, result meaning, effects, failure behavior, and execution requirements understandable through function contracts.
-Human authorship must not be a prerequisite for program construction or maintenance.
+Make intent, dependencies, result meaning, effects, failures, and execution requirements understandable through function contracts.
+Agents must be able to discover, compose, assess, and revise programs without depending on development history or human authorship.
 
 ### Program text is code
 
@@ -42,41 +38,38 @@ Keep task data distinct from program instructions; using it as program text requ
 
 ### Acceptance criteria belong to their owner
 
-Revising an implementation does not itself authorize changing the owner's acceptance criteria or execution policy, wherever those requirements are represented.
+Revising an implementation does not authorize changing the owner's acceptance criteria or execution policy, wherever represented.
 Improving tests and evaluators to implement unchanged requirements is implementation work.
 Authority to change the requirements may be delegated in advance; it must come from their owner.
 
 ### Guarantees match mechanisms and evidence
 
-Describe guarantees in terms of what their mechanisms establish, and limit empirical claims to what evaluation coverage, evaluator accuracy, and uncertainty support.
+Describe guarantees in terms of their mechanisms; limit empirical claims to what evaluation coverage, evaluator accuracy, and uncertainty support.
 Make those limits visible where callers rely on them.
-For example, validating a result's type does not establish the correctness of its meaning.
 
 ### Success requires completed work and acceptable effects
 
 Judge task success by completed work and observed effects against the task's acceptance criteria.
 Make required procedural checks enforceable in Python, and assess semantic adequacy with evidence appropriate to the claim.
-A valid output or successful step alone does not establish task success.
-Keep enough evidence to connect an assessment to what ran and the relevant execution conditions.
+Connect assessments to what ran and its execution conditions; a valid output or successful step alone does not establish task success.
 
 ## Defaults
 
 ### Ordinary functions over framework-specific units
 
-Prefer ordinary Python functions as units of composition and reuse, minimizing the additional work needed to import, inspect, test, and replace them.
-Use a specialized execution interface when ordinary function composition cannot express a required contract at an acceptable total burden.
+Prefer ordinary Python functions to minimize the work of importing, inspecting, testing, and replacing reusable units.
+Use a specialized execution interface when function composition cannot express a required contract at acceptable total burden.
 
 ### Explicit rules over judgment where rules suffice
 
-Prefer Python rules when they express the required behavior with acceptable maintenance burden, and use Natural for interpretation of meaning or context.
-Keep judgment in Natural when rules inadequately capture the task or their maintenance burden outweighs their benefit.
+Prefer Python rules when they express required behavior with acceptable maintenance burden.
+Use Natural when interpreting meaning or context needs judgment, or maintaining rules would outweigh their benefit.
 Revisit the boundary using evaluation evidence as requirements and model capabilities change; model use is not an objective.
 
 ### Explicit dependencies over ambient context
 
 Pass essential inputs as parameters so a function's requirements remain visible when it is reused.
-Use explicitly declared shared context when dependencies span a task and passing them through intermediate functions adds burden without clarifying their contracts.
-Include that context in the receiving function's execution contract.
+Use declared shared context when passing it through intermediate functions adds burden without clarifying their contracts; include it in the receiving function's execution contract.
 
 ### Host-selected policy over function-embedded policy
 
@@ -86,26 +79,24 @@ Reusable libraries can supply host policy, but a function's requirements do not 
 
 ### Reusable functions over one-off solutions
 
-Prefer retaining useful functions, judgment criteria, and evaluation evidence so work on one task makes later tasks easier.
-Keep a solution within its task when reuse lacks supporting evidence or would impose more maintenance burden than benefit.
-Applications own retention and revision, including checks that reuse preserves required contracts and remains authorized.
+Retain useful functions, judgment criteria, and evaluation evidence so one task makes later tasks easier.
+Keep a solution within its task when reuse lacks evidence or costs more to maintain than it benefits.
+Applications own retention and revision, checking that reuse preserves contracts and remains authorized.
 
 ## Core responsibility
 
-Core supplies the execution semantics and usable connection points needed to compose Natural and Python reliably.
+Core means the execution semantics and common contracts required to compose Natural and Python.
 Applications, hosts, backends, and reusable libraries own domain operations, policy, orchestration, storage, isolation, and improvement processes.
 Responsibilities assigned to hosts must have usable integration boundaries and verified examples.
-Reduce total burden through better composition, documentation, libraries, or the simplification and removal of features.
 
 ### Core inclusion criteria
 
-Add a Core feature only when distinct applications share an execution need that existing composition and reusable libraries cannot meet correctly with acceptable total burden.
-Require clear guarantees and little conceptual or configuration burden for applications that do not use the feature.
-Evaluate total burden across authors, hosts, adapters, and maintainers, including duplicated execution machinery and complexity displaced into applications.
+Require a concrete execution need, demonstrated limits of existing composition and libraries, and a reason the requirement generalizes beyond one application's policy.
+Require clear guarantees and little burden for applications that do not use the feature.
+Evaluate total burden across authors, hosts, adapters, and maintainers, including complexity displaced into applications.
+Apply the [evidence criteria](design-drivers.md#from-findings-to-design-decisions) for additions, corrections, and simplifications.
 
 ## Accepted tradeoffs
-
-Nighthawk accepts these costs of its design choices and seeks to reduce them while preserving the invariants.
 
 - **Python dependence.** Composition and integration depend on Python's language and ecosystem.
 - **Inference cost.** Delegating judgment to a model adds inference cost and latency.

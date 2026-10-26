@@ -6,6 +6,7 @@ This document is the specification for Nighthawk.
 
 This document defines Natural syntax, runtime behavior, and host-facing contracts.
 [API reference](api.md) owns signatures and the public symbol inventory; task-oriented guides explain usage.
+The [philosophy](philosophy.md#core-responsibility) defines the Core boundary and principles for changing it.
 
 ## 1. Goals
 
@@ -1145,7 +1146,8 @@ Host domain operations should validate, approve, execute, and record their own c
 
 ### 11.1. Rationale
 
-Natural blocks often need to embed computed values (for example, paths or JSON envelopes in tests). To keep rendering predictable and explicit, Nighthawk supports interpolation only when the author opts in using Python f-string syntax.
+Natural blocks can compose trusted program fragments and host-authorized configuration through explicit Python f-string syntax.
+Interpolated values become program text under the [trust contract](#3-hard-constraints); task data is supplied through bindings.
 
 ### 11.2. Mechanism
 
