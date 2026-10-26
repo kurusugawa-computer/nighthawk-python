@@ -44,7 +44,8 @@ def test_fragment_includes_raise_error_type_enum_when_bindings_present() -> None
     )
 
     assert "raise needs raise_message." in fragment
-    assert "raise_error_type: ValueError | TypeError" in fragment
+    assert "ValueError | TypeError" in fragment
+    assert "Null or omission uses Exception" in fragment
 
 
 def test_fragment_mentions_result_field_and_conditions_default_pass() -> None:

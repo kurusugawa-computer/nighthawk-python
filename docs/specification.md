@@ -785,9 +785,9 @@ Outcome kinds:
 - `raise`:
     - Failure.
     - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.
-    - `raise_error_type` is optional. If provided, it MUST be one of the exception type names listed in the prompt.
-    - The host enforces this using the structured output JSON Schema: when `raise_error_type` is allowed for a block, its schema is an `enum` over the allowed exception type names.
-    - The adapter resolves the exception class through the common operation pipeline. Without a supplied class, it uses `Exception`.
+    - A non-null `raise_error_type` MUST be one of the exception binding names listed in the prompt. Bindings may use aliases, such as `selected_error = ValueError`.
+    - The structured output JSON Schema constrains this field to the allowed binding names or `null`, preserving the default even when a provider requires every field.
+    - The adapter resolves the exception class through the common operation pipeline. An omitted or null selection uses `Exception`.
     - The runner constructs the final exception with `raise_message` after commit inspection.
 
 The implementation chooses strict parsing. Any non-JSON final response is an error.

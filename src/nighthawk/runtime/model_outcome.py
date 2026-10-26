@@ -62,12 +62,6 @@ type ModelOutcome = Annotated[
 ]
 
 
-# OpenAI / Codex structured outputs require the root JSON schema to be a single object (no anyOf at root level).
-# ModelOutcome is a discriminated union whose JSON schema produces anyOf at root, which is rejected by these providers.
-# By placing the union inside a ``result`` field, the anyOf moves to a nested level where it is accepted.
-# Additionally, each variant uses ``additionalProperties: false`` so that kind-specific properties are enforced (e.g. ``kind: "return"`` cannot include ``raise_message``).
-
-
 class ModelStepResponse(BaseModel):
     """Envelope that wraps ModelOutcome for LLM structured output."""
 
@@ -76,91 +70,13 @@ class ModelStepResponse(BaseModel):
     result: ModelOutcome
 
 
-def _build_pass_variant_schema() -> dict[str, object]:
-    return {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "const": "pass"},
-        },
-        "required": ["kind"],
-        "additionalProperties": False,
-    }
-
-
-def _build_return_variant_schema() -> dict[str, object]:
-    return {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "const": "return"},
-            "return_expression": {"type": "string"},
-        },
-        "required": ["kind", "return_expression"],
-        "additionalProperties": False,
-    }
-
-
-def _build_break_variant_schema() -> dict[str, object]:
-    return {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "const": "break"},
-        },
-        "required": ["kind"],
-        "additionalProperties": False,
-    }
-
-
-def _build_continue_variant_schema() -> dict[str, object]:
-    return {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "const": "continue"},
-        },
-        "required": ["kind"],
-        "additionalProperties": False,
-    }
-
-
-def _build_raise_variant_schema(
-    *,
-    raise_error_type_binding_names: tuple[str, ...],
-) -> dict[str, object]:
-    properties: dict[str, object] = {
-        "kind": {"type": "string", "const": "raise"},
-        "raise_message": {"type": "string"},
-    }
-    required: list[str] = ["kind", "raise_message"]
-
-    if raise_error_type_binding_names:
-        properties["raise_error_type"] = {
-            "type": "string",
-            "enum": list(raise_error_type_binding_names),
-        }
-
-    return {
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": False,
-    }
-
-
-def _build_variant_schema(
-    kind: OutcomeKind,
-    *,
-    raise_error_type_binding_names: tuple[str, ...],
-) -> dict[str, object]:
-    match kind:
-        case "pass":
-            return _build_pass_variant_schema()
-        case "return":
-            return _build_return_variant_schema()
-        case "break":
-            return _build_break_variant_schema()
-        case "continue":
-            return _build_continue_variant_schema()
-        case "raise":
-            return _build_raise_variant_schema(raise_error_type_binding_names=raise_error_type_binding_names)
+_kind_to_model: dict[OutcomeKind, type[BaseModel]] = {
+    "pass": ModelPass,
+    "return": ModelReturn,
+    "break": ModelBreak,
+    "continue": ModelContinue,
+    "raise": ModelRaise,
+}
 
 
 def build_model_response_schema(
@@ -171,24 +87,32 @@ def build_model_response_schema(
     if not allowed_kinds:
         raise ValueError("allowed_kinds must not be empty")
 
-    variants: list[dict[str, object]] = [
-        _build_variant_schema(kind, raise_error_type_binding_names=raise_error_type_binding_names) for kind in allowed_kinds
-    ]
+    variants = []
+    for kind in allowed_kinds:
+        variant = _kind_to_model[kind].model_json_schema()
+        if kind == "raise":
+            if raise_error_type_binding_names:
+                variant["properties"]["raise_error_type"] = {
+                    "type": ["string", "null"],
+                    "enum": [*raise_error_type_binding_names, None],
+                }
+            else:
+                del variant["properties"]["raise_error_type"]
+        variants.append(variant)
 
     if len(variants) == 1:
         result_schema: dict[str, object] = variants[0]
     else:
         result_schema = {"anyOf": variants}
 
-    schema: dict[str, object] = {
+    # Structured-output providers require an object root, even for multiple outcomes.
+    return {
         "type": "object",
         "title": "ModelStepResponse",
         "properties": {"result": result_schema},
         "required": ["result"],
         "additionalProperties": False,
     }
-
-    return schema
 
 
 def build_model_response_instructions(
@@ -227,7 +151,9 @@ def build_model_response_instructions(
         raise_line = "raise needs raise_message."
         if raise_error_type_binding_names:
             error_type_names_text = " | ".join(raise_error_type_binding_names)
-            raise_line += f" Optional raise_error_type: {error_type_names_text}."
+            raise_line += (
+                f" Use raise_error_type to select the requested exception binding: {error_type_names_text}. Null or omission uses Exception."
+            )
         lines.append(raise_line)
 
     return "\n".join(lines) + "\n"

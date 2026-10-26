@@ -1,12 +1,58 @@
 import pytest
 from pydantic import BaseModel
-from pydantic_ai.messages import BinaryContent
+from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 from nighthawk.runtime.scoping import get_usage_meter
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [ValueError, TypeError])
+@pytest.mark.parametrize("embedded", [False, True], ids=["natural-function", "embedded-step"])
+@pytest.mark.parametrize("selection", ["selected_error", None])
+async def test_executor_exposes_exception_binding_aliases(error_type: type[Exception], embedded: bool, selection: str | None) -> None:
+    events: list[nh.lifecycle.StepFinished] = []
+
+    async def respond(messages: list[ModelMessage], information: AgentInfo) -> ModelResponse:
+        output_tool = information.output_tools[0]
+        variant = output_tool.parameters_json_schema["properties"]["result"]
+        exception_schema = variant["properties"]["raise_error_type"]
+        assert "selected_error" in exception_schema["enum"]
+        assert None in exception_schema["enum"]
+        return ModelResponse(
+            parts=[ToolCallPart(output_tool.name, {"result": {"kind": "raise", "raise_message": "invalid input", "raise_error_type": selection}})]
+        )
+
+    @nh.function
+    async def reject(selected_error: type[Exception]) -> None:
+        """execute
+        ---
+        deny: [pass, return]
+        ---
+        Raise <selected_error> with message 'invalid input'.
+        """
+
+    with nh.run(execution_model=FunctionModel(respond)), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(events.append)):
+        with pytest.raises(error_type if selection is not None else Exception, match="^invalid input$") as caught:
+            if embedded:
+                await nh.runtime.execute_step_async(
+                    nh.runtime.StepDefinition(
+                        "---\ndeny: [pass, return]\n---\nRaise <selected_error> with message 'invalid input'.",
+                        input_binding_names=("selected_error",),
+                    ),
+                    name_to_value={"selected_error": error_type},
+                    write_binding=lambda name, value: pytest.fail("Raising must not write bindings"),
+                )
+            else:
+                await reject(error_type)
+        assert len(events) == 1
+        assert isinstance(events[0], nh.lifecycle.StepRaised)
+        assert events[0].exception is caught.value
+        assert type(caught.value) is (error_type if selection is not None else Exception)
 
 
 def test_borrowed_agent_preserves_identity_without_constructing_a_managed_agent(monkeypatch: pytest.MonkeyPatch) -> None:

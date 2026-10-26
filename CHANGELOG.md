@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Allow exception types passed through Python binding aliases to be selected by Natural blocks, and preserve default `Exception` selection under strict structured output.
 - Preserve complete usage deltas in per-call budget checks and evaluate estimated cumulative costs from predicted total usage.
 - Leave the host environment unchanged during Claude SDK requests; child-process environment handling belongs to the pinned SDK.
 - Include cache reads and writes in Claude Code input-token totals through one shared CLI and SDK usage conversion.

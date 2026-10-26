@@ -44,7 +44,6 @@ from .scoping import (
     system_prompt_suffix_fragment_scope,
 )
 from .step_context import (
-    _MISSING,
     StepContext,
     ToolResultRenderingPolicy,
     resolve_name_in_step_context,
@@ -387,17 +386,10 @@ class AgentStepExecutor:
 
         referenced_names, _ = extract_references_and_program(processed_natural_program)
 
-        error_type_candidate_names: set[str] = set(referenced_names)
-        for name, value in step_context.step_locals.items():
-            if isinstance(value, type) and issubclass(value, BaseException) and value.__name__ == name:
-                error_type_candidate_names.add(name)
-
         error_type_binding_name_list: list[str] = []
-        for name in sorted(error_type_candidate_names):
+        for name in sorted(set(referenced_names) | step_context.step_locals.keys()):
             value = resolve_name_in_step_context(step_context, name)
-            if value is _MISSING:
-                continue
-            if not isinstance(value, type) or not issubclass(value, BaseException) or value.__name__ != name:
+            if not isinstance(value, type) or not issubclass(value, BaseException):
                 continue
             error_type_binding_name_list.append(name)
 

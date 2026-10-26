@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -12,13 +13,66 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic_ai import models
 from pydantic_ai.capabilities import Hooks
-from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
+
+
+@pytest.mark.asyncio
+async def test_managed_model_sends_native_images_with_binding_labels() -> None:
+    requests: list[dict[str, Any]] = []
+    images = [BinaryContent(data=b"\x89PNG\r\n\x1a\n" + bytes([index]), media_type="image/png") for index in range(3)]
+
+    class Transport(httpx2.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+            body = json.loads(request.content)
+            requests.append(body)
+            output_tool = next(tool for tool in body["tools"] if tool["name"] not in {"nh_evaluate", "nh_assign"})
+            return httpx2.Response(
+                200,
+                json={
+                    "id": "resp_mock",
+                    "object": "response",
+                    "created_at": 1,
+                    "status": "completed",
+                    "model": "gpt-6-luna",
+                    "output": [
+                        {
+                            "type": "function_call",
+                            "id": "fc_mock",
+                            "call_id": "call_mock",
+                            "name": output_tool["name"],
+                            "arguments": json.dumps({"result": {"kind": "pass"}}),
+                        }
+                    ],
+                },
+            )
+
+    @nh.function
+    async def inspect(first_image: BinaryContent, second_image: BinaryContent, third_image: BinaryContent) -> None:
+        """execute
+        Inspect <first_image>, <second_image>, and <third_image> as actual images.
+        """
+
+    async with AsyncOpenAI(
+        api_key="synthetic-credential", base_url="https://mock.invalid/v1", http_client=httpx2.AsyncClient(transport=Transport())
+    ) as client:
+        model = OpenAIResponsesModel("gpt-6-luna", provider=OpenAIProvider(openai_client=client))
+        with nh.run(execution_model=model):
+            await inspect(*images)
+
+    assert len(requests) == 1
+    content = [part for message in requests[0]["input"] if message.get("role") == "user" for part in message["content"]]
+    image_indices = [index for index, part in enumerate(content) if part["type"] == "input_image"]
+    assert len(image_indices) == len(images)
+    for index, name, image in zip(image_indices, ("first_image", "second_image", "third_image"), images, strict=True):
+        assert content[index]["image_url"] == "data:image/png;base64," + base64.b64encode(image.data).decode("ascii")
+        assert content[index - 1]["type"] == "input_text"
+        assert f"{name}: BinaryContent = " in content[index - 1]["text"]
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
