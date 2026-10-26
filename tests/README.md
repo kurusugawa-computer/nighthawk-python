@@ -14,6 +14,7 @@ Choose a test owner by the behavior that would break, including when a test call
 | `backends/` | Backend settings and protocols, text and MCP projection, callback transport, and process cleanup using local stubs. |
 | `resilience/` | Retry, fallback, voting, timeout, circuit breaker, budget, and their composition. |
 | `docs/` | Published examples executed or compared against actual runtime output, navigation, anchors, and API inventories. |
+| `distribution/` | Installed wheel contracts, including exported types and decorator signatures through `py.typed`. |
 | `test_model_evaluation.py` | Model-evaluation selection, trial isolation, failure/interruption accounting, and evidence recording through actual pytest subprocesses. |
 | `integration/` | Opt-in tests using real providers or coding agent executables, including repeated model-behavior and Python-composition evaluations. |
 | `support/` | Shared executors, contexts, prompt helpers, tool fixtures, and backend stubs; never collected as tests. |
@@ -32,6 +33,7 @@ Within `runtime/`, use these owners:
 - `test_environment.py`: name resolution, precedence, and live or inherited value views, including application names resembling generated helpers.
 - `test_prompt_values.py`: value presentation in prompt context, including those application names.
 - `test_step_executor.py`: agent adaptation, scoped tool delivery, prompt content, and completed usage forwarding.
+- `test_scoping.py`: run and scope identities, executor installation, usage-meter inheritance, and restoration.
 - `test_decisions.py`: OpenAI Decisions through a local SDK transport, typed contracts, full evidence, scoped models, failures, and per-step details.
 - `test_model_selection.py`: model/configuration resolution, executor policy, and restoration across function and scope boundaries.
 - `test_model_candidate.py`: resolving model-facing return and exception expressions, including admission before evaluation.
@@ -42,6 +44,8 @@ Within `runtime/`, use these owners:
 Commit inspection belongs in `oversight/`, including embedded output replacement and rejection.
 Assignment failure, cancellation, and terminal delivery belong in `lifecycle/`, including host writers.
 Test pure binding rules once in their owner and keep entry-point tests focused on their integration.
+Configuration value validation belongs in `test_configuration.py`, executor construction in `runtime/test_step_executor.py`, and function interception in `test_function_call.py`.
+Decision syntax belongs in `natural/test_blocks.py`, while scripted decision recording belongs in `test_testing.py`; using a decision block does not change the owner of a contract.
 Tool-result rendering and response budgets belong in `tools/test_contracts.py`; nested discovery content belongs in `tools/test_discovery_content.py`.
 Provider toolset execution belongs in `tools/test_execution.py`, and pure JSON projection belongs in `test_json_renderer.py`.
 Backend process termination and reaping belong in `backends/test_process_management.py`; callback transport belongs in `backends/test_tool_transport.py`.
@@ -57,11 +61,14 @@ Use `conftest.py` for fixtures that pytest injects, and let pytest own collectio
 User-facing example code lives in docs and is executed by extraction tests in `tests/docs/`.
 `docs/test_links.py` builds the site and verifies internal links and anchors in rendered HTML, using MkDocs' actual Markdown and API rendering.
 Runtime test fixtures live in `tests/support/`; they must not import the published examples.
-Set `NIGHTHAWK_DISTRIBUTION_PYTHON` to a fresh environment's Python executable when running `tests/docs/test_runtime_examples.py` to verify the installed wheel with those same documented examples.
+The shared `package_python` fixture selects the current interpreter or verifies the fresh environment selected by `NIGHTHAWK_DISTRIBUTION_PYTHON`.
+Set that variable and run `tests/docs/test_runtime_examples.py tests/distribution/` to verify both published examples and installed type contracts against the wheel.
 
 Retain failure cases that enforce current boundaries, such as rejected effects, invalid outputs, scope isolation, and cancellation.
 Remove checks whose only purpose is to remember deleted APIs, obsolete paths, exact documentation prose, or behavior already covered by the same owner.
 Do not duplicate a dependency's own tests unless exercising a Nighthawk adapter contract.
+Test tokenizer selection and failure propagation with a local encoding loader so those checks do not download vocabulary data.
+Bound asynchronous coordination waits and propagate child-task failures, for example with `asyncio.timeout` and `asyncio.TaskGroup`; retain independent process deadlines for cleanup that may resist cancellation.
 
 Run the deterministic suite with `uv run pytest -q`.
 Backend contract tests may start local HTTP servers and subprocesses, but do not require provider credentials.

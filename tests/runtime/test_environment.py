@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from types import CellType
 
 import pytest
@@ -214,3 +215,35 @@ def test_unbound_application_prefix_blocks_fallback(cell: bool) -> None:
         environment.resolve(name)
     assert environment.describe(name)["unbound"] is True
     assert name not in environment.snapshot_working_state()
+
+
+class FalseyMapping(dict[str, object]):
+    def __bool__(self) -> bool:
+        return False
+
+
+@pytest.mark.parametrize("field", ["python_name_to_cell", "task_name_to_value", "binding_name_to_annotation", "binding_name_to_type"])
+def test_environment_optional_mappings_reject_none_and_invalid_keys(field: str) -> None:
+    for invalid in (None, nh.UNSET, [], {1: object()}):
+        with pytest.raises(TypeError, match=field):
+            StepEnvironment(python_name_to_value={}, python_globals={}, **{field: invalid})  # type: ignore[arg-type]
+
+
+def test_falsey_mappings_keep_live_values_and_explicit_none() -> None:
+    value = []
+    cell = CellType(value)
+    environment = StepEnvironment(
+        python_name_to_value=FalseyMapping({"local": value}),
+        python_globals={},
+        python_name_to_cell=FalseyMapping({"cell": cell}),  # type: ignore[arg-type]
+        task_name_to_value=FalseyMapping({"task": value, "none": None}),
+        binding_name_to_annotation=FalseyMapping({"local": list}),
+        binding_name_to_type=FalseyMapping({"local": list}),
+    )
+    assert environment.resolve("local") is value
+    assert environment.resolve("cell") is value
+    assert environment.resolve("task") is value
+    assert environment.resolve("none") is None
+    assert environment.binding_name_to_type == {"local": list}
+    assert environment.expression_namespace(FalseyMapping({"local": None}))["local"] is None
+    assert isinstance(environment.task_name_to_value, Mapping)

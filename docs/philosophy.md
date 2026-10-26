@@ -27,8 +27,8 @@ Keep execution interfaces composable through Python calls and existing libraries
 
 ### Agents can understand and revise programs
 
-Make intent, dependencies, result meaning, effects, failures, and execution requirements understandable through function contracts.
-Agents must be able to discover, compose, assess, and revise programs without depending on development history or human authorship.
+Public contracts must expose intent, dependencies, result meaning, effects, failure boundaries, and ownership of execution resources and policy.
+Make the ordinary usage path discoverable so agents can choose an entry point, compose programs, and locate the contract to revise without depending on development history or human authorship.
 
 ### Program text is code
 
@@ -59,6 +59,11 @@ Connect assessments to what ran and its execution conditions; a valid output or 
 
 Prefer ordinary Python functions to minimize the work of importing, inspecting, testing, and replacing reusable units.
 Use a specialized execution interface when function composition cannot express a required contract at acceptable total burden.
+
+### One clear entry point per contract
+
+Prefer one ordinary entry point for each distinct contract, with consistent omission, replacement, and failure semantics.
+Use additional entry points when they clarify a difference callers need to understand, such as resource ownership; justify the added vocabulary by its benefit to callers and hosts.
 
 ### Explicit rules over judgment where rules suffice
 

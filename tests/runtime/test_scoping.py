@@ -248,3 +248,24 @@ def test_host_integration_defaults() -> None:
         assert nh.get_tools() == ()
         assert nh.get_capabilities() == ()
         assert nh.get_oversight() is None
+
+
+@pytest.mark.parametrize("invalid", [None, "", {}, False])
+def test_run_identifier_rejection_preserves_parent(invalid: object) -> None:
+    with nh.run(StubExecutor(), run_id="parent"):
+        reference = nh.get_execution_reference()
+        with pytest.raises((TypeError, ValueError)), nh.run(StubExecutor(), run_id=invalid):  # type: ignore[arg-type]
+            pytest.fail("Invalid run identifier installed context")
+        assert nh.get_execution_reference() is reference
+
+
+def test_run_omission_creates_identity_and_meter_while_scope_inherits_meter() -> None:
+    with nh.run(StubExecutor()):
+        reference = nh.get_execution_reference()
+        meter = nh.get_usage_meter()
+        with nh.scope(usage_meter=nh.UNSET):
+            assert nh.get_usage_meter() is meter
+        with nh.run(StubExecutor(), run_id=nh.UNSET, usage_meter=nh.UNSET):
+            assert nh.get_execution_reference().run_id != reference.run_id
+            assert nh.get_usage_meter() is not meter
+        assert nh.get_usage_meter() is meter

@@ -123,7 +123,7 @@ class PreservingExecutor:
             configuration = configuration.model_copy(update={"execution_model": self.model_name_to_model[model]})
         elif not any(model is allowed for allowed in self.model_name_to_model.values()):
             raise PermissionError("Borrowed model is not allowed")
-        return PreservingExecutor(nh.AgentStepExecutor.from_configuration(configuration=configuration), self.model_name_to_model, self.observer)
+        return PreservingExecutor(nh.AgentStepExecutor(configuration=configuration), self.model_name_to_model, self.observer)
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         assert self.observer in nh.get_capabilities()

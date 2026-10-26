@@ -18,7 +18,7 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=run_configuration,
     )
 
@@ -56,7 +56,7 @@ def test_claude_skill() -> None:
             ).model_dump(),
         )
 
-        step_executor = nh.AgentStepExecutor.from_configuration(
+        step_executor = nh.AgentStepExecutor(
             configuration=configuration,
         )
         with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
@@ -99,7 +99,7 @@ def test_claude_skill_calc() -> None:
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=configuration,
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
@@ -137,7 +137,7 @@ def test_claude_mcp_callback() -> None:
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=configuration,
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):

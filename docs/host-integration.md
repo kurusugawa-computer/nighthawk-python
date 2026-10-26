@@ -53,7 +53,7 @@ class AllowedModels:
             configuration = configuration.model_copy(update={"execution_model": self.model_name_to_model[model]})
         elif not any(model is allowed for allowed in self.model_name_to_model.values()):
             raise PermissionError("Borrowed model is not allowed")
-        executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+        executor = nh.AgentStepExecutor(configuration=configuration)
         return AllowedModels(executor, self.model_name_to_model)
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
@@ -91,7 +91,7 @@ async def child() -> None:
 
 model_name_to_model = {"allowed:A": simulated_model("A"), "allowed:B": simulated_model("B")}
 executor = AllowedModels(
-    nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model_name_to_model["allowed:A"])),
+    nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=model_name_to_model["allowed:A"])),
     model_name_to_model,
 )
 with nh.run(executor):
@@ -293,7 +293,7 @@ def investigate() -> None:
 
 
 budget = RequestBudget(threshold=100)
-executor = nh.AgentStepExecutor.from_configuration(
+executor = nh.AgentStepExecutor(
     configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(simulated_response)),
 )
 with nh.run(executor), nh.scope(capabilities=[budget]):

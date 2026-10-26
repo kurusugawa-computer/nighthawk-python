@@ -41,7 +41,7 @@ def local_executor(monkeypatch):
         nh.get_usage_meter().record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
         call.input_binding_name_to_value["items"].append(9)
         return pass_response(binding_name_to_value={"result": None})
-    monkeypatch.setattr(nh.AgentStepExecutor, "from_configuration", lambda **arguments: CallbackExecutor(respond))
+    monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", lambda self, selection: CallbackExecutor(respond))
 """)
     (tmp_path / "test_trials.py").write_text("""
 import pytest

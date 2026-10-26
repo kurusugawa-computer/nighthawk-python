@@ -92,7 +92,7 @@ def make_executor() -> nh.AgentStepExecutor:
             parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "return", "return_expression": "1 + 1"}}, "finish")]
         )
 
-    return nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
+    return nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
 
 
 def run_sync_example() -> int:

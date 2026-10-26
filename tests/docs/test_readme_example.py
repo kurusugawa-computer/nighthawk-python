@@ -38,11 +38,11 @@ def test_readme_example(
 
     executor = CallbackExecutor(respond)
 
-    def build_executor(*, configuration: nh.StepExecutorConfiguration) -> CallbackExecutor:
-        assert isinstance(configuration, nh.StepExecutorConfiguration)
+    def select_executor(self: nh.AgentStepExecutor, selection: nh.ModelSelection) -> CallbackExecutor:
+        assert selection.apply(self.configuration).execution_model is not None
         return executor
 
-    monkeypatch.setattr(nh.AgentStepExecutor, "from_configuration", staticmethod(build_executor))
+    monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", select_executor)
     if invalid_output:
         with pytest.raises(ExecutionError) as failure:
             runpy.run_path(str(example_path))

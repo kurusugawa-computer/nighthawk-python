@@ -326,3 +326,26 @@ def test_awaited_child_finally_finishes_before_parent_handler_returns() -> None:
         assert handler.calls[1].parent_call_id == handler.calls[0].call_id
 
     asyncio.run(execute())
+
+
+def test_function_handler_inherits_replaces_clears_and_validates_before_entry() -> None:
+    @nh.function
+    def function() -> int:
+        return 1
+
+    first, second = RecordingHandler(), RecordingHandler()
+    with nh.function_call_scope(first):
+        with nh.function_call_scope():
+            assert function() == 1
+        with nh.function_call_scope(nh.UNSET):
+            assert function() == 1
+        with nh.function_call_scope(None):
+            assert function() == 1
+        with nh.function_call_scope(second):
+            assert function() == 1
+        for invalid in ({}, {"invoke": function}, object()):
+            with pytest.raises(TypeError), nh.function_call_scope(invalid):  # type: ignore[arg-type]
+                pytest.fail("Invalid handler entered context")
+        assert function() == 1
+    assert len(first.calls) == 3
+    assert len(second.calls) == 1

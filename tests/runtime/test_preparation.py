@@ -299,7 +299,6 @@ def test_scope_task_references_are_merged_into_step_context() -> None:
         f()
 
     assert "search_repository" in observed_task_reference_name_set
-    assert "SHADOWED_NUMBER" not in observed_task_reference_name_set
 
 
 def test_unannotated_binding_type_inferred_from_initial_value():

@@ -86,8 +86,8 @@ Do not assert exact prose or retain tests solely to remember removed names and p
 
 | Test owner | Contract |
 | --- | --- |
-| `tests/docs/test_integrity.py` | Shared README/index example, navigation targets, and explicit API members. |
-| `tests/docs/test_links.py` | Rendered internal links and anchors, including absolute documentation URLs. |
+| `tests/docs/test_integrity.py` | Shared README/index example and explicit API members. |
+| `tests/docs/test_links.py` | Strict site build, navigation targets, and rendered internal links and anchors, including absolute documentation URLs. |
 | `tests/docs/test_prompt_examples.py` | Marked prompt examples in Natural blocks and the carry example in Patterns. |
 | `tests/docs/test_coding_agent_examples.py` | Runnable coding-agent guidance. |
 | `tests/docs/test_runtime_examples.py` | Marked runtime, host, embedded, and verification examples, also against an installed wheel. |

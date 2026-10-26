@@ -25,7 +25,7 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
         assert saved_name_to_value == {"result": 17}
         events.append(event)
 
-    executor = nh.AgentStepExecutor.from_configuration(
+    executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
         )
@@ -62,7 +62,7 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
 async def test_async_function_call():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
@@ -88,7 +88,7 @@ async def test_async_function_call():
 def test_multiple_blocks_one_call_scope():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
@@ -116,7 +116,7 @@ def test_multiple_blocks_one_call_scope():
 def test_provided_tools_smoke():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
@@ -161,7 +161,7 @@ async def test_embedded_selection_and_request_observation():
             """
             return 0
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+    executor = nh.AgentStepExecutor(configuration=configuration)
     with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer]):
         assert await child() == 17
         assert nh.get_step_executor() is executor

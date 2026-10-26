@@ -1,8 +1,5 @@
-import json
-import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -20,34 +17,6 @@ _EXAMPLE_NAME_TO_OUTPUT = {
     "request_budget": "observed_tokens=120; next_request_refused=True; aggregate_tokens=0",
     "notification_cleanup": "returned_after_notification_cleanup=True",
 }
-
-
-@pytest.fixture(scope="module")
-def example_python(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    installed_python = os.environ.get("NIGHTHAWK_DISTRIBUTION_PYTHON")
-    if installed_python is None:
-        return Path(sys.executable)
-    executable = Path(installed_python).expanduser().absolute()
-    assert executable.is_file(), f"Distribution interpreter does not exist: {executable}"
-    probe = subprocess.run(
-        [
-            str(executable),
-            "-I",
-            "-c",
-            "import json, sys, nighthawk; print(json.dumps({'prefix': sys.prefix, 'package': nighthawk.__file__}))",
-        ],
-        cwd=tmp_path_factory.mktemp("distribution_origin"),
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    origin_name_to_path = json.loads(probe.stdout)
-    prefix = Path(origin_name_to_path["prefix"]).resolve()
-    package = Path(origin_name_to_path["package"]).resolve()
-    assert not prefix.is_relative_to(_REPOSITORY_ROOT), "Distribution environment must be outside the source tree"
-    assert package.is_relative_to(prefix), f"Nighthawk must come from the distribution environment: {package}"
-    return executable
 
 
 @pytest.fixture
@@ -72,10 +41,10 @@ def example_name_to_path(tmp_path: Path) -> dict[str, Path]:
 
 
 @pytest.mark.parametrize("example_name", _EXAMPLE_NAME_TO_OUTPUT)
-def test_runtime_example(example_name: str, example_name_to_path: dict[str, Path], example_python: Path) -> None:
+def test_runtime_example(example_name: str, example_name_to_path: dict[str, Path], package_python: Path) -> None:
     source_path = example_name_to_path[example_name]
     completed = subprocess.run(
-        [str(example_python), "-I", str(source_path)],
+        [str(package_python), "-I", str(source_path)],
         cwd=source_path.parent,
         capture_output=True,
         text=True,
@@ -83,62 +52,3 @@ def test_runtime_example(example_name: str, example_name_to_path: dict[str, Path
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stdout.strip() == _EXAMPLE_NAME_TO_OUTPUT[example_name]
-
-
-@pytest.mark.skipif(not os.environ.get("NIGHTHAWK_DISTRIBUTION_PYTHON"), reason="Requires an installed distribution outside the source tree")
-def test_installed_distribution_preserves_function_types(example_python: Path, tmp_path: Path) -> None:
-    source_path = tmp_path / "consumer.py"
-    source_path.write_text(
-        "from typing import assert_type\n"
-        "import nighthawk as nh\n"
-        "from nighthawk.resilience import circuit_breaker, timeout\n"
-        "from nighthawk.runtime import StepDefinition\n"
-        "\n"
-        "@nh.function\n"
-        "def label(text: str) -> str:\n"
-        "    return text\n"
-        "\n"
-        "@nh.function\n"
-        "async def label_async(text: str) -> str:\n"
-        "    return text\n"
-        "\n"
-        "assert_type(label('ready'), str)\n"
-        "assert_type(nh.get_function_definition(label), nh.FunctionDefinition | None)\n"
-        "assert_type(StepDefinition('Read the evidence.'), StepDefinition)\n"
-        "assert_type(timeout(seconds=1)(circuit_breaker()(label))('ready'), str)\n"
-        "\n"
-        "class Reader:\n"
-        "    @circuit_breaker()\n"
-        "    def read(self, text: str) -> str:\n"
-        "        return text\n"
-        "\n"
-        "    @circuit_breaker()\n"
-        "    async def read_async(self, text: str) -> str:\n"
-        "        return text\n"
-        "\n"
-        "assert_type(Reader().read('ready'), str)\n"
-        "assert_type(Reader.read(Reader(), 'ready'), str)\n"
-        "\n"
-        "async def consume() -> None:\n"
-        "    assert_type(await label_async('ready'), str)\n"
-        "    assert_type(await timeout(seconds=1)(circuit_breaker()(label_async))('ready'), str)\n"
-        "    assert_type(await Reader().read_async('ready'), str)\n"
-    )
-    configuration_path = tmp_path / "pyrightconfig.json"
-    configuration_path.write_text(
-        json.dumps(
-            {
-                "include": [source_path.name],
-                "typeCheckingMode": "strict",
-                "useLibraryCodeForTypes": False,
-            }
-        )
-    )
-    completed = subprocess.run(
-        [sys.executable, "-m", "pyright", "--project", str(configuration_path), "--pythonpath", str(example_python)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr

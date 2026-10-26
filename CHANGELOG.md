@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Limit tokenizer fallback to unknown model names and propagate encoding data loading failures.
 - Preserve Python name resolution and host admission for recursive Natural functions, including global rebinding.
 - Interpret Natural blocks in loop `else` clauses in their enclosing control context, so `break` and `continue` apply only to a surrounding active loop.
 - Preserve Python composition across resilience transformers: synchronous timeout inherits caller context, circuit breakers preserve coroutine detection and method binding, and nested breakers retain independent state.
@@ -24,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Remove the unused `UsageMeter.record(kind=...)` argument and internal per-kind accumulation; lifecycle records already identify each step's block kind and model result.
+- Breaking: construct managed executors with `AgentStepExecutor(configuration=...)` and borrow existing execution agents with `AgentStepExecutor.from_agent(...)`. Remove `from_configuration` and the constructor's `agent` argument; decision model selection remains independent on both paths.
+- Clarify API ownership and execution identities, assign tests to their behavioral owners, and separate installed distribution type checks from documentation examples.
 - Standardize current OpenAI test models and documentation examples on `gpt-6-luna` and `gpt-6.1-sol`, including explicit Codex integration model selection.
 - Breaking: `execution_model_settings` names execution overrides explicitly alongside `decision_model_settings`. `StepPromptTemplates` uses `system_prompt_template` and `user_prompt_template`.
 - Breaking: runtime operations are `evaluate_expression` and `assign_expression`, with matching asynchronous entry points. The model-facing evaluation tool is `nh_evaluate`, including coding-agent MCP names.

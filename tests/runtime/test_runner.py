@@ -12,8 +12,6 @@ from nighthawk.testing import ScriptedExecutor, break_response, continue_respons
 
 GLOBAL_NUMBER = 7
 
-SHADOWED_NUMBER = 1
-
 
 class RuntimeChildModel(BaseModel):
     value: int

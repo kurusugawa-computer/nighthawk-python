@@ -9,15 +9,23 @@ from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 from nighthawk.runtime.scoping import get_usage_meter
 
 
-def test_agent_step_executor_constructor_supports_standard_path_with_agent() -> None:
+def test_borrowed_agent_preserves_identity_without_constructing_a_managed_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeAgent:
         def run_sync(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             _ = args
             _ = kwargs
             raise AssertionError
 
-    step_executor = nh.AgentStepExecutor(agent=FakeAgent())
-    assert step_executor.configuration.execution_model is None
+    def unexpected(configuration):
+        pytest.fail("Borrowing an agent must not construct a managed agent")
+
+    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", unexpected)
+    agent = FakeAgent()
+    configuration = nh.StepExecutorConfiguration(execution_model="test:borrowed")
+    step_executor = nh.AgentStepExecutor.from_agent(agent=agent, configuration=configuration)
+    assert step_executor.agent is agent
+    assert step_executor.configuration is configuration
+    assert not step_executor.agent_is_managed
 
 
 class RuntimeChildModel(BaseModel):
@@ -225,9 +233,8 @@ def test_external_agent_rejects_instance_configuration() -> None:
             raise AssertionError("No model execution expected")
 
     configuration = nh.StepExecutorConfiguration(execution_model=TestModel())
-    for construct in (nh.AgentStepExecutor, nh.AgentStepExecutor.from_agent):
-        with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
-            construct(configuration=configuration, agent=FakeAgent())
+    with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
+        nh.AgentStepExecutor.from_agent(configuration=configuration, agent=FakeAgent())
 
 
 def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
@@ -267,3 +274,37 @@ def test_agent_step_executor_receives_scoped_tools_in_toolset() -> None:
         "greet,nh_assign,nh_evaluate",
         "nh_assign,nh_evaluate",
     ]
+
+
+class FakeAgent:
+    def run_sync(self, *arguments, **keywords):
+        raise AssertionError("No agent execution expected")
+
+
+@pytest.mark.parametrize("invalid", [None, {}, {"model": "test:model"}, False, nh.Merge({})])
+def test_executor_rejects_invalid_configuration_before_creating_agent(invalid: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected(configuration):
+        pytest.fail("Invalid configuration constructed an agent")
+
+    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", unexpected)
+    with pytest.raises(TypeError, match="configuration"):
+        nh.AgentStepExecutor(configuration=invalid)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="configuration"):
+        nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=invalid)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("borrowed", [False, True])
+def test_executor_defaults_and_falsey_configuration_preserve_explicit_selection(borrowed: bool) -> None:
+    class FalseyConfiguration(nh.StepExecutorConfiguration):
+        def __bool__(self) -> bool:
+            return False
+
+    def construct(configuration: nh.StepExecutorConfiguration | nh.UnsetType = nh.UNSET) -> nh.AgentStepExecutor:
+        return nh.AgentStepExecutor.from_agent(agent=FakeAgent(), configuration=configuration) if borrowed else nh.AgentStepExecutor(configuration)
+
+    first = construct()
+    second = construct(nh.UNSET)
+    assert first.configuration == second.configuration
+    assert first.configuration is not second.configuration
+    configuration = FalseyConfiguration(execution_model_settings={"temperature": 0})
+    assert construct(configuration).configuration is configuration

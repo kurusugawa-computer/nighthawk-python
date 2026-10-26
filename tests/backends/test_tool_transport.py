@@ -129,11 +129,12 @@ def test_caller_cancellation_cancels_transport_and_pending_handler() -> None:
             finally:
                 effects.append("provider stopped")
 
-        task = asyncio.create_task(ToolTransport().run(request))
-        await entered.wait()
-        task.cancel("caller cancelled")
-        with pytest.raises(asyncio.CancelledError, match="caller cancelled"):
-            await task
+        async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
+            task = tasks.create_task(ToolTransport().run(request))
+            await entered.wait()
+            task.cancel("caller cancelled")
+            with pytest.raises(asyncio.CancelledError, match="caller cancelled"):
+                await task
 
     asyncio.run(execute())
     assert effects == ["handler stopped", "provider stopped"]

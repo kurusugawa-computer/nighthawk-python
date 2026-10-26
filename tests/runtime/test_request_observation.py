@@ -16,7 +16,7 @@ def test_nested_model_changes_account_once_before_next_admission() -> None:
     first, second = deterministic_model("A"), deterministic_model("B")
     observer, handler = RequestObserver(), RecordingHandler()
     executor = PreservingExecutor(
-        nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=first)), {"allowed:B": second}, observer
+        nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=first)), {"allowed:B": second}, observer
     )
 
     @nh.function
@@ -80,7 +80,7 @@ def test_unknown_metadata_and_previous_usage_survive_failure() -> None:
     observer = RequestObserver(1000)
     model = ControlledModel("unknown")
     with (
-        nh.run(nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model))),
+        nh.run(nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=model))),
         nh.scope(capabilities=[observer]),
     ):
         block()
@@ -103,14 +103,15 @@ def test_cancellation_is_not_success_and_does_not_shutdown_caller_loop() -> None
         model = ControlledModel("success", entered, release)
         observer = RequestObserver()
         with (
-            nh.run(nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model))),
+            nh.run(nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=model))),
             nh.scope(capabilities=[observer]),
         ):
-            task = asyncio.create_task(async_block())
-            await entered.wait()
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await task
+            async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
+                task = tasks.create_task(async_block())
+                await entered.wait()
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
             assert observer.records[0].status == "interrupted"
             assert observer.records[0].tokens is None
             assert observer.observed_tokens == 0
@@ -125,17 +126,16 @@ def test_concurrent_admissions_can_overrun_then_refuse() -> None:
         model = ControlledModel("success", entered, release)
         observer = RequestObserver()
         with (
-            nh.run(nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model))),
+            nh.run(nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=model))),
             nh.scope(capabilities=[observer]),
         ):
-            first, second = asyncio.create_task(async_block()), asyncio.create_task(async_block())
-            try:
+            async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
+                tasks.create_task(async_block())
+                tasks.create_task(async_block())
                 while model.requests < 2:
                     await asyncio.sleep(0)
                 assert observer.observed_tokens == 0
-            finally:
                 release.set()
-            await asyncio.gather(first, second)
             assert observer.observed_tokens == 120
             with pytest.raises(nh.ExecutionError):
                 await async_block()
@@ -155,7 +155,7 @@ def test_budget_stops_third_request_inside_one_unfinished_block() -> None:
     model = MultiRequestModel("success")
     observer = RequestObserver()
     with (
-        nh.run(nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=model))),
+        nh.run(nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=model))),
         nh.scope(capabilities=[observer]),
     ):
         with pytest.raises(nh.ExecutionError) as caught:

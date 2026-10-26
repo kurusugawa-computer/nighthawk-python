@@ -220,12 +220,15 @@ def _create_execution_agent(
 
 
 class AgentStepExecutor:
-    """Step executor that delegates Natural block execution to a Pydantic AI agent.
+    """Execute Natural blocks using managed agents or a borrowed execution agent.
+
+    The constructor manages execution model selection through configuration.
+    Use ``from_agent`` when an existing agent owns execute model selection.
+    In both cases, decide uses the independently configured decision model.
 
     Attributes:
         configuration: The step executor configuration.
-        agent: The underlying agent instance. If not provided, one is created
-            from the configuration.
+        agent: The execution agent, or None until an execution model is selected.
         token_encoding: The tiktoken encoding resolved from the configuration.
         tool_result_rendering_policy: Policy for rendering tool results.
         agent_is_managed: Whether the agent was created internally from
@@ -235,12 +238,17 @@ class AgentStepExecutor:
     def __init__(
         self,
         configuration: StepExecutorConfiguration | UnsetType = UNSET,
-        agent: StepExecutionAgent | None = None,
+    ) -> None:
+        self._initialize(configuration=configuration, agent=None)
+
+    def _initialize(
+        self,
+        *,
+        configuration: StepExecutorConfiguration | UnsetType,
+        agent: StepExecutionAgent | None,
     ) -> None:
         if not isinstance(configuration, (StepExecutorConfiguration, UnsetType)):
             raise TypeError("configuration must be StepExecutorConfiguration or UNSET")
-        if agent is not None and not isinstance(agent, (AsyncExecutionAgent, SyncExecutionAgent)):
-            raise TypeError("agent must implement the synchronous or asynchronous agent protocol")
         self.configuration = StepExecutorConfiguration() if isinstance(configuration, UnsetType) else configuration
         if agent is not None and self.configuration.execution_model is not None and not isinstance(self.configuration.execution_model, str):
             raise NighthawkError("The external agent owns model selection; configuration.execution_model must be a string")
@@ -262,7 +270,10 @@ class AgentStepExecutor:
         agent: StepExecutionAgent,
         configuration: StepExecutorConfiguration | UnsetType = UNSET,
     ) -> AgentStepExecutor:
-        """Create an executor wrapping an existing agent.
+        """Borrow an existing agent for execute blocks without constructing another.
+
+        The supplied agent owns execute model selection and its resource lifetime.
+        Decide blocks use configuration.decision_model independently.
 
         Args:
             agent: A pre-configured agent to use for step execution.
@@ -271,18 +282,9 @@ class AgentStepExecutor:
         """
         if not isinstance(agent, (AsyncExecutionAgent, SyncExecutionAgent)):
             raise TypeError("agent must implement the synchronous or asynchronous agent protocol")
-        return cls(configuration=configuration, agent=agent)
-
-    @classmethod
-    def from_configuration(
-        cls,
-        *,
-        configuration: StepExecutorConfiguration,
-    ) -> AgentStepExecutor:
-        """Create an executor from a configuration, building a managed agent internally."""
-        if not isinstance(configuration, StepExecutorConfiguration):
-            raise TypeError("configuration must be StepExecutorConfiguration")
-        return cls(configuration=configuration)
+        executor = cls.__new__(cls)
+        executor._initialize(configuration=configuration, agent=agent)
+        return executor
 
     def resolve_model_selection(self, selection: ModelSelection) -> StepExecutor:
         """Resolve selection; subclasses must explicitly implement preserving resolution."""
@@ -290,7 +292,7 @@ class AgentStepExecutor:
             raise NighthawkError("AgentStepExecutor subclasses must implement a preserving resolve_model_selection")
         configuration = selection.apply(self.configuration)
         if self.agent_is_managed:
-            return AgentStepExecutor.from_configuration(configuration=configuration)
+            return AgentStepExecutor(configuration=configuration)
         if configuration.execution_model != self.configuration.execution_model:
             raise NighthawkError("The external agent owns model selection; scope cannot switch its model")
         if self.agent is None:
@@ -329,7 +331,7 @@ class AgentStepExecutor:
         # Accessing response requires a real response from this invocation, even if a capability supplies output.
         _ = result.response
         request.step_context.model_result = result
-        get_usage_meter().record(result.usage, kind="decide")
+        get_usage_meter().record(result.usage)
         return StepCandidate(outcome=Pass(), binding_name_to_value={output_name: result.output})
 
     async def _run_agent(
@@ -468,9 +470,8 @@ class AgentStepExecutor:
 
         if isinstance(result, AgentRunResult):
             step_context.model_result = result
-        usage_meter = get_usage_meter()
-        if usage_meter is not None and hasattr(result, "usage"):
-            usage_meter.record(result.usage, kind="execute")
+        if hasattr(result, "usage"):
+            get_usage_meter().record(result.usage)
 
         if isinstance(result.output, StepCandidate):
             return result.output

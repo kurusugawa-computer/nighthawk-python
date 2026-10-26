@@ -393,14 +393,14 @@ configuration = nh.StepExecutorConfiguration(
     execution_model_settings={"openai_store": False},
     tokenizer_encoding="o200k_base",
 )
-executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+executor = nh.AgentStepExecutor(configuration=configuration)
 with nh.run(executor):
     result = workflow()
 ```
 
 The host supplies `credentials` and owns the Model's client lifetime.
 `nh.scope(execution_model=another_model)` selects a borrowed Model while retaining the other configuration fields, then restores the parent executor on exit.
-External agents created through `from_agent` own their model selection.
+External agents supplied through `from_agent` own `execute` model selection; `decision_model` remains independently configurable through `run` and `scope`.
 
 Live Models cannot be serialized as settings; use `configuration.model_dump(exclude={"execution_model", "decision_model"})` for a partial export.
 See the [configuration contract](specification.md#52-configuration) for ownership, serialization, and setting precedence.
@@ -410,11 +410,11 @@ See the [configuration contract](specification.md#52-configuration) for ownershi
 Use `nh.scope(step_executor=...)` to switch executors within a single run. This is the standard pattern for mixing a cheap classifier with a deep autonomous step:
 
 ```py
-fast_executor = nh.AgentStepExecutor.from_configuration(
+fast_executor = nh.AgentStepExecutor(
     configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
 )
 
-deep_executor = nh.AgentStepExecutor.from_configuration(
+deep_executor = nh.AgentStepExecutor(
     configuration=nh.StepExecutorConfiguration(execution_model="codex:gpt-6.1-sol"),
 )
 

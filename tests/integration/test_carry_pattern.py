@@ -5,7 +5,7 @@ from tests.integration.skip_helpers import requires_openai_integration
 def test_carry_continuity_across_blocks():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="medium"),
@@ -47,7 +47,7 @@ def test_carry_continuity_across_blocks():
 def test_carry_branching():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
@@ -106,7 +106,7 @@ def test_carry_branching():
 def test_carry_with_fstring_injection():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),

@@ -9,13 +9,13 @@ import httpx2
 import pytest
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
+from pydantic_ai import Agent
 from pydantic_ai.messages import BinaryContent, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.openai_decisions import OpenAIDecisionsModel
 from pydantic_ai.providers.openai_decisions import OpenAIDecisionsProvider
 
 import nighthawk as nh
-from nighthawk.natural.blocks import parse_block
 from nighthawk.runtime import Pass, StepCandidate, StepDefinition, execute_step
 from tests.support.executors import InspectingExecutor
 
@@ -211,6 +211,41 @@ def test_models_inherit_independently_and_decision_settings_apply(decision_backe
     assert len(transport.requests) == 2
 
 
+def test_borrowed_execution_agent_keeps_ownership_across_decision_model_selection(decision_backend) -> None:
+    decision_model, transport = decision_backend
+    executions: list[str] = []
+
+    def respond(messages, information):
+        executions.append("execute")
+        return ModelResponse(parts=[ToolCallPart("final_result", {"result": {"kind": "pass"}})])
+
+    agent = Agent(model=FunctionModel(respond))
+    executor = nh.AgentStepExecutor.from_agent(agent=agent, configuration=nh.StepExecutorConfiguration(decision_model=decision_model))
+
+    @nh.function
+    def act() -> None:
+        """execute
+        Complete this step.
+        """
+
+    with nh.run(executor):
+        act()
+        assert supported("first evidence") is True
+        with nh.scope(decision_model=None) as selected:
+            assert isinstance(selected, nh.AgentStepExecutor)
+            assert selected.agent is agent
+            act()
+            with pytest.raises(nh.ExecutionError, match="decision_model"):
+                supported("unconfigured decision")
+            with nh.scope(decision_model=decision_model) as restored:
+                assert isinstance(restored, nh.AgentStepExecutor)
+                assert restored.agent is agent
+                assert supported("second evidence") is True
+        assert nh.get_step_executor() is executor
+    assert executions == ["execute", "execute"]
+    assert len(transport.requests) == 2
+
+
 def test_execute_multiple_assignments_then_decide_share_lifecycle(decision_backend) -> None:
     model, _ = decision_backend
     responses = iter(
@@ -273,12 +308,6 @@ def test_embedded_decision_images_and_write_failure_keep_model_evidence(decision
     assert finished[0].model_result is not None
     assert finished[0].model_result.output is True
     assert not finished[0].assigned_binding_name_to_value
-
-
-@pytest.mark.parametrize("source", ["decide\nQuestion", "decide <:a> <:b>\nQuestion", "decide <:a>\nWrite <:a>.", "decide <:a>\n"])
-def test_invalid_decision_declarations(source: str) -> None:
-    with pytest.raises(nh.NaturalParseError):
-        parse_block(source)
 
 
 def test_decision_commit_oversight_requires_destination(decision_backend) -> None:
@@ -444,13 +473,3 @@ def test_cancelled_decision_is_interrupted_without_assignment(decision_backend) 
     assert finished[0].block_kind == "decide"
     assert finished[0].model_result is None
     assert not finished[0].assigned_binding_name_to_value
-
-
-def test_scripted_decision_reports_block_kind_and_explicit_evidence() -> None:
-    from nighthawk.testing import ScriptedExecutor, pass_response
-
-    executor = ScriptedExecutor([pass_response(binding_name_to_value={"result": True})])
-    with nh.run(executor):
-        assert supported("evidence")
-    assert executor.calls[0].block_kind == "decide"
-    assert executor.calls[0].input_binding_name_to_value == {"document": "evidence"}

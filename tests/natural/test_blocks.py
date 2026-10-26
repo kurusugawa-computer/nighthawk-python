@@ -3,7 +3,7 @@ import textwrap
 import pytest
 
 from nighthawk.errors import NaturalParseError
-from nighthawk.natural.blocks import find_natural_blocks, is_natural_sentinel
+from nighthawk.natural.blocks import find_natural_blocks, is_natural_sentinel, parse_block
 
 
 def test_docstring_natural_block_detected_and_bindings_extracted():
@@ -150,3 +150,9 @@ def test_repeated_markers_share_one_ordered_declaration() -> None:
     from nighthawk.natural.blocks import extract_bindings
 
     assert extract_bindings("<second> <first> <second> <:result> <:result>") == (("second", "first"), ("result",))
+
+
+@pytest.mark.parametrize("source", ["decide\nQuestion", "decide <:a> <:b>\nQuestion", "decide <:a>\nWrite <:a>.", "decide <:a>\n"])
+def test_invalid_decision_declarations(source: str) -> None:
+    with pytest.raises(NaturalParseError):
+        parse_block(source)

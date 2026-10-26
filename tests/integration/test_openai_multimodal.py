@@ -74,7 +74,7 @@ def classify_pixel_colors(
 def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content():
     openai_responses_model_settings_class = _requires_openai_multimodal_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
@@ -114,7 +114,7 @@ def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content(
 def test_provider_backed_executor_accepts_native_multimodal_tool_result_content():
     openai_responses_model_settings_class = _requires_openai_multimodal_integration()
 
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),

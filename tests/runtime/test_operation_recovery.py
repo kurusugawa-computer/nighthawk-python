@@ -259,9 +259,7 @@ def test_standard_model_receives_refusal_and_corrects_the_same_step(route: str) 
         return 0
 
     profile = ModelProfile(supports_json_schema_output=True, default_structured_output_mode="native") if route == "native_output" else None
-    executor = nh.AgentStepExecutor.from_configuration(
-        configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond, profile=profile))
-    )
+    executor = nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond, profile=profile)))
     with (
         nh.run(executor),
         nh.scope(
@@ -403,7 +401,7 @@ def test_capability_cannot_replace_rejection_with_success_or_different_feedback(
         Choose a permitted method.
         """
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(
@@ -442,7 +440,7 @@ def test_repeated_rejections_preserve_request_accounting_and_host_stop() -> None
         Choose a permitted operation.
         """
 
-    executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
+    executor = nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
         nh.run(executor),
         nh.scope(
@@ -491,7 +489,7 @@ def test_cancellation_while_waiting_for_correction_prevents_another_model_reques
             Evaluate a permitted expression.
             """
 
-        executor = nh.AgentStepExecutor.from_configuration(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
+        executor = nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
         with (
             nh.run(executor),
             nh.scope(

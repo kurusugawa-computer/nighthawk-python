@@ -52,6 +52,14 @@ For a correction to an existing contract, a reproducer and regression coverage c
 For a simplification, show how it reduces total burden while preserving required contracts, or identify any intentional contract change and its compatibility consequences.
 Reuse can justify a library without a Core addition; including a helper or backend policy in the package does not by itself make it part of Core.
 
+For an API change, make the philosophy's [understandable contracts](philosophy.md#agents-can-understand-and-revise-programs) assessable in review:
+
+- Show the ordinary usage path and explain any additional entry points through differences in caller-visible contracts.
+- Identify dependencies, effects, failure boundaries, and the owners of resources and policy from public documentation and signatures.
+- Demonstrate any ownership distinction through a small executable composition, including rejection or restoration where relevant.
+- Place each behavioral check with the contract it protects, following the [test organization](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/tests/README.md); retain boundary coverage while removing checks that only record implementation history.
+- Update the authoritative contract and its linked examples together, with explicit compatibility consequences.
+
 ## Agents building and improving reusable functions
 
 **Status:** Conceptual application direction; no evaluation of the complete construction, revision, and reuse cycle is recorded here.

@@ -35,7 +35,7 @@ See [Philosophy](philosophy.md) for the purpose and composition principles, and 
 import nighthawk as nh
 
 configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
-step_executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+step_executor = nh.AgentStepExecutor(configuration=configuration)
 ```
 
 The `execution_model` and `decision_model` fields accept a `provider:model` identifier or a borrowed Pydantic AI `Model` instance whose client lifetime remains with the host.
@@ -59,6 +59,10 @@ import nighthawk as nh
 agent = Agent(model="openai-responses:gpt-6-luna")
 executor = nh.AgentStepExecutor.from_agent(agent=agent)
 ```
+
+Use the constructor when Nighthawk should manage execution model selection, or `from_agent` when an existing agent owns that selection and its resource lifetime.
+The optional `execution_model` string on a borrowed agent's configuration describes it for tokenizer inference; it does not select the agent's model.
+Both paths use `decision_model` independently for `decide`, including borrowed decision Models and scoped replacements.
 
 For full control, implement `AsyncStepExecutor` directly. See [Specification Section 14.3](specification.md#143-custom-backends) for semantics and [API reference](api.md#runtime-executor-boundary) for the protocol.
 

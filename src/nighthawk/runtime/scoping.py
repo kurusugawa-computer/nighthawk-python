@@ -40,17 +40,11 @@ class UsageMeter:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cumulative = RunUsage()
-        self._kind_name_to_cumulative_usage: dict[str, RunUsage] = {}
 
-    def record(self, usage: RunUsage, *, kind: str = "default") -> None:
-        """Add *usage* to the cumulative total and internal per-kind totals."""
+    def record(self, usage: RunUsage) -> None:
+        """Add completed agent usage to the cumulative total."""
         with self._lock:
             self._cumulative.incr(usage)
-            kind_usage = self._kind_name_to_cumulative_usage.get(kind)
-            if kind_usage is None:
-                self._kind_name_to_cumulative_usage[kind] = copy(usage)
-                return
-            kind_usage.incr(usage)
 
     @property
     def total_tokens(self) -> int:

@@ -2,12 +2,8 @@ import ast
 import re
 from pathlib import Path
 
-import pytest
-import yaml
-
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _DOCS_DIR = _REPOSITORY_ROOT / "docs"
-_MKDOCS_PATH = _REPOSITORY_ROOT / "mkdocs.yml"
 _INDEX_PATH = _DOCS_DIR / "index.md"
 _README_PATH = _REPOSITORY_ROOT / "README.md"
 
@@ -15,20 +11,6 @@ _README_PATH = _REPOSITORY_ROOT / "README.md"
 def _extract_python_code_blocks(text: str) -> list[str]:
     pattern = re.compile(r"```py\n(.*?)```", re.DOTALL)
     return [m.group(1).strip() for m in pattern.finditer(text)]
-
-
-def _collect_nav_files(nav: list) -> set[str]:
-    files: set[str] = set()
-    for entry in nav:
-        if isinstance(entry, str):
-            files.add(entry)
-        elif isinstance(entry, dict):
-            for value in entry.values():
-                if isinstance(value, str):
-                    files.add(value)
-                elif isinstance(value, list):
-                    files.update(_collect_nav_files(value))
-    return files
 
 
 class TestCanonicalExample:
@@ -45,17 +27,6 @@ class TestCanonicalExample:
         assert index_example == readme_example, (
             f"Canonical example in index.md and README.md must match.\nindex.md:\n{index_example}\n\nREADME.md:\n{readme_example}"
         )
-
-
-class TestNavStructure:
-    @pytest.fixture()
-    def mkdocs_config(self) -> dict:
-        return yaml.safe_load(_MKDOCS_PATH.read_text(encoding="utf-8"))
-
-    def test_all_nav_files_exist(self, mkdocs_config: dict) -> None:
-        nav_files = _collect_nav_files(mkdocs_config["nav"])
-        for nav_file in nav_files:
-            assert (_DOCS_DIR / nav_file).exists(), f"Nav entry '{nav_file}' does not exist in docs/"
 
 
 def test_explicit_api_members_exist_in_their_documented_modules() -> None:

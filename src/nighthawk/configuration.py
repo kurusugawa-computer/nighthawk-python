@@ -171,9 +171,9 @@ class StepExecutorConfiguration(BaseModel):
     def resolve_token_encoding(self) -> tiktoken.Encoding:
         """Return the tiktoken encoding for this configuration.
 
-        Uses tokenizer_encoding if set explicitly (raises on invalid encoding),
-        otherwise infers from the model name.  Falls back to o200k_base if the
-        model name is not recognized by tiktoken.
+        Uses tokenizer_encoding if set explicitly; invalid encodings fail.
+        Otherwise infers from the model name, falling back to o200k_base only for unrecognized names.
+        Encoding load failures propagate.
         """
         if self.tokenizer_encoding is not None:
             return tiktoken.get_encoding(self.tokenizer_encoding)
@@ -184,9 +184,10 @@ class StepExecutorConfiguration(BaseModel):
         model_name = self.execution_model.split(":", 1)[1] if isinstance(self.execution_model, str) else self.execution_model.model_name
 
         try:
-            return tiktoken.encoding_for_model(model_name)
-        except Exception:
-            return tiktoken.get_encoding("o200k_base")
+            encoding_name = tiktoken.encoding_name_for_model(model_name)
+        except KeyError:
+            encoding_name = "o200k_base"
+        return tiktoken.get_encoding(encoding_name)
 
 
 @dataclass(frozen=True)

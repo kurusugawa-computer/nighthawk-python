@@ -132,7 +132,7 @@ import nighthawk as nh
 
 @pytest.mark.integration
 def test_classify_with_real_llm():
-    step_executor = nh.AgentStepExecutor.from_configuration(
+    step_executor = nh.AgentStepExecutor(
         configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
     )
     with nh.run(step_executor):
@@ -190,7 +190,7 @@ def inspect_label(text: str) -> None:
     """
 
 
-executor = nh.AgentStepExecutor.from_configuration(
+executor = nh.AgentStepExecutor(
     configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(observe_request)),
 )
 with nh.run(executor):
@@ -311,13 +311,13 @@ uv build --wheel --out-dir "$validation_directory/dist"
 uv venv "$validation_directory/environment"
 uv pip install --python "$validation_directory/environment/bin/python" "$validation_directory"/dist/*.whl
 NIGHTHAWK_DISTRIBUTION_PYTHON="$validation_directory/environment/bin/python" \
-    uv run pytest -q tests/docs/test_runtime_examples.py
+    uv run pytest -q tests/docs/test_runtime_examples.py tests/distribution/
 ```
 
 The test runner extracts code from the documentation, while the fresh environment executes it with `python -I` from a temporary directory.
 It verifies that `nighthawk.__file__` belongs to that environment rather than an editable source checkout.
 The child processes need only the wheel and its declared dependencies; they do not import the repository's test helpers.
-The distribution check also runs Pyright on a separate consumer with library-source inference disabled, verifying exported types and synchronous/asynchronous decorator signatures through the installed package's `py.typed` marker.
+`tests/distribution/test_typing.py` runs Pyright on a separate consumer with library-source inference disabled, verifying exported types and synchronous/asynchronous decorator signatures through the installed package's `py.typed` marker.
 Pyright runs from the development environment while resolving imports from the fresh distribution environment.
 CI runs this check after building the distribution.
 A source-tree test alone is not installed-distribution evidence.

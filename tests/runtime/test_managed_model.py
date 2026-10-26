@@ -85,7 +85,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         system_prompt_suffix_fragments=("configured-system",),
         user_prompt_suffix_fragments=("configured-user",),
     )
-    executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+    executor = nh.AgentStepExecutor(configuration=configuration)
     assert executor.agent_is_managed
     assert executor.agent is not None and executor.agent.model is model  # type: ignore[attr-defined]
 
@@ -236,7 +236,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                 )
                 for index, model in enumerate(selected_models)
             ]
-            parent = nh.AgentStepExecutor.from_configuration(configuration=configurations[0])
+            parent = nh.AgentStepExecutor(configuration=configurations[0])
             with nh.run(parent):
                 assert await workflow() == 7
                 with nh.scope(step_executor_configuration=configurations[1]):
@@ -268,7 +268,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                 assert_credentials_absent()
 
             async def independent(configuration: nh.StepExecutorConfiguration) -> int:
-                executor = nh.AgentStepExecutor.from_configuration(configuration=configuration)
+                executor = nh.AgentStepExecutor(configuration=configuration)
                 with nh.run(executor):
                     await asyncio.sleep(0)
                     result = await workflow()

@@ -25,11 +25,11 @@ def guide_examples(tmp_path: Path) -> list[Path]:
 def test_working_template(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"label": "bug"})])
 
-    def build_executor(*, configuration: nh.StepExecutorConfiguration) -> ScriptedExecutor:
-        assert isinstance(configuration, nh.StepExecutorConfiguration)
+    def select_executor(self: nh.AgentStepExecutor, selection: nh.ModelSelection) -> ScriptedExecutor:
+        assert selection.apply(self.configuration).execution_model is not None
         return executor
 
-    monkeypatch.setattr(nh.AgentStepExecutor, "from_configuration", staticmethod(build_executor))
+    monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", select_executor)
     runpy.run_path(str(guide_examples[0]), run_name="__main__")
     assert capsys.readouterr().out == "bug\n"
     assert len(executor.calls) == 1

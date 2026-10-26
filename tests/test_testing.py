@@ -588,3 +588,19 @@ class TestFStringNaturalBlock:
         assert len(received_programs) == 1
         assert "important note" in received_programs[0]
         assert "{context_text}" not in received_programs[0]
+
+
+def test_scripted_decision_reports_block_kind_and_explicit_evidence() -> None:
+    @nh.function
+    def supported(document: str) -> bool:
+        result: bool = False
+        """decide <:result>
+        Does <document> support the claim?
+        """
+        return result
+
+    executor = ScriptedExecutor([pass_response(binding_name_to_value={"result": True})])
+    with nh.run(executor):
+        assert supported("evidence")
+    assert executor.calls[0].block_kind == "decide"
+    assert executor.calls[0].input_binding_name_to_value == {"document": "evidence"}

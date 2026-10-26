@@ -71,7 +71,7 @@ Authorization does not change supported source forms.
 - Python locals (`python_locals`): the actual Python local variables in the function's frame.
 - Python globals (`python_globals`): the Python module globals for the compiled function.
 - Step locals (`step_locals`): captured working values and tracked assignment bookkeeping; the environment owns full expression lookup.
-- Step environment (`StepEnvironment`): provenance-preserving Python, parent, task, and step views with one effective lookup contract.
+- Step environment (`StepEnvironment`): provenance-preserving Python, task, and step views with one effective lookup contract.
 - Step globals (`step_globals`): internal namespace storage; it is not an independent lookup authority.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
     - Required fields include `execution_reference`, containing invocation identity and source location.
@@ -123,13 +123,20 @@ Authorization does not change supported source forms.
 Runtime Models are borrowed resources. Configuration validation, shallow derivation, managed Agent construction, and scope replacement preserve the exact supplied Model. Two instances with the same name can have different authentication. Nighthawk does not clone, reconstruct, mutate, enter, or close supplied clients. The host owns client lifetime and any SDK restrictions on threads or event loops.
 
 For `execute`, a managed executor uses one common prompt, tools, dynamic output contract, capability, settings, and oversight path for either string or borrowed model selection.
-The decision path uses typed questions and explicit evidence instead of execution tools and prompt previews. Configuration model settings override Model defaults under Pydantic AI's existing precedence, with per-run capabilities retaining their ordinary behavior. Explicit tokenizer encoding wins; otherwise inference uses the string's model component or `Model.model_name`, falling back to `o200k_base` for unknown names. Invalid explicit encoding fails.
+The decision path uses typed questions and explicit evidence instead of execution tools and prompt previews. Configuration model settings override Model defaults under Pydantic AI's existing precedence, with per-run capabilities retaining their ordinary behavior.
+Explicit tokenizer encoding wins; otherwise inference uses the string's model component or `Model.model_name`, falling back to `o200k_base` only for unknown model names.
+Invalid explicit encodings and encoding data loading failures propagate; a loading failure never selects a different tokenizer.
 
 Model instances cannot be reconstructed from mappings. Configuration `repr` and `str` omit the model without invoking its representation. Python and JSON serialization including a live model field raises `PydanticSerializationError` with no traversal of the Model; explicit exclusion or inclusion of only other fields succeeds, including nested Pydantic records. String configurations remain serializable. A partial dump cannot reconstruct authenticated execution resources. `model_copy(update=...)` preserves Model identity by default but does not validate updates; callers must supply valid typed settings.
 
 Hosts supply authenticated Providers and Models in memory. Nighthawk does not extract credentials or transport them through environment variables, operating-system process launch arguments, prompts, or its diagnostic payloads. Pydantic AI environment reads and existing provider-string authentication are supported. Docker credential delivery, arbitrary Model behavior, and external logging are host concerns. Forwarding settings such as `openai_store=False` proves request forwarding, not remote retention compliance.
 
-External agents own model selection: both the constructor and `from_agent` reject instance-valued configuration models. Replacing their configuration with a different model string raises `NighthawkError` before scope installation. Keeping the configured string permits rendering changes. For managed agents, full configuration replacement selects its supplied Model and restores the exact parent executor on exit or error.
+Agents supplied through `from_agent` own model selection for `execute`.
+That entry point rejects a Model instance in `configuration.execution_model`; an optional string describes the borrowed execution model and supports tokenizer inference without configuring the agent.
+Changing that execution model selection raises `NighthawkError` before scope installation; keeping it permits rendering changes.
+For both managed and borrowed execution agents, `decision_model` independently selects the model for `decide` and accepts a string, a borrowed Model, or `None`.
+For managed execution agents, full configuration replacement selects its supplied execution Model.
+Scopes restore the exact parent executor on exit or error, and the host retains ownership of borrowed clients and agents.
 
 ### 5.3. Supporting types
 
@@ -144,7 +151,7 @@ External agents own model selection: both the constructor and `from_agent` rejec
     - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
 - `ExecutionReference`
     - Frozen dataclass representing runtime execution identity.
-    - `run_id`: the Id of the outermost run (trace root).
+    - `run_id`: the Id of the active run; nested runs create independent identities unless an Id is supplied explicitly.
     - `scope_id`: the Id of the current scope.
     - `step_execution_id`: a fresh Id for each runtime invocation, otherwise `None`.
     - `parent_step_execution_id`: the active parent step Id, or `None`.
@@ -1236,16 +1243,16 @@ Finalization remains mandatory, as specified in Section 10.2.
 
 `AgentStepExecutor` is the built-in implementation that delegates Natural block execution to a Pydantic AI agent. It implements both `SyncStepExecutor` and `AsyncStepExecutor`.
 
-Factory methods:
+Construction paths:
 
-- `AgentStepExecutor.from_configuration(*, configuration: StepExecutorConfiguration) -> AgentStepExecutor`
-    - Creates an executor with a managed agent built from the configuration.
+- `AgentStepExecutor(configuration: StepExecutorConfiguration | UnsetType = UNSET) -> AgentStepExecutor`
+    - Creates an executor managing its execution agent from configuration; an agent is constructed when an execution model is selected.
 - `AgentStepExecutor.from_agent(*, agent: StepExecutionAgent, configuration: StepExecutorConfiguration | UnsetType = UNSET) -> AgentStepExecutor`
-    - Creates an executor wrapping an existing agent. The agent is not managed (not rebuilt on configuration changes).
-    - Omission or `UNSET` creates a fresh `StepExecutorConfiguration()`. `None` and raw dictionaries are invalid before agent construction; parse data explicitly with `StepExecutorConfiguration.model_validate(data)`.
+    - Borrows an existing agent for `execute` without constructing a replacement. The agent owns execution model selection and is not rebuilt on configuration changes.
 
-The direct constructor uses the same optional configuration contract.
-`from_configuration` requires an explicit `StepExecutorConfiguration` object.
+Both paths use `decision_model` independently for `decide`.
+Omission or `UNSET` creates a fresh `StepExecutorConfiguration()`.
+`None` and raw dictionaries are invalid before agent construction; parse data explicitly with `StepExecutorConfiguration.model_validate(data)`.
 
 Instance attributes:
 
@@ -1481,7 +1488,7 @@ Functions inherit the active settings without a decorator override.
 The active executor's optional `ConfigurableStepExecutor.resolve_model_selection()` accepts, maps, or rejects selection synchronously.
 Core never unwraps a host executor to bypass its policy, and verifies the returned executor protocol.
 Direct `AgentStepExecutor` supports resolution; subclasses must explicitly implement preserving resolution.
-Borrowed model identity and client ownership remain with the application; externally supplied agents continue to own model selection.
+Borrowed model identity and client ownership remain with the application; externally supplied agents own `execute` model selection while `decision_model` remains independently configurable.
 Selection alone preserves scoped usage meters, capabilities, oversight, lifecycle, task references, and the call handler.
 Explicit executor replacement, cleared hooks, and new runs retain their documented effects and are not prohibited.
 
