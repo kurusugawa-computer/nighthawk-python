@@ -7,12 +7,12 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepLifecycle
-from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepEnvironment, StepRequest, evaluate_expression_async, inspect_value
+from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepEnvironment, StepRequest, describe_value, evaluate_expression_async
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context, build_user_prompt_text, locals_section
 
 
-def test_runtime_access_preserves_application_inspect_and_reserves_its_own_root() -> None:
+def test_runtime_access_preserves_application_names_and_reserves_its_own_root() -> None:
     environment = StepEnvironment(
         python_name_to_value={"inspect": "application", "__nighthawk_runtime_0": "existing"},
         python_globals={},
@@ -22,22 +22,43 @@ def test_runtime_access_preserves_application_inspect_and_reserves_its_own_root(
     assert environment.runtime_reference == "__nighthawk_runtime_3"
     namespace = environment.expression_namespace()
     assert eval("inspect", namespace, namespace) == "application"
-    result = eval(f"{environment.runtime_reference}.inspect(7)", namespace, namespace)
-    assert result["preview"] == 7
+    result = eval(f"{environment.runtime_reference}.environment.describe('inspect')", namespace, namespace)
+    assert result["origin"] == "python"
     with pytest.raises(ValueError):
         environment.assign(environment.runtime_reference, 0)
     assert environment.runtime_reference not in environment.snapshot_working_state()
 
 
-def test_unbound_inspect_keeps_python_meaning_with_a_usable_runtime_helper() -> None:
-    environment = StepEnvironment(
-        python_name_to_value={}, python_globals={}, local_name_set=frozenset({"inspect"}), task_name_to_value={"inspect": "shared"}
-    )
+@pytest.mark.parametrize("name", ["inspect", "describe_value"])
+def test_unbound_local_keeps_python_meaning_with_explicit_task_references(name: str) -> None:
+    environment = StepEnvironment(python_name_to_value={}, python_globals={}, local_name_set=frozenset({name}), task_name_to_value={name: "shared"})
     namespace = environment.expression_namespace()
     with pytest.raises(UnboundLocalError):
-        eval("inspect", namespace, namespace)
-    assert eval(f"{environment.runtime_reference}.inspect(None)", namespace, namespace)["preview"] is None
-    assert eval(environment.reference("inspect", source="task"), namespace, namespace) == "shared"
+        eval(name, namespace, namespace)
+    assert eval(environment.reference(name, source="task"), namespace, namespace) == "shared"
+
+
+@pytest.mark.parametrize("source", ["local", "global", "task"])
+def test_explicit_value_description_uses_ordinary_binding_and_rendering(source: str) -> None:
+    name_to_value: dict[str, object] = {"metadata": describe_value}
+    context = build_step_context(
+        python_locals=name_to_value if source == "local" else {},
+        python_globals=name_to_value if source == "global" else {},
+    )
+    context.environment = StepEnvironment(
+        python_name_to_value=context.step_locals,
+        python_globals=context.step_globals,
+        task_name_to_value=name_to_value if source == "task" else {},
+    )
+    prompt = build_user_prompt_text(processed_natural_program="Use <metadata> to describe a value.", step_context=context)
+    assert "metadata: Callable  # (value: object, *, cursor: str | None = None, max_items: int = 8) -> dict[str, object]" in prompt
+    assert "Return bounded metadata (type, members, preview) for a Python value." in prompt
+    assert ("metadata: Callable" in locals_section(prompt)) is (source == "local")
+    assert context.environment.resolve("metadata") is describe_value
+    namespace = context.environment.expression_namespace()
+    assert eval("metadata(7)", namespace, namespace)["preview"] == 7
+    with pytest.raises(NameError):
+        eval("describe_value", namespace, namespace)
 
 
 def test_opaque_names_are_discoverable_and_source_references_resolve_live_bindings() -> None:
@@ -89,17 +110,17 @@ def test_default_context_prioritizes_explicit_names_and_includes_task_values() -
     assert ".environment.describe(" not in prompt
 
 
-def test_runtime_inspection_and_discovery_are_one_evaluation_operation() -> None:
-    context = build_step_context(python_globals={}, python_locals={"value": [1, 2]})
+def test_explicit_value_description_and_discovery_are_one_evaluation_operation() -> None:
+    context = build_step_context(python_globals={}, python_locals={"value": [1, 2], "metadata": describe_value})
     finished: list[OperationFinished] = []
     reference = context.environment.runtime_reference
-    expression = f"({reference}.inspect(value), {reference}.environment.describe('value'))"
+    expression = f"(metadata(value), {reference}.environment.describe('value'))"
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished.append)):
         result = asyncio.run(evaluate_expression_async(context, expression))
         assert result[0]["preview"] == [1, 2]  # type: ignore[index]
         assert len(finished) == 1
         assert finished[0].request.expression == expression
-        inspect_value([1, 2])
+        describe_value([1, 2])
         assert len(finished) == 1
 
 
@@ -138,14 +159,14 @@ def test_member_discovery_progresses_and_invalidated_cursor_has_recovery() -> No
     value = Surface()
     for name in ("a", "b", "c", "d", "e"):
         setattr(value, name, name)
-    first = inspect_value(value, max_items=2)
+    first = describe_value(value, max_items=2)
     assert [item["name"] for item in first["members"]] == ["a", "b"]  # type: ignore[union-attr]
-    second = inspect_value(value, max_items=2, cursor=first["next_cursor"])  # type: ignore[arg-type]
+    second = describe_value(value, max_items=2, cursor=first["next_cursor"])  # type: ignore[arg-type]
     assert [item["name"] for item in second["members"]] == ["c", "d"]  # type: ignore[union-attr]
-    third = inspect_value(value, max_items=2, cursor=second["next_cursor"])  # type: ignore[arg-type]
+    third = describe_value(value, max_items=2, cursor=second["next_cursor"])  # type: ignore[arg-type]
     assert [item["name"] for item in third["members"]] == ["e"]  # type: ignore[union-attr]
     assert third["next_cursor"] is None
     value.f = "new"  # type: ignore[attr-defined]
-    invalid = inspect_value(value, max_items=2, cursor=first["next_cursor"])  # type: ignore[arg-type]
+    invalid = describe_value(value, max_items=2, cursor=first["next_cursor"])  # type: ignore[arg-type]
     assert "listing changed" in str(invalid["error"])
     assert "without a cursor" in str(invalid["recovery"])

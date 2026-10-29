@@ -6,9 +6,10 @@ from .description import describe_callable, describe_public_members, safe_previe
 from .discovery import DiscoveryResult, page_names
 
 
-def inspect_value(value: object, *, cursor: str | None = None, max_items: int = 8) -> dict[str, object]:
-    """Describe a value without invoking its application properties or methods.
+def describe_value(value: object, *, cursor: str | None = None, max_items: int = 8) -> dict[str, object]:
+    """Return bounded metadata (type, members, preview) for a Python value.
 
+    Application properties, methods, and custom representations are not invoked.
     Member pages progress while the supported member-name listing is stable.
     An invalid cursor returns a recovery instruction. Metadata is best effort;
     missing metadata does not make the value inaccessible to Python.
@@ -18,7 +19,7 @@ def inspect_value(value: object, *, cursor: str | None = None, max_items: int = 
     names = tuple(sorted(set(members.method_name_to_value) | set(members.field_name_to_value) | set(members.omitted_names)))
     page = page_names(names, source="value members", cursor=cursor, max_items=max_items)
     if page.error is not None:
-        return {"error": page.error, "recovery": "Call inspect(value) again without a cursor and with max_items from 1 to 100."}
+        return {"error": page.error, "recovery": "Call this function again with the same value, without a cursor and with max_items from 1 to 100."}
     description: dict[str, object] = {"type": type_name(value), "preview": safe_preview(value)}
     if callable(value):
         callable_description = describe_callable(value)
@@ -46,7 +47,7 @@ def inspect_value(value: object, *, cursor: str | None = None, max_items: int = 
     description["members"] = described_members
     description["next_cursor"] = page.next_cursor
     if page.next_cursor is not None:
-        description["continuation"] = "Call inspect with the same value and next_cursor as cursor to read the next member page."
+        description["continuation"] = "Call this function with the same value and next_cursor as cursor to read the next member page."
     elif not names:
         description["member_omission"] = "No supported public member metadata; use ordinary Python or a domain helper for further detail."
-    return DiscoveryResult(description, item_count=len(page.names), repage=lambda count: inspect_value(value, cursor=cursor, max_items=count))
+    return DiscoveryResult(description, item_count=len(page.names), repage=lambda count: describe_value(value, cursor=cursor, max_items=count))

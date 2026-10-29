@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Breaking: rename `nighthawk.runtime.inspect_value` to `describe_value` and remove the generated runtime root's `.inspect` method and unconditional prompt guidance. Import or explicitly pass the optional helper through ordinary Python bindings or scoped task references; omitted-name and output-contract discovery remains available through `.environment`.
 - Clarify when the execution model should assign a function's actual return value instead of evaluating a call without retaining its result.
 - Remove the unused `UsageMeter.record(kind=...)` argument and internal per-kind accumulation; lifecycle records already identify each step's block kind and model result.
 - Breaking: construct managed executors with `AgentStepExecutor(configuration=...)` and borrow existing execution agents with `AgentStepExecutor.from_agent(...)`. Remove `from_configuration` and the constructor's `agent` argument; decision model selection remains independent on both paths.

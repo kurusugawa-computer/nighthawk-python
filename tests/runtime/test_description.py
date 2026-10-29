@@ -8,7 +8,7 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel, field_serializer
 
-from nighthawk.runtime import inspect_value
+from nighthawk.runtime import describe_value
 from nighthawk.runtime.description import describe_callable, describe_public_members, discover_type_alias_reference_names
 from tests.support.prompts import build_step_context, build_user_prompt_text
 
@@ -25,7 +25,7 @@ def test_callable_annotation_expressions_are_not_evaluated_for_presentation() ->
 
     context = build_step_context(python_globals={"annotation_effect": annotation_effect}, python_locals={"action": action})
     prompt = build_user_prompt_text(processed_natural_program="Describe <action>.", step_context=context)
-    description = inspect_value(action)
+    description = describe_value(action)
     assert "annotation_effect()" in prompt
     assert "annotation_effect()" in str(description["signature"])
     assert "not evaluated" in str(description["annotation_note"])
@@ -45,7 +45,7 @@ def test_callable_signature_property_is_not_executed() -> None:
             effects.append("call")
 
     value = Action()
-    description = inspect_value(value)
+    description = describe_value(value)
     assert description["signature"] is None
     assert "unavailable" in str(description["metadata_omission"])
     context = build_step_context(python_globals={}, python_locals={"action": value})
@@ -70,7 +70,7 @@ def test_annotation_metadata_and_callable_defaults_do_not_invoke_repr() -> None:
     assert "Annotated[int, <opaque Metadata>]" in signature
     assert "= <opaque Metadata>" in signature or "=<opaque Metadata>" in signature
     partial = functools.partial(action, value=Metadata())
-    assert "<opaque Metadata>" in str(inspect_value(partial)["signature"])
+    assert "<opaque Metadata>" in str(describe_value(partial)["signature"])
     assert effects == []
 
 
@@ -86,7 +86,7 @@ def test_custom_signature_parameter_methods_are_not_called() -> None:
         pass
 
     action.__signature__ = inspect.Signature([Parameter("value", inspect.Parameter.POSITIONAL_OR_KEYWORD)])  # type: ignore[attr-defined]
-    result = inspect_value(action)
+    result = describe_value(action)
     assert result["signature"] is None
     assert "unavailable" in str(result["metadata_omission"])
     assert effects == []
@@ -149,7 +149,7 @@ def test_metadata_bypasses_instance_and_metaclass_attribute_hooks(surface: str) 
         result: object = build_user_prompt_text(processed_natural_program="Describe.", step_context=context)
     else:
         effects.clear()
-        result = inspect_value(value)
+        result = describe_value(value)
     assert "Opaque" in str(result)
     assert effects == []
 
@@ -210,6 +210,6 @@ def test_lazy_type_alias_is_discovered_without_evaluating_its_body() -> None:
 
 def test_known_value_inspection_does_not_infer_binding_provenance() -> None:
     value: list[str] = []
-    result = inspect_value(value)
+    result = describe_value(value)
     assert result["type"] == "list" and result["preview"] == []
     assert all(name not in result for name in ("origin", "source", "annotation", "output_contract", "write_eligible"))

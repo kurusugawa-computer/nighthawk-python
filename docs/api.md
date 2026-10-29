@@ -312,4 +312,4 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
 ::: nighthawk.runtime.inspection
     options:
       members:
-        - inspect_value
+        - describe_value

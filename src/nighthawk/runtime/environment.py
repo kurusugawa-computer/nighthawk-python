@@ -86,12 +86,6 @@ class _ExpressionNamespace(dict[str, object]):
 class _RuntimeAccess:
     environment: StepEnvironment
 
-    @staticmethod
-    def inspect(value: object, *, cursor: str | None = None, max_items: int = 8) -> dict[str, object]:
-        from .inspection import inspect_value
-
-        return inspect_value(value, cursor=cursor, max_items=max_items)
-
 
 class StepEnvironment:
     """Read-only environment views with a separate, tracked working namespace.

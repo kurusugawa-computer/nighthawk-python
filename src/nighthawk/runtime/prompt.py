@@ -689,13 +689,9 @@ def _build_user_prompt_content(
         tool_result_max_tokens=context_limits.tool_result_max_tokens,
     )
 
-    runtime_reference = step_context.environment.runtime_reference
-    access_lines = [
-        f"For missing details: {runtime_reference}.inspect(value) returns a metadata dictionary (type, members, preview).",
-    ]
     if any(is_multi_modal_content(content) for content in prompt_content):
-        access_lines.append("Use attached media directly for perceptual judgments.")
-    return coalesce_user_content(("\n".join(access_lines) + "\n\n", *prompt_content))
+        return coalesce_user_content(("Use attached media directly for perceptual judgments.\n\n", *prompt_content))
+    return prompt_content
 
 
 def append_user_prompt_suffixes(prompt_content: PromptContentTuple, *, configuration: StepExecutorConfiguration) -> PromptContentTuple:

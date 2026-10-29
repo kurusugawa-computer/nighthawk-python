@@ -13,7 +13,7 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
-from nighthawk.runtime import StepEnvironment, inspect_value
+from nighthawk.runtime import StepEnvironment, describe_value
 from nighthawk.runtime.step_context import ToolResultRenderingPolicy
 from nighthawk.tools._tool_return_content import resolve_tool_return_segments
 from nighthawk.tools.contracts import render_tool_result_json_text
@@ -111,7 +111,7 @@ def test_cycles_and_different_discovery_pages_preserve_progress() -> None:
 
     for i in range(30):
         setattr(Service, f"member_{i:02}", i)
-    value: list[object] = [environment.discover(source="task"), inspect_value(Service())]
+    value: list[object] = [environment.discover(source="task"), describe_value(Service())]
     value.append(value)
     normalized = _normalize_tool_success(value)["payload"]
     encoding = tiktoken.get_encoding("o200k_base")
@@ -121,7 +121,7 @@ def test_cycles_and_different_discovery_pages_preserve_progress() -> None:
     assert_continuation(observed[0], environment)
     members = observed[1]["members"]
     assert members
-    continued: Any = inspect_value(Service(), cursor=observed[1]["next_cursor"])
+    continued: Any = describe_value(Service(), cursor=observed[1]["next_cursor"])
     assert continued["members"][0]["name"] == f"member_{len(members):02}"
     assert observed[2] == "<cycle>"
 

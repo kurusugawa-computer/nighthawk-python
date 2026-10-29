@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from .embedded import BindingWriter, execute_step, execute_step_async
     from .environment import StepEnvironment
     from .expression import evaluate_expression, evaluate_expression_async
-    from .inspection import inspect_value
+    from .inspection import describe_value
     from .operation_contract import (
         OperationDeliveryError,
         OperationError,
@@ -60,7 +60,7 @@ _name_to_module = {
     "evaluate_expression": "expression",
     "evaluate_expression_async": "expression",
     "StepEnvironment": "environment",
-    "inspect_value": "inspection",
+    "describe_value": "inspection",
     "OperationError": "operation_contract",
     "OperationDeliveryError": "operation_contract",
     "OperationRejectedError": "operation_contract",
@@ -103,7 +103,7 @@ __all__ = [
     "evaluate_expression",
     "evaluate_expression_async",
     "StepEnvironment",
-    "inspect_value",
+    "describe_value",
     "OperationError",
     "OperationDeliveryError",
     "OperationRejectedError",

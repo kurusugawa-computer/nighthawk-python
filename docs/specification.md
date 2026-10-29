@@ -568,14 +568,17 @@ Builder exceptions and invalid content fail the step before model execution and 
 
 #### 8.2.5. Value inspection and name discovery
 
-`nighthawk.runtime.inspect_value(value, cursor=None, max_items=8)` describes a known live value.
+`nighthawk.runtime.describe_value(value, cursor=None, max_items=8)` describes a known live value.
+It is an optional ordinary Python function, available to a step only through an explicit import, argument, local binding, embedded input, or scoped task reference.
+The runtime does not inject a value-description function into locals or globals, or unconditionally advertise one in the default prompt.
+Explicitly supplied callables use the ordinary signature and documentation renderer, under the name selected by the program or host.
+Python builtins and explicitly imported standard-library functions remain available through the same expression mechanism.
 It does not infer a binding name, source, write eligibility, or declared contract from object identity.
 Callable annotations belong to the value; named declaration annotations and output contracts belong to `StepEnvironment.describe(name, source="effective")`.
 Presentation-only annotation spelling is not evaluated and does not weaken preparation-time output validation.
 
-The default context advertises `environment.runtime_reference`, a generated collision-free Python root.
-Its `.inspect(value)` method uses the same value-description implementation, and `.environment` exposes the current environment.
-Application bindings named `inspect`, including unbound Python locals, retain their meaning.
+When entries are omitted, the default context advertises `environment.runtime_reference`, a generated collision-free Python root whose `.environment` exposes the current environment.
+Application bindings, including unbound Python locals, retain their meaning.
 The generated root cannot be used as a temporary assignment target and is excluded from explicit working-state snapshots.
 
 `StepEnvironment.reference(name, source="effective")` returns an expression that resolves the binding when evaluated.

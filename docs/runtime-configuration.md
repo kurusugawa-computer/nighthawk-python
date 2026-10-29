@@ -99,6 +99,31 @@ with nh.run(step_executor):
 
 Use the [composition rules](#scoped-overrides-with-nhscope) to replace, merge, or clear task references.
 
+### Optional value descriptions
+
+Use ordinary Python operations or explicitly import the standard-library `inspect` module when a block needs additional information about a value.
+For bounded metadata with member pagination, Nighthawk also provides `describe_value` as an ordinary optional function:
+
+```py
+from nighthawk.runtime import describe_value
+
+
+@nh.function
+def describe_input(value: object) -> dict[str, object]:
+    """execute
+    Return the metadata produced by <describe_value> for <value>.
+    """
+```
+
+The explicit global reference makes the helper available and renders its signature and first documentation line with other callables.
+An argument, local binding, embedded `name_to_value` input, or scoped `task_references` entry can supply the same function, including under another name.
+Nighthawk does not automatically add it to locals or globals.
+
+The result contains descriptions and bounded previews, not replacements for the original objects.
+Pass the original value to subsequent Python operations; use `next_cursor` to request another member page when present.
+The helper does not invoke application properties or custom representations, and reports unsupported metadata as omissions.
+Binding names and declared output contracts remain the responsibility of [environment discovery](specification.md#825-value-inspection-and-name-discovery).
+
 ### Selecting shared values with Python
 
 Natural calls do not implicitly copy parent arguments, locals, closure values, or step temporaries into the child.

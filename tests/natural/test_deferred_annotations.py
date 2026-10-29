@@ -8,7 +8,7 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, inspect_value
+from nighthawk.runtime import Pass, StepCandidate, StepRequest, describe_value
 
 pytestmark = pytest.mark.skipif(sys.version_info < (3, 14), reason="CPython deferred annotations require Python 3.14")
 
@@ -91,12 +91,12 @@ def annotate(format):
 action.__annotate__ = annotate
 """,
     )
-    description = inspect_value(module.action)
+    description = describe_value(module.action)
     assert description["signature"] == "(value: int) -> str"
     assert "not evaluated" in str(description["annotation_note"])
     assert module.effects == []
     Path(module.action.__code__.co_filename).unlink()
-    description = inspect_value(module.action)
+    description = describe_value(module.action)
     assert description["signature"] == "(value)"
     assert "source unavailable" in str(description["annotation_note"])
     assert module.effects == []

@@ -405,8 +405,6 @@ When `step_2(carry)` executes, the LLM sees the carry's current contents in LOCA
 
 <!-- prompt-example:carry-pattern -->
 ```py
-For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-
 <<<NH:PROGRAM>>>
 Read <carry> for prior context.
 The carry says the previous result was 10.

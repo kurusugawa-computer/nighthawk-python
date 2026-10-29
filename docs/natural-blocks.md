@@ -43,8 +43,6 @@ And call `classify_priority("Server is on fire!")`, Nighthawk assembles this use
 
 <!-- prompt-example:basic-binding -->
 ```py
-For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-
 <<<NH:PROGRAM>>>
 Read <text> and update <:priority> with one of: low, normal, high.
 <<<NH:END_PROGRAM>>>
@@ -231,8 +229,6 @@ Calling `choose_policy("Breaking: earthquake hits downtown")` produces:
 
 <!-- prompt-example:fstring-injection -->
 ```py
-For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-
 <<<NH:PROGRAM>>>
 Read <post>.
 Available policies: ['safety-first', 'concise-output', 'cite-assumptions']
@@ -317,8 +313,6 @@ The LLM sees:
 
 <!-- prompt-example:local-function-signature -->
 ```py
-For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-
 <<<NH:PROGRAM>>>
 Compute <:result> by choosing the most suitable local helper based on its docstring.
 Use base=38 and bonus=4.
@@ -357,8 +351,6 @@ Calling `calculate_average([1, "2", "three", "cuatro"])` produces:
 
 <!-- prompt-example:global-function-reference -->
 ```py
-For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-
 <<<NH:PROGRAM>>>
 Map each element of <numbers> to the number it represents,
 then compute <:result> by calling <python_average> with the mapped list.
