@@ -13,7 +13,7 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic_ai import models
 from pydantic_ai.capabilities import Hooks
-from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import BinaryContent, ModelMessage, ModelResponse, SystemPromptPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -99,7 +99,11 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         assert "configured-system" in prompt and "scoped-system" in prompt
         assert "configured-user" in prompt and "scoped-user" in prompt
         assert "<<<NH:PROGRAM>>>" in prompt
-        assert "You are executing one Nighthawk Natural" in prompt
+        assert any(
+            isinstance(part, SystemPromptPart) and part.content.startswith(configuration.prompts.system_prompt_template)
+            for message in messages
+            for part in message.parts
+        )
         assert {tool.name for tool in information.function_tools} == {"nh_evaluate", "nh_assign", "custom_tool"}
         assert information.model_settings is not None
         assert information.model_settings.get("temperature") == 0.1

@@ -14,7 +14,7 @@ from .step_outcome import OutcomeKind
 
 
 class ModelPass(BaseModel):
-    """Propose continuing with the next Python statement."""
+    """Continue with the next Python statement after completing the block."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -22,7 +22,7 @@ class ModelPass(BaseModel):
 
 
 class ModelReturn(BaseModel):
-    """Propose a Python expression to evaluate once as the return value."""
+    """Return the value of return_expression, evaluated once in the live Python environment."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -31,7 +31,7 @@ class ModelReturn(BaseModel):
 
 
 class ModelBreak(BaseModel):
-    """Propose exiting the enclosing Python loop."""
+    """Exit the enclosing Python loop."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -39,7 +39,7 @@ class ModelBreak(BaseModel):
 
 
 class ModelContinue(BaseModel):
-    """Propose starting the next iteration of the enclosing Python loop."""
+    """Skip to the next iteration of the enclosing Python loop."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -47,7 +47,7 @@ class ModelContinue(BaseModel):
 
 
 class ModelRaise(BaseModel):
-    """Propose an exception message and an optional exception-type expression."""
+    """Raise an exception with raise_message."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -90,14 +90,19 @@ def build_model_response_schema(
     variants = []
     for kind in allowed_kinds:
         variant = _kind_to_model[kind].model_json_schema()
+        del variant["title"]
+        for property_schema in variant["properties"].values():
+            property_schema.pop("title", None)
         if kind == "raise":
             if raise_error_type_binding_names:
                 variant["properties"]["raise_error_type"] = {
                     "type": ["string", "null"],
                     "enum": [*raise_error_type_binding_names, None],
+                    "description": "Exception type binding name; null selects Exception.",
                 }
             else:
                 del variant["properties"]["raise_error_type"]
+                variant["description"] = "Raise Exception with raise_message."
         variants.append(variant)
 
     if len(variants) == 1:
@@ -108,7 +113,6 @@ def build_model_response_schema(
     # Structured-output providers require an object root, even for multiple outcomes.
     return {
         "type": "object",
-        "title": "ModelStepResponse",
         "properties": {"result": result_schema},
         "required": ["result"],
         "additionalProperties": False,
@@ -118,42 +122,13 @@ def build_model_response_schema(
 def build_model_response_instructions(
     *,
     allowed_kinds: tuple[OutcomeKind, ...],
-    raise_error_type_binding_names: tuple[str, ...],
 ) -> str:
     if not allowed_kinds:
         raise ValueError("allowed_kinds must not be empty")
 
-    allowed_kinds_text = " | ".join(allowed_kinds)
-
-    lines: list[str] = ['Output {"result": {"kind": "<kind>", ...}}.']
-
-    kind_line = f"kind: {allowed_kinds_text}."
     if "pass" in allowed_kinds:
-        kind_line += " Default: pass."
-    lines.append(kind_line)
-
-    if "pass" in allowed_kinds:
-        lines.append("Choose pass after completing the work. Most blocks end with pass.")
-
-    if "break" in allowed_kinds and "continue" in allowed_kinds:
-        lines.append("Use continue for instructions like continue or next iteration; use break for instructions like break or stop the loop.")
-    elif "break" in allowed_kinds:
-        lines.append("Use break for instructions like break or stop the loop.")
-    elif "continue" in allowed_kinds:
-        lines.append("Use continue for instructions like continue or next iteration.")
-
-    if "return" in allowed_kinds:
-        lines.append(
-            'return needs return_expression (a Python expression evaluated against step locals/globals, e.g. "result", "\'hello\'", "len(items)").'
+        return (
+            'Complete the program, then submit {"result":{"kind":"pass"}} unless it requests other control flow. '
+            "Assigning outputs does not return from the function."
         )
-
-    if "raise" in allowed_kinds:
-        raise_line = "raise needs raise_message."
-        if raise_error_type_binding_names:
-            error_type_names_text = " | ".join(raise_error_type_binding_names)
-            raise_line += (
-                f" Use raise_error_type to select the requested exception binding: {error_type_names_text}. Null or omission uses Exception."
-            )
-        lines.append(raise_line)
-
-    return "\n".join(lines) + "\n"
+    return "Complete the program before submitting its control result."

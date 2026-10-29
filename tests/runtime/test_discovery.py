@@ -74,7 +74,7 @@ def test_environment_name_pages_progress_and_recover_when_membership_changes() -
     assert "listing changed" in str(environment.discover(source="step", cursor=page["next_cursor"])["error"])
 
 
-def test_default_context_prioritizes_explicit_names_and_shows_task_provenance() -> None:
+def test_default_context_prioritizes_explicit_names_and_includes_task_values() -> None:
     context = build_step_context(python_globals={}, python_locals={"a": 1, "z": 7})
     configuration = nh.StepExecutorConfiguration(context_limits=nh.StepContextLimits(locals_max_items=1))
     prompt = build_user_prompt_text(processed_natural_program="Use <z>.", step_context=context, configuration=configuration)
@@ -83,21 +83,7 @@ def test_default_context_prioritizes_explicit_names_and_shows_task_provenance() 
     assert ".environment.discover()" in prompt
     context.environment = StepEnvironment(python_name_to_value=context.step_locals, python_globals={}, task_name_to_value={"shared": 5})
     prompt = build_user_prompt_text(processed_natural_program="Review state.", step_context=context)
-    assert "Origin: task; name: shared" in prompt
     assert "shared: int = 5" in prompt
-
-
-def test_default_context_shows_collision_sources_before_model_lookup() -> None:
-    context = build_step_context(python_globals={}, python_locals={"inspect": "application"})
-    context.environment = StepEnvironment(
-        python_name_to_value=context.step_locals, python_globals={}, task_name_to_value={"len": "task", "inspect": "task inspection"}
-    )
-    prompt = build_user_prompt_text(processed_natural_program="Use <len>.", step_context=context)
-    assert "Name collision: inspect; effective origin: python" in prompt
-    assert "Name collision: len; effective origin: python" in prompt
-    for name in ("inspect", "len"):
-        assert context.environment.reference(name, source="python") in prompt
-        assert context.environment.reference(name, source="task") in prompt
 
 
 def test_runtime_inspection_and_discovery_are_one_evaluation_operation() -> None:

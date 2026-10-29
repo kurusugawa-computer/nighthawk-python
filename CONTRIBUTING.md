@@ -112,6 +112,7 @@ Historical evaluation records retain the model identifiers used in their origina
 
 Model evaluations use ordinary Python fixtures, production execution, and direct pytest assertions.
 `tests/integration/test_model_behavior.py` checks embedded values, Python object identity, requested calls, mutations, exceptions, and control outcomes.
+`tests/integration/test_environment_selection.py` checks explicit source selection when Python and task bindings share a name.
 `tests/integration/test_natural_composition.py` checks actual Natural parent/child calls, inherited policy, and Python iteration around model judgments.
 The synthetic inputs assess these tasks; their scores do not establish broad application reliability or a security boundary.
 

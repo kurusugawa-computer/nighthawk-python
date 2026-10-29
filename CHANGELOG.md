@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Clarify when the execution model should assign a function's actual return value instead of evaluating a call without retaining its result.
 - Remove the unused `UsageMeter.record(kind=...)` argument and internal per-kind accumulation; lifecycle records already identify each step's block kind and model result.
 - Breaking: construct managed executors with `AgentStepExecutor(configuration=...)` and borrow existing execution agents with `AgentStepExecutor.from_agent(...)`. Remove `from_configuration` and the constructor's `agent` argument; decision model selection remains independent on both paths.
 - Clarify API ownership and execution identities, assign tests to their behavioral owners, and separate installed distribution type checks from documentation examples.

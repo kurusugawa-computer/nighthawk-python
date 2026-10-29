@@ -43,19 +43,16 @@ And call `classify_priority("Server is on fire!")`, Nighthawk assembles this use
 
 <!-- prompt-example:basic-binding -->
 ```py
-Runtime inspection: __nighthawk_runtime_0.inspect(value).
-Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
-Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
-Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
+For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
+Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
+The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Read <text> and update <:priority> with one of: low, normal, high.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-Origin: python; name: priority; output contract: str
-priority: str = "normal"
-Origin: python; name: text
+[output: str] priority: str = "normal"
 text: str = "Server is on fire!"
 <<<NH:END_LOCALS>>>
 
@@ -68,7 +65,7 @@ text: str = "Server is on fire!"
 Three sections:
 
 - **`<<<NH:PROGRAM>>>`** -- your Natural block text (after header removal and `textwrap.dedent`).
-- **`<<<NH:LOCALS>>>`** -- bounded working context, with origins and output contracts.
+- **`<<<NH:LOCALS>>>`** -- bounded working context, with annotations and output contracts.
   Explicit references and outputs take priority, followed by other Python working locals, with alphabetical ordering within each priority class.
 - **`<<<NH:GLOBALS>>>`** -- referenced globals and builtins, plus scoped task capabilities not already presented as working state.
 
@@ -236,10 +233,9 @@ Calling `choose_policy("Breaking: earthquake hits downtown")` produces:
 
 <!-- prompt-example:fstring-injection -->
 ```py
-Runtime inspection: __nighthawk_runtime_0.inspect(value).
-Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
-Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
-Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
+For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
+Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
+The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Read <post>.
@@ -248,10 +244,8 @@ Select the single best policy and set <:selected_policy>.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-Origin: python; name: post
 post: str = "Breaking: earthquake hits downtown"
-Origin: python; name: selected_policy; output contract: str
-selected_policy: str = ""
+[output: str] selected_policy: str = ""
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
@@ -327,10 +321,9 @@ The LLM sees:
 
 <!-- prompt-example:local-function-signature -->
 ```py
-Runtime inspection: __nighthawk_runtime_0.inspect(value).
-Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
-Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
-Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
+For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
+Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
+The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Compute <:result> by choosing the most suitable local helper based on its docstring.
@@ -338,9 +331,7 @@ Use base=38 and bonus=4.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-Origin: python; name: result; output contract: int
-result: int = 0
-Origin: python; name: add_points
+[output: int] result: int = 0
 add_points: (base: int, bonus: int) -> int  # Return a deterministic sum for score calculation.
 <<<NH:END_LOCALS>>>
 
@@ -372,10 +363,9 @@ Calling `calculate_average([1, "2", "three", "cuatro"])` produces:
 
 <!-- prompt-example:global-function-reference -->
 ```py
-Runtime inspection: __nighthawk_runtime_0.inspect(value).
-Name discovery: __nighthawk_runtime_0.environment.discover(); named contracts: __nighthawk_runtime_0.environment.describe('name').
-Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.
-Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.
+For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
+Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
+The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Map each element of <numbers> to the number it represents,
@@ -383,14 +373,11 @@ then compute <:result> by calling <python_average> with the mapped list.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-Origin: python; name: numbers
 numbers: list = [1,"2","three","cuatro"]
-Origin: python; name: result; output contract: int
-result: int = 0
+[output: int] result: int = 0
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
-Origin: python; name: python_average
 python_average: (numbers)
 <<<NH:END_GLOBALS>>>
 ```

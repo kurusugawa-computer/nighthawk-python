@@ -76,7 +76,7 @@ Authorization does not change supported source forms.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
     - Required fields include `execution_reference`, containing invocation identity and source location.
     - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
-- Locals summary: a bounded presentation of selected working values and their provenance, included in the LLM prompt.
+- Locals summary: a bounded presentation of selected working values and their available contracts, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
 - Step: one invocation of a Natural block, with its own execution identity.
 - Block kind (`BlockKind`): `execute` for action-oriented instructions or `decide` for a typed judgment.
@@ -405,12 +405,18 @@ The default user prompt template renders three delimited sections:
 
 The template uses `$program`, `$locals`, and `$globals` placeholders, substituted at prompt construction time.
 A bounded runtime-access preamble precedes the template.
-It identifies the collision-free inspection and environment references, and relevant known source collisions.
+It identifies collision-free inspection and environment references for details missing from the snapshots.
+Inspection returns a metadata dictionary rather than the original value.
+When native media is included, the preamble directs perceptual judgments to that attached content.
 
 #### 8.2.2. Locals summary
 
 The locals summary presents current Python working locals and step assignments.
-Each entry identifies its origin and available declaration annotation or selected output contract.
+Entries show available declaration annotations and selected output contracts in a compact prefix such as `[output: int]`.
+An annotation identical to the output contract is shown only once.
+Explicit dotted entries do not inherit their root's annotation or output contract.
+Provenance and shadowed alternatives are available through environment discovery and named descriptions.
+When relevant names have multiple sources, the preamble supplies the explicit source-selection expression without enumerating each collision.
 These descriptions do not change the live environment or its validation contracts.
 
 Selection:
@@ -434,7 +440,7 @@ Rendering format:
   Available annotations are included, such as `(base: int, bonus: int) -> int`; unresolved annotation spelling is preserved without evaluation.
     - If the callable has a meaningful docstring, the first line is appended as `# first_line`.
     - If the callable is async, `async` is appended in metadata comments.
-    - If multiple callable entries share the same signature text, each is annotated with `# disambiguation: use name`.
+    - Each callable retains its distinct Python reference, including the object path for methods.
     - If signature acquisition requires executing an application descriptor, the entry renders as `name: <callable; signature-unavailable>` without reading that descriptor.
 - Object capability values (non-callable, non-scalar, non-container values):
     - Header line: `name: object = TypeName`.

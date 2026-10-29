@@ -119,7 +119,6 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         _ = a
 
     first_prompt = prompt_content_to_text(agent.seen_prompts[0])
-    assert "Runtime inspection:" in first_prompt
     assert first_prompt[first_prompt.index("<<<NH:PROGRAM>>>") :] == textwrap.dedent(
         """\
         <<<NH:PROGRAM>>>
@@ -128,9 +127,7 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         <<<NH:END_PROGRAM>>>
 
         <<<NH:LOCALS>>>
-        Origin: python; name: a
         a: float = 1.0
-        Origin: python; name: x
         x: int = 10
         <<<NH:END_LOCALS>>>
 
@@ -148,16 +145,12 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         <<<NH:END_PROGRAM>>>
 
         <<<NH:LOCALS>>>
-        Origin: python; name: a
         a: float = 1.0
-        Origin: python; name: x
         x: int = 10
-        Origin: python; name: y
         y: str = "hello"
         <<<NH:END_LOCALS>>>
 
         <<<NH:GLOBALS>>>
-        Origin: python; name: G
         G: int = 1
         <<<NH:END_GLOBALS>>>
         """
@@ -358,7 +351,7 @@ def test_object_surface_renders_public_slots() -> None:
     assert "collector._private_slot" not in locals_text
 
 
-def test_object_method_signature_collision_renders_disambiguation_hint() -> None:
+def test_object_methods_preserve_qualified_references() -> None:
     step_context = build_step_context(
         python_globals={"__builtins__": builtins},
         python_locals={"a": _MethodCollisionA(), "b": _MethodCollisionB()},
@@ -370,8 +363,8 @@ def test_object_method_signature_collision_renders_disambiguation_hint() -> None
     )
 
     locals_text = locals_section(prompt)
-    assert "a.open: (action_id: str) -> None  # disambiguation: use a.open" in locals_text
-    assert "b.open: (action_id: str) -> None  # disambiguation: use b.open" in locals_text
+    assert "a.open: (action_id: str) -> None" in locals_text
+    assert "b.open: (action_id: str) -> None" in locals_text
 
 
 def test_object_async_method_renders_async_marker() -> None:
@@ -389,7 +382,7 @@ def test_object_async_method_renders_async_marker() -> None:
     assert "worker.wait: (operation: str) -> str  # async" in locals_text
 
 
-def test_callable_signature_collision_renders_disambiguation_hint_for_each_callable() -> None:
+def test_callables_preserve_distinct_references() -> None:
     def open_customer(customer_id):  # type: ignore[no-untyped-def]
         return customer_id
 
@@ -410,8 +403,8 @@ def test_callable_signature_collision_renders_disambiguation_hint_for_each_calla
     )
 
     locals_text = locals_section(prompt)
-    assert "open_customer: (customer_id)  # disambiguation: use open_customer" in locals_text
-    assert "open_order: (customer_id)  # disambiguation: use open_order" in locals_text
+    assert "open_customer: (customer_id)" in locals_text
+    assert "open_order: (customer_id)" in locals_text
 
 
 def test_object_surface_limits_methods_and_fields() -> None:

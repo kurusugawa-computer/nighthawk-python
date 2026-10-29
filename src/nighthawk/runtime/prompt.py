@@ -8,7 +8,7 @@ from string import Template
 from typing import Any, NamedTuple, TypeAliasType, cast
 
 import tiktoken
-from pydantic_ai.messages import TextContent, UserContent
+from pydantic_ai.messages import TextContent, UserContent, is_multi_modal_content
 
 from ..configuration import StepContextLimits, StepExecutorConfiguration
 from ..json_renderer import JsonRendererStyle, count_tokens, render_json_text
@@ -51,10 +51,6 @@ class ExtractedReferenceData(NamedTuple):
     program_text: str
 
 
-def _resolve_callable_signature_text(value: object) -> str | None:
-    return describe_callable(value).signature_text
-
-
 def _normalize_usage_intent_text(text: str, *, max_length: int = 72) -> str:
     normalized_text = " ".join(text.split())
     if len(normalized_text) <= max_length:
@@ -72,8 +68,7 @@ def _is_meaningful_usage_intent_hint(usage_intent_hint: str) -> bool:
     return normalized_lower_text not in meaningless_usage_intent_hint_set
 
 
-def _resolve_callable_usage_intent_hint(*, value: object) -> str | None:
-    documentation_text = describe_callable(value).documentation
+def _resolve_callable_usage_intent_hint(documentation_text: str | None) -> str | None:
     if documentation_text:
         first_line = documentation_text.splitlines()[0].strip()
         if first_line:
@@ -83,40 +78,14 @@ def _resolve_callable_usage_intent_hint(*, value: object) -> str | None:
     return None
 
 
-def _is_async_callable_value(value: object) -> bool:
-    return describe_callable(value).asynchronous
-
-
-def _find_ambiguous_callable_signatures(
-    *,
-    reference_and_value_list: list[ReferenceAndValue],
-) -> dict[str, list[str]]:
-    callable_signature_text_to_reference_list: dict[str, list[str]] = {}
-    for reference, value in reference_and_value_list:
-        if not callable(value):
-            continue
-
-        callable_signature_text = _resolve_callable_signature_text(value)
-        if callable_signature_text is None:
-            continue
-
-        callable_signature_text_to_reference_list.setdefault(callable_signature_text, []).append(reference)
-
-    return {
-        callable_signature_text: reference_list
-        for callable_signature_text, reference_list in callable_signature_text_to_reference_list.items()
-        if len(reference_list) > 1
-    }
-
-
 def _render_callable_line(
     *,
     reference: str,
     value: object,
-    callable_signature_text_to_reference_list: dict[str, list[str]],
 ) -> str:
-    usage_intent_hint = _resolve_callable_usage_intent_hint(value=value)
-    callable_signature_text = _resolve_callable_signature_text(value)
+    description = describe_callable(value)
+    usage_intent_hint = _resolve_callable_usage_intent_hint(description.documentation)
+    callable_signature_text = description.signature_text
     if callable_signature_text is None:
         rendered_text = f"{reference}: <callable; signature-unavailable>"
         if usage_intent_hint is not None:
@@ -127,10 +96,8 @@ def _render_callable_line(
     metadata_comment_list: list[str] = []
     if usage_intent_hint is not None:
         metadata_comment_list.append(usage_intent_hint)
-    if _is_async_callable_value(value):
+    if description.asynchronous:
         metadata_comment_list.append("async")
-    if callable_signature_text in callable_signature_text_to_reference_list:
-        metadata_comment_list.append(f"disambiguation: use {reference}")
 
     if metadata_comment_list:
         rendered_text += f"  # {'; '.join(metadata_comment_list)}"
@@ -205,29 +172,11 @@ def _count_prompt_line_tokens(
     return total_tokens
 
 
-def _collect_callable_reference_and_value_list(*, reference_and_value_list: list[ReferenceAndValue]) -> list[ReferenceAndValue]:
-    callable_reference_and_value_list: list[ReferenceAndValue] = []
-    for reference, value in reference_and_value_list:
-        if callable(value):
-            callable_reference_and_value_list.append((reference, value))
-            continue
-
-        if not _is_object_capability_candidate(value):
-            continue
-
-        method_name_to_value = _resolve_public_method_name_to_value(value=value)
-        for method_name, method_value in method_name_to_value.items():
-            callable_reference_and_value_list.append((f"{reference}.{method_name}", method_value))
-
-    return callable_reference_and_value_list
-
-
 def _render_object_capability_lines(
     *,
     reference: str,
     value: object,
     render_context: _PromptRenderContext,
-    callable_signature_text_to_reference_list: dict[str, list[str]],
 ) -> list[tuple[UserContent, ...]]:
     lines: list[tuple[UserContent, ...]] = [(f"{reference}: object = {type_name(value)}",)]
 
@@ -244,7 +193,6 @@ def _render_object_capability_lines(
                 _render_callable_line(
                     reference=method_reference,
                     value=method_value,
-                    callable_signature_text_to_reference_list=callable_signature_text_to_reference_list,
                 ),
             )
         )
@@ -289,7 +237,6 @@ def _render_reference_and_value_lines(
     reference: str,
     value: object,
     render_context: _PromptRenderContext,
-    callable_signature_text_to_reference_list: dict[str, list[str]],
 ) -> list[tuple[UserContent, ...]]:
     if value is _UNBOUND:
         return [(f"{reference}: <unbound Python binding>",)]
@@ -302,7 +249,6 @@ def _render_reference_and_value_lines(
                 _render_callable_line(
                     reference=reference,
                     value=value,
-                    callable_signature_text_to_reference_list=callable_signature_text_to_reference_list,
                 ),
             )
         ]
@@ -316,7 +262,6 @@ def _render_reference_and_value_lines(
             reference=reference,
             value=value,
             render_context=render_context,
-            callable_signature_text_to_reference_list=callable_signature_text_to_reference_list,
         )
 
     return [
@@ -346,9 +291,6 @@ def _render_reference_and_value_list_section(
     shown_items = 0
     token_limit_reached = False
 
-    callable_reference_and_value_list = _collect_callable_reference_and_value_list(reference_and_value_list=reference_and_value_list)
-    callable_signature_text_to_reference_list = _find_ambiguous_callable_signatures(reference_and_value_list=callable_reference_and_value_list)
-
     for reference, value in reference_and_value_list:
         if shown_items >= max_items:
             break
@@ -357,15 +299,19 @@ def _render_reference_and_value_list_section(
             reference=reference,
             value=value,
             render_context=render_context,
-            callable_signature_text_to_reference_list=callable_signature_text_to_reference_list,
         )
-        named_description = step_context.environment.describe(reference.split(".", 1)[0])
-        metadata = f"Origin: {named_description['origin']}; name: {reference}"
-        if named_description["annotation"] is not None:
-            metadata += f"; annotation: {named_description['annotation']}"
-        if named_description["output_contract"] is not None:
-            metadata += f"; output contract: {named_description['output_contract']}"
-        rendered_line_list.insert(0, (metadata,))
+        if "." not in reference:
+            named_description = step_context.environment.describe(reference)
+            annotation = named_description["annotation"]
+            output_contract = named_description["output_contract"]
+            metadata: list[str] = []
+            if output_contract is not None:
+                metadata.append(f"output: {output_contract}")
+            if annotation is not None and annotation != output_contract:
+                metadata.append(f"annotation: {annotation}")
+            if metadata:
+                first_line = rendered_line_list[0]
+                rendered_line_list[0] = (f"[{'; '.join(metadata)}] {first_line[0]}", *first_line[1:])
 
         rendered_tokens = sum(
             _count_prompt_line_tokens(
@@ -710,31 +656,20 @@ def _build_user_prompt_content(
         tool_result_max_tokens=context_limits.tool_result_max_tokens,
     )
 
-    environment = step_context.environment
-    runtime_reference = environment.runtime_reference
+    runtime_reference = step_context.environment.runtime_reference
     access_lines = [
-        f"Runtime inspection: {runtime_reference}.inspect(value).",
-        f"Name discovery: {runtime_reference}.environment.discover(); named contracts: {runtime_reference}.environment.describe('name').",
-        "Application names, including inspect, retain their Python meaning. These runtime references cannot be assignment roots.",
-        "Displayed annotations are best-effort metadata and may be unresolved source spelling; they are not evaluated for presentation.",
+        f"For missing details: {runtime_reference}.inspect(value) returns a metadata dictionary (type, members, preview).",
+        f"Names, sources, contracts: {runtime_reference}.environment.discover(), {runtime_reference}.environment.describe('name').",
+        "The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.",
     ]
-    relevant_names = (
-        set(references) | step_context.binding_commit_targets | set(step_context.step_locals) | set(environment.task_name_to_value) | {"inspect"}
-    )
-    collision_names = [
-        name
-        for name in sorted(relevant_names)
-        if len(cast(list[str], environment.describe(name)["source_references"])) > 1
-        or name == "inspect"
-        and environment.describe(name)["origin"] is not None
-    ]
-    for name in collision_names[:8]:
-        description = environment.describe(name)
+    if any(is_multi_modal_content(content) for content in prompt_content):
+        access_lines.append("Use attached media directly for perceptual judgments.")
+    environment = step_context.environment
+    relevant_names = set(references) | step_context.binding_commit_targets | set(step_context.step_locals) | set(environment.task_name_to_value)
+    if any(len(cast(list[str], environment.describe(name)["source_references"])) > 1 for name in relevant_names):
         access_lines.append(
-            f"Name collision: {name}; effective origin: {description['origin']}. Sources: {', '.join(cast(list[str], description['source_references']))}."
+            f"For source-specific requests: {runtime_reference}.environment.resolve('name', source='task') (also 'python' or 'step')."
         )
-    if len(collision_names) > 8:
-        access_lines.append(f"More collisions omitted; retrieve them with {runtime_reference}.environment.discover().")
     return coalesce_user_content(("\n".join(access_lines) + "\n\n", *prompt_content))
 
 

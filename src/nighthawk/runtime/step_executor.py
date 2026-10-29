@@ -397,7 +397,6 @@ class AgentStepExecutor:
 
         step_system_prompt_fragment = build_model_response_instructions(
             allowed_kinds=allowed_kinds_typed,
-            raise_error_type_binding_names=raise_error_type_binding_names,
         )
 
         outcome_json_schema = build_model_response_schema(

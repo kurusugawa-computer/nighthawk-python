@@ -30,7 +30,7 @@ def test_build_user_prompt_returns_tuple_for_text_only_prompt() -> None:
 
     assert isinstance(prompt_content, tuple)
     assert all(isinstance(content, str) for content in prompt_content)
-    assert prompt_content_to_text(prompt_content).startswith("Runtime inspection:")
+    assert f"{step_context.environment.runtime_reference}.inspect(value)" in prompt_content_to_text(prompt_content)
 
 
 def test_locals_section_inlines_binary_content_for_provider_prompt() -> None:
