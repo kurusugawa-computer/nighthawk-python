@@ -72,7 +72,7 @@ async def test_managed_model_sends_native_images_with_binding_labels() -> None:
     for index, name, image in zip(image_indices, ("first_image", "second_image", "third_image"), images, strict=True):
         assert content[index]["image_url"] == "data:image/png;base64," + base64.b64encode(image.data).decode("ascii")
         assert content[index - 1]["type"] == "input_text"
-        assert f"{name}: BinaryContent = " in content[index - 1]["text"]
+        assert f"{name}: BinaryContent  # attached content: " in content[index - 1]["text"]
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

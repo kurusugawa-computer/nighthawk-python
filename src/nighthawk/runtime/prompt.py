@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
+import math
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from string import Template
-from typing import Any, NamedTuple, TypeAliasType, cast
+from typing import Any, NamedTuple, TypeAliasType
 
 import tiktoken
 from pydantic_ai.messages import TextContent, UserContent, is_multi_modal_content
@@ -82,25 +84,16 @@ def _render_callable_line(
     *,
     reference: str,
     value: object,
+    annotation: str | None = None,
 ) -> str:
     description = describe_callable(value)
     usage_intent_hint = _resolve_callable_usage_intent_hint(description.documentation)
-    callable_signature_text = description.signature_text
-    if callable_signature_text is None:
-        rendered_text = f"{reference}: <callable; signature-unavailable>"
-        if usage_intent_hint is not None:
-            rendered_text += f"  # {usage_intent_hint}"
-        return rendered_text
-
-    rendered_text = f"{reference}: {callable_signature_text}"
-    metadata_comment_list: list[str] = []
-    if usage_intent_hint is not None:
-        metadata_comment_list.append(usage_intent_hint)
+    callable_signature_text = description.signature_text or "signature unavailable"
     if description.asynchronous:
-        metadata_comment_list.append("async")
-
-    if metadata_comment_list:
-        rendered_text += f"  # {'; '.join(metadata_comment_list)}"
+        callable_signature_text = f"async {callable_signature_text}"
+    rendered_text = f"{reference}: {annotation or 'Callable'}  # {callable_signature_text}"
+    if usage_intent_hint is not None:
+        rendered_text += f"; {usage_intent_hint}"
     return rendered_text
 
 
@@ -124,6 +117,25 @@ def _resolve_public_field_name_to_value(*, value: object) -> dict[str, object]:
     return dict(describe_public_members(value).field_name_to_value)
 
 
+def _matches_literal_preview(value: object, preview: object) -> bool:
+    """Recognize exact literal previews without calling application equality methods."""
+    if type(value) is not type(preview):
+        return False
+    if exact_type(value, float) and not math.isfinite(value):
+        return False
+    if value is None or any(type(value) is candidate for candidate in (bool, int, float, str)):
+        return value == preview
+    if exact_type(value, list) and exact_type(preview, list):
+        return len(value) == len(preview) and all(_matches_literal_preview(item, shown) for item, shown in zip(value, preview, strict=True))
+    if exact_type(value, dict) and exact_type(preview, dict):
+        return (
+            len(value) == len(preview)
+            and all(type(key) is str for key in value)
+            and all(key in preview and _matches_literal_preview(item, preview[key]) for key, item in value.items())
+        )
+    return False
+
+
 def _render_value_preview_line(
     *,
     reference: str,
@@ -131,9 +143,9 @@ def _render_value_preview_line(
     value_max_tokens: int,
     token_encoding: tiktoken.Encoding,
     json_renderer_style: JsonRendererStyle,
+    annotation: str | None = None,
 ) -> str:
-    reference_type_name = type_name(value)
-    rendered_name_and_type = f"{reference}: {reference_type_name} = "
+    reference_type_name = annotation or ("None" if value is None else type_name(value))
 
     rendered_value, _ = render_json_text(
         safe_preview(value),
@@ -142,7 +154,18 @@ def _render_value_preview_line(
         style=json_renderer_style,
     )
 
-    return rendered_name_and_type + rendered_value
+    try:
+        complete_literal = _matches_literal_preview(value, json.loads(rendered_value))
+    except ValueError:
+        complete_literal = False
+    # Translate JSON literals only outside strings, preserving the renderer's bounded preview.
+    rendered_value = re.sub(
+        r'"(?:\\.|[^"\\])*"|\b(?:null|true|false)\b',
+        lambda match: {"null": "None", "true": "True", "false": "False"}.get(match[0], match[0]),
+        rendered_value,
+    )
+    separator = " = " if complete_literal else "  # preview: "
+    return f"{reference}: {reference_type_name}{separator}{rendered_value}"
 
 
 def _append_prompt_line(
@@ -177,8 +200,11 @@ def _render_object_capability_lines(
     reference: str,
     value: object,
     render_context: _PromptRenderContext,
+    annotation: str | None = None,
 ) -> list[tuple[UserContent, ...]]:
-    lines: list[tuple[UserContent, ...]] = [(f"{reference}: object = {type_name(value)}",)]
+    value_type_name = type_name(value)
+    instance_comment = "instance" if annotation is None or annotation == value_type_name else f"{value_type_name} instance"
+    lines: list[tuple[UserContent, ...]] = [(f"{reference}: {annotation or value_type_name}  # {instance_comment}",)]
 
     method_name_to_value = _resolve_public_method_name_to_value(value=value)
     field_name_to_value = _resolve_public_field_name_to_value(value=value)
@@ -200,7 +226,7 @@ def _render_object_capability_lines(
 
     omitted_method_count = len(method_name_to_value) - shown_method_count
     if omitted_method_count > 0:
-        lines.append((f"{reference}.<methods>: <snipped {omitted_method_count} public methods>",))
+        lines.append((f"# {reference}: {omitted_method_count} public methods omitted",))
 
     shown_field_count = 0
     for field_name, field_value in field_name_to_value.items():
@@ -227,7 +253,7 @@ def _render_object_capability_lines(
 
     omitted_field_count = len(field_name_to_value) - shown_field_count
     if omitted_field_count > 0:
-        lines.append((f"{reference}.<fields>: <snipped {omitted_field_count} public fields>",))
+        lines.append((f"# {reference}: {omitted_field_count} public fields omitted",))
 
     return lines
 
@@ -237,11 +263,12 @@ def _render_reference_and_value_lines(
     reference: str,
     value: object,
     render_context: _PromptRenderContext,
+    annotation: str | None = None,
 ) -> list[tuple[UserContent, ...]]:
     if value is _UNBOUND:
-        return [(f"{reference}: <unbound Python binding>",)]
+        return [(f"{reference}: {annotation or 'object'}  # unbound",)]
     if exact_type(value, TypeAliasType):
-        return [(f"{reference}: type = {annotation_text(value)}; alias expansion omitted (requires evaluation)",)]
+        return [(f"{reference}: {annotation or 'TypeAliasType'}  # {annotation_text(value)}; alias expansion omitted (requires evaluation)",)]
 
     if callable(value):
         return [
@@ -249,19 +276,21 @@ def _render_reference_and_value_lines(
                 _render_callable_line(
                     reference=reference,
                     value=value,
+                    annotation=annotation,
                 ),
             )
         ]
 
     prompt_user_content = try_project_user_prompt_value(value)
     if prompt_user_content is not None:
-        return [(f"{reference}: {type(value).__name__} = ", *prompt_user_content)]
+        return [(f"{reference}: {annotation or type_name(value)}  # attached content: ", *prompt_user_content)]
 
     if _is_object_capability_candidate(value):
         return _render_object_capability_lines(
             reference=reference,
             value=value,
             render_context=render_context,
+            annotation=annotation,
         )
 
     return [
@@ -272,6 +301,7 @@ def _render_reference_and_value_lines(
                 value_max_tokens=render_context.context_limits.value_max_tokens,
                 token_encoding=render_context.token_encoding,
                 json_renderer_style=render_context.json_renderer_style,
+                annotation=annotation,
             ),
         )
     ]
@@ -295,23 +325,18 @@ def _render_reference_and_value_list_section(
         if shown_items >= max_items:
             break
 
+        annotation = None
+        if "." not in reference:
+            named_description = step_context.environment.describe(reference)
+            selected_annotation = named_description["output_contract"] or named_description["annotation"]
+            if isinstance(selected_annotation, str):
+                annotation = selected_annotation
         rendered_line_list = _render_reference_and_value_lines(
             reference=reference,
             value=value,
             render_context=render_context,
+            annotation=annotation,
         )
-        if "." not in reference:
-            named_description = step_context.environment.describe(reference)
-            annotation = named_description["annotation"]
-            output_contract = named_description["output_contract"]
-            metadata: list[str] = []
-            if output_contract is not None:
-                metadata.append(f"output: {output_contract}")
-            if annotation is not None and annotation != output_contract:
-                metadata.append(f"annotation: {annotation}")
-            if metadata:
-                first_line = rendered_line_list[0]
-                rendered_line_list[0] = (f"[{'; '.join(metadata)}] {first_line[0]}", *first_line[1:])
 
         rendered_tokens = sum(
             _count_prompt_line_tokens(
@@ -332,12 +357,14 @@ def _render_reference_and_value_list_section(
 
     truncated = shown_items < len(reference_and_value_list)
     if truncated:
-        _append_prompt_line(content_part_list=content_part_list, prompt_line=("<snipped>",))
+        _append_prompt_line(content_part_list=content_part_list, prompt_line=("# <snipped>",))
         omitted_names = [name for name, _ in reference_and_value_list[shown_items:]]
         _append_prompt_line(
             content_part_list=content_part_list,
             prompt_line=(
-                f"Omitted: {', '.join(omitted_names[:8])}{', ...' if len(omitted_names) > 8 else ''}. Retrieve names with {step_context.environment.runtime_reference}.environment.discover().",
+                f"# Omitted: {', '.join(omitted_names[:8])}{', ...' if len(omitted_names) > 8 else ''}. "
+                f"Retrieve names with {step_context.environment.runtime_reference}.environment.discover(); "
+                f"binding details with {step_context.environment.runtime_reference}.environment.describe('name').",
             ),
         )
         if token_limit_reached:
@@ -372,7 +399,10 @@ def _resolve_reference_path_in_step_context(
     if not reference_segment_list:
         return _MISSING
 
-    current_value = resolve_name_in_step_context(step_context, reference_segment_list[0])
+    try:
+        current_value = resolve_name_in_step_context(step_context, reference_segment_list[0])
+    except UnboundEnvironmentNameError:
+        return _MISSING
     if current_value is _MISSING:
         return _MISSING
 
@@ -498,7 +528,10 @@ def _render_globals_section(
             or reference in step_context.binding_commit_targets
         ):
             continue
-        value = resolve_name_in_step_context(step_context, reference)
+        try:
+            value = resolve_name_in_step_context(step_context, reference)
+        except UnboundEnvironmentNameError:
+            value = _UNBOUND
         if value is _MISSING:
             continue
         eligible_reference_and_value_list.append((reference, value))
@@ -659,17 +692,9 @@ def _build_user_prompt_content(
     runtime_reference = step_context.environment.runtime_reference
     access_lines = [
         f"For missing details: {runtime_reference}.inspect(value) returns a metadata dictionary (type, members, preview).",
-        f"Names, sources, contracts: {runtime_reference}.environment.discover(), {runtime_reference}.environment.describe('name').",
-        "The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.",
     ]
     if any(is_multi_modal_content(content) for content in prompt_content):
         access_lines.append("Use attached media directly for perceptual judgments.")
-    environment = step_context.environment
-    relevant_names = set(references) | step_context.binding_commit_targets | set(step_context.step_locals) | set(environment.task_name_to_value)
-    if any(len(cast(list[str], environment.describe(name)["source_references"])) > 1 for name in relevant_names):
-        access_lines.append(
-            f"For source-specific requests: {runtime_reference}.environment.resolve('name', source='task') (also 'python' or 'step')."
-        )
     return coalesce_user_content(("\n".join(access_lines) + "\n\n", *prompt_content))
 
 

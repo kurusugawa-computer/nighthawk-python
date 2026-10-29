@@ -47,11 +47,11 @@ def test_locals_section_inlines_binary_content_for_provider_prompt() -> None:
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_photo = prompt_content[photo_index - 1]
     assert isinstance(content_before_photo, str)
-    assert content_before_photo.endswith("photo: BinaryContent = ")
+    assert content_before_photo.endswith("photo: BinaryContent  # attached content: ")
     content_after_photo = prompt_content[photo_index + 1]
     assert isinstance(content_after_photo, str)
     assert content_after_photo.startswith("\n<<<NH:END_LOCALS>>>")
-    assert "photo: BinaryContent = <image>" in prompt_content_to_text(prompt_content)
+    assert "photo: BinaryContent  # attached content: <image>" in prompt_content_to_text(prompt_content)
 
 
 def test_globals_section_inlines_image_url_for_provider_prompt() -> None:
@@ -68,8 +68,8 @@ def test_globals_section_inlines_image_url_for_provider_prompt() -> None:
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, ImageUrl))
     content_before_photo = prompt_content[photo_index - 1]
     assert isinstance(content_before_photo, str)
-    assert content_before_photo.endswith("photo: ImageUrl = ")
-    assert prompt_content_to_text(prompt_content).endswith("photo: ImageUrl = <image>\n<<<NH:END_GLOBALS>>>\n")
+    assert content_before_photo.endswith("photo: ImageUrl  # attached content: ")
+    assert prompt_content_to_text(prompt_content).endswith("photo: ImageUrl  # attached content: <image>\n<<<NH:END_GLOBALS>>>\n")
 
 
 def test_locals_section_inlines_uploaded_file_for_provider_prompt() -> None:
@@ -86,8 +86,8 @@ def test_locals_section_inlines_uploaded_file_for_provider_prompt() -> None:
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, UploadedFile))
     content_before_photo = prompt_content[photo_index - 1]
     assert isinstance(content_before_photo, str)
-    assert content_before_photo.endswith("photo: UploadedFile = ")
-    assert "photo: UploadedFile = <image>" in prompt_content_to_text(prompt_content)
+    assert content_before_photo.endswith("photo: UploadedFile  # attached content: ")
+    assert "photo: UploadedFile  # attached content: <image>" in prompt_content_to_text(prompt_content)
 
 
 def test_locals_section_inlines_audio_url_as_file_for_provider_prompt() -> None:
@@ -104,8 +104,8 @@ def test_locals_section_inlines_audio_url_as_file_for_provider_prompt() -> None:
     clip_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, AudioUrl))
     content_before_clip = prompt_content[clip_index - 1]
     assert isinstance(content_before_clip, str)
-    assert content_before_clip.endswith("clip: AudioUrl = ")
-    assert "clip: AudioUrl = <file>" in prompt_content_to_text(prompt_content)
+    assert content_before_clip.endswith("clip: AudioUrl  # attached content: ")
+    assert "clip: AudioUrl  # attached content: <file>" in prompt_content_to_text(prompt_content)
 
 
 def test_locals_section_keeps_unreferenced_top_level_multimodal_bindings_by_design() -> None:
@@ -124,8 +124,8 @@ def test_locals_section_keeps_unreferenced_top_level_multimodal_bindings_by_desi
 
     assert sum(1 for content in prompt_content if isinstance(content, BinaryContent)) == 2
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "extra: BinaryContent = <image>" in prompt_text
-    assert "photo: BinaryContent = <image>" in prompt_text
+    assert "extra: BinaryContent  # attached content: <image>" in prompt_text
+    assert "photo: BinaryContent  # attached content: <image>" in prompt_text
 
 
 def test_locals_section_inlines_top_level_user_content_sequence_for_provider_prompt() -> None:
@@ -142,11 +142,11 @@ def test_locals_section_inlines_top_level_user_content_sequence_for_provider_pro
     image_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_image = prompt_content[image_index - 1]
     assert isinstance(content_before_image, str)
-    assert content_before_image.endswith("gallery: list = prefix ")
+    assert content_before_image.endswith("gallery: list  # attached content: prefix ")
     content_after_image = prompt_content[image_index + 1]
     assert isinstance(content_after_image, str)
     assert content_after_image.startswith(" suffix\n<<<NH:END_LOCALS>>>")
-    assert "gallery: list = prefix <image> suffix" in prompt_content_to_text(prompt_content)
+    assert "gallery: list  # attached content: prefix <image> suffix" in prompt_content_to_text(prompt_content)
 
 
 def test_top_level_text_only_sequence_remains_preview_only() -> None:
@@ -183,10 +183,10 @@ def test_dotted_multimodal_reference_adds_explicit_native_prompt_line() -> None:
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_photo = prompt_content[photo_index - 1]
     assert isinstance(content_before_photo, str)
-    assert content_before_photo.endswith("holder.photo: BinaryContent = ")
+    assert content_before_photo.endswith("holder.photo: BinaryContent  # attached content: ")
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "holder: object = Holder" in prompt_text
-    assert "holder.photo: BinaryContent = <image>" in prompt_text
+    assert "holder: Holder  # instance" in prompt_text
+    assert "holder.photo: BinaryContent  # attached content: <image>" in prompt_text
 
 
 def test_dotted_multimodal_reference_preserves_base_model_leaf_identity() -> None:
@@ -209,14 +209,14 @@ def test_dotted_multimodal_reference_preserves_base_model_leaf_identity() -> Non
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_photo = prompt_content[photo_index - 1]
     assert isinstance(content_before_photo, str)
-    assert content_before_photo.endswith("holder.photo: BinaryContent = ")
+    assert content_before_photo.endswith("holder.photo: BinaryContent  # attached content: ")
     prompt_text = prompt_content_to_text(prompt_content)
     assert "holder.describe:" in prompt_text
     assert "holder.model_config:" not in prompt_text
     assert "holder.model_dump:" not in prompt_text
     assert "holder.model_fields:" not in prompt_text
     assert "holder.model_validate:" not in prompt_text
-    assert "holder.photo: BinaryContent = <image>" in prompt_text
+    assert "holder.photo: BinaryContent  # attached content: <image>" in prompt_text
 
 
 def test_dotted_non_multimodal_reference_remains_preview_only() -> None:
@@ -257,9 +257,9 @@ def test_dotted_multimodal_sequence_reference_is_hoisted() -> None:
     image_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_image = prompt_content[image_index - 1]
     assert isinstance(content_before_image, str)
-    assert content_before_image.endswith("holder.photos: list = ")
+    assert content_before_image.endswith("holder.photos: list  # attached content: ")
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "holder.photos: list = <image>" in prompt_text
+    assert "holder.photos: list  # attached content: <image>" in prompt_text
 
 
 def test_dotted_multimodal_sequence_reference_is_hoisted_from_globals() -> None:
@@ -280,9 +280,9 @@ def test_dotted_multimodal_sequence_reference_is_hoisted_from_globals() -> None:
     image_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_image = prompt_content[image_index - 1]
     assert isinstance(content_before_image, str)
-    assert content_before_image.endswith("holder.photos: list = ")
+    assert content_before_image.endswith("holder.photos: list  # attached content: ")
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "holder.photos: list = <image>" in prompt_text
+    assert "holder.photos: list  # attached content: <image>" in prompt_text
 
 
 def test_dotted_mapping_key_multimodal_reference_is_not_hoisted() -> None:
@@ -301,8 +301,8 @@ def test_dotted_mapping_key_multimodal_reference_is_not_hoisted() -> None:
 
     assert all(not isinstance(content, BinaryContent) for content in prompt_content)
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "payload: dict = " in prompt_text
-    assert "payload.photo: BinaryContent = <image>" not in prompt_text
+    assert "payload: dict  # preview: " in prompt_text
+    assert "payload.photo: BinaryContent  # attached content: <image>" not in prompt_text
     assert '"kind":"binary"' in prompt_text
 
 
@@ -321,7 +321,7 @@ def test_top_level_mixed_non_user_content_sequence_remains_preview_only() -> Non
 
     assert all(not isinstance(content, BinaryContent) for content in prompt_content)
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "gallery: list = [" in prompt_text
+    assert "gallery: list  # preview: [" in prompt_text
     assert '"label":"cat"' in prompt_text
     assert "<bytes; 8 bytes>" in prompt_text
 
@@ -345,7 +345,7 @@ def test_namedtuple_multimodal_reference_remains_record_preview_only() -> None:
 
     assert all(not isinstance(content, BinaryContent) for content in prompt_content)
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "report: PhotoReport = " in prompt_text
+    assert "report: PhotoReport  # preview: " in prompt_text
     assert '"caption":"cat"' in prompt_text
     assert '"kind":"binary"' in prompt_text
 
@@ -372,10 +372,10 @@ def test_deep_dotted_multimodal_reference_adds_explicit_native_prompt_line() -> 
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
     content_before_photo = prompt_content[photo_index - 1]
     assert isinstance(content_before_photo, str)
-    assert content_before_photo.endswith("holder.inner.photo: BinaryContent = ")
+    assert content_before_photo.endswith("holder.inner.photo: BinaryContent  # attached content: ")
     prompt_text = prompt_content_to_text(prompt_content)
     assert "holder.inner:" in prompt_text
-    assert "holder.inner.photo: BinaryContent = <image>" in prompt_text
+    assert "holder.inner.photo: BinaryContent  # attached content: <image>" in prompt_text
 
 
 def test_depth_one_dotted_multimodal_reference_survives_object_max_fields_truncation() -> None:
@@ -404,7 +404,7 @@ def test_depth_one_dotted_multimodal_reference_survives_object_max_fields_trunca
     )
 
     prompt_text = prompt_content_to_text(prompt_content)
-    assert "holder.photo: BinaryContent = <image>" in prompt_text
+    assert "holder.photo: BinaryContent  # attached content: <image>" in prompt_text
     assert sum(1 for content in prompt_content if isinstance(content, BinaryContent)) == 1
 
 
@@ -435,7 +435,7 @@ def test_explicit_dotted_multimodal_reference_can_be_truncated_by_section_limits
     )
 
     assert "alpha: str = " in prompt_text
-    assert "holder.photo: BinaryContent = <image>" not in prompt_text
+    assert "holder.photo: BinaryContent  # attached content: <image>" not in prompt_text
     assert "<snipped>" in locals_section(prompt_text)
 
 
@@ -468,7 +468,7 @@ def test_token_truncation_log_marks_dropped_multimodal(caplog) -> None:  # type:
         )
 
     assert "alpha: str = " in prompt_text
-    assert "holder.photo: BinaryContent = <image>" not in prompt_text
+    assert "holder.photo: BinaryContent  # attached content: <image>" not in prompt_text
     assert "<snipped>" in locals_section(prompt_text)
 
     truncation_log_record_list = [record for record in caplog.records if "prompt_context_truncated" in record.getMessage()]

@@ -405,18 +405,22 @@ The default user prompt template renders three delimited sections:
 
 The template uses `$program`, `$locals`, and `$globals` placeholders, substituted at prompt construction time.
 A bounded runtime-access preamble precedes the template.
-It identifies collision-free inspection and environment references for details missing from the snapshots.
+It identifies a collision-free inspection reference for details missing from the snapshots.
 Inspection returns a metadata dictionary rather than the original value.
 When native media is included, the preamble directs perceptual judgments to that attached content.
+Environment discovery and named-description expressions appear beside omitted context entries instead of in the preamble.
+The preamble does not repeat runtime-root protection or output-validation rules; their runtime enforcement is unchanged.
 
 #### 8.2.2. Locals summary
 
 The locals summary presents current Python working locals and step assignments.
-Entries show available declaration annotations and selected output contracts in a compact prefix such as `[output: int]`.
-An annotation identical to the output contract is shown only once.
+Entries use ordinary Python names and a single type annotation, such as `result: int = 0`.
+The selected output contract takes precedence over an available declaration annotation; otherwise the current value's type is used.
+Neither `[output: ...]` / `[annotation: ...]` prefixes nor `<:name>` decorations appear in the context sections.
+Natural source declarations and runtime assignment and validation rules remain authoritative.
 Explicit dotted entries do not inherit their root's annotation or output contract.
 Provenance and shadowed alternatives are available through environment discovery and named descriptions.
-When relevant names have multiple sources, the preamble supplies the explicit source-selection expression without enumerating each collision.
+The default prompt presents effective bindings without a collision scan or source-selection instructions.
 These descriptions do not change the live environment or its validation contracts.
 
 Selection:
@@ -435,30 +439,39 @@ Ordering:
 
 Rendering format:
 
-- `TypeAliasType` values (PEP 695) retain their name and explicitly omit expansion that would require evaluation.
+- Unbound names have an annotation and `# unbound`, without an invented initial value.
+- `TypeAliasType` values (PEP 695) retain their name in a comment and explicitly omit expansion that would require evaluation.
 - Callable values use static, best-effort signature metadata shared with value inspection.
-  Available annotations are included, such as `(base: int, bonus: int) -> int`; unresolved annotation spelling is preserved without evaluation.
-    - If the callable has a meaningful docstring, the first line is appended as `# first_line`.
-    - If the callable is async, `async` is appended in metadata comments.
+  The binding annotation is followed by a signature comment, such as `helper: Callable  # (base: int, bonus: int) -> int`.
+  A selected contract or declaration annotation replaces the generic `Callable` annotation when available.
+  Unresolved annotation spelling is preserved without evaluation.
+    - If the callable has a meaningful docstring, the first line is appended to the comment.
+    - If the callable is async, `async` precedes the signature, as in `helper: Callable  # async (operation: str) -> str; first_line`.
+      Known async status is also retained when the signature is unavailable.
     - Each callable retains its distinct Python reference, including the object path for methods.
-    - If signature acquisition requires executing an application descriptor, the entry renders as `name: <callable; signature-unavailable>` without reading that descriptor.
+    - If signature acquisition requires executing an application descriptor, the comment states `signature unavailable` without reading that descriptor.
 - Object capability values (non-callable, non-scalar, non-container values):
-    - Header line: `name: object = TypeName`.
-    - Public method lines: `name.method: (signature)` using callable rules above.
-    - Public field lines: `name.field: type_name = json_value`.
+    - Header line: `name: TypeName  # instance`.
+      If a selected contract or declaration differs from the runtime type, the annotation shows that contract or declaration and the comment identifies the actual instance type.
+    - Public method lines use callable rules above with the full `name.method` reference.
+    - Public field lines use the value preview rules below.
     - Public means names that do not start with `_`; private and dunder names are excluded.
     - Properties are not evaluated.
     - Field discovery uses safe sources: instance `__dict__`, dataclass fields, Pydantic model fields, and readable public `__slots__` entries.
     - Class attributes that are public and non-callable are included as fields.
     - Method expansion is bounded by `context_limits.object_max_methods`; field expansion is bounded by `context_limits.object_max_fields`; each field value preview is bounded by `context_limits.object_field_value_max_tokens`.
-    - If object member limits are exceeded, explicit omission lines are added: `name.<methods>: <snipped N public methods>` and/or `name.<fields>: <snipped N public fields>`.
-- Other non-callable values: `name: type_name = json_value`, where `json_value` is bounded by `context_limits.value_max_tokens`.
-- Top-level Pydantic AI multimodal values are rendered as `name: TypeName = ` followed by inline user content in the prompt payload.
+    - If object member limits are exceeded, comments identify the object and the number of omitted methods or fields.
+- Complete previews of ordinary scalar, list, and string-keyed dictionary values use Python literals, including `None`, `True`, and `False`.
+  JSON preview rendering and its configured style still supply bounded summaries; JSON literals outside strings are translated to Python spelling for context display.
+  Lossy or non-literal previews appear in `# preview: ...` comments rather than assignments to invented values.
+  This includes truncated containers and strings, tuples projected as lists, opaque objects, and non-finite floats.
+  Display does not execute application equality, representation, annotation, or serialization code.
+- Top-level Pydantic AI multimodal values are rendered as `name: TypeName  # attached content: ` followed by inline user content in the prompt payload.
     - This applies to top-level locals/globals entries.
 - Top-level `list` / `tuple` values are also rendered as inline user content when every item is valid Pydantic AI `UserContent` and at least one item is multimodal.
-    - The binding line still renders once, for example `photos: list = `, followed by the original top-level item order.
+    - The binding line still renders once, for example `photos: list  # attached content: `, followed by the original top-level item order.
     - Pure text-only sequences do not use this rule; they remain preview-rendered values.
-- Explicit dotted references whose resolved leaf resolves to hoistable inline user content add a separate section line for that full dotted path (for example `holder.photo: BinaryContent = ` followed by inline user content).
+- Explicit dotted references whose resolved leaf resolves to hoistable inline user content add a separate section line for that full dotted path (for example `holder.photo: BinaryContent  # attached content: ` followed by inline user content).
     - Only explicitly referenced dotted paths are added this way.
     - This is a leaf-only rendering rule, not recursive object-graph extraction.
     - Dotted-path resolution is attribute-oriented only. Each segment after the top-level name is resolved against discovered object fields using the same safe field sources as object capability rendering.
@@ -467,14 +480,16 @@ Rendering format:
     - Non-multimodal dotted references remain preview text inside object capability rendering.
     - When a dotted multimodal reference is rendered as a separate section line, the corresponding field is omitted from the owning object capability block to avoid duplication. The field still consumes a slot in the `object_max_fields` budget.
 
-Callable disambiguation considers both top-level callable entries and object method entries in the same section.
+Context is a bounded description, not executable initialization code.
+Declaration spellings and native content need not form a complete Python program.
 
 Ordering:
 
 - Top-level entries follow the priority classes above and use lexicographic order within each class.
 - Object methods and fields are rendered in lexicographic order by member name.
 - Methods are rendered before fields for each object entry.
-- If a section-level budget prevents rendering all top-level entries, `<snipped>` is appended at the end of the section.
+- If an item or token budget prevents rendering all top-level entries, a `# <snipped>` comment is appended at the end of the section.
+  An adjacent omission comment names up to eight omitted entries and supplies `environment.discover()` and `environment.describe('name')` expressions using the live runtime reference.
 
 Safety:
 

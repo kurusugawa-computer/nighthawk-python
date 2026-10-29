@@ -406,8 +406,6 @@ When `step_2(carry)` executes, the LLM sees the carry's current contents in LOCA
 <!-- prompt-example:carry-pattern -->
 ```py
 For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
-The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Read <carry> for prior context.
@@ -418,7 +416,7 @@ Append a one-line summary of what you did to <carry>.
 
 <<<NH:LOCALS>>>
 carry: list = ["Set result to 10."]
-[output: int] result: int = 0
+result: int = 0
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>

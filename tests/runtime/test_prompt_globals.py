@@ -307,7 +307,7 @@ def test_custom_user_prompt_template_preserves_multimodal_placeholder_order() ->
     )
 
     photo_index = next(index for index, content in enumerate(prompt_content) if isinstance(content, BinaryContent))
-    assert str(prompt_content[photo_index - 1]).endswith("before\nphoto: BinaryContent = ")
+    assert str(prompt_content[photo_index - 1]).endswith("before\nphoto: BinaryContent  # attached content: ")
     content_after_photo = prompt_content[photo_index + 1]
     assert isinstance(content_after_photo, str)
     assert content_after_photo.startswith("\nbetween\nInspect <photo>.\nafter\n")

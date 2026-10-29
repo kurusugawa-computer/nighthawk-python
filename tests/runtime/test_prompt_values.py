@@ -70,6 +70,7 @@ class _MethodCollisionB:
 
 class _AsyncSurface:
     async def wait(self, operation: str) -> str:
+        """Wait for the requested operation."""
         return operation
 
 
@@ -173,8 +174,7 @@ def test_locals_section_renders_plain_python_function_signature() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "local_function: (required, optional=10, *, keyword='x')" in locals_text
-    assert "# " not in locals_text
+    assert "local_function: Callable  # (required, optional=10, *, keyword='x')" in locals_text
     assert "<function>" not in locals_text
 
 
@@ -197,9 +197,9 @@ def test_locals_section_renders_lambda_builtin_and_bound_method_values() -> None
     )
 
     locals_text = locals_section(prompt)
-    assert "lambda_value: (number)" in locals_text
-    assert "builtin_length: (obj, /)  # " in locals_text
-    assert "bound_method: (item)" in locals_text
+    assert "lambda_value: Callable  # (number)" in locals_text
+    assert "builtin_length: Callable  # (obj, /); " in locals_text
+    assert "bound_method: Callable  # (item)" in locals_text
     assert "<function>" not in locals_text
     assert "builtin_function_or_method" not in locals_text
     assert "method = " not in locals_text
@@ -223,10 +223,9 @@ def test_locals_section_renders_callable_instance_and_partial_function() -> None
     )
 
     locals_text = locals_section(prompt)
-    assert "callable_instance: (item)" in locals_text
-    assert "partially_applied_helper: (optional=10, *, keyword='x')" in locals_text
+    assert "callable_instance: Callable  # (item)" in locals_text
+    assert "partially_applied_helper: Callable  # (optional=10, *, keyword='x')" in locals_text
     assert "partial = " not in locals_text
-    assert "# " not in locals_text
     assert "<function>" not in locals_text
     assert "(*args, **kwargs)" not in locals_text
 
@@ -246,8 +245,7 @@ def test_globals_section_renders_referenced_global_function_signature() -> None:
     )
 
     globals_text = globals_section(prompt)
-    assert "global_helper: (required, optional=10, *, keyword='x')" in globals_text
-    assert "# " not in globals_text
+    assert "global_helper: Callable  # (required, optional=10, *, keyword='x')" in globals_text
     assert "<function>" not in globals_text
 
 
@@ -273,8 +271,7 @@ def test_locals_section_renders_typed_function_argument_and_return_annotations()
     )
 
     locals_text = locals_section(prompt)
-    assert "local_typed_function: (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in locals_text
-    assert "# " not in locals_text
+    assert "local_typed_function: Callable  # (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in locals_text
     assert "<function>" not in locals_text
 
 
@@ -293,8 +290,7 @@ def test_globals_section_renders_referenced_typed_function_argument_and_return_a
     )
 
     globals_text = globals_section(prompt)
-    assert "global_typed_helper: (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in globals_text
-    assert "# " not in globals_text
+    assert "global_typed_helper: Callable  # (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in globals_text
     assert "<function>" not in globals_text
 
 
@@ -310,8 +306,7 @@ def test_signature_unavailable_callable_renders_non_invocable_marker() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "opaque_callable: <callable; signature-unavailable>" in locals_text
-    assert "# " not in locals_text
+    assert "opaque_callable: Callable  # signature unavailable" in locals_text
     assert "(*args, **kwargs)" not in locals_text
 
 
@@ -327,9 +322,9 @@ def test_object_surface_renders_public_methods_and_fields_without_properties() -
     )
 
     locals_text = locals_section(prompt)
-    assert "collector: object = _PublicObjectSurface" in locals_text
-    assert "collector.append: (action: str) -> None" in locals_text
-    assert "collector.remove: (action_id: str) -> None" in locals_text
+    assert "collector: _PublicObjectSurface  # instance" in locals_text
+    assert "collector.append: Callable  # (action: str) -> None" in locals_text
+    assert "collector.remove: Callable  # (action_id: str) -> None" in locals_text
     assert "collector.field_value: int = 12" in locals_text
     assert "collector._internal" not in locals_text
     assert "collector.computed" not in locals_text
@@ -363,8 +358,8 @@ def test_object_methods_preserve_qualified_references() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "a.open: (action_id: str) -> None" in locals_text
-    assert "b.open: (action_id: str) -> None" in locals_text
+    assert "a.open: Callable  # (action_id: str) -> None" in locals_text
+    assert "b.open: Callable  # (action_id: str) -> None" in locals_text
 
 
 def test_object_async_method_renders_async_marker() -> None:
@@ -379,7 +374,7 @@ def test_object_async_method_renders_async_marker() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "worker.wait: (operation: str) -> str  # async" in locals_text
+    assert "worker.wait: Callable  # async (operation: str) -> str; Wait for the requested operation." in locals_text
 
 
 def test_callables_preserve_distinct_references() -> None:
@@ -403,8 +398,8 @@ def test_callables_preserve_distinct_references() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "open_customer: (customer_id)" in locals_text
-    assert "open_order: (customer_id)" in locals_text
+    assert "open_customer: Callable  # (customer_id)" in locals_text
+    assert "open_order: Callable  # (customer_id)" in locals_text
 
 
 def test_object_surface_limits_methods_and_fields() -> None:
@@ -448,8 +443,8 @@ def test_object_surface_limits_methods_and_fields() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "surface.<methods>: <snipped 1 public methods>" in locals_text
-    assert "surface.<fields>: <snipped 1 public fields>" in locals_text
+    assert "# surface: 1 public methods omitted" in locals_text
+    assert "# surface: 1 public fields omitted" in locals_text
 
 
 def test_locals_section_renders_pep695_type_alias_in_function_signature() -> None:
@@ -472,10 +467,9 @@ def test_locals_section_renders_pep695_type_alias_in_function_signature() -> Non
     )
 
     locals_text = locals_section(prompt)
-    assert "T: type = T; alias expansion omitted (requires evaluation)" in locals_text
-    assert "f: (t: T) -> None" in locals_text
-    assert "g: (literal_value: Literal['A', 'B', 'C']) -> None" in locals_text
-    assert "# " not in locals_text
+    assert "T: TypeAliasType  # T; alias expansion omitted (requires evaluation)" in locals_text
+    assert "f: Callable  # (t: T) -> None" in locals_text
+    assert "g: Callable  # (literal_value: Literal['A', 'B', 'C']) -> None" in locals_text
     assert "<function>" not in locals_text
 
 
@@ -496,10 +490,10 @@ def test_globals_section_includes_type_alias_from_local_callable_return_annotati
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
 
     locals_text = locals_section(prompt)
-    assert "check: (text: str) -> Labels" in locals_text
+    assert "check: Callable  # (text: str) -> Labels" in locals_text
 
 
 def test_globals_section_includes_type_alias_from_local_callable_parameter_annotation() -> None:
@@ -520,7 +514,7 @@ def test_globals_section_includes_type_alias_from_local_callable_parameter_annot
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
 
 
 def test_globals_section_includes_type_alias_from_generic_annotation() -> None:
@@ -541,7 +535,7 @@ def test_globals_section_includes_type_alias_from_generic_annotation() -> None:
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
 
 
 def test_globals_section_includes_type_alias_from_nested_generic_annotation() -> None:
@@ -561,7 +555,7 @@ def test_globals_section_includes_type_alias_from_nested_generic_annotation() ->
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
 
 
 def test_globals_section_includes_type_alias_from_global_callable_signature() -> None:
@@ -582,8 +576,8 @@ def test_globals_section_includes_type_alias_from_global_callable_signature() ->
     )
 
     globals_text = globals_section(prompt)
-    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in globals_text
-    assert "classify: (text: str) -> Labels" in globals_text
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
+    assert "classify: Callable  # (text: str) -> Labels" in globals_text
 
 
 def test_globals_section_excludes_builtin_types_from_callable_signature() -> None:
@@ -625,7 +619,7 @@ def test_type_alias_in_locals_is_not_duplicated_in_globals_section() -> None:
     assert "Labels" not in globals_text
 
     locals_text = locals_section(prompt)
-    assert "Labels: type = Labels; alias expansion omitted (requires evaluation)" in locals_text
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in locals_text
 
 
 def test_globals_section_deduplicates_type_alias_from_multiple_callables() -> None:
@@ -712,8 +706,7 @@ def test_locals_section_renders_fallback_composed_function_signature() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "composed: (x: str) -> str" in locals_text
-    assert "# " not in locals_text
+    assert "composed: Callable  # (x: str) -> str" in locals_text
     assert "<function>" not in locals_text
 
 
@@ -737,8 +730,7 @@ def test_locals_section_renders_fallback_merged_return_type_signature() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert "composed: (x: str) -> str | int" in locals_text
-    assert "# " not in locals_text
+    assert "composed: Callable  # (x: str) -> str | int" in locals_text
     assert "<function>" not in locals_text
 
 

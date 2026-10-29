@@ -81,9 +81,12 @@ def test_default_context_prioritizes_explicit_names_and_includes_task_values() -
     assert "z: int = 7" in locals_section(prompt)
     assert "Omitted: a" in prompt
     assert ".environment.discover()" in prompt
+    assert ".environment.describe('name')" in locals_section(prompt)
     context.environment = StepEnvironment(python_name_to_value=context.step_locals, python_globals={}, task_name_to_value={"shared": 5})
     prompt = build_user_prompt_text(processed_natural_program="Review state.", step_context=context)
     assert "shared: int = 5" in prompt
+    assert ".environment.discover()" not in prompt
+    assert ".environment.describe(" not in prompt
 
 
 def test_runtime_inspection_and_discovery_are_one_evaluation_operation() -> None:

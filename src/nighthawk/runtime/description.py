@@ -13,7 +13,7 @@ import sys
 import tokenize
 import types
 import typing
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +83,7 @@ def annotation_arguments(annotation: object) -> tuple[object, ...]:
         type(typing.Literal[1]),
         type(typing.Annotated[int, "metadata"]),
         type(typing.Callable[[int], str]),
+        type(Callable[[int], str]),
     )
     if any(annotation_type is candidate for candidate in known_annotation_types):
         return typing.get_args(annotation)
@@ -116,6 +117,13 @@ def annotation_text(annotation: object, *, depth: int = 0) -> str:
             return f"Literal[{', '.join(safe_literal(item) for item in arguments)}]"
         if origin is typing.Annotated:
             return f"Annotated[{annotation_text(arguments[0], depth=depth + 1)}, {', '.join(safe_literal(item) for item in arguments[1:])}]"
+        if origin is Callable and len(arguments) == 2:
+            parameters, result = arguments
+            if exact_type(parameters, list):
+                parameter_text = f"[{', '.join(annotation_text(item, depth=depth + 1) for item in parameters)}]"
+            else:
+                parameter_text = "..." if parameters is Ellipsis else annotation_text(parameters, depth=depth + 1)
+            return f"Callable[{parameter_text}, {annotation_text(result, depth=depth + 1)}]"
         origin_text = class_name(origin) if _is_class(origin) else "Callable" if origin is typing.Callable else type_name(annotation)
         return f"{origin_text}[{', '.join(annotation_text(item, depth=depth + 1) for item in arguments)}]"
     return f"<opaque {type_name(annotation)} annotation>"

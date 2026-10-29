@@ -428,6 +428,25 @@ async def test_output_contract_guides_semantic_choice(model_evaluation: ModelEva
     assert name_to_value == {"priority": "urgent"}
 
 
+async def test_omitted_output_contract_guides_semantic_choice(model_evaluation: ModelEvaluation) -> None:
+    name_to_value: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=name_to_value)
+    configuration = model_evaluation.configuration.model_copy(update={"context_limits": nh.StepContextLimits(locals_max_items=1)})
+    with nh.scope(step_executor_configuration=configuration):
+        outcome = await execute_step_async(
+            StepDefinition(
+                "Read <message> and set <:selection> to the appropriate value allowed by its output contract.",
+                input_binding_names=("message",),
+                output_binding_names=("selection",),
+                binding_name_to_type={"selection": Literal["defer_review", "page_on_call"]},
+            ),
+            name_to_value={"message": "The production service is down for every customer. Immediate action is required."},
+            write_binding=name_to_value.__setitem__,
+        )
+    assert outcome == Pass()
+    assert name_to_value == {"selection": "page_on_call"}
+
+
 async def test_application_inspect_and_task_collision(model_evaluation: ModelEvaluation) -> None:
     calls: list[int] = []
 

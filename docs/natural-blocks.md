@@ -44,15 +44,13 @@ And call `classify_priority("Server is on fire!")`, Nighthawk assembles this use
 <!-- prompt-example:basic-binding -->
 ```py
 For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
-The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Read <text> and update <:priority> with one of: low, normal, high.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-[output: str] priority: str = "normal"
+priority: str = "normal"
 text: str = "Server is on fire!"
 <<<NH:END_LOCALS>>>
 
@@ -234,8 +232,6 @@ Calling `choose_policy("Breaking: earthquake hits downtown")` produces:
 <!-- prompt-example:fstring-injection -->
 ```py
 For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
-The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Read <post>.
@@ -245,7 +241,7 @@ Select the single best policy and set <:selected_policy>.
 
 <<<NH:LOCALS>>>
 post: str = "Breaking: earthquake hits downtown"
-[output: str] selected_policy: str = ""
+selected_policy: str = ""
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
@@ -322,8 +318,6 @@ The LLM sees:
 <!-- prompt-example:local-function-signature -->
 ```py
 For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
-The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Compute <:result> by choosing the most suitable local helper based on its docstring.
@@ -331,8 +325,8 @@ Use base=38 and bonus=4.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-[output: int] result: int = 0
-add_points: (base: int, bonus: int) -> int  # Return a deterministic sum for score calculation.
+result: int = 0
+add_points: Callable  # (base: int, bonus: int) -> int; Return a deterministic sum for score calculation.
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
@@ -364,8 +358,6 @@ Calling `calculate_average([1, "2", "three", "cuatro"])` produces:
 <!-- prompt-example:global-function-reference -->
 ```py
 For missing details: __nighthawk_runtime_0.inspect(value) returns a metadata dictionary (type, members, preview).
-Names, sources, contracts: __nighthawk_runtime_0.environment.discover(), __nighthawk_runtime_0.environment.describe('name').
-The runtime root cannot be rebound. Annotations are unevaluated hints; output contracts are enforced.
 
 <<<NH:PROGRAM>>>
 Map each element of <numbers> to the number it represents,
@@ -374,11 +366,11 @@ then compute <:result> by calling <python_average> with the mapped list.
 
 <<<NH:LOCALS>>>
 numbers: list = [1,"2","three","cuatro"]
-[output: int] result: int = 0
+result: int = 0
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
-python_average: (numbers)
+python_average: Callable  # (numbers)
 <<<NH:END_GLOBALS>>>
 ```
 <!-- /prompt-example:global-function-reference -->

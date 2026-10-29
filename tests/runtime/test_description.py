@@ -49,7 +49,7 @@ def test_callable_signature_property_is_not_executed() -> None:
     assert description["signature"] is None
     assert "unavailable" in str(description["metadata_omission"])
     context = build_step_context(python_globals={}, python_locals={"action": value})
-    assert "signature-unavailable" in build_user_prompt_text(processed_natural_program="Describe.", step_context=context)
+    assert "signature unavailable" in build_user_prompt_text(processed_natural_program="Describe.", step_context=context)
     assert effects == []
 
 
