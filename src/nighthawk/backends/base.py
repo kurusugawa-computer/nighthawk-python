@@ -13,7 +13,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    RetryPromptPart,
+    RetryFeedbackPart,
     SystemPromptPart,
     TextContent,
     ToolReturnPart,
@@ -82,7 +82,7 @@ def _collect_instruction_text(
     if len(model_request_list) < 2:
         return None
 
-    if all(isinstance(part, ToolReturnPart | RetryPromptPart) for part in most_recent_model_request.parts):
+    if all(isinstance(part, ToolReturnPart | RetryFeedbackPart) for part in most_recent_model_request.parts):
         return model_request_list[1].instructions
 
     return None
@@ -138,7 +138,7 @@ def _collect_request_prompt_part_list(model_request: ModelRequest, *, backend_la
     for part in model_request.parts:
         if isinstance(part, UserPromptPart):
             request_prompt_part_list.append(_normalize_user_prompt_content(part.content, backend_label=backend_label))
-        elif isinstance(part, RetryPromptPart):
+        elif isinstance(part, RetryFeedbackPart):
             request_prompt_part_list.append((part.model_response(),))
         elif isinstance(part, ToolReturnPart):
             request_prompt_part_list.append(part)

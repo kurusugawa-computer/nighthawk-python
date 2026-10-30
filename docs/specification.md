@@ -730,7 +730,7 @@ Tool result transport contract:
     - When they do, they preserve the original top-level content item order from the tool payload, including text/media adjacency for qualifying mixed `list` / `tuple` payloads.
     - The MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Native MCP document and video carriage are unsupported. Multimodal-capable providers that bypass MCP still send supported items natively via `ToolReturnPart.files`.
 - Provider-backed backends that use Pydantic AI's standard tool loop SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts.
-    - Argument validation failures and explicit `ModelRetry` use the dedicated retry-prompt path (for example via `RetryPromptPart.model_response()`).
+    - Argument validation failures and explicit `ModelRetry` use Pydantic AI's retry path, which answers the call with a `ToolReturnPart` whose `outcome` is `"retried"`.
       Ordinary application exceptions propagate to Python.
     - When a provider-backed backend surfaces a tool failure without native multimodal content, it SHOULD use the same structured preview envelope shape described above.
 - User-prompt transport is backend-dependent.

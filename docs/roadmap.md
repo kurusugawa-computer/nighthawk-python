@@ -95,6 +95,12 @@ Explore explicit serialization of host data and correlation metadata for multi-p
 
 Investigate propagating selected context-variable rebindings back from bridge threads while preserving [shared-value and expression-lifetime boundaries](specification.md#813-shared-values-and-expression-lifetime).
 
+### Ordered dispatch on public Pydantic AI extension points
+
+Ordered model batches currently replace internal Pydantic AI tool-dispatch methods, so each Pydantic AI minor release requires a matching Nighthawk release.
+Propose upstream extension points that preserve the [operation inspection](specification.md#103-operation-inspection) contracts: argument validation at each sequential barrier, a public signal that skips the remaining calls in a response and discards its accepted output without consuming retry budgets, and denied tool returns from tools or hooks.
+Once released, remove the internal overrides and widen the Pydantic AI version range.
+
 ## Coding agent backends
 
 ### Backend-agnostic structured output

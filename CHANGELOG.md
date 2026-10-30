@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
+  Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
+
 ## [0.18.0]
 
 ### Fixed

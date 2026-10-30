@@ -1,6 +1,6 @@
 """Keep validation and refusal barriers inside ordered model-tool dispatch.
 
-Pydantic AI 2.59 validates function batches before its execution barriers.
+Pydantic AI 2.63 validates function batches before its execution barriers.
 These scoped compatibility hooks move validation to sequential dispatch,
 stop later calls after a refusal, and discard candidates from that response.
 Pydantic AI still owns execution, retry limits, and output selection among
@@ -10,14 +10,22 @@ permitted candidates. Ordinary Pydantic AI runs are unchanged.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Generator
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
+from contextlib import aclosing, contextmanager
 from contextvars import ContextVar
 from typing import Any
 
 from pydantic_ai import _agent_graph, _tool_execution
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import AgentStreamEvent, FunctionToolCallEvent, FunctionToolResultEvent, RetryPromptPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import (
+    AgentStreamEvent,
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    RetryFeedbackPart,
+    RetryInfo,
+    ToolCallPart,
+    ToolReturnPart,
+)
 from pydantic_ai.tool_manager import ToolManager, ValidatedToolCall
 from pydantic_ai.tools import ToolApproved
 
@@ -83,19 +91,22 @@ async def _skip_call(processor: Any, call: ToolCallPart, *, output: bool = False
     )
 
 
-async def _run(self: Any) -> AsyncIterator[AgentStreamEvent]:
+async def _run(self: Any) -> AsyncGenerator[AgentStreamEvent]:
     if not _requires_ordered_validation(self):
-        async for event in _original_run(self):
-            yield event
+        async with aclosing(_original_run(self)) as events:
+            async for event in events:
+                yield event
         return
     with model_response_scope(self.tool_manager.ctx.deps, reuse=True) as execution:
         if execution.rejection is not None:
             # Native output under `early` was inspected before tool dispatch.
             # Pydantic AI suppresses its retry; preserve both feedback and accounting.
-            self.ctx.state.consume_output_retry(self.ctx.deps.max_output_retries)
-            self.output_parts.append(RetryPromptPart(content=json.dumps(execution.rejection.model_feedback())))
-        async for event in _original_run(self):
-            yield event
+            feedback = RetryFeedbackPart(content=json.dumps(execution.rejection.model_feedback()), retry=RetryInfo(cause="model_retry"))
+            self.ctx.state.consume_output_retry(self.ctx.deps.max_output_retries, feedback=feedback)
+            self.output_parts.append(feedback)
+        async with aclosing(_original_run(self)) as events:
+            async for event in events:
+                yield event
         if execution.rejection is not None:
             # An earlier accepted output cannot mask a later refusal in the same response.
             self.final_result = None
@@ -106,17 +117,19 @@ async def _run(self: Any) -> AsyncIterator[AgentStreamEvent]:
                 }
 
 
-async def _handle_tool_calls(self: Any, ctx: Any, tool_calls: list[ToolCallPart], *, response_output: Any = None) -> AsyncIterator[AgentStreamEvent]:
+async def _handle_tool_calls(self: Any, ctx: Any, tool_calls: list[ToolCallPart], *, response_output: Any = None) -> AsyncGenerator[AgentStreamEvent]:
     if _ordered_dispatch.get() and isinstance(ctx.deps.user_deps, StepContext):
         with model_response_scope(ctx.deps.user_deps):
-            async for event in _original_handle_tool_calls(self, ctx, tool_calls, response_output=response_output):
-                yield event
+            async with aclosing(_original_handle_tool_calls(self, ctx, tool_calls, response_output=response_output)) as events:
+                async for event in events:
+                    yield event
     else:
-        async for event in _original_handle_tool_calls(self, ctx, tool_calls, response_output=response_output):
-            yield event
+        async with aclosing(_original_handle_tool_calls(self, ctx, tool_calls, response_output=response_output)) as events:
+            async for event in events:
+                yield event
 
 
-async def _run_function_calls(self: Any, calls: list[ToolCallPart]) -> AsyncIterator[AgentStreamEvent]:
+async def _run_function_calls(self: Any, calls: list[ToolCallPart]) -> AsyncGenerator[AgentStreamEvent]:
     batches = ([call] for call in calls) if _requires_ordered_validation(self) else (calls,)
     for batch in batches:
         if _rejection(self) is not None:
@@ -126,8 +139,9 @@ async def _run_function_calls(self: Any, calls: list[ToolCallPart]) -> AsyncIter
                 yield FunctionToolCallEvent(call, args_valid=None)
                 yield FunctionToolResultEvent(part)
             continue
-        async for event in _original_function_calls(self, batch):
-            yield event
+        async with aclosing(_original_function_calls(self, batch)) as events:
+            async for event in events:
+                yield event
 
 
 async def _call_tool(self: Any, tool_call: Any, *, tool_call_result: Any) -> Any:
@@ -150,10 +164,7 @@ async def _run_output_tool_call(self: Any, call: ToolCallPart) -> Any:
     if _rejection(self) is not None:
         part = await _skip_call(self, call, output=True)
         # No output validator or retry budget is consumed by an unattempted candidate.
-        return _tool_execution._OutputCallResult(
-            call=call,
-            retry_part=RetryPromptPart(tool_name=call.tool_name, tool_call_id=call.tool_call_id, content=json.dumps(part.content)),
-        )
+        return _tool_execution._OutputCallResult(call=call, retry_part=part)
     result = await _original_output_call(self, call)
     if _rejection(self) is not None and result.raise_exc is not None:
         # Exhaustive output settlement must not hide exhausted retry limits behind an earlier candidate.
@@ -171,9 +182,9 @@ async def _run_output(self: Any, call: ToolCallPart) -> AsyncIterator[AgentStrea
         yield event
 
 
-async def _finalize_deferred(self: Any) -> AsyncIterator[AgentStreamEvent]:
+async def _finalize_deferred(self: Any) -> AsyncGenerator[AgentStreamEvent]:
     if _rejection(self) is not None:
-        settled = {part.tool_call_id for part in self.output_parts if isinstance(part, (ToolReturnPart, RetryPromptPart))}
+        settled = {part.tool_call_id for part in self.output_parts if isinstance(part, ToolReturnPart)}
         for call in self.tool_calls:
             if call.tool_call_id not in settled:
                 part = await _skip_call(self, call)
@@ -181,14 +192,16 @@ async def _finalize_deferred(self: Any) -> AsyncIterator[AgentStreamEvent]:
                 yield FunctionToolCallEvent(call, args_valid=None)
                 yield FunctionToolResultEvent(part)
         return
-    async for event in _original_finalize_deferred(self):
-        yield event
+    async with aclosing(_original_finalize_deferred(self)) as events:
+        async for event in events:
+            yield event
 
 
-async def _run_early_strategy(self: Any) -> AsyncIterator[AgentStreamEvent]:
+async def _run_early_strategy(self: Any) -> AsyncGenerator[AgentStreamEvent]:
     strategy = _tool_execution._GracefulProcessor._run_strategy if _requires_ordered_validation(self) else _original_early_strategy
-    async for event in strategy(self):
-        yield event
+    async with aclosing(strategy(self)) as events:
+        async for event in events:
+            yield event
 
 
 async def _validate_exhaustive_calls(

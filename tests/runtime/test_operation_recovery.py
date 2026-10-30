@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, Tool
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import ModelRetry
-from pydantic_ai.messages import ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.profiles import ModelProfile
 
@@ -238,7 +238,7 @@ def test_standard_model_receives_refusal_and_corrects_the_same_step(route: str) 
             return ModelResponse(
                 parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "return", "return_expression": "forbidden()"}}, "refused")]
             )
-        feedback = [part for message in messages for part in message.parts if isinstance(part, (ToolReturnPart, RetryPromptPart))]
+        feedback = [part for message in messages for part in message.parts if isinstance(part, (ToolReturnPart, UserPromptPart))]
         assert feedback
         text = str([part.content for part in feedback])
         assert "Host policy refused this operation." in text and "Use the constant 7." in text
@@ -595,7 +595,7 @@ def test_native_output_refusal_skips_coemitted_tools_and_respects_retry_limit(ou
                     ToolCallPart("later", {"value": 1}, "later"),
                 ]
             )
-        feedback = [part.content for message in messages for part in message.parts if isinstance(part, (RetryPromptPart, ToolReturnPart))]
+        feedback = [part.content for message in messages for part in message.parts if isinstance(part, (UserPromptPart, ToolReturnPart))]
         assert "Host refusal" in str(feedback) and operations[0].request.operation_id in str(feedback)
         assert "skipped" in str(feedback)
         return ModelResponse(parts=[TextPart(json.dumps({"result": {"kind": "return", "return_expression": "7"}}))])

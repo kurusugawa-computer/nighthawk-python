@@ -12,7 +12,7 @@ from pydantic_ai import RunContext
 # pydantic_ai releases and keep private access centralized in this module.
 from pydantic_ai._run_context import set_current_run_context
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
-from pydantic_ai.messages import RetryPromptPart, ToolCallPart
+from pydantic_ai.messages import RetryInfo, ToolCallPart, ToolReturnPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.tool_manager import ToolManager
 from pydantic_ai.tools import ToolDenied
@@ -158,11 +158,14 @@ async def execute_tool_call(
                 raise run_context.deps.operation_failure from run_context.deps.operation_failure.__cause__
             if observed_toolset.outcome is not None and (observed_toolset.outcome["error"] or {}).get("status") == "rejected":
                 return build_tool_result_observation(tool_outcome=observed_toolset.outcome)
-            retry_text = RetryPromptPart(
+            # MCP and SDK transports mark retry prompts as errors, so the text omits Pydantic AI's error wrapper.
+            retry_text = ToolReturnPart(
                 tool_name=tool_name,
                 content=exception.errors(include_url=False, include_context=False),
                 tool_call_id=tool_call_id,
-            ).model_response()
+                outcome="retried",
+                retry=RetryInfo(cause="validation_error"),
+            ).model_response_str(wrap_if_error=False)
             return _build_retry_prompt_observation(retry_text=retry_text)
         except ModelRetry as exception:
             if run_context.deps.operation_failure is not None:

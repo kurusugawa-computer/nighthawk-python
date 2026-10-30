@@ -140,7 +140,7 @@ def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:
 
     tool_handler_result = anyio.run(call_invalid)
     assert tool_handler_result["kind"] == "retry_prompt"
-    assert "Fix the errors and try again." in _render_preview_text_for_test(tool_handler_result)
+    assert "Input should be a valid integer" in _render_preview_text_for_test(tool_handler_result)
 
 
 def test_backend_handler_calls_oversight_once_for_accept_decision(

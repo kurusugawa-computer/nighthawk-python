@@ -13,7 +13,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import BinaryContent, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.openai_decisions import OpenAIDecisionsModel
-from pydantic_ai.providers.openai_decisions import OpenAIDecisionsProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 
 import nighthawk as nh
 from nighthawk.runtime import Pass, StepCandidate, StepDefinition, execute_step
@@ -82,7 +82,7 @@ class DecisionsTransport(httpx2.AsyncBaseTransport):
 def decision_backend() -> Iterator[tuple[OpenAIDecisionsModel, DecisionsTransport]]:
     transport = DecisionsTransport()
     client = AsyncOpenAI(api_key="synthetic-test-key", base_url="https://mock.invalid/v1", http_client=httpx2.AsyncClient(transport=transport))
-    yield OpenAIDecisionsModel("gpt-6-luna", provider=OpenAIDecisionsProvider(openai_client=client)), transport
+    yield OpenAIDecisionsModel("gpt-6-luna", provider=OpenAIProvider(openai_client=client)), transport
     asyncio.run(client.close())
 
 
@@ -122,11 +122,11 @@ def test_decision_uses_typed_answer_full_inputs_and_per_step_details(decision_ba
     assert first.model_result is not None and first.model_result.output is True
     assert first.model_result.response.provider_details is not None
     assert first.model_result.response.provider_details["confidence"]
-    assert evidence in transport.requests[0]["input"]
+    assert evidence in json.dumps(transport.requests[0]["input"])
     assert "Does <document> support" in transport.requests[0]["questions"][0]["instructions"]
     assert "<:result>" not in json.dumps(transport.requests)
     assert "nh_assign" not in json.dumps(transport.requests)
-    assert "False" not in transport.requests[0]["input"]
+    assert "False" not in json.dumps(transport.requests[0]["input"])
 
 
 class Assessment(BaseModel):

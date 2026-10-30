@@ -8,7 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 from pydantic_ai import Tool
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import ModelRetry
-from pydantic_ai.messages import ModelResponse, RetryPromptPart, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import FunctionModel
 
 import nighthawk as nh
@@ -103,7 +103,7 @@ def test_model_input_failure_and_explicit_retry_remain_recoverable(failure_origi
         if model_calls == 1:
             return ModelResponse(parts=[ToolCallPart("action", {"value": "invalid" if failure_origin == "arguments" else 0}, "first")])
         if model_calls == 2:
-            assert any(isinstance(part, RetryPromptPart) for message in messages for part in message.parts)
+            assert any(isinstance(part, ToolReturnPart) and part.outcome == "retried" for message in messages for part in message.parts)
             return ModelResponse(parts=[ToolCallPart("action", {"value": 1}, "second")])
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
