@@ -9,7 +9,7 @@ Both blocks live inside ordinary `@nh.function` functions and share validation, 
 Install Nighthawk and the provider dependency:
 
 ```sh
-uv add nighthawk-python 'pydantic-ai-slim[openai]>=2.58.0,<2.59'
+uv add nighthawk-python 'pydantic-ai-slim[openai]'
 ```
 
 Configure credentials using Pydantic AI's provider configuration, or pass a caller-owned `OpenAIDecisionsModel`.

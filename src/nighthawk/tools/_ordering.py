@@ -1,6 +1,6 @@
 """Keep validation and refusal barriers inside ordered model-tool dispatch.
 
-Pydantic AI 2.58 validates function batches before its execution barriers.
+Pydantic AI 2.59 validates function batches before its execution barriers.
 These scoped compatibility hooks move validation to sequential dispatch,
 stop later calls after a refusal, and discard candidates from that response.
 Pydantic AI still owns execution, retry limits, and output selection among

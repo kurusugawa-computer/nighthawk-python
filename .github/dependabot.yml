@@ -6,6 +6,13 @@ updates:
      interval: weekly
    cooldown:
      default-days: 7
+   groups:
+     # Pydantic AI stays separate: ordered tool dispatch adapts its internal
+     # batch handling, so each minor series needs its own compatibility review.
+     uv-dependencies:
+       patterns: ["*"]
+       exclude-patterns: ["pydantic-ai-slim"]
+       update-types: ["minor", "patch"]
  - package-ecosystem: "devcontainers"
    directory: "/"
    schedule:

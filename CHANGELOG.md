@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Annotate synchronous and asynchronous context managers with `Generator` and `AsyncGenerator` to avoid deprecated iterator overloads in type checking.
 - Allow exception types passed through Python binding aliases to be selected by Natural blocks, and preserve default `Exception` selection under strict structured output.
 - Preserve complete usage deltas in per-call budget checks and evaluate estimated cumulative costs from predicted total usage.
-- Leave the host environment unchanged during Claude SDK requests; child-process environment handling belongs to the pinned SDK.
+- Leave the host environment unchanged during Claude SDK requests; child-process environment handling belongs to the Claude Agent SDK.
 - Include cache reads and writes in Claude Code input-token totals through one shared CLI and SDK usage conversion.
 - Limit tokenizer fallback to unknown model names and propagate encoding data loading failures.
 - Preserve Python name resolution and host admission for recursive Natural functions, including global rebinding.
@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Escaped Natural markers declare neither reads nor writes and render literally in both execution and decision instructions.
 - F-string validation tracks interpolation boundaries without reserving a character in author text, preserves escaped interpolated markers, and accepts decision instructions supplied entirely through interpolation while rejecting empty rendered instructions.
 - Protect the documented summary-assessment pipeline with an explicit `deny: [return]` contract, preventing model-selected early return from bypassing Python assessment work.
+- Declare directly imported `typing-extensions` and `opentelemetry-api` as dependencies, and `starlette` and `uvicorn` in the `claude-code-cli` and `codex` extras.
 
 ### Changed
 
@@ -51,7 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Breaking: `@nh.function` replaces `@nh.natural_function`; Natural action blocks start with `execute` instead of `natural`.
 - Breaking: select `execution_model` and `decision_model` independently through `nh.run(...)`, `nh.scope(...)`, or `StepExecutorConfiguration`. Reusable functions no longer carry model configuration. No model is selected by default.
 - `FunctionDefinition` and `get_function_definition` replace the Natural-prefixed names. Function call records no longer carry decorator model selections.
-- Upgrade Pydantic AI to 2.58 and adapt ordered tool dispatch to its expanded event contract.
+- Upgrade Pydantic AI to 2.59 and adapt ordered tool dispatch to its expanded event contract.
+- Require Claude Agent SDK 0.2.175 or later instead of one exact release, and raise other dependency minimums to tested releases without upper bounds.
+  Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
 
 ### Added
 
