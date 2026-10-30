@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
-from collections.abc import Awaitable, Callable, Coroutine, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -47,7 +47,7 @@ _call: ContextVar[FunctionCall | None] = ContextVar("nighthawk_function_call", d
 
 
 @contextmanager
-def function_call_scope(handler: FunctionCallHandler | None | UnsetType = UNSET) -> Iterator[None]:
+def function_call_scope(handler: FunctionCallHandler | None | UnsetType = UNSET) -> Generator[None]:
     """Inherit, replace, or clear interception independently of executor runs.
 
     Omission or UNSET inherits; None clears; a handler replaces the current one.

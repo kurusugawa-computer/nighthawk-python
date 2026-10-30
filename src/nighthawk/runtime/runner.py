@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import typing
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncGenerator, Generator, Mapping
 from contextlib import ExitStack, asynccontextmanager, contextmanager
 from types import FrameType
 from typing import TypedDict, cast
@@ -107,7 +107,7 @@ class Runner:
         self.context_stack = ExitStack()
 
     @contextmanager
-    def _execution_scope(self, source_location: str) -> Iterator[tuple[ExecutionReference, Span, StepLifecycle | None]]:
+    def _execution_scope(self, source_location: str) -> Generator[tuple[ExecutionReference, Span, StepLifecycle | None]]:
         with step_execution_reference_scope(source_location=source_location) as execution_reference:
             lifecycle = get_lifecycle()
             with (
@@ -199,7 +199,7 @@ class Runner:
         return finished, original_exception
 
     @contextmanager
-    def _terminal_boundary(self, finished: StepFinished, original_exception: BaseException | None, step_span: Span) -> Iterator[None]:
+    def _terminal_boundary(self, finished: StepFinished, original_exception: BaseException | None, step_span: Span) -> Generator[None]:
         # Notification errors cannot enter classification or cause a second event.
         try:
             yield
@@ -225,7 +225,7 @@ class Runner:
             raise original_exception
 
     @contextmanager
-    def execution(self, *, caller_frame: FrameType | None = None, source_location: str = "<embedded>:0") -> Iterator[Runner]:
+    def execution(self, *, caller_frame: FrameType | None = None, source_location: str = "<embedded>:0") -> Generator[Runner]:
         if caller_frame is not None:
             source_location = _build_source_location(caller_frame=caller_frame)
         with self._execution_scope(source_location) as (execution_reference, step_span, lifecycle):
@@ -254,7 +254,7 @@ class Runner:
                         )
 
     @asynccontextmanager
-    async def execution_async(self, *, caller_frame: FrameType | None = None, source_location: str = "<embedded>:0") -> AsyncIterator[Runner]:
+    async def execution_async(self, *, caller_frame: FrameType | None = None, source_location: str = "<embedded>:0") -> AsyncGenerator[Runner]:
         if caller_frame is not None:
             source_location = _build_source_location(caller_frame=caller_frame)
         with self._execution_scope(source_location) as (execution_reference, step_span, lifecycle):

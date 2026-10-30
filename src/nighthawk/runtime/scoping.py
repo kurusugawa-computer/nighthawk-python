@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import threading
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import copy
@@ -71,7 +71,7 @@ _tracer = get_tracer_provider().get_tracer("nighthawk", _LIBRARY_VERSION)
 
 
 @contextmanager
-def span(span_name: str, /, **attributes: Any) -> Iterator[Span]:
+def span(span_name: str, /, **attributes: Any) -> Generator[Span]:
     with _tracer.start_as_current_span(
         span_name,
         attributes=attributes,
@@ -206,7 +206,7 @@ def get_lifecycle() -> StepLifecycle | None:
 
 
 @contextmanager
-def step_execution_reference_scope(*, source_location: str) -> Iterator[ExecutionReference]:
+def step_execution_reference_scope(*, source_location: str) -> Generator[ExecutionReference]:
     current_execution_reference = get_execution_reference()
     step_execution_reference = replace(
         current_execution_reference,
@@ -287,7 +287,7 @@ def get_capabilities() -> tuple[AbstractCapability[StepContext], ...]:
 
 
 @contextmanager
-def system_prompt_suffix_fragment_scope(fragment: str) -> Iterator[None]:
+def system_prompt_suffix_fragment_scope(fragment: str) -> Generator[None]:
     current = _system_prompt_suffix_fragments_var.get()
     token = _system_prompt_suffix_fragments_var.set((*current, fragment))
     try:
@@ -297,7 +297,7 @@ def system_prompt_suffix_fragment_scope(fragment: str) -> Iterator[None]:
 
 
 @contextmanager
-def user_prompt_suffix_fragment_scope(fragment: str) -> Iterator[None]:
+def user_prompt_suffix_fragment_scope(fragment: str) -> Generator[None]:
     current = _user_prompt_suffix_fragments_var.get()
     token = _user_prompt_suffix_fragments_var.set((*current, fragment))
     try:
@@ -333,7 +333,7 @@ def run(
     step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
     run_id: str | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
-) -> Iterator[None]:
+) -> Generator[None]:
     """Start a run with independent execution and decision model selections.
 
     Establishes a run-scoped context that makes the step executor
@@ -436,7 +436,7 @@ def scope(
     context_builder: ContextBuilder | UnsetType = UNSET,
     tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET,
     capabilities: Sequence[AbstractCapability[StepContext]] | Extend[AbstractCapability[StepContext]] | UnsetType = UNSET,
-) -> Iterator[StepExecutor]:
+) -> Generator[StepExecutor]:
     """Compose a nested execution scope and restore its parent on exit.
 
     Omission or UNSET inherits. Ordinary values replace; empty collections clear.

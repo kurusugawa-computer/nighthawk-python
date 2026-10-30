@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Annotate synchronous and asynchronous context managers with `Generator` and `AsyncGenerator` to avoid deprecated iterator overloads in type checking.
 - Allow exception types passed through Python binding aliases to be selected by Natural blocks, and preserve default `Exception` selection under strict structured output.
 - Preserve complete usage deltas in per-call budget checks and evaluate estimated cumulative costs from predicted total usage.
 - Leave the host environment unchanged during Claude SDK requests; child-process environment handling belongs to the pinned SDK.
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Report deprecated API usage as Pyright errors while retaining Python 3.13 as the static analysis target.
 - Document principles for minimizing LLM cognitive load across program authoring, revision, and execution through familiar representations, orthogonal tools, and Python composition.
   Align binding function guidance and evaluation criteria with required choices and total burden.
 - Breaking: rename `nighthawk.runtime.inspect_value` to `describe_value` and remove the generated runtime root's `.inspect` method and unconditional prompt guidance. Import or explicitly pass the optional helper through ordinary Python bindings or scoped task references; omitted-name and output-contract discovery remains available through `.environment`.

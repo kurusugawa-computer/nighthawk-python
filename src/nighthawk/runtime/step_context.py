@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import InitVar, dataclass, field, replace
@@ -122,7 +122,7 @@ _python_lookup_state_var: ContextVar[_PythonLookupState] = ContextVar(
 
 
 @contextmanager
-def step_context_scope(step_context: StepContext) -> Iterator[None]:
+def step_context_scope(step_context: StepContext) -> Generator[None]:
     current_stack = _step_context_stack_var.get()
     token = _step_context_stack_var.set((*current_stack, step_context))
     try:
@@ -132,7 +132,7 @@ def step_context_scope(step_context: StepContext) -> Iterator[None]:
 
 
 @contextmanager
-def python_cell_scope(name_to_cell: dict[str, CellType]) -> Iterator[None]:
+def python_cell_scope(name_to_cell: dict[str, CellType]) -> Generator[None]:
     current_lookup_state = _python_lookup_state_var.get()
     next_lookup_state = replace(
         current_lookup_state,

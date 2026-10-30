@@ -1,6 +1,6 @@
 """A response-local rejection barrier, independent of model retry budgets."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -19,7 +19,7 @@ _model_response_execution: ContextVar[ModelResponseExecution | None] = ContextVa
 
 
 @contextmanager
-def model_response_scope(step_context: StepContext, *, reuse: bool = False) -> Iterator[ModelResponseExecution]:
+def model_response_scope(step_context: StepContext, *, reuse: bool = False) -> Generator[ModelResponseExecution]:
     current = _model_response_execution.get()
     if reuse and current is not None and current.step_context is step_context:
         yield current

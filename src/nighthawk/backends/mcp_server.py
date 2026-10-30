@@ -5,7 +5,7 @@ import contextlib
 import socket
 import threading
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import copy_context
 from typing import Any
@@ -191,7 +191,7 @@ async def mcp_server_if_needed(
     *,
     tool_name_to_tool_definition: dict[str, ToolDefinition],
     tool_name_to_handler: dict[str, Callable[[dict[str, Any]], Awaitable[ToolHandlerResult]]],
-) -> AsyncIterator[str | None]:
+) -> AsyncGenerator[str | None]:
     if not tool_name_to_handler:
         yield None
         return

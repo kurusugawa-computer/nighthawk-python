@@ -1,6 +1,7 @@
 {
   "pythonVersion": "3.13",
   "typeCheckingMode": "standard",
+  "reportDeprecated": "error",
   "venvPath": ".",
   "venv": ".venv",
   "include": [

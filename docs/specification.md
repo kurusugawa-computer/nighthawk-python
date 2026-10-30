@@ -915,7 +915,7 @@ API:
     - Uses a provided nonempty string `run_id`; omission or `UNSET` generates a new `run_id` (trace root). `None`, empty strings, and other types are invalid before context installation.
     - Always generates a fresh `scope_id`.
     - Can be used even when no step executor is currently set.
-- `nighthawk.scope(...) -> Iterator[StepExecutor]`
+- `nighthawk.scope(...)`
     - Every configurable parameter defaults to `UNSET`; omission and explicit `UNSET` inherit.
     - `execution_model=...` and `decision_model=...` independently replace their models; `step_executor_configuration=...` replaces the full configuration, including defaults. Model selections cannot accompany full configuration replacement.
     - Ordinary values replace; empty sequences or mappings clear inherited collections.

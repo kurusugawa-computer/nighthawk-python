@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
@@ -114,7 +114,7 @@ class _BudgetHandle:
                 )
 
     @contextmanager
-    def _check_call(self, arguments: tuple[Any, ...], keyword_name_to_value: dict[str, Any]) -> Iterator[None]:
+    def _check_call(self, arguments: tuple[Any, ...], keyword_name_to_value: dict[str, Any]) -> Generator[None]:
         meter = _optional_usage_meter()
         if meter is None:
             yield

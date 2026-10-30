@@ -10,7 +10,7 @@ permitted candidates. Ordinary Pydantic AI runs are unchanged.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
@@ -241,7 +241,7 @@ _agent_graph.CallToolsNode._handle_tool_calls = _handle_tool_calls
 
 
 @contextmanager
-def sequential_model_tools() -> Iterator[None]:
+def sequential_model_tools() -> Generator[None]:
     token = _ordered_dispatch.set(True)
     try:
         with ToolManager.parallel_execution_mode("sequential"):
