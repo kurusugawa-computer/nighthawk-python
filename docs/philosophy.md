@@ -27,6 +27,7 @@ Keep execution interfaces composable through Python calls and existing libraries
 
 ### Agents can understand and revise programs
 
+Minimize LLM cognitive load across program authoring, revision, and execution while preserving required contracts.
 Public contracts must expose intent, dependencies, result meaning, effects, failure boundaries, and ownership of execution resources and policy.
 Make the ordinary usage path discoverable so agents can choose an entry point, compose programs, and locate the contract to revise without depending on development history or human authorship.
 
@@ -54,6 +55,18 @@ Make required procedural checks enforceable in Python, and assess semantic adequ
 Connect assessments to what ran and its execution conditions; a valid output or successful step alone does not establish task success.
 
 ## Defaults
+
+### Familiar representations over new conventions
+
+Prefer syntax, terminology, and semantics that draw on conventions learned during pretraining so LLMs can use existing knowledge.
+Keep the implied meaning consistent with the actual contract.
+Use specialized representations when they make the task or contract easier to understand.
+
+### Composition over additional tools and mechanisms
+
+Prefer a small, expressive set of orthogonal tools with distinct responsibilities and predictable composition.
+Use existing tools and Python composition when they meet the required contract at acceptable total burden.
+Add tools or mechanisms only to address requirements or burdens that existing composition cannot adequately handle.
 
 ### Ordinary functions over framework-specific units
 

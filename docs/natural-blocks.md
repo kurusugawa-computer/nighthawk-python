@@ -453,7 +453,7 @@ When a Natural block produces a single value (a label, a score, a summary), a si
 
 Design guidelines for structured output models:
 
-- **Keep models flat.** Nested models add LLM cognitive load. Prefer `approved: bool, reason: str, risk_level: str` over a model-within-a-model hierarchy.
+- **Use structure that matches the result.** Keep independent fields such as `approved`, `reason`, and `risk_level` flat; use nested models when grouping clarifies required relationships.
 - **Use descriptive field names.** The LLM sees the model schema; field names are the primary signal for what to produce.
 - **Constrain field types.** Use `Literal["low", "medium", "high"]` instead of `str` where possible. This enables both LLM guidance and host-side validation.
 - **Handle validation failures at their boundary.** A recoverable assignment validation failure is returned to the model so it can correct the value. Invalid output bindings at finalization instead raise `ExecutionError`, whose `step_failed.failure_stage` is `"binding_validation"` and whose cause is the original validation exception. See [Error handling](patterns.md#error-handling) for executable examples. Choose retry or fallback only when repeating earlier helper calls, mutations, and other effects is acceptable; validation failure does not roll them back.
@@ -464,11 +464,10 @@ Keep locals minimal ([Keep locals minimal](#keep-locals-minimal)) and prefer bin
 
 ### Minimize LLM cognitive load
 
-Each parameter in a binding function signature is a decision point the LLM must evaluate. Fewer parameters mean lower cognitive load and more reliable tool use.
+Apply the philosophy's [cognitive-load principle](philosophy.md#agents-can-understand-and-revise-programs) by exposing choices the task requires the LLM to make and composing already-determined processing and conditions in Python.
+Assess parameter meaning, dependencies, and the sequence of calls alongside parameter count.
 
-**Principle:** justify each parameter against LLM cognitive load. Simple writes (e.g., setting a value at creation) are acceptable. Complex reads (e.g., multi-predicate queries) are not -- compose those in Python.
-
-**Wrong** -- too many parameters force the LLM to construct a complex query:
+**General interface:** callers select the query criteria.
 
 ```py
 def find_items(
@@ -483,7 +482,7 @@ def find_items(
     ...
 ```
 
-**Correct** -- compose the complex query in Python, expose a simple binding function:
+**Task-specific composition:** this task fixes the score threshold, tag selection, date cutoff, and ordering, leaving the category to the LLM.
 
 ```py
 def find_top_items(category: str) -> list[dict]:
@@ -497,7 +496,8 @@ def find_top_items(category: str) -> list[dict]:
     )
 ```
 
-The LLM sees a one-parameter function with a clear intent. The filtering logic lives in Python where it can be tested and debugged.
+The helper retains that category choice while keeping fixed query construction in testable Python.
+If a task requires choosing other criteria, expose those choices in its contract.
 
 This principle extends to project architecture: compose domain-specific helper functions in Python and expose them to Natural blocks as binding functions.
 

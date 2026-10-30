@@ -414,7 +414,7 @@ The preamble does not repeat runtime-root protection or output-validation rules;
 #### 8.2.2. Locals summary
 
 The locals summary presents current Python working locals and step assignments.
-Entries use ordinary Python names and a single type annotation, such as `result: int = 0`.
+Entries use ordinary Python names and a single type annotation, such as `result: int = 0`, following the preference for [familiar representations](philosophy.md#familiar-representations-over-new-conventions).
 The selected output contract takes precedence over an available declaration annotation; otherwise the current value's type is used.
 Neither `[output: ...]` / `[annotation: ...]` prefixes nor `<:name>` decorations appear in the context sections.
 Natural source declarations and runtime assignment and validation rules remain authoritative.
@@ -610,7 +610,7 @@ Nighthawk exposes two paths for the LLM to call Python functions:
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.
 
-Design intent: Each parameter in a binding function signature represents a decision point the LLM must evaluate. The two-path design reflects this: binding functions carry minimal, LLM-friendly signatures while complex operations are composed in Python and exposed through simple binding functions. See [Natural blocks](natural-blocks.md#designing-binding-functions) for practical design patterns.
+Binding functions support the philosophy's [preference for composition](philosophy.md#composition-over-additional-tools-and-mechanisms); [Natural blocks](natural-blocks.md#designing-binding-functions) shows how to expose task-dependent choices through Python helpers.
 
 Tools are Python callables exposed to the LLM via pydantic-ai tool calling. There is no process-global tool registry: a tool is visible only inside a `nighthawk.scope(tools=...)` that declares it.
 

@@ -16,15 +16,16 @@ Allow both implementations to use their normal libraries and idioms, and record 
 
 | Dimension | Evidence to collect |
 |---|---|
-| Construction and revision | Whether an agent builds a working composition and makes a requested change correctly; repair attempts and regressions. |
-| Results and effects | Whether accepted outputs and actual effects meet application criteria, and whether failures and partial effects can be diagnosed. |
+| Construction and revision | Whether an agent builds a working composition and makes a requested change correctly; misunderstood contracts, repair attempts, and regressions. |
+| Results and effects | Whether accepted outputs and actual effects meet application criteria, and whether operation-selection errors, failures, and partial effects can be diagnosed. |
 | Reuse and improvement | Success and adaptation effort on a different task, with checks that previously accepted behavior remains valid. |
-| Overall complexity | Work required to understand and maintain contracts, context, configuration, host integration, adapters, and recovery. |
+| Overall complexity | Work required to understand and maintain contracts, context, configuration, host integration, adapters, and recovery, including burden shifted between authoring and execution. |
 | Resources | Model usage, latency, and cost during both program construction and execution. |
 
 Use representative cases, including failures and cases outside those used to develop a change.
 Account for evaluator limitations and variation across repeated model runs.
-Record when Nighthawk offers no benefit or increases burden; shorter source or fewer model calls alone do not establish success.
+These observations assess usability; they do not directly measure an LLM's internal cognitive load.
+Record when Nighthawk offers no benefit or increases burden; shorter source or fewer parameters, tools, or model calls alone do not establish success or lower cognitive load.
 Keep detailed experiment procedures and results in linked evaluation records.
 The scenarios below identify comparisons to perform; they do not establish a comparative advantage.
 
