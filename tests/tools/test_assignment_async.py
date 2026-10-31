@@ -28,12 +28,12 @@ def test_assign_tool_async_assigns_awaited_result() -> None:
         return a + b * 8
 
     step_context = _new_step_context()
-    step_context.record_assignment("calculate", calculate)
+    step_context.environment.assign("calculate", calculate)
 
     update = asyncio.run(assign_tool_async(step_context, "result", "await calculate(1, 2)"))
 
     assert update["updates"][0]["value"] == 17
-    assert step_context.step_locals["result"] == 17
+    assert step_context.environment.resolve("result") == 17
 
 
 def test_assign_rejects_rebind_of_read_binding() -> None:
@@ -49,7 +49,7 @@ def test_assign_rejects_rebind_of_read_binding() -> None:
     with pytest.raises(OperationError):
         assign_tool(step_context, "data", "{'key': 'new'}")
 
-    assert step_context.step_locals["data"] == {"key": "old"}
+    assert step_context.environment.resolve("data") == {"key": "old"}
 
 
 def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
@@ -65,7 +65,7 @@ def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
     result = assign_tool(step_context, "data", "{'key': 'new'}")
 
     assert result["updates"][0]["value"] == {"key": "new"}
-    assert step_context.step_locals["data"] == {"key": "new"}
+    assert step_context.environment.resolve("data") == {"key": "new"}
 
 
 def test_assign_allows_multiple_rebinds_of_new_local() -> None:
@@ -79,10 +79,10 @@ def test_assign_allows_multiple_rebinds_of_new_local() -> None:
     )
 
     assign_tool(step_context, "temp", "1")
-    assert step_context.step_locals["temp"] == 1
+    assert step_context.environment.resolve("temp") == 1
 
     assign_tool(step_context, "temp", "2")
-    assert step_context.step_locals["temp"] == 2
+    assert step_context.environment.resolve("temp") == 2
 
 
 def test_assign_dotted_path_updates_write_binding_root() -> None:

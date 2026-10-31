@@ -47,7 +47,7 @@ def test_explicit_value_description_uses_ordinary_binding_and_rendering(source: 
     )
     context.environment = StepEnvironment(
         python_name_to_value=context.step_locals,
-        python_globals=context.step_globals,
+        python_globals=name_to_value if source == "global" else {},
         task_name_to_value=name_to_value if source == "task" else {},
     )
     prompt = build_user_prompt_text(processed_natural_program="Use <metadata> to describe a value.", step_context=context)

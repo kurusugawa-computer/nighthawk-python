@@ -94,7 +94,7 @@ def test_selected_contract_survives_executor_context_replacement() -> None:
             context = request.step_context
             context.environment = StepEnvironment(
                 python_name_to_value=context.step_locals,
-                python_globals=context.step_globals,
+                python_globals={},
                 output_name_set=frozenset({"value"}),
                 binding_name_to_type={"value": str},
             )

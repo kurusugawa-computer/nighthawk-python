@@ -57,7 +57,7 @@ async def test_asynchronous_natural_awaits_model_return_expression() -> None:
             async def calculate() -> int:
                 return 17
 
-            step_context.record_assignment("calculate", calculate)
+            step_context.environment.assign("calculate", calculate)
             return await resolve_model_candidate(request, ModelReturn(kind="return", return_expression="calculate()"), {})
 
     with nh.run(AssertingExecutor()):
@@ -82,7 +82,7 @@ def test_synchronous_natural_rejects_awaitable_model_return_expression():
     class AssertingExecutor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             step_context = request.step_context
-            step_context.record_assignment("result", AwaitableInt())
+            step_context.environment.assign("result", AwaitableInt())
             return run_coroutine_synchronously(lambda: resolve_model_candidate(request, ModelReturn(kind="return", return_expression="result"), {}))
 
     with nh.run(AssertingExecutor()):

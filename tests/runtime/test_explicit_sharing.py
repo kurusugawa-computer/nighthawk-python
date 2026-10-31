@@ -71,7 +71,7 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
             contexts.append(context)
             environment = context.environment
             if request.processed_natural_program == "parent":
-                context.record_assignment("parent_temporary", "PARENT_TEMPORARY_MARKER")
+                context.environment.assign("parent_temporary", "PARENT_TEMPORARY_MARKER")
                 with nh.scope(task_name_to_value=select_shared_references(environment)):
                     assert nh.get_scope().execution_reference.step_execution_id == context.execution_reference.step_execution_id
                     if asynchronous_child:
@@ -118,7 +118,7 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
             if request.processed_natural_program.startswith("Child:"):
                 assert environment.resolve("child_cell") is child_cell
                 assert environment.resolve("child_local") == 11
-                context.record_assignment("child_temporary", "CHILD_TEMPORARY_MARKER")
+                context.environment.assign("child_temporary", "CHILD_TEMPORARY_MARKER")
                 if asynchronous_child:
                     await asynchronous_grandchild(shared)
                 else:
@@ -194,7 +194,7 @@ async def test_missing_parent_read_fails_before_executor_and_writeback_through_c
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             requests.append(request)
             assert request.processed_natural_program.startswith("Parent:")
-            request.step_context.record_assignment("parent_temporary", 42)
+            request.step_context.environment.assign("parent_temporary", 42)
             with pytest.raises(nh.ExecutionError) as caught:
                 if asynchronous:
                     await child_alias()  # type: ignore[misc]
@@ -242,7 +242,7 @@ async def test_replaced_or_cleared_references_do_not_reappear_from_parent_workin
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             environment = request.step_context.environment
             if request.processed_natural_program.startswith("Parent:"):
-                request.step_context.record_assignment("shared_value", "parent working value")
+                request.step_context.environment.assign("shared_value", "parent working value")
                 await child(shared)
                 with nh.scope(task_name_to_value={"shared_value": replacement}):
                     await child(replacement)

@@ -278,7 +278,7 @@ class Runner:
         """Record only a successfully completed generated Python assignment."""
         self.assigned_binding_name_to_value[name] = value
         if self.preparation is not None:
-            self.preparation.step_context.record_assignment(name, value)
+            self.preparation.step_context.environment.assign(name, value)
 
     def _parse_and_coerce_return_value(self, value: object, return_annotation: object) -> object:
         self.failure_description = "Return value validation failed"

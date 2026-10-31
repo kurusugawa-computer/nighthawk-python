@@ -44,7 +44,7 @@ def test_nh_evaluate_awaits_async_expression() -> None:
         return a + b * 8
 
     step_context = _new_step_context()
-    step_context.record_assignment("calculate", calculate)
+    step_context.environment.assign("calculate", calculate)
     run_context = _new_run_context(step_context)
 
     nh_evaluate = _get_tool_function("nh_evaluate")
@@ -54,7 +54,7 @@ def test_nh_evaluate_awaits_async_expression() -> None:
 
 def test_nh_evaluate_handles_sync_expression() -> None:
     step_context = _new_step_context()
-    step_context.record_assignment("x", 10)
+    step_context.environment.assign("x", 10)
     run_context = _new_run_context(step_context)
 
     nh_evaluate = _get_tool_function("nh_evaluate")
@@ -67,7 +67,7 @@ def test_nh_evaluate_supports_top_level_await() -> None:
         return f"value-{key}"
 
     step_context = _new_step_context()
-    step_context.record_assignment("fetch", fetch)
+    step_context.environment.assign("fetch", fetch)
     run_context = _new_run_context(step_context)
 
     nh_evaluate = _get_tool_function("nh_evaluate")
@@ -80,23 +80,23 @@ def test_nh_assign_awaits_async_expression() -> None:
         return a + b * 8
 
     step_context = _new_step_context()
-    step_context.record_assignment("calculate", calculate)
+    step_context.environment.assign("calculate", calculate)
     run_context = _new_run_context(step_context)
 
     nh_assign = _get_tool_function("nh_assign")
     update = asyncio.run(nh_assign(run_context, target_path="result", expression="calculate(1, 2)"))
 
     assert update["updates"][0]["value"] == 17
-    assert step_context.step_locals["result"] == 17
+    assert step_context.environment.resolve("result") == 17
 
 
 def test_nh_assign_handles_sync_expression() -> None:
     step_context = _new_step_context()
-    step_context.record_assignment("x", 10)
+    step_context.environment.assign("x", 10)
     run_context = _new_run_context(step_context)
 
     nh_assign = _get_tool_function("nh_assign")
     update = asyncio.run(nh_assign(run_context, target_path="result", expression="x * 3"))
 
     assert update["updates"][0]["value"] == 30
-    assert step_context.step_locals["result"] == 30
+    assert step_context.environment.resolve("result") == 30

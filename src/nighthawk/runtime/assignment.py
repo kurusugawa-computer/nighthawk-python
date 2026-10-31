@@ -76,7 +76,7 @@ def assign_value(
                     evaluation_started=True,
                 ) from exception
         execution.phase = "assignment"
-        step_context.record_assignment(name, value)
+        step_context.environment.assign(name, value)
         return AssignmentResult(target_path, value, "output" if name in step_context.environment.output_name_set else "temporary")
 
     execution.phase = "target_resolution"

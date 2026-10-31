@@ -470,7 +470,11 @@ def _render_locals_section(
     )
     eligible_reference_and_value_list.sort(
         key=lambda item: (
-            0 if item[0].split(".", 1)[0] in explicit_names else 1 if item[0].split(".", 1)[0] in step_context.step_locals else 2,
+            0
+            if item[0].split(".", 1)[0] in explicit_names
+            else 1
+            if item[0].split(".", 1)[0] in step_context.step_locals or item[0].split(".", 1)[0] in step_context.environment.step_name_to_value
+            else 2,
             item[0],
         )
     )

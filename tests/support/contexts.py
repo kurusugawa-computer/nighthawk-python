@@ -28,7 +28,6 @@ def new_step_context(
             output_name_set=frozenset(output_binding_names),
             binding_name_to_type=binding_name_to_type or {},
         ),
-        step_globals=step_globals,
         step_locals=step_locals,
         read_binding_names=read_binding_names,
         type_alias_reference_names=type_alias_reference_names,

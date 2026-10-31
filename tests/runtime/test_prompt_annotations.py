@@ -93,7 +93,7 @@ def test_effective_binding_and_unbound_local_do_not_expose_shadowed_values() -> 
     context.read_binding_names = frozenset({"value", "missing"})
     context.environment = StepEnvironment(
         python_name_to_value=context.step_locals,
-        python_globals=context.step_globals,
+        python_globals={"missing": 23},
         local_name_set=frozenset({"value", "missing"}),
         task_name_to_value={"value": 100, "missing": 200},
     )

@@ -70,9 +70,8 @@ Authorization does not change supported source forms.
 - Natural DSL: the constrained syntax inside a Natural block (token binding plus free-form instructions).
 - Python locals (`python_locals`): the actual Python local variables in the function's frame.
 - Python globals (`python_globals`): the Python module globals for the compiled function.
-- Step locals (`step_locals`): captured working values and tracked assignment bookkeeping; the environment owns full expression lookup.
+- Step locals (`step_locals`): Python working values captured at block entry; the environment owns tracked assignments and full expression lookup.
 - Step environment (`StepEnvironment`): provenance-preserving Python, task, and step views with one effective lookup contract.
-- Step globals (`step_globals`): internal namespace storage; it is not an independent lookup authority.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
     - `execution_reference` contains invocation identity and source location; `environment` owns lookup, declared outputs, and their contracts.
     - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
@@ -307,7 +306,7 @@ A value passed as an argument, accessible through the child's own Python globals
 No name or object-identity blacklist is applied.
 This controls implicit name availability, not Python introspection, object access, or security isolation.
 
-`step_locals` holds captured Python working values and tracked assignment bookkeeping; it is not the complete effective environment.
+`step_locals` holds the Python working values captured at block entry; it is not the complete effective environment.
 Use `environment.resolve`, its source views, or the common runtime operations for name lookup.
 Generated assignments write validated, selected `<:name>` values back to the corresponding Python locals, cells, or globals after finalization.
 Automatic output selection considers all initialized declared outputs, even without tracked assignment or mutation marks.
@@ -324,6 +323,7 @@ Optional constructor mappings default to empty and reject `None`; explicitly sup
 | `python_name_to_value` | Values accessible through the block's Python lexical environment, including enclosing cells, globals, and builtins. |
 | `task_name_to_value` | The resolved mapping injected by the active scope. |
 | `step_name_to_value` | Values explicitly assigned in this step, including pending declared outputs and temporary working names. |
+| `assign(name, value)` | Record a tracked step value without validation or an operation record; an existing Python name requires an output declaration. Runtime operations validate before assigning. |
 | `output_name_set` and `binding_name_to_type` | Declared outputs and their contracts, fixed at step entry. |
 | `resolve(name, *, source="effective")` | Resolve a name from the effective environment or specifically from `python`, `task`, or `step`. |
 | `describe(name)` | Describe the effective origin, shadowed alternatives, write eligibility, captured annotation, selected output contract, and usable references without evaluating the value's properties. |
@@ -580,7 +580,7 @@ Direct Python calls to these helpers do not create an additional Natural operati
 
 Nighthawk exposes two paths for the LLM to call Python functions:
 
-1. **Binding functions** (Section 8.2): Callable values in step locals or step globals are rendered as text signatures in the prompt context. The LLM invokes them via `nh_evaluate`.
+1. **Binding functions** (Section 8.2): Callable values visible to the block are rendered as text signatures in the prompt context. The LLM invokes them via `nh_evaluate`.
 2. **Scoped tools** (`nighthawk.scope(tools=...)`): Declared callables are presented via the model's native tool-calling interface. Each tool definition adds a JSON Schema to every API request.
 
 Binding functions incur no per-definition token overhead beyond the signature line in the prompt context. User-defined tools incur per-definition overhead proportional to the tool's JSON Schema size.

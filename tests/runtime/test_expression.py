@@ -143,7 +143,7 @@ async def test_evaluate_expression_async_supports_top_level_await() -> None:
         return a + b * 8
 
     step_context = context_for()
-    step_context.record_assignment("calculate", calculate)
+    step_context.environment.assign("calculate", calculate)
 
     result = await evaluate_expression_async(step_context, "await calculate(1, 2)")
     assert result == 17
@@ -155,7 +155,7 @@ async def test_evaluate_expression_async_awaits_returned_awaitable_implicitly() 
         return a + b * 8
 
     step_context = context_for()
-    step_context.record_assignment("calculate", calculate)
+    step_context.environment.assign("calculate", calculate)
 
     result = await evaluate_expression_async(step_context, "calculate(1, 2)")
     assert result == 17

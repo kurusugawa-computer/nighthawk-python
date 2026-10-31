@@ -212,7 +212,6 @@ class StepPreparation:
         step_context = StepContext(
             execution_reference=get_scope().execution_reference,
             environment=environment,
-            step_globals=step_globals,
             step_locals=step_locals,
             read_binding_names=read_binding_names,
             type_alias_reference_names=type_alias_reference_names,

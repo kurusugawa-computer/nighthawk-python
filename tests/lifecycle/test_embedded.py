@@ -45,7 +45,7 @@ async def test_final_raise_discards_invalid_output_and_delivers_before_propagati
     saved_name_to_value: dict[str, object] = {}
 
     def candidate(request):
-        request.step_context.record_assignment("result", "invalid")
+        request.step_context.environment.assign("result", "invalid")
         return StepCandidate(outcome=Raise("domain error", error_type=LookupError))
 
     with nh.run(InspectingExecutor(candidate)), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(LookupError):

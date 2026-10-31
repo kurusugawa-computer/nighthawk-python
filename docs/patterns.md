@@ -138,7 +138,7 @@ except Exception as error:
 
 ### Custom exception types
 
-When a Natural block references exception types visible in step locals or globals, those types become available as `raise_error_type` options:
+When a Natural block references exception types visible as Python locals or globals, those types become available as `raise_error_type` options:
 
 <!-- error-example:custom_raise -->
 ```py

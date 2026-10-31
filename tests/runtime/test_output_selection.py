@@ -27,8 +27,8 @@ async def test_candidate_selects_exact_outputs_before_validation_and_assignment(
         return value + 100
 
     def execute_candidate(request: StepRequest) -> StepCandidate:
-        request.step_context.record_assignment("first", 11)
-        request.step_context.record_assignment("temporary", "not an output")
+        request.step_context.environment.assign("first", 11)
+        request.step_context.environment.assign("temporary", "not an output")
         if selection == "omitted":
             return StepCandidate(outcome=Pass())
         if selection == "unset":
@@ -41,7 +41,7 @@ async def test_candidate_selects_exact_outputs_before_validation_and_assignment(
         assert snapshot_binding_name_to_value == {"first": 11, "second": 20}
         assert list(snapshot_binding_name_to_value) == ["first", "second"]
         assert validated == [] and assigned_binding_name_to_value == {}
-        request.step_context.record_assignment("second", 99)
+        request.step_context.environment.assign("second", 99)
         return StepCandidate(outcome=Pass(), binding_name_to_value={**snapshot_binding_name_to_value, "first": "31"})
 
     def inspect(commit):

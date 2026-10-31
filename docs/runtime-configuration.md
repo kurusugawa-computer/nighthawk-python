@@ -164,7 +164,7 @@ selected_policy = ["Use direct evidence."]
 def respond(request: StepRequest) -> StepCandidate:
     context = request.step_context
     if request.processed_natural_program == "parent":
-        context.record_assignment("parent_temporary", 42)
+        context.environment.assign("parent_temporary", 42)
         with nh.scope(task_name_to_value=select_shared_references(context.environment)):
             child(6)
         assert context.environment.resolve("parent_temporary") == 42
@@ -218,7 +218,7 @@ class Executor:
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
         context = request.step_context
         if request.processed_natural_program == "parent":
-            context.record_assignment("parent_temporary", 42)
+            context.environment.assign("parent_temporary", 42)
             with nh.scope(task_name_to_value=select_shared_references(context.environment)):
                 await child(6)
             assert context.environment.resolve("parent_temporary") == 42

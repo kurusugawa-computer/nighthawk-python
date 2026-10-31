@@ -9,7 +9,7 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime import StepCandidate, StepRequest
 
 _MODULE_SOURCE = '''
 import nighthawk as nh
@@ -36,11 +36,11 @@ def later_helper() -> int:
 
 class _GlobalsProbeExecutor:
     def __init__(self) -> None:
-        self.step_globals_list: list[dict[str, object]] = []
+        self.later_helper_list: list[object] = []
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
-        self.step_globals_list.append(request.step_context.step_globals)
-        return StepCandidate(outcome=Pass(), binding_name_to_value={})
+        self.later_helper_list.append(request.step_context.environment.python_name_to_value.get("later_helper"))
+        return StepCandidate(binding_name_to_value={})
 
 
 @pytest.fixture
@@ -66,8 +66,7 @@ def test_natural_function_sees_module_names_defined_after_decoration(probe_modul
     with nh.run(probe_executor):
         probe_module.uses_later_helper()
 
-    assert len(probe_executor.step_globals_list) == 1
-    assert probe_executor.step_globals_list[0]["later_helper"] is probe_module.later_helper
+    assert probe_executor.later_helper_list == [probe_module.later_helper]
 
 
 def test_async_natural_function_sees_module_names_defined_after_decoration(probe_module: ModuleType) -> None:
@@ -78,7 +77,7 @@ def test_async_natural_function_sees_module_names_defined_after_decoration(probe
     with nh.run(probe_executor):
         asyncio.run(probe_module.uses_later_helper_async())
 
-    assert probe_executor.step_globals_list[0]["later_helper"] is probe_module.later_helper
+    assert probe_executor.later_helper_list[0] is probe_module.later_helper
 
 
 def test_decoration_and_execution_preserve_module_globals() -> None:
@@ -100,6 +99,6 @@ def test_decoration_and_execution_preserve_module_globals() -> None:
     executor = _GlobalsProbeExecutor()
     with nh.run(executor):
         decorated()
-    assert len(executor.step_globals_list) == 1
+    assert len(executor.later_helper_list) == 1
     assert module_name_to_value.keys() == original_name_to_value.keys()
     assert all(module_name_to_value[name] is value for name, value in original_name_to_value.items())

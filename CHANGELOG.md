@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Breaking: `StepLifecycle` and `Oversight` accept only keyword arguments, such as `StepLifecycle(on_step_finished=record)`; lifecycle hooks are ordered chronologically.
 - Breaking: `StepContext` receives its prepared `environment` and keeps runtime-owned operation state private.
   Declared outputs and their contracts are read from `environment.output_name_set` and `environment.binding_name_to_type`.
-  The duplicated `binding_commit_targets` and `binding_name_to_type` fields, the `task_name_to_value` constructor argument, the `operation_*` fields, and write-only bookkeeping (`assigned_binding_names`, `dirty_output_binding_names`, `step_locals_revision`, `record_output_binding_mutation`, `processed_natural_program`) are removed.
+  `StepEnvironment.assign(name, value)` is the one way to record a tracked step value; `StepContext.record_assignment` is removed, and `step_locals` holds only the values captured at block entry.
+  The duplicated `step_globals`, `binding_commit_targets`, and `binding_name_to_type` fields, the `task_name_to_value` constructor argument, the `operation_*` fields, and write-only bookkeeping (`assigned_binding_names`, `dirty_output_binding_names`, `step_locals_revision`, `record_output_binding_mutation`, `processed_natural_program`) are removed.
 - Breaking: `StepRequest` and `ContextRequest` read `execution_reference` and `binding_name_to_type` from their step context instead of accepting separate copies.
   `StepCommit.output_binding_names` is the declared output order as a tuple, replacing `output_binding_name_set`.
 - Breaking: `OperationError` carries its own `kind`, `phase`, `evaluation_started`, and `guidance`; the `ToolBoundaryError` base is removed because application tools raising it were never converted into model feedback.

@@ -373,7 +373,7 @@ class AgentStepExecutor:
         referenced_names, _ = extract_references_and_program(processed_natural_program)
 
         error_type_binding_name_list: list[str] = []
-        for name in sorted(set(referenced_names) | step_context.step_locals.keys()):
+        for name in sorted(set(referenced_names) | step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys()):
             value = resolve_name_in_step_context(step_context, name)
             if not isinstance(value, type) or not issubclass(value, BaseException):
                 continue

@@ -430,7 +430,7 @@ def test_reference_views_preserve_validated_values_and_freeze_only_mapping() -> 
 def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            request.step_context.record_assignment("result", "invalid")
+            request.step_context.environment.assign("result", "invalid")
             return run_coroutine_synchronously(lambda: resolve_model_candidate(request, ModelRaise(kind="raise", raise_message="failed")))
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:

@@ -35,7 +35,7 @@ async def test_explicit_environment_is_shared_by_reads_evaluation_discovery_and_
         assert environment.describe("value")["origin"] == "python"
         with pytest.raises(NameError):
             environment.resolve("saved_name_to_value")
-        assert "saved_name_to_value" not in request.step_context.step_globals
+        assert "saved_name_to_value" not in request.step_context.environment.python_name_to_value
         return StepCandidate(outcome=Return(["done"]), binding_name_to_value={"result": "saved"})
 
     with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)):
@@ -141,7 +141,7 @@ async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callab
 @pytest.mark.asyncio
 async def test_explicit_step_cannot_inherit_parent_temporary(execute: Callable[..., Awaitable[StepOutcome]]) -> None:
     def inspect(request: StepRequest) -> StepCandidate:
-        request.step_context.record_assignment("parent_only", 10)
+        request.step_context.environment.assign("parent_only", 10)
         with pytest.raises(nh.ExecutionError, match="parent_only"):
             execute_step(StepDefinition("child", input_binding_names=("parent_only",)), name_to_value={}, write_binding=lambda name, value: None)
         return StepCandidate(outcome=Pass())

@@ -58,24 +58,18 @@ class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
     ``environment`` owns effective lookup, declared outputs and their contracts, and tracked step assignments.
-    Use :meth:`record_assignment` or the common assignment operations to keep that environment and ``step_locals`` consistent.
+    ``step_locals`` holds the Python working values captured at block entry.
     Finalization validates initialized declared outputs when the candidate omits its output selection; an explicit mapping supplies the complete selection.
     """
 
     execution_reference: ExecutionReference
     environment: StepEnvironment
-    step_globals: dict[str, object]
     step_locals: dict[str, object]
     read_binding_names: frozenset[str] = frozenset()
     type_alias_reference_names: frozenset[str] = frozenset()
     model_result: AgentRunResult[Any] | None = None
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
     _operation_state: OperationState = field(default_factory=OperationState, init=False, repr=False)
-
-    def record_assignment(self, name: str, value: object) -> None:
-        """Assign a tracked step value without validation or operation records."""
-        self.environment.assign(name, value)
-        self.step_locals[name] = value
 
 
 _step_context_stack_var: ContextVar[tuple[StepContext, ...]] = ContextVar(

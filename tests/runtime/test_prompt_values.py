@@ -737,7 +737,7 @@ def test_locals_section_renders_fallback_merged_return_type_signature() -> None:
 def test_explicit_application_prefixes_are_presented_in_initial_context() -> None:
     context = build_step_context(python_globals={"__nh_global": 9}, python_locals={"__nh_local": 7})
     context.environment = StepEnvironment(
-        python_name_to_value=context.step_locals, python_globals=context.step_globals, task_name_to_value={"__nighthawk_task": 5}
+        python_name_to_value=context.step_locals, python_globals={"__nh_global": 9}, task_name_to_value={"__nighthawk_task": 5}
     )
     prompt = build_user_prompt_text(processed_natural_program="Read <__nh_local>, <__nh_global>, and <__nighthawk_task>.", step_context=context)
     for name, value in (("__nh_local", 7), ("__nh_global", 9), ("__nighthawk_task", 5)):
