@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from . import lifecycle, oversight, resilience, runtime
+# lifecycle and oversight import runtime leaf modules, whose package imports the runner that uses them.
+from . import runtime
+
+# isort: split
+from . import lifecycle, oversight, resilience
 from .composition import UNSET, Extend, Merge, UnsetType
 from .configuration import StepContextLimits, StepExecutorConfiguration
 from .errors import (
