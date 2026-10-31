@@ -743,7 +743,7 @@ Tool result transport contract:
 - `UploadedFile` values are provider-owned references. Backends that cannot resolve the provider file identifier MUST reject them at the user-prompt boundary.
 - For tool results, backends that cannot resolve an `UploadedFile` MUST preserve the rest of the top-level payload and replace only that item with an explanatory text fallback instead of silently dropping it.
 
-Error kind categories: `invalid_input`, `resolution`, `execution`, `transient`, `internal`, `oversight`.
+Error kind categories: `invalid_input`, `resolution`, and `oversight`.
 
 Boundary rule for tool-call failures:
 
@@ -764,11 +764,6 @@ Partial effects:
 - Static admission failure does not evaluate the right-hand side.
 - A failed pending name assignment retains its prior working value, but earlier helper, validator, or object-mutation effects remain.
 - Dotted traversal or model validation can fail after right-hand-side effects; the block provides no transaction or automatic rollback.
-
-#### 8.3.1. Supporting types (internal)
-
-- `ToolBoundaryError`: Exception carrying `kind` (ErrorKind), `message`, and optional `guidance`. Raised by tool implementations to signal structured failures.
-- `ToolResultRenderingPolicy`: Frozen dataclass controlling how tool result previews are rendered (tokenizer encoding name, max tokens, JSON renderer style).
 
 ### 8.4. Execution contract (final JSON)
 
@@ -1213,7 +1208,7 @@ For practical examples and design tips, see [Patterns](patterns.md#cross-block-c
 ## 13. Error handling
 
 Nighthawk execution, policy, and delivery failures derive from `NighthawkError`.
-Recoverable operation diagnostics use `OperationError`, a `ToolBoundaryError` subtype, so custom executors can handle them at the operation boundary.
+Recoverable operation diagnostics use `OperationError`, which is deliberately not a `NighthawkError`, so custom executors can handle them at the operation boundary.
 Invalid arguments can raise ordinary `TypeError`, `ValueError`, or Pydantic validation errors.
 
 Exception hierarchy:
@@ -1225,7 +1220,7 @@ Exception hierarchy:
 - `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception.
     - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, or boundary value validation fails outside the operation pipeline.
     - A DSL Raise defaults to ordinary `Exception`; application operation failures retain their own exception types.
-- `ToolBoundaryError(Exception)`: Internal tool boundary signal with an `ErrorKind` and optional guidance. A failed `nh_assign` value validation raises this signal with `kind="invalid_input"`; the tool wrapper converts it into `ToolOutcome.error` for the model. It is not a `NighthawkError` subclass.
+- `OperationError(Exception)`: Recoverable runtime admission, name-resolution, or value-validation failure, with `kind`, `phase`, `evaluation_started`, and `guidance`. A failed `nh_assign` value validation raises it with `kind="invalid_input"`; the tool wrapper returns it to the model as a structured error. It is not a `NighthawkError` subclass, and an application tool raising it is not converted into feedback.
 - `ToolDeclarationError(NighthawkError)`: Invalid tool declaration.
 - `NameConflictError(NighthawkError)`: Distinct declarations claim the same name.
 - `ToolNameConflictError(ToolDeclarationError, NameConflictError)`: Tool name collision, including reserved built-in names.
@@ -1278,8 +1273,6 @@ Instance attributes:
 
 - `configuration: StepExecutorConfiguration` — the resolved configuration.
 - `agent_is_managed: bool` — `True` when the agent was built internally from the configuration, `False` when provided externally via `from_agent`.
-- `token_encoding` — tiktoken encoding resolved from the configuration.
-- `tool_result_rendering_policy: ToolResultRenderingPolicy` — policy for rendering tool result previews, derived from configuration.
 
 ### 14.3. Custom backends
 

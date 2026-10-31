@@ -10,7 +10,7 @@ class NighthawkError(Exception):
     """Base exception for Nighthawk execution, policy, and delivery failures.
 
     Invalid arguments may raise ordinary Python or Pydantic validation errors.
-    Recoverable operation diagnostics use ToolBoundaryError instead.
+    Recoverable operation diagnostics use OperationError instead.
     """
 
 

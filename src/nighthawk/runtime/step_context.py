@@ -48,8 +48,7 @@ class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
     ``environment`` owns effective lookup and tracked step assignments.
-    Use :meth:`record_assignment` or the common assignment operations to keep that environment and ``step_locals`` bookkeeping consistent.
-    Revision and mutation marks describe tracked changes.
+    Use :meth:`record_assignment` or the common assignment operations to keep that environment and ``step_locals`` consistent.
     Finalization validates initialized declared outputs when the candidate omits its output selection; an explicit mapping supplies the complete selection.
     """
 
@@ -66,11 +65,7 @@ class StepContext:
 
     type_alias_reference_names: frozenset[str] = frozenset()
     model_result: AgentRunResult[Any] | None = None
-    processed_natural_program: str = ""
     binding_name_to_type: Mapping[str, object] = field(default_factory=dict)
-    assigned_binding_names: set[str] = field(default_factory=set)
-    dirty_output_binding_names: set[str] = field(default_factory=set)
-    step_locals_revision: int = 0
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
     environment: StepEnvironment = field(init=False)
     operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
@@ -89,19 +84,9 @@ class StepContext:
         )
 
     def record_assignment(self, name: str, value: object) -> None:
-        """Record an assignment to a step local variable.
-
-        Updates step_locals, marks the name as assigned, and bumps the revision.
-        """
+        """Assign a tracked step value without validation or operation records."""
         self.environment.assign(name, value)
         self.step_locals[name] = value
-        self.assigned_binding_names.add(name)
-        self.step_locals_revision += 1
-
-    def record_output_binding_mutation(self, name: str) -> None:
-        """Record an in-place mutation affecting a committed output binding root."""
-        self.dirty_output_binding_names.add(name)
-        self.step_locals_revision += 1
 
 
 _step_context_stack_var: ContextVar[tuple[StepContext, ...]] = ContextVar(

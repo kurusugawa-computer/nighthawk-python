@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..errors import NighthawkError
-from ..tools.contracts import ToolBoundaryError
+from ..tools.contracts import ErrorKind
 from .execution_reference import ExecutionReference
 
 type OperationKind = Literal["evaluation", "assignment", "return", "native_tool", "inspection", "output"]
@@ -74,17 +74,15 @@ class OperationFinished:
     blocked_by_operation_id: str | None = None
 
 
-class OperationError(ToolBoundaryError):
-    """Recoverable runtime admission, lookup, or value-validation failure."""
+class OperationError(Exception):
+    """Recoverable runtime admission, lookup, or value-validation failure, returned to the model as feedback."""
 
     def __init__(self, *, message: str, phase: OperationPhase, evaluation_started: bool, guidance: str) -> None:
+        super().__init__(message)
         self.phase = phase
         self.evaluation_started = evaluation_started
-        super().__init__(
-            kind="resolution" if phase in ("target_resolution", "evaluation") else "invalid_input",
-            message=message,
-            guidance=guidance,
-        )
+        self.guidance = guidance
+        self.kind: ErrorKind = "resolution" if phase in ("target_resolution", "evaluation") else "invalid_input"
 
 
 class OperationDeliveryError(NighthawkError):

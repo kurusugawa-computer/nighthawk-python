@@ -7,14 +7,7 @@ import tiktoken
 
 from ..json_renderer import JsonRendererStyle, render_json_text
 
-type ErrorKind = Literal["invalid_input", "resolution", "execution", "transient", "internal", "oversight"]
-
-
-class ToolBoundaryError(Exception):
-    def __init__(self, *, kind: ErrorKind, message: str, guidance: str | None = None) -> None:
-        super().__init__(message)
-        self.kind: ErrorKind = kind
-        self.guidance: str | None = guidance
+type ErrorKind = Literal["invalid_input", "resolution", "oversight"]
 
 
 class ToolError(TypedDict):
@@ -33,9 +26,6 @@ class ToolOutcome(TypedDict):
     error: ToolError | None
 
 
-type ToolHandlerResultKind = Literal["tool_result", "retry_prompt", "boundary_failure"]
-
-
 class ToolResultObservation(TypedDict):
     """Carries the canonical ``ToolOutcome``; backend boundaries derive text previews and trace payloads lazily."""
 
@@ -48,17 +38,7 @@ class RetryPromptObservation(TypedDict):
     retry_text: str
 
 
-class BoundaryFailureObservation(TypedDict):
-    """A failure of Nighthawk's tool-handler invocation boundary, distinct from a recoverable ``tool_result`` error.
-
-    Projection failures after a successful ``ToolOutcome`` stay on the ``tool_result`` path and fall back to the preview.
-    """
-
-    kind: Literal["boundary_failure"]
-    tool_error: ToolError
-
-
-type ToolHandlerResult = ToolResultObservation | RetryPromptObservation | BoundaryFailureObservation
+type ToolHandlerResult = ToolResultObservation | RetryPromptObservation
 
 
 def build_tool_result_observation(
@@ -91,17 +71,7 @@ def render_tool_handler_result_preview_text(
             style=style,
         )
 
-    if tool_handler_result["kind"] == "retry_prompt":
-        return tool_handler_result["retry_text"]
-
-    tool_error = tool_handler_result["tool_error"]
-    return render_tool_result_json_text(
-        value=None,
-        error=tool_error,
-        max_tokens=max_tokens,
-        encoding=encoding,
-        style=style,
-    )
+    return tool_handler_result["retry_text"]
 
 
 def build_tool_handler_result_trace_text(
@@ -124,13 +94,6 @@ def build_tool_handler_result_trace_text(
         encoding=encoding,
         style=style,
     )
-
-    if tool_handler_result["kind"] == "boundary_failure":
-        trace_payload = {
-            "kind": "boundary_failure",
-            "preview_chars": len(preview_text),
-        }
-        return json.dumps(trace_payload, ensure_ascii=False, separators=(",", ":"))
 
     tool_outcome = tool_handler_result["tool_outcome"]
     trace_payload = {

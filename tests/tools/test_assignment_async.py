@@ -6,9 +6,9 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
+from nighthawk.runtime import OperationError
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.assignment import assign_tool, assign_tool_async
-from nighthawk.tools.contracts import ToolBoundaryError
 
 
 def _new_step_context() -> StepContext:
@@ -45,7 +45,7 @@ def test_assign_rejects_rebind_of_read_binding() -> None:
         task_name_to_value={},
     )
 
-    with pytest.raises(ToolBoundaryError):
+    with pytest.raises(OperationError):
         assign_tool(step_context, "data", "{'key': 'new'}")
 
     assert step_context.step_locals["data"] == {"key": "old"}
@@ -65,7 +65,6 @@ def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
 
     assert result["updates"][0]["value"] == {"key": "new"}
     assert step_context.step_locals["data"] == {"key": "new"}
-    assert "data" in step_context.assigned_binding_names
 
 
 def test_assign_allows_multiple_rebinds_of_new_local() -> None:
@@ -85,7 +84,7 @@ def test_assign_allows_multiple_rebinds_of_new_local() -> None:
     assert step_context.step_locals["temp"] == 2
 
 
-def test_assign_dotted_path_marks_write_binding_root_dirty() -> None:
+def test_assign_dotted_path_updates_write_binding_root() -> None:
     class Model(BaseModel, validate_assignment=True):
         value: int = 0
 
@@ -100,11 +99,10 @@ def test_assign_dotted_path_marks_write_binding_root_dirty() -> None:
 
     assign_tool(step_context, "model.value", "2")
 
-    assert "model" in step_context.dirty_output_binding_names
-    assert "model" not in step_context.assigned_binding_names
+    assert step_context.environment.resolve("model") == Model(value=2)
 
 
-def test_assign_dotted_path_read_binding_root_is_not_marked_dirty() -> None:
+def test_assign_dotted_path_updates_read_binding_root() -> None:
     class Model(BaseModel, validate_assignment=True):
         value: int = 0
 
@@ -119,4 +117,4 @@ def test_assign_dotted_path_read_binding_root_is_not_marked_dirty() -> None:
 
     assign_tool(step_context, "model.value", "2")
 
-    assert step_context.dirty_output_binding_names == set()
+    assert step_context.environment.resolve("model") == Model(value=2)

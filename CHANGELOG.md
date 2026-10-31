@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
+- Breaking: `OperationError` carries its own `kind`, `phase`, `evaluation_started`, and `guidance`; the separate `ToolBoundaryError` base is removed because application tools raising it were never converted into model feedback. Tool error kinds are limited to the produced `invalid_input`, `resolution`, and `oversight`.
+- Breaking: `StepContext` no longer carries write-only bookkeeping (`assigned_binding_names`, `dirty_output_binding_names`, `step_locals_revision`, `record_output_binding_mutation`, `processed_natural_program`); `StepRequest` already supplies the processed program.
+- Breaking: protocol agents supplied through `AgentStepExecutor.from_agent` return the `ModelStepResponse` envelope; a bare outcome is no longer accepted.
+- The API reference documents only symbols with an external use. Tool transport records, backend request internals, rendering policies, and individual model outcome variants are internal.
 - Breaking: the top-level namespace keeps the ordinary application path. `StepExecutor`, `ConfigurableStepExecutor`, and `ModelSelection` are exported only from `nighthawk.runtime`, beside the other executor-boundary contracts. `nighthawk.oversight` no longer re-exports the resolved outcomes; import them from `nighthawk.runtime`. `to_jsonable_value` is internal, and `JsonableValue` is replaced by Pydantic's `JsonValue`.
 - Breaking: `nh.get_function_definition(function).transformed_function` is the one accessor for a Natural function's compiled body; `nh.get_transformed_function` is removed. `@nh.function` is applied bare; the empty-call `@nh.function()` form is removed.
 - Breaking: `StepExecutorConfiguration` holds `system_prompt_template` and `user_prompt_template` directly beside the matching suffix fragments; `StepPromptTemplates` and the `prompts` field are removed.

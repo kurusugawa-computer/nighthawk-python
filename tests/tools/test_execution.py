@@ -27,7 +27,6 @@ import nighthawk as nh
 from nighthawk.runtime import StepEnvironment
 from nighthawk.runtime.step_context import StepContext, ToolResultRenderingPolicy
 from nighthawk.tools.contracts import (
-    ToolBoundaryError,
     ToolOutcome,
 )
 from nighthawk.tools.execution import ToolResultWrapperToolset, _normalize_tool_success
@@ -302,11 +301,7 @@ def test_provider_tool_loop_propagates_application_failure() -> None:
     def test_failing_tool() -> int:  # type: ignore[no-untyped-def]
         nonlocal tool_call_count
         tool_call_count += 1
-        raise ToolBoundaryError(
-            kind="execution",
-            message="tool crashed",
-            guidance="Retry with different arguments.",
-        )
+        raise RuntimeError("tool crashed")
 
     step_context = _new_step_context()
     wrapped_toolset = ToolResultWrapperToolset(FunctionToolset([test_failing_tool]))
@@ -322,7 +317,7 @@ def test_provider_tool_loop_propagates_application_failure() -> None:
         model_request_list = [message for message in result.all_messages() if isinstance(message, ModelRequest)]
         return result.output, model_request_list
 
-    with nh.run(StubExecutor()), pytest.raises(ToolBoundaryError, match="tool crashed"):
+    with nh.run(StubExecutor()), pytest.raises(RuntimeError, match="tool crashed"):
         anyio.run(run_agent)
     assert tool_call_count == 1
 

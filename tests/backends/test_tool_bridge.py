@@ -22,7 +22,6 @@ import nighthawk as nh
 from nighthawk.backends.tool_bridge import build_tool_name_to_handler
 from nighthawk.errors import NighthawkError
 from nighthawk.tools.contracts import (
-    ToolBoundaryError,
     ToolHandlerResult,
     render_tool_handler_result_preview_text,
 )
@@ -52,13 +51,9 @@ def _render_preview_text_for_test(tool_handler_result: ToolHandlerResult) -> str
     )
 
 
-def test_backend_handler_propagates_application_boundary_error() -> None:
-    def test_boundary_error() -> int:  # type: ignore[no-untyped-def]
-        raise ToolBoundaryError(
-            kind="execution",
-            message="tool crashed",
-            guidance="Retry with different arguments.",
-        )
+def test_backend_handler_propagates_application_error() -> None:
+    def failing_tool() -> int:  # type: ignore[no-untyped-def]
+        raise RuntimeError("tool crashed")
 
     step_context = _new_step_context()
 
@@ -68,13 +63,13 @@ def test_backend_handler_propagates_application_boundary_error() -> None:
         usage=RunUsage(),
     )
 
-    with nh.run(StubExecutor()), nh.scope(tools=[Tool(test_boundary_error, name="test_boundary_error")]):
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(failing_tool, name="failing_tool")]):
         visible_tools = get_visible_tools()
     base_toolset = FunctionToolset(visible_tools)
 
     async def get_tool_def():  # type: ignore[no-untyped-def]
         tool_name_to_tool = await base_toolset.get_tools(run_context)
-        return tool_name_to_tool["test_boundary_error"].tool_def
+        return tool_name_to_tool["failing_tool"].tool_def
 
     tool_def = anyio.run(get_tool_def)
     assert isinstance(tool_def, ToolDefinition)
@@ -88,13 +83,13 @@ def test_backend_handler_propagates_application_boundary_error() -> None:
             )
 
     handlers = anyio.run(build_handlers)
-    handler = handlers["test_boundary_error"]
+    handler = handlers["failing_tool"]
 
     async def call_handler() -> ToolHandlerResult:
         with set_current_run_context(run_context):
             return await handler({})
 
-    with nh.run(StubExecutor()), pytest.raises(ToolBoundaryError, match="tool crashed"):
+    with nh.run(StubExecutor()), pytest.raises(RuntimeError, match="tool crashed"):
         anyio.run(call_handler)
 
 

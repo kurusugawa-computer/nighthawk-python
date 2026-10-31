@@ -41,17 +41,12 @@
 
 ## Backends
 
-### Base
+### Base settings
 
 ::: nighthawk.backends.base
     options:
       members:
-        - BackendModelBase
         - BackendModelSettings
-        - PreparedRequestParts
-        - PreparedTextProjectedRequest
-        - RequestPromptPart
-        - RequestPromptPartList
 
 ### Claude Code shared settings
 
@@ -94,9 +89,7 @@
     options:
       members:
         - StepContext
-        - ToolResultRenderingPolicy
         - get_step_context
-        - step_context_scope
 
 ## Model response contracts
 
@@ -105,31 +98,13 @@
       members:
         - ModelStepResponse
         - ModelOutcome
-        - ModelPass
-        - ModelReturn
-        - ModelBreak
-        - ModelContinue
-        - ModelRaise
 
-## Tool contracts
-
-::: nighthawk.tools.contracts
-    options:
-      members:
-        - ToolOutcome
-        - ToolBoundaryError
-        - ToolError
-        - ErrorKind
+## Tool declarations
 
 ::: nighthawk.tools.declarations
     options:
       members:
         - ToolEntry
-
-::: nighthawk.tools.execution
-    options:
-      members:
-        - ToolResultWrapperToolset
 
 ## Resilience
 

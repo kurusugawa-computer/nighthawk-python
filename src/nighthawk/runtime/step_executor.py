@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol, cast, runtime_checkable
 
-from pydantic import TypeAdapter
 from pydantic_ai import Agent, AgentRunResult, RunContext, StructuredDict, models
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.exceptions import ModelRetry
@@ -103,11 +102,7 @@ class _StepOutputBoundary(_OperationFailureGuard):
 
 def _parse_model_outcome(raw_output: Any) -> ModelOutcome:
     try:
-        if isinstance(raw_output, ModelStepResponse):
-            return raw_output.result
-        if isinstance(raw_output, dict) and "result" in raw_output:
-            return TypeAdapter(ModelOutcome).validate_python(raw_output["result"])
-        return TypeAdapter(ModelOutcome).validate_python(raw_output)
+        return ModelStepResponse.model_validate(raw_output).result
     except Exception as exception:
         raise ExecutionError(f"Step produced invalid step outcome: {exception}") from exception
 

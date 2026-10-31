@@ -116,10 +116,6 @@ def assign_value(
     # The standard setter already validated and wrote once. Read stored state directly,
     # without invoking a final getter or validating the field in isolation.
     value = object.__getattribute__(target, "__dict__")[field_name]
-    if name in step_context.binding_commit_targets:
-        step_context.record_output_binding_mutation(name)
-    else:
-        step_context.step_locals_revision += 1
     return AssignmentResult(target_path, value, "attribute")
 
 

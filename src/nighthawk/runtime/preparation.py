@@ -13,7 +13,7 @@ from .bindings import MISSING_ANNOTATION, infer_binding_types, normalize_binding
 from .description import discover_type_alias_reference_names
 from .environment import StepEnvironment
 from .scoping import get_scope
-from .step_context import StepContext, ToolResultRenderingPolicy, get_python_cell_scope_stack
+from .step_context import StepContext, get_python_cell_scope_stack
 from .step_definition import BlockKind
 from .step_executor import StepExecutor
 from .step_outcome import OutcomeKind
@@ -210,9 +210,6 @@ class StepPreparation:
                     raise NameError(f"Read binding {name!r} is absent from the explicit namespace", name=name)
             self.input_binding_name_to_value = {name: step_locals[name] for name in input_binding_names}
         binding_name_to_type = dict(environment.binding_name_to_type)
-        tool_result_rendering_policy = getattr(self.step_executor, "tool_result_rendering_policy", None)
-        if tool_result_rendering_policy is not None and not isinstance(tool_result_rendering_policy, ToolResultRenderingPolicy):
-            raise ExecutionError("Step executor tool_result_rendering_policy must be ToolResultRenderingPolicy when provided")
 
         binding_commit_targets = set(output_binding_names)
         read_binding_names = frozenset(input_binding_names) - binding_commit_targets
@@ -230,9 +227,7 @@ class StepPreparation:
             read_binding_names=read_binding_names,
             task_name_to_value=scoped_task_name_to_value,
             type_alias_reference_names=type_alias_reference_names,
-            processed_natural_program=processed_without_frontmatter,
             binding_name_to_type=binding_name_to_type,
-            tool_result_rendering_policy=tool_result_rendering_policy,
         )
         step_context.environment = environment
 

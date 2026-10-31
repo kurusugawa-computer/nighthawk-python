@@ -9,7 +9,6 @@ from nighthawk.json_renderer import JsonRendererStyle
 from nighthawk.runtime import StepEnvironment
 from nighthawk.tools import contracts
 from nighthawk.tools.contracts import (
-    BoundaryFailureObservation,
     build_tool_handler_result_trace_text,
     build_tool_result_observation,
     render_tool_handler_result_preview_text,
@@ -82,37 +81,6 @@ def test_build_tool_result_observation_hides_raw_payload_in_trace() -> None:
     assert "value" in parsed_preview
     assert parsed_trace.get("has_error") is False
     assert "large" not in json.dumps(parsed_trace)
-
-
-def test_boundary_failure_observation_uses_boundary_failure_trace_kind() -> None:
-    tool_handler_result: BoundaryFailureObservation = {
-        "kind": "boundary_failure",
-        "tool_error": {
-            "kind": "internal",
-            "message": "wrapper boom",
-            "guidance": "Retry.",
-        },
-    }
-    preview_text = render_tool_handler_result_preview_text(
-        tool_handler_result=tool_handler_result,
-        max_tokens=_budget,
-        encoding=_encoding,
-        style=_style,
-    )
-    trace_text = build_tool_handler_result_trace_text(
-        tool_handler_result=tool_handler_result,
-        max_tokens=_budget,
-        encoding=_encoding,
-        style=_style,
-    )
-
-    parsed_preview = json.loads(preview_text)
-    parsed_trace = json.loads(trace_text)
-
-    assert parsed_preview["error"]["message"] == "wrapper boom"
-    assert parsed_trace["kind"] == "boundary_failure"
-    assert isinstance(parsed_trace["preview_chars"], int)
-    assert parsed_trace["preview_chars"] > 0
 
 
 @pytest.mark.parametrize(
