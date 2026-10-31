@@ -68,7 +68,7 @@ async def test_empty_namespace_keeps_builtins_and_scoped_references(execute: Cal
         assert evaluate_expression(request.step_context, "len([injected])") == 1
         return StepCandidate(outcome=Pass())
 
-    with nh.run(InspectingExecutor(inspect)), nh.scope(task_references={"injected": 42}):
+    with nh.run(InspectingExecutor(inspect)), nh.scope(task_name_to_value={"injected": 42}):
         assert await execute(StepDefinition("Inspect the environment."), name_to_value={}, write_binding=lambda name, value: None) == Pass()
 
 
@@ -95,7 +95,7 @@ async def test_type_contracts_respect_explicit_and_scoped_names(execute: Callabl
             binding_name_to_value={"selected": "7", "nested": ["8"], "shadowed": "9", "scoped": "value"},
         )
 
-    with nh.run(InspectingExecutor(inspect)), nh.scope(task_references={"SelectedType": float, "ScopedType": bytes}):
+    with nh.run(InspectingExecutor(inspect)), nh.scope(task_name_to_value={"SelectedType": float, "ScopedType": bytes}):
         outcome = await execute(definition, name_to_value={"SelectedType": int, "int": str}, write_binding=saved_name_to_value.__setitem__)
     assert outcome == Return([b"done"])
     assert saved_name_to_value == {"selected": 7, "nested": [8], "shadowed": "9", "scoped": b"value"}
@@ -127,7 +127,7 @@ async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callab
 
     with (
         nh.run(InspectingExecutor(inspect)),
-        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append), task_references={"shared_policy": "explicit policy"}),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append), task_name_to_value={"shared_policy": "explicit policy"}),
     ):
         await execute(
             StepDefinition("parent"),

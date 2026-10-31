@@ -99,7 +99,7 @@ class Scope:
     context_builder: ContextBuilder
     system_prompt_suffix_fragments: tuple[str, ...] = ()
     user_prompt_suffix_fragments: tuple[str, ...] = ()
-    task_references: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    task_name_to_value: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
     capabilities: tuple[AbstractCapability[StepContext], ...] = ()
     _tool_declarations: tuple[ToolDeclaration, ...] = field(default=(), repr=False)
 
@@ -157,7 +157,7 @@ def system_prompt_suffix_fragment_scope(fragment: str) -> Generator[None]:
         yield
 
 
-def _merge_task_references(current: Mapping[str, object], supplied: Mapping[str, object]) -> Mapping[str, object]:
+def _merge_task_name_to_value(current: Mapping[str, object], supplied: Mapping[str, object]) -> Mapping[str, object]:
     merged_task_name_to_value = dict(current)
     for name, value in supplied.items():
         if name in merged_task_name_to_value and merged_task_name_to_value[name] is not value:
@@ -270,7 +270,7 @@ def scope(
     lifecycle: StepLifecycle | None | UnsetType = UNSET,
     system_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
     user_prompt_suffix_fragments: Sequence[str] | Extend[str] | UnsetType = UNSET,
-    task_references: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
+    task_name_to_value: Mapping[str, object] | Merge[object] | UnsetType = UNSET,
     context_builder: ContextBuilder | UnsetType = UNSET,
     tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET,
     capabilities: Sequence[AbstractCapability[StepContext]] | Extend[AbstractCapability[StepContext]] | UnsetType = UNSET,
@@ -314,13 +314,13 @@ def scope(
     next_capabilities = _compose_sequence(current.capabilities, capabilities)
     if any(not isinstance(capability, AbstractCapability) for capability in next_capabilities):
         raise TypeError("Capabilities must be AbstractCapability instances")
-    next_task_references = current.task_references
-    if isinstance(task_references, Merge):
-        next_task_references = _merge_task_references(next_task_references, task_references.name_to_value)
-    elif not isinstance(task_references, UnsetType):
-        if not isinstance(task_references, Mapping) or any(not isinstance(name, str) for name in task_references):
-            raise TypeError("task_references requires a string-keyed mapping, Merge, or UNSET")
-        next_task_references = MappingProxyType(dict(task_references))
+    next_task_name_to_value = current.task_name_to_value
+    if isinstance(task_name_to_value, Merge):
+        next_task_name_to_value = _merge_task_name_to_value(next_task_name_to_value, task_name_to_value.name_to_value)
+    elif not isinstance(task_name_to_value, UnsetType):
+        if not isinstance(task_name_to_value, Mapping) or any(not isinstance(name, str) for name in task_name_to_value):
+            raise TypeError("task_name_to_value requires a string-keyed mapping, Merge, or UNSET")
+        next_task_name_to_value = MappingProxyType(dict(task_name_to_value))
     next_tool_declarations = current._tool_declarations
     if isinstance(tools, Extend):
         next_tool_declarations = resolve_scoped_tools(next_tool_declarations, tools.values)
@@ -341,7 +341,7 @@ def scope(
         context_builder=current.context_builder if isinstance(context_builder, UnsetType) else context_builder,
         system_prompt_suffix_fragments=next_system_prompt_suffix_fragments,
         user_prompt_suffix_fragments=next_user_prompt_suffix_fragments,
-        task_references=next_task_references,
+        task_name_to_value=next_task_name_to_value,
         capabilities=next_capabilities,
         _tool_declarations=next_tool_declarations,
     )

@@ -339,7 +339,7 @@ def test_scoped_execution_tools_and_previews_do_not_enter_decision(decision_back
         nh.run(decision_model=model),
         nh.scope(
             tools=[forbidden_action],
-            task_references={"unreferenced": "PRIVATE_VALUE"},
+            task_name_to_value={"unreferenced": "PRIVATE_VALUE"},
             system_prompt_suffix_fragments=["EXECUTION_ONLY_SYSTEM"],
             user_prompt_suffix_fragments=["EXECUTION_ONLY_USER"],
         ),

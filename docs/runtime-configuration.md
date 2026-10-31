@@ -27,7 +27,7 @@ Composition uses `nh.Merge(...)` or `nh.Extend(...)` in their supported scope fi
 
 | Argument | Omitted or `UNSET` | Explicit empty value | `None` |
 |---|---|---|---|
-| `scope(task_references=...)` | Inherit | `{}` removes scoped references | Invalid |
+| `scope(task_name_to_value=...)` | Inherit | `{}` removes scoped references | Invalid |
 | `scope(tools=...)` and other sequence fields | Inherit | `[]` empties the scoped collection | Invalid |
 | `scope(oversight=...)` or `scope(lifecycle=...)` | Inherit | Not a collection | Disable hooks |
 | `function_call_scope(handler)` | Inherit | Not a collection | Disable interception |
@@ -66,7 +66,7 @@ Parameters:
 - `context_builder`: replace context presentation without changing value access or validation.
 - `system_prompt_suffix_fragments`: scope-level system suffix fragments.
 - `user_prompt_suffix_fragments`: scope-level user suffix fragments.
-- `task_references`: values in the scoped task environment.
+- `task_name_to_value`: values in the scoped task environment.
 - `tools`: scope-level native tools. See [Scoped tools](#scoped-tools).
 - `capabilities`: scope-level Pydantic AI capabilities. See [Pydantic AI capabilities in scopes](#pydantic-ai-capabilities-in-scopes).
 
@@ -83,7 +83,7 @@ The context manager yields the resulting `nh.Scope`, the same record `nh.get_sco
 
 ## Scoped task references
 
-`task_references` supplies helpers and values through a separate task environment.
+`task_name_to_value` supplies helpers and values through a separate task environment.
 It does not modify Python globals; ordinary Python names take precedence.
 Use `environment.resolve(name, source="task")` when deliberately selecting a shadowed injected value.
 For example:
@@ -93,7 +93,7 @@ def search_repository(query: str) -> list[str]: ...
 
 
 with nh.run(step_executor):
-    with nh.scope(task_references={"search_repository": search_repository}):
+    with nh.scope(task_name_to_value={"search_repository": search_repository}):
         triage_issue(ticket_text)
 ```
 
@@ -116,7 +116,7 @@ def describe_input(value: object) -> dict[str, object]:
 ```
 
 The explicit global reference makes the helper available and renders its signature and first documentation line with other callables.
-An argument, local binding, embedded `name_to_value` input, or scoped `task_references` entry can supply the same function, including under another name.
+An argument, local binding, embedded `name_to_value` input, or scoped `task_name_to_value` entry can supply the same function, including under another name.
 Nighthawk does not automatically add it to locals or globals.
 
 The result contains descriptions and bounded previews, not replacements for the original objects.
@@ -127,11 +127,11 @@ Binding names and declared output contracts remain the responsibility of [enviro
 ### Selecting shared values with Python
 
 Natural calls do not implicitly copy parent arguments, locals, closure values, or step temporaries into the child.
-Use parameters for essential inputs and `task_references` for references intentionally shared throughout a scope.
+Use parameters for essential inputs and `task_name_to_value` for references intentionally shared throughout a scope.
 A Python helper can select names from `nh.get_step_context().environment` and return an ordinary dictionary.
 The helper runs where it is called; Core does not rerun it during later step preparation.
 
-Omitting `task_references` keeps the enclosing references; supplying a dictionary replaces them, `{}` clears them, and `nh.Merge(...)` adds references with identity-based conflict checking.
+Omitting `task_name_to_value` keeps the enclosing references; supplying a dictionary replaces them, `{}` clears them, and `nh.Merge(...)` adds references with identity-based conflict checking.
 Replacement or clearing affects newly prepared steps, not an already active parent's environment.
 Children and grandchildren see the selected references until another scope replaces them; their own new working values are not automatically shared.
 An explicit dictionary and a dictionary returned by a helper have identical sharing semantics.
@@ -165,7 +165,7 @@ def respond(request: StepRequest) -> StepCandidate:
     context = request.step_context
     if request.processed_natural_program == "parent":
         context.record_assignment("parent_temporary", 42)
-        with nh.scope(task_references=select_shared_references(context.environment)):
+        with nh.scope(task_name_to_value=select_shared_references(context.environment)):
             child(6)
         assert context.environment.resolve("parent_temporary") == 42
     else:
@@ -219,7 +219,7 @@ class Executor:
         context = request.step_context
         if request.processed_natural_program == "parent":
             context.record_assignment("parent_temporary", 42)
-            with nh.scope(task_references=select_shared_references(context.environment)):
+            with nh.scope(task_name_to_value=select_shared_references(context.environment)):
                 await child(6)
             assert context.environment.resolve("parent_temporary") == 42
         else:
@@ -278,7 +278,7 @@ Each element is either a plain callable or a Pydantic AI `Tool`. A plain callabl
 
 A plain sequence replaces tools; `tools=[]` clears scoped declarations. `nh.Extend([lookup])` appends tools. Repeating an identical callable or exact `Tool` object is idempotent and retains the first normalized tool and order. Different wrappers conflict, even when they wrap the same callable. `ToolNameConflictError` is both a `ToolDeclarationError` and a `NameConflictError`. Built-in names remain reserved.
 
-`task_references` and `tools` have distinct roles. `task_references` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_operation`, and is served to coding-agent backends over MCP. Prefer `task_references` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
+`task_name_to_value` and `tools` have distinct roles. `task_name_to_value` injects Python names into the block's namespace: they render as signature lines and the model invokes them through Nighthawk's expression tool, at the cost of one line of prompt context. `tools` exposes callables through native tool calling: each tool adds a JSON Schema to every model request, passes through Nighthawk's tool boundary and `inspect_operation`, and is served to coding-agent backends over MCP. Prefer `task_name_to_value` for Python helpers. Reserve `tools` for cases that need native tool calling, such as strict argument schemas, Pydantic AI tool features (`ModelRetry`, `ApprovalRequired`, timeouts), or first-class tool exposure to a coding agent. Do not expose the same function through both.
 
 ## Pydantic AI capabilities in scopes
 
@@ -319,16 +319,16 @@ System suffixes expand `$tool_result_max_tokens`; use `$$` for a literal dollar 
 
 ## Reading the active scope
 
-`nh.get_scope()` returns the active `nh.Scope`, a frozen record whose fields mirror the `nh.scope()` parameters, such as `step_executor`, `lifecycle`, `task_references`, `tools`, and `capabilities`.
+`nh.get_scope()` returns the active `nh.Scope`, a frozen record whose fields mirror the `nh.scope()` parameters, such as `step_executor`, `lifecycle`, `task_name_to_value`, `tools`, and `capabilities`.
 It requires an active run and raises `NighthawkError` outside it.
 Its prompt suffix fields hold scope fragments without configuration-level baselines, and `tools` excludes built-in tools.
 `nh.get_step_context()` additionally requires an active step.
 
 ```py
 with nh.run(step_executor) as run_scope:
-    with nh.scope(task_references={"search_repository": search_repository}) as child_scope:
+    with nh.scope(task_name_to_value={"search_repository": search_repository}) as child_scope:
         assert nh.get_scope() is child_scope
-        assert child_scope.task_references["search_repository"] is search_repository
+        assert child_scope.task_name_to_value["search_repository"] is search_repository
     assert nh.get_scope() is run_scope
 ```
 

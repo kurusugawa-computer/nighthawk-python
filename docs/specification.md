@@ -303,7 +303,7 @@ Unrelated caller frames are not lexical dependencies.
 
 A child establishes its own Python lexical environment and receives the active scope's explicit task references.
 Parent arguments, locals, cells, and step temporaries are not additional name sources, including through intermediate helpers and further descendants.
-A value passed as an argument, accessible through the child's own Python globals or cells, or deliberately supplied through `task_references` remains available from that source.
+A value passed as an argument, accessible through the child's own Python globals or cells, or deliberately supplied through `task_name_to_value` remains available from that source.
 No name or object-identity blacklist is applied.
 This controls implicit name availability, not Python introspection, object access, or security isolation.
 
@@ -336,7 +336,7 @@ Step temporaries may shadow task names, but an existing Python name can be rebou
 Select a shadowed value with `environment.resolve(name, source="task")` or `source="python"`; selection applies to that value reference, not an entire expression's namespace.
 Bindings, evaluation, assignment expressions, model-selected return and exception expressions, and discovery share this resolution contract.
 There is no parent environment view or supported `parent` source.
-Ordinary Python helpers can select shared values with `resolve` and return a dictionary for `scope(task_references=...)`.
+Ordinary Python helpers can select shared values with `resolve` and return a dictionary for `scope(task_name_to_value=...)`.
 An explicit working-state snapshot retains object identity and does not by itself publish anything to another step.
 
 #### 8.1.2. Supported Python source forms
@@ -617,7 +617,7 @@ The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` inj
 
 Role split with task references:
 
-- `task_references` supplies a distinct `StepEnvironment.task_name_to_value` mapping without modifying Python globals.
+- `task_name_to_value` supplies a distinct `StepEnvironment.task_name_to_value` mapping without modifying Python globals.
   Python names shadow task references in [effective lookup](#811-environment-views-and-lookup); explicit source selection retrieves a shadowed task value.
 - `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_operation`, and are served to coding-agent backends over MCP.
 - A given callable SHOULD be exposed through one of the two, not both.
@@ -900,10 +900,10 @@ API:
     - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.
 - `nighthawk.get_scope() -> Scope`
     - Returns the active frozen `Scope`; `run()` and `scope()` yield the same record for their body.
-    - Fields mirror the `scope()` parameters they hold: `step_executor`, `usage_meter`, `oversight`, `lifecycle`, `context_builder`, `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, `task_references`, `tools`, and `capabilities`, plus the current `execution_reference`.
+    - Fields mirror the `scope()` parameters they hold: `step_executor`, `usage_meter`, `oversight`, `lifecycle`, `context_builder`, `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, `task_name_to_value`, `tools`, and `capabilities`, plus the current `execution_reference`.
     - Model selections are resolved into `step_executor` rather than stored separately.
     - Inside a step, `execution_reference` carries that step's identity.
-    - Prompt suffix fields exclude configuration-level baselines; `tools` excludes built-in tools; `task_references` is a shallow read-only mapping.
+    - Prompt suffix fields exclude configuration-level baselines; `tools` excludes built-in tools; `task_name_to_value` is a shallow read-only mapping.
 
 `UNSET` represents an omitted argument where the signature accepts it; the receiving API defines the default behavior.
 Ordinary values select the complete value, including empty collections; `None` requires an explicitly supported absent or disabled value.
@@ -1336,7 +1336,7 @@ The contracts above own these semantics; this table collects review cases for im
 | No lexical `i`, parent `i=5`, injected `i=8` | Resolve 8; without injection, raise `NameError`. |
 | Child declares a read that exists only in the parent | Fail preparation with the original lookup error, without executor admission or output writeback; deliver the ordinary failed-step lifecycle fact. |
 | Inner scope clears task references | Cleared injection cannot reappear from a parent's working names or an older ancestor. |
-| A Python helper selects a parent's value for `task_references` | The child sees that explicit reference with task provenance and the same object identity. |
+| A Python helper selects a parent's value for `task_name_to_value` | The child sees that explicit reference with task provenance and the same object identity. |
 | A parent opens a sharing scope before calling a child | The child keeps the parent step and call identities, executor, inspection, and lifecycle relationships. |
 | Visible local `value=7` evaluated as `(lambda: value)()` | Return 7 using the same environment as direct lookup. |
 | Visible local `value=7` evaluated as `list(value + i for i in range(2))` | Return `[7, 8]`; the generator is consumed within one operation. |
@@ -1397,7 +1397,7 @@ Prompt context, discovery, evaluation, type references, and model-selected excep
 Called Python functions retain their own globals and closures.
 Called Natural functions establish their own lexical environment and receive the active scope's task references.
 The explicit parent namespace and its later temporaries are not implicit inputs to those functions or their descendants.
-Use arguments or an ordinary Python helper with `scope(task_references=...)` to share selected values.
+Use arguments or an ordinary Python helper with `scope(task_name_to_value=...)` to share selected values.
 Explicit environment selection does not change scoped execution configuration or establish an isolation boundary.
 
 Output and return annotations, including string and nested forward references, resolve during preparation in the selected environment.

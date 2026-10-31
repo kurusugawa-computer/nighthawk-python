@@ -58,7 +58,10 @@ def test_custom_builder_receives_live_environment_contracts_and_budgets() -> Non
     )
     executor = nh.AgentStepExecutor.from_agent(agent=agent, configuration=configuration)
     builder = NamedBuilder("custom context")
-    with nh.run(executor), nh.scope(context_builder=builder, task_references={"injected": injected}, user_prompt_suffix_fragments=["scoped suffix"]):
+    with (
+        nh.run(executor),
+        nh.scope(context_builder=builder, task_name_to_value={"injected": injected}, user_prompt_suffix_fragments=["scoped suffix"]),
+    ):
         assert asyncio.run(workflow(original)) == 7
     assert agent.prompts == ["custom context\n\nconfigured suffix\n\nscoped suffix"]
     request = builder.requests[0]

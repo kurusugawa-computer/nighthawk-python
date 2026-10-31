@@ -9,7 +9,7 @@ from tests.support.model_evaluation import ModelEvaluation
 async def test_explicit_task_source_survives_python_shadowing(model_evaluation: ModelEvaluation) -> None:
     name_to_value: dict[str, object] = {}
     model_evaluation.name_to_observation.update(bindings=name_to_value)
-    with nh.scope(task_references={"value": 100}):
+    with nh.scope(task_name_to_value={"value": 100}):
         outcome = await execute_step_async(
             StepDefinition(
                 "Set <:result> to the task-scoped binding named 'value', even though a Python binding with that name is visible.",

@@ -90,7 +90,7 @@ Read [Quickstart](https://kurusugawa-computer.github.io/nighthawk-python/quickst
 - Use `deny` frontmatter to prohibit outcomes that would bypass required Python work. The template denies `return` to preserve the Python return path and denies the explicit `raise` outcome; runtime and helper failures can still raise.
 - Denying outcomes does not require a fresh assignment. A permitted `pass` can retain an output's initial value. Use a deliberate default or an unbound annotated output, and validate the result before dependent work.
 - Each block starts a fresh model interaction without implicit message history. Carry essential inputs and results through Python parameters and return values.
-- Python lexical values and scoped task references supply context. Prefer explicit arguments for essential dependencies and `scope(task_references=...)` for intentionally shared policy. Parent working values are not copied into children. Child name rebinding stays local; explicitly shared mutable objects retain identity.
+- Python lexical values and scoped task references supply context. Prefer explicit arguments for essential dependencies and `scope(task_name_to_value=...)` for intentionally shared policy. Parent working values are not copied into children. Child name rebinding stays local; explicitly shared mutable objects retain identity.
 
 A `decide` block requires one explicit answer and continues with the next Python statement.
 Its initial output value cannot substitute for a missing answer.

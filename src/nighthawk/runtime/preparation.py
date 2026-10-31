@@ -185,7 +185,7 @@ class StepPreparation:
             ("pass",) if block_kind == "decide" else _compute_allowed_outcome_kinds(is_in_loop, denied_outcome_kinds)
         )
         self.allowed_outcome_kinds = allowed_outcome_kinds
-        scoped_task_name_to_value = get_scope().task_references
+        scoped_task_name_to_value = get_scope().task_name_to_value
         if name_to_value is None:
             assert caller_frame is not None
             environment, step_locals = self._prepare_python_environment(

@@ -52,7 +52,7 @@ async def test_candidate_selects_exact_outputs_before_validation_and_assignment(
     with (
         nh.run(InspectingExecutor(execute_candidate)),
         nh.scope(
-            task_references={"task_only": 30},
+            task_name_to_value={"task_only": 30},
             oversight=Oversight(inspect_step_commit=inspect),
             lifecycle=StepLifecycle(on_step_finished=events.append),
         ),

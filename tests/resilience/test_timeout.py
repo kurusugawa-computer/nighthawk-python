@@ -139,7 +139,7 @@ class TestTimeoutDecoratorSync:
     def test_natural_function_inherits_run_and_host_scope(self) -> None:
         executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": "shared"})])
         events: list[nh.lifecycle.StepFinished] = []
-        with nh.run(executor), nh.scope(task_references={"value": "shared"}, lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
+        with nh.run(executor), nh.scope(task_name_to_value={"value": "shared"}, lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
             assert timeout(seconds=5)(_read_scoped_value)() == "shared"
 
         assert executor.requests[0].input_binding_name_to_value == {"value": "shared"}

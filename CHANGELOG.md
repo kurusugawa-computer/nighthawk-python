@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Breaking: `nh.get_scope()` returns the active frozen `nh.Scope`, whose fields mirror the `nh.scope()` parameters plus the current `execution_reference`; `nh.run()` and `nh.scope()` yield that record.
-  It replaces `get_step_executor`, `get_execution_reference`, `get_usage_meter`, `get_oversight`, `get_lifecycle`, `get_tools`, `get_capabilities`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`, and also exposes `task_references` and `context_builder`.
+  It replaces `get_step_executor`, `get_execution_reference`, `get_usage_meter`, `get_oversight`, `get_lifecycle`, `get_tools`, `get_capabilities`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`, and also exposes `task_name_to_value` and `context_builder`.
+- Breaking: `nh.scope(task_name_to_value=...)` replaces `task_references=`, matching `StepEnvironment.task_name_to_value` and the `key_to_value` naming rule.
 - Breaking: `nighthawk.testing` uses the executor protocol's own values.
   `ScriptedExecutor` and `CallbackExecutor` return `StepCandidate` values and record each live `StepRequest` in `requests`; a callback receives the `StepRequest`.
   `StepCandidate.outcome` defaults to `Pass()`.
