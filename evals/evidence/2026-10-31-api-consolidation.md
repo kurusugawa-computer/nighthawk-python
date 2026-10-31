@@ -36,3 +36,10 @@ The shadowing case remains unreliable for `gpt-6-luna` on both implementations; 
 The shared suite ran once, so it shows that the cases still execute end to end, not their pass rates.
 Coding-agent backends were not run.
 Synthetic success does not establish application-level judgment quality.
+
+## Final revision check
+
+Revision `3319e77`, source fingerprint `984eb9515c23…`, includes the [rejection feedback](2026-10-31-rejection-feedback-shape.md) and [skip guidance](2026-10-31-skip-guidance.md) changes.
+The shared suite runs once with the same settings: 49 passed and 1 failed, using 162 requests, 138,639 input tokens, 7,697 output tokens, and 270.5 summed trial seconds.
+The failure is again `test_explicit_task_source_survives_python_shadowing`, committing the Python value 7.
+The OpenAI integration tests pass: 10 passed, with coding-agent and opt-in evaluation cases skipped.
