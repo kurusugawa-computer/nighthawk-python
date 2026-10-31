@@ -12,7 +12,7 @@ from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInt
 from nighthawk.oversight import Accept, Oversight
 from nighthawk.runtime import Pass, Raise, StepCandidate, StepDefinition, StepRequest, execute_step_async
 from nighthawk.runtime.step_outcome import StepOutcome
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import InspectingExecutor
 
 
@@ -67,7 +67,7 @@ async def test_terminal_failure_preserves_successful_write_without_redelivery(ex
         raise RuntimeError("notification failed")
 
     with (
-        nh.run(ScriptedExecutor([pass_response(binding_name_to_value={"result": 7})])),
+        nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"result": 7})])),
         nh.scope(lifecycle=StepLifecycle(finished)),
         pytest.raises(RuntimeError, match="notification failed"),
     ):
@@ -97,7 +97,7 @@ async def test_cancellation_during_write_joins_cleanup_and_records_completed_wri
         assert cleaned_up.is_set()
         events.append(event)
 
-    with nh.run(ScriptedExecutor([pass_response(binding_name_to_value={"first": 1, "second": 2})])), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])), nh.scope(lifecycle=StepLifecycle(finished)):
         task = asyncio.create_task(
             execute_step_async(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)
         )

@@ -11,7 +11,7 @@ import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
 from nighthawk.runtime import Pass, Return, StepCandidate, StepDefinition, StepRequest, evaluate_expression, execute_step
 from nighthawk.runtime.step_outcome import StepOutcome
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import InspectingExecutor, ModelResponseExecutor
 
 
@@ -188,7 +188,7 @@ async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[...,
         order.append(name)
 
     with (
-        nh.run(ScriptedExecutor([pass_response(binding_name_to_value={"first": 1, "second": 2})])),
+        nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])),
         nh.scope(lifecycle=StepLifecycle(lambda event: order.append("finished"))),
     ):
         await execute(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)

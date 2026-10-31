@@ -7,7 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 import nighthawk as nh
-from nighthawk.testing import CallbackExecutor, StepCall, StepResponse, pass_response, raise_response
+from nighthawk.runtime import Raise, StepCandidate, StepRequest
+from nighthawk.testing import CallbackExecutor
 
 
 @pytest.fixture
@@ -26,17 +27,19 @@ def example_name_to_path(tmp_path: Path) -> dict[str, Path]:
 def test_documented_error_handler(example_name: str, example_name_to_path: dict[str, Path], capsys: pytest.CaptureFixture[str]) -> None:
     events: list[nh.lifecycle.StepFinished] = []
 
-    def respond(call: StepCall) -> StepResponse:
+    def respond(request: StepRequest) -> StepCandidate:
         if example_name == "output_validation":
-            return pass_response(binding_name_to_value={"count": "not an integer"})
-        error_type = cast(type[BaseException], call.step_globals["InputError"]) if example_name == "custom_raise" else Exception
-        return raise_response("invalid input", error_type=error_type)
+            return StepCandidate(binding_name_to_value={"count": "not an integer"})
+        error_type = (
+            cast(type[BaseException], request.step_context.environment.resolve("InputError")) if example_name == "custom_raise" else Exception
+        )
+        return StepCandidate(outcome=Raise("invalid input", error_type))
 
     executor = CallbackExecutor(respond)
     with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(events.append)):
         namespace = runpy.run_path(str(example_name_to_path[example_name]), init_globals={"nh": nh})
 
-    assert len(executor.calls) == len(events) == 1
+    assert len(executor.requests) == len(events) == 1
     event = events[0]
     if example_name == "output_validation":
         assert isinstance(event, nh.lifecycle.StepFailed)
@@ -53,7 +56,7 @@ def test_documented_error_handler(example_name: str, example_name_to_path: dict[
 def test_output_validation_handler_propagates_other_failure_stages(example_name_to_path: dict[str, Path]) -> None:
     original = RuntimeError("executor failed")
 
-    def respond(call: StepCall) -> StepResponse:
+    def respond(request: StepRequest) -> StepCandidate:
         raise original
 
     with nh.run(CallbackExecutor(respond)), pytest.raises(nh.ExecutionError) as caught:

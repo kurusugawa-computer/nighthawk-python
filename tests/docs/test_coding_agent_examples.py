@@ -7,7 +7,8 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def guide_examples(tmp_path: Path) -> list[Path]:
 
 
 def test_working_template(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"label": "bug"})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"label": "bug"})])
 
     def select_executor(self: nh.AgentStepExecutor, selection: nh.ModelSelection) -> ScriptedExecutor:
         assert selection.apply(self.configuration).execution_model is not None
@@ -32,7 +33,7 @@ def test_working_template(guide_examples: list[Path], monkeypatch: pytest.Monkey
     monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", select_executor)
     runpy.run_path(str(guide_examples[0]), run_name="__main__")
     assert capsys.readouterr().out == "bug\n"
-    assert len(executor.calls) == 1
+    assert len(executor.requests) == 1
 
 
 def test_published_quote_contracts(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch) -> None:

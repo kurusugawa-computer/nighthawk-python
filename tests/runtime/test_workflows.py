@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import nighthawk as nh
-from nighthawk.testing import CallbackExecutor, ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.testing import CallbackExecutor, ScriptedExecutor
 
 
 def helper(query: str) -> list[str]:
@@ -13,8 +14,8 @@ def helper(query: str) -> list[str]:
 
 class TestExecutorSelectionPatterns:
     def test_can_mix_fast_and_deep_executors_in_one_run(self) -> None:
-        fast_executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"label": "bug"})])
-        deep_executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"report": "detailed analysis"})])
+        fast_executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"label": "bug"})])
+        deep_executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"report": "detailed analysis"})])
 
         @nh.function
         def classify_ticket(text: str) -> str:
@@ -49,17 +50,17 @@ class TestExecutorSelectionPatterns:
 
         assert label == "bug"
         assert report == "detailed analysis"
-        assert len(fast_executor.calls) == 1
-        assert len(deep_executor.calls) == 1
+        assert len(fast_executor.requests) == 1
+        assert len(deep_executor.requests) == 1
 
 
 class TestStateBoundaryPatterns:
     def test_read_binding_mutation_is_visible_through_shared_reference(self) -> None:
-        def handler(call):
-            carry = call.step_locals["carry"]
+        def handler(request: StepRequest) -> StepCandidate:
+            carry = request.step_context.environment.resolve("carry")
             assert isinstance(carry, list)
             carry.append("step_1 summary")
-            return pass_response(binding_name_to_value={"result": 10})
+            return StepCandidate(binding_name_to_value={"result": 10})
 
         executor = CallbackExecutor(handler)
 
@@ -80,7 +81,7 @@ class TestStateBoundaryPatterns:
         assert carry == ["step_1 summary"]
 
     def test_precisely_typed_callable_parameter_remains_visible_in_locals(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "item summary"})])
+        executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": "item summary"})])
 
         @nh.function
         def summarize(query: str, fetch_data: Callable[[str], list[str]]) -> str:
@@ -94,14 +95,12 @@ class TestStateBoundaryPatterns:
             output = summarize("test", helper)
 
         assert output == "item summary"
-        call = executor.calls[0]
-        assert call.step_locals["fetch_data"] is helper
-        assert "fetch_data" not in call.step_globals
+        assert executor.requests[0].step_context.environment.resolve("fetch_data") is helper
 
 
 class TestControlFlowPatterns:
     def test_post_block_logic_pattern_allows_python_validation(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"summary": "concise summary"})])
+        executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"summary": "concise summary"})])
 
         @nh.function
         def summarize(text: str) -> str:

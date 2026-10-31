@@ -8,7 +8,7 @@ import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle
 from nighthawk.oversight import Accept, Oversight, Rewrite
 from nighthawk.runtime import Pass, Raise, StepCandidate, StepDefinition, StepOutcome, StepRequest
-from nighthawk.testing import CallbackExecutor, ScriptedExecutor, StepResponse, pass_response
+from nighthawk.testing import CallbackExecutor, ScriptedExecutor
 from tests.support.executors import InspectingExecutor
 
 
@@ -102,7 +102,7 @@ async def test_explicit_selection_excludes_invalid_initial_output_and_keeps_live
     assert assigned_binding_name_to_value["shared"] is shared
 
 
-@pytest.mark.parametrize("factory", [StepCandidate, Rewrite, StepResponse])
+@pytest.mark.parametrize("factory", [StepCandidate, Rewrite])
 def test_raise_rejects_nonempty_selection_at_construction(factory) -> None:
     with pytest.raises((ValueError, ValidationError), match="Raise cannot include output bindings"):
         factory(outcome=Raise("failed"), binding_name_to_value={"value": 1})
@@ -110,7 +110,7 @@ def test_raise_rejects_nonempty_selection_at_construction(factory) -> None:
     factory(outcome=Raise("failed"), binding_name_to_value={})
 
 
-@pytest.mark.parametrize("factory", [StepCandidate, Rewrite, StepResponse])
+@pytest.mark.parametrize("factory", [StepCandidate, Rewrite])
 @pytest.mark.parametrize("invalid", [None, {1: "invalid key"}, [], nh.Merge({})])
 def test_output_selection_rejects_invalid_shapes(factory, invalid) -> None:
     with pytest.raises((TypeError, ValidationError)):
@@ -123,7 +123,7 @@ def test_output_selection_rejects_invalid_shapes(factory, invalid) -> None:
 async def test_testing_executors_preserve_omitted_and_empty_selection(
     execute: Callable[..., Awaitable[StepOutcome]], callback: bool, empty: bool
 ) -> None:
-    response = pass_response(binding_name_to_value={}) if empty else pass_response()
+    response = StepCandidate(binding_name_to_value={}) if empty else StepCandidate()
     executor = CallbackExecutor(lambda call: response) if callback else ScriptedExecutor([response])
     assigned_binding_name_to_value: dict[str, object] = {}
     with nh.run(executor):

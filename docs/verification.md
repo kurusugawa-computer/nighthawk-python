@@ -7,11 +7,12 @@ A mock verifies the surrounding Python behavior, not the quality of the prompt.
 
 ## Mock tests
 
-The `nighthawk.testing` module provides `ScriptedExecutor`, which returns scripted responses and records every Natural block invocation. Use it to test the Python logic that surrounds Natural blocks.
+The `nighthawk.testing` module provides `ScriptedExecutor`, which returns scripted candidates and records every Natural block request. Use it to test the Python logic that surrounds Natural blocks.
 
 ```py
 import nighthawk as nh
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 @nh.function
@@ -24,48 +25,37 @@ def classify(text: str) -> str:
 
 
 def test_classify_returns_scripted_label():
-    executor = ScriptedExecutor(
-        responses=[
-            pass_response(binding_name_to_value={"label": "positive"}),
-        ]
-    )
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"label": "positive"})])
     with nh.run(executor):
         result = classify("Great product!")
 
     assert result == "positive"
 ```
 
-`ScriptedExecutor` does not call an LLM. You script what it returns with **outcome factories**:
+`ScriptedExecutor` does not call an LLM.
+Each scripted response is an ordinary `StepCandidate`, the same value a [custom executor](specification.md#143-custom-backends) returns.
+Its `outcome` defaults to `Pass()`; use `Return(value)`, `Raise(message, error_type)`, `Break()`, or `Continue()` from `nighthawk.runtime` for other control results.
 
-| Factory | Outcome | Use case |
-|---|---|---|
-| `pass_response(*, binding_name_to_value=UNSET)` | pass | Normal completion with automatic or explicit output selection |
-| `raise_response(message, *, error_type=Exception)` | raise | Test error handling paths |
-| `return_response(value, /, *, binding_name_to_value=UNSET)` | return | Early return from Natural function |
-| `break_response(*, binding_name_to_value=UNSET)` | break | Exit enclosing loop |
-| `continue_response(*, binding_name_to_value=UNSET)` | continue | Skip to next iteration |
+| Candidate | Outcome |
+|---|---|
+| `StepCandidate()` | Continue normally with automatic output selection |
+| `StepCandidate(binding_name_to_value={"result": 7})` | Continue and write exactly `result` |
+| `StepCandidate(outcome=Return("bug"))` | Return the literal string `"bug"` from the Natural function |
+| `StepCandidate(outcome=Raise("failed", ValueError))` | Raise `ValueError("failed")` after commit inspection |
+| `StepCandidate(outcome=Break())` or `StepCandidate(outcome=Continue())` | Control the enclosing loop |
 
-Responses carry resolved Python values: `return_response("bug")` returns the literal string `"bug"`, and `return_response(None)` returns `None`.
-`raise_response("failed", error_type=ValueError)` accepts an exception class; it does not look up a name in the Natural environment.
-For direct response construction, use `StepResponse(outcome=nh.runtime.Return(value))` or the other resolved outcomes from `nighthawk.runtime`.
-Output bindings and the return value pass through the ordinary, independent runtime validation and commit inspection.
-`StepResponse` shares `StepCandidate`'s frozen structure and output-selection contract.
+Candidates carry resolved Python values; strings are never evaluated as expressions, and `Raise` takes an exception class rather than a name.
+Output bindings and the return value pass through the ordinary runtime validation and commit inspection.
 Omission or `nh.UNSET` selects initialized declared outputs, `{}` selects no writes, and a nonempty mapping selects exactly its entries without supplementation.
-For example, `pass_response(binding_name_to_value={"result": 7})` writes only `result`.
-Use `pass_response(binding_name_to_value={})` to explicitly suppress writeback; `pass_response()` retains automatic selection.
 
-**Testing error handling.** Use `raise_response` to verify that your code handles LLM failures gracefully:
+**Testing error handling.** Script a `Raise` to verify that your code handles failures:
 
 ```py
-from nighthawk.testing import raise_response
+from nighthawk.runtime import Raise
 
 
 def test_fallback_on_error():
-    executor = ScriptedExecutor(
-        responses=[
-            raise_response("cannot interpret input", error_type=ValueError),
-        ]
-    )
+    executor = ScriptedExecutor([StepCandidate(outcome=Raise("cannot interpret input", ValueError))])
     with nh.run(executor):
         try:
             result = classify("???")
@@ -76,40 +66,41 @@ def test_fallback_on_error():
 ```
 
 For a pipeline, supply one response per block in execution order.
-An invocation beyond the supplied responses fails instead of silently succeeding.
-`ScriptedExecutor` records that invocation and raises `AssertionError`; ordinary runtime execution wraps it in `ExecutionError` with failure stage `"executor"`.
-When repetition is intentional, explicitly supply `default_response=pass_response()` or another response to use after the sequence is exhausted.
+A request beyond the supplied responses fails instead of silently succeeding.
+`ScriptedExecutor` records that request and raises `AssertionError`; ordinary runtime execution wraps it in `ExecutionError` with failure stage `"executor"`.
+When repetition is intentional, explicitly supply `default_response=StepCandidate()` or another response to use after the sequence is exhausted.
 
-**Verifying binding wiring.** Recorded calls contain shallow snapshots whose values retain application object identity.
-`step_globals` selects module globals named by read bindings, scoped task references, or discovered type aliases, excluding names already present in locals.
-`task_name_to_value` records explicitly scoped references separately from Python working values.
-Parent working values are not part of a child's recorded or effective environment unless explicitly supplied through an argument or task reference.
-These records show the execution inputs; rendered prompt budgets and context builders determine what the model actually sees.
+**Verifying binding wiring.** `executor.requests` holds each live `StepRequest`.
+Its `step_context.environment` resolves names exactly as runtime operations do, with values retaining application object identity.
+Parent working values are not part of a child's environment unless explicitly supplied through an argument or task reference.
+The environment shows the execution inputs; rendered prompt budgets and context builders determine what the model actually sees.
 Use [prompt observation](#inspecting-the-assembled-prompt) to inspect the assembled presentation.
 
 ```py
-def test_helper_is_discoverable():
-    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
+def test_helper_is_available():
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": ""})])
     with nh.run(executor):
         analyze(query="test")
 
-    call = executor.calls[0]
-    assert "helper" in call.step_globals  # referenced module helper
-    assert "query" in call.step_locals  # parameter available in the environment
-    assert "result" in call.output_binding_names  # write binding registered
+    request = executor.requests[0]
+    environment = request.step_context.environment
+    assert environment.resolve("helper") is helper  # referenced module helper
+    assert environment.resolve("query") == "test"  # parameter available in the environment
+    assert request.output_binding_names == ("result",)  # write binding registered
 ```
 
-**Callback executor.** When the mock response depends on the input, use `CallbackExecutor`:
+**Callback executor.** When the scripted candidate depends on the request, use `CallbackExecutor` with an ordinary function:
 
 ```py
-from nighthawk.testing import CallbackExecutor, StepCall, StepResponse
+from nighthawk.runtime import StepRequest
+from nighthawk.testing import CallbackExecutor
 
 
-def handler(call: StepCall) -> StepResponse:
-    text = call.step_locals.get("text", "")
+def handler(request: StepRequest) -> StepCandidate:
+    text = request.step_context.environment.resolve("text")
     if isinstance(text, str) and "urgent" in text:
-        return pass_response(binding_name_to_value={"priority": "high"})
-    return pass_response(binding_name_to_value={"priority": "normal"})
+        return StepCandidate(binding_name_to_value={"priority": "high"})
+    return StepCandidate(binding_name_to_value={"priority": "normal"})
 
 
 def test_urgent_routing():
@@ -119,7 +110,7 @@ def test_urgent_routing():
         assert triage("minor typo") == "normal"
 ```
 
-`CallbackExecutor` records every call in `executor.calls`, just like `ScriptedExecutor`. Use it to verify binding wiring alongside dynamic response logic.
+`CallbackExecutor` records every request in `executor.requests`, just like `ScriptedExecutor`.
 
 ## Integration tests
 

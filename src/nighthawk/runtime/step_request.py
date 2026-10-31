@@ -3,14 +3,14 @@
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
-from pydantic import BaseModel, ConfigDict, InstanceOf, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator, model_validator
 
 from ..composition import UNSET, UnsetType
 from .environment import StepEnvironment, UnboundEnvironmentNameError
 from .execution_reference import ExecutionReference
 from .step_context import StepContext
 from .step_definition import BlockKind
-from .step_outcome import OutcomeKind, Raise, StepOutcome
+from .step_outcome import OutcomeKind, Pass, Raise, StepOutcome
 
 
 def _snapshot_output_bindings(environment: StepEnvironment, output_binding_names: Sequence[str]) -> dict[str, object]:
@@ -80,6 +80,7 @@ class StepRequest(BaseModel):
 class StepCandidate(BaseModel):
     """Resolved control flow and output selection, pending runtime validation.
 
+    The outcome defaults to Pass.
     Omission or UNSET selects initialized declared outputs at finalization.
     A mapping supplies the entire output selection; {} selects no writes.
     Explicit selections receive no supplementation from the working environment.
@@ -88,7 +89,7 @@ class StepCandidate(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid", validate_default=True)
 
-    outcome: StepOutcome
+    outcome: StepOutcome = Field(default_factory=Pass)
     binding_name_to_value: Mapping[str, object] | UnsetType = UNSET
 
     @field_validator("binding_name_to_value", mode="after")

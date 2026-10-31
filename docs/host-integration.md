@@ -137,7 +137,8 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 import nighthawk as nh
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 class Admission:
@@ -202,7 +203,7 @@ with nh.function_call_scope(admission):
 
     admission.allowed = True
     executor = ScriptedExecutor(
-        responses=[pass_response(binding_name_to_value={"summary": "First"}), pass_response(binding_name_to_value={"summary": "Second"})]
+        [StepCandidate(binding_name_to_value={"summary": "First"}), StepCandidate(binding_name_to_value={"summary": "Second"})]
     )
     with nh.run(executor):
         assert summarize("First document") == "First"
@@ -331,7 +332,8 @@ from contextlib import suppress
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 @nh.function
@@ -356,7 +358,7 @@ async def demonstrate_cleanup() -> None:
             await release_cleanup.wait()
             completed.append("notification")
 
-    executor = ScriptedExecutor(responses=[pass_response()])
+    executor = ScriptedExecutor([StepCandidate()])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=record_finished)):
         task = asyncio.create_task(work())
         try:

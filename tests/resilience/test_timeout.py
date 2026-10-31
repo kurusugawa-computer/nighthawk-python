@@ -14,8 +14,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 import nighthawk as nh
 from nighthawk.resilience import timeout
+from nighthawk.runtime import StepCandidate
 from nighthawk.runtime import scoping as runtime_scoping
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 
 
@@ -136,12 +137,12 @@ class TestTimeoutDecoratorSync:
             selected_value.reset(token)
 
     def test_natural_function_inherits_run_and_host_scope(self) -> None:
-        executor = ScriptedExecutor([pass_response(binding_name_to_value={"result": "shared"})])
+        executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": "shared"})])
         events: list[nh.lifecycle.StepFinished] = []
         with nh.run(executor), nh.scope(task_references={"value": "shared"}, lifecycle=nh.lifecycle.StepLifecycle(events.append)):
             assert timeout(seconds=5)(_read_scoped_value)() == "shared"
 
-        assert executor.calls[0].input_binding_name_to_value == {"value": "shared"}
+        assert executor.requests[0].input_binding_name_to_value == {"value": "shared"}
         assert len(events) == 1 and isinstance(events[0], nh.lifecycle.StepCompleted)
 
     def test_completes_within_timeout(self) -> None:

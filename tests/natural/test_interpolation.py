@@ -4,7 +4,8 @@ from pydantic_ai.models.function import FunctionModel
 
 import nighthawk as nh
 from nighthawk.natural.blocks import find_natural_blocks
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 def test_escaped_markers_do_not_declare_inputs_or_outputs() -> None:
@@ -16,11 +17,11 @@ def test_escaped_markers_do_not_declare_inputs_or_outputs() -> None:
         """
         return result
 
-    executor = ScriptedExecutor(responses=[pass_response()])
+    executor = ScriptedExecutor([StepCandidate()])
     with nh.run(executor):
         assert describe_syntax() == 7
-    assert executor.calls[0].input_binding_name_to_value == {}
-    assert executor.calls[0].output_binding_names == []
+    assert executor.requests[0].input_binding_name_to_value == {}
+    assert executor.requests[0].output_binding_names == ()
 
 
 def test_escaped_markers_are_rendered_as_literal_model_instructions() -> None:
@@ -51,13 +52,13 @@ def test_interpolated_decision_instruction_is_validated_after_rendering() -> Non
         """
         return result
 
-    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": True})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": True})])
     with nh.run(executor):
         assert judge("Is the evidence sufficient?") is True
         with pytest.raises(nh.ExecutionError, match="judgment instruction"):
             judge(" \n\t")
-    assert len(executor.calls) == 1
-    assert executor.calls[0].natural_program.strip() == "Is the evidence sufficient?"
+    assert len(executor.requests) == 1
+    assert executor.requests[0].processed_natural_program.strip() == "Is the evidence sufficient?"
 
 
 def test_literal_null_character_does_not_impersonate_interpolation() -> None:
@@ -67,10 +68,10 @@ def test_literal_null_character_does_not_impersonate_interpolation() -> None:
         Explain literal <\x00> and number {number}.
         """  # noqa: B021 - a first-statement f-string is an inline Natural block.
 
-    executor = ScriptedExecutor(responses=[pass_response()])
+    executor = ScriptedExecutor([StepCandidate()])
     with nh.run(executor):
         describe_literal(3)
-    assert "literal <\x00> and number 3" in executor.calls[0].natural_program
+    assert "literal <\x00> and number 3" in executor.requests[0].processed_natural_program
 
 
 @pytest.mark.parametrize("body", ["<{name}>", "<:{name}>", "<pre{name}post>", "<{first}{second}>"])
@@ -94,13 +95,13 @@ def test_escaped_interpolated_markers_and_format_specifications_preserve_python_
         Explain \<{name}> and \<:{name}> with value {number:.{precision}f} and {{braces}}.
         """  # noqa: B021 - a first-statement f-string is an inline Natural block.
 
-    executor = ScriptedExecutor(responses=[pass_response()])
+    executor = ScriptedExecutor([StepCandidate()])
     with nh.run(executor):
         describe_literal("sample", 1.234, 2)
-    call = executor.calls[0]
+    call = executor.requests[0]
     assert call.input_binding_name_to_value == {}
-    assert call.output_binding_names == []
-    assert r"Explain \<sample> and \<:sample> with value 1.23 and {braces}." in call.natural_program
+    assert call.output_binding_names == ()
+    assert r"Explain \<sample> and \<:sample> with value 1.23 and {braces}." in call.processed_natural_program
 
 
 def test_block_discovery_accepts_a_fully_interpolated_decision_instruction() -> None:
@@ -118,7 +119,7 @@ def test_interpolation_cannot_join_a_backslash_to_a_static_binding() -> None:
         A backslash \{separator}<evidence>.
         """  # noqa: B021 - a first-statement f-string is an inline Natural block.
 
-    executor = ScriptedExecutor(responses=[pass_response()])
+    executor = ScriptedExecutor([StepCandidate()])
     with nh.run(executor):
         read_evidence(" ", "complete evidence")
-    assert executor.calls[0].input_binding_name_to_value == {"evidence": "complete evidence"}
+    assert executor.requests[0].input_binding_name_to_value == {"evidence": "complete evidence"}

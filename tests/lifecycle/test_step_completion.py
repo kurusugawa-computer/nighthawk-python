@@ -14,7 +14,7 @@ from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInt
 from nighthawk.natural.transform import build_runtime_call_and_assignments
 from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.runner import Runner
-from nighthawk.testing import ScriptedExecutor, StepResponse
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 
 
@@ -342,7 +342,7 @@ def test_partial_assignment_failure_reports_only_completed_writes() -> None:
     module = ast.fix_missing_locations(ast.Module(body=statements[:1], type_ignores=[]))
     namespace = Namespace(__nighthawk_runner__=Proxy())
     with (
-        nh.run(ScriptedExecutor([StepResponse(binding_name_to_value={"first": 1, "second": 2})])),
+        nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])),
         nh.scope(lifecycle=StepLifecycle(events.append)),
         pytest.raises(nh.ExecutionError, match="assignment failed"),
     ):
@@ -477,7 +477,7 @@ def test_distinct_blocks_have_distinct_source_locations() -> None:
         Finish second.
         """
 
-    with nh.run(ScriptedExecutor([StepResponse(), StepResponse()])), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(ScriptedExecutor([StepCandidate(), StepCandidate()])), nh.scope(lifecycle=StepLifecycle(events.append)):
         workflow()
     assert len(events) == 2
     assert events[0].execution_reference.source_location != events[1].execution_reference.source_location

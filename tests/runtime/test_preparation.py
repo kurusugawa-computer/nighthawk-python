@@ -10,7 +10,7 @@ from pydantic import Field
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import StepDefinition
+from nighthawk.runtime import StepCandidate, StepDefinition, StepRequest
 from nighthawk.runtime.step_outcome import StepOutcome
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
@@ -29,7 +29,7 @@ async def test_missing_reads_do_not_fall_back(execute: Callable[..., Awaitable[S
     ):
         await execute(StepDefinition("Read required input.", input_binding_names=(name,)), name_to_value={}, write_binding=lambda name, value: None)
     assert caller_value == 99
-    assert executor.calls == []
+    assert executor.requests == []
     assert len(events) == 1 and isinstance(events[0], StepFailed)
     assert events[0].failure_stage == "preparation"
     assert isinstance(events[0].original_exception, NameError)
@@ -48,7 +48,7 @@ async def test_type_contracts_do_not_use_caller_types(execute: Callable[..., Awa
             write_binding=lambda name, value: None,
         )
     assert CallerOnlyType is int
-    assert executor.calls == []
+    assert executor.requests == []
 
 
 _global_contract_result: Annotated[int, Field(ge=0, le=10)] = 0
@@ -274,7 +274,7 @@ def test_frontmatter_deny_return_allows_bindings():
 
 
 def test_scope_task_references_are_merged_into_step_context() -> None:
-    from nighthawk.testing import CallbackExecutor, pass_response
+    from nighthawk.testing import CallbackExecutor
 
     observed_task_reference_name_set: set[str] = set()
 
@@ -282,9 +282,9 @@ def test_scope_task_references_are_merged_into_step_context() -> None:
         _ = query
         return ["hit"]
 
-    def handler(call):  # type: ignore[no-untyped-def]
-        observed_task_reference_name_set.update(call.task_name_to_value.keys())
-        return pass_response()
+    def handler(request: StepRequest) -> StepCandidate:
+        observed_task_reference_name_set.update(request.step_context.environment.task_name_to_value.keys())
+        return StepCandidate()
 
     executor = CallbackExecutor(handler)
 
@@ -302,9 +302,9 @@ def test_scope_task_references_are_merged_into_step_context() -> None:
 
 
 def test_unannotated_binding_type_inferred_from_initial_value():
-    from nighthawk.testing import ScriptedExecutor, pass_response
+    from nighthawk.testing import ScriptedExecutor
 
-    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "hello"})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": "hello"})])
     with nh.run(executor):
 
         @nh.function
@@ -319,4 +319,4 @@ def test_unannotated_binding_type_inferred_from_initial_value():
 
         assert f() == "hello"
 
-    assert executor.calls[0].binding_name_to_type["result"] is str
+    assert executor.requests[0].binding_name_to_type["result"] is str

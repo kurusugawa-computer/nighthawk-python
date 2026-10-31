@@ -17,8 +17,9 @@ from nighthawk.resilience import (
     timeout,
     vote,
 )
+from nighthawk.runtime import Raise, StepCandidate
 from nighthawk.runtime.scoping import get_usage_meter
-from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
+from nighthawk.testing import ScriptedExecutor
 
 
 class TestRetryWithVote:
@@ -170,9 +171,9 @@ class TestCompositionWithNaturalFunction:
     def test_natural_function_with_resilience(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                raise_response("transient error 1"),
-                raise_response("transient error 2"),
-                pass_response(binding_name_to_value={"result": "classified"}),
+                StepCandidate(outcome=Raise("transient error 1")),
+                StepCandidate(outcome=Raise("transient error 2")),
+                StepCandidate(binding_name_to_value={"result": "classified"}),
             ]
         )
 
@@ -250,7 +251,7 @@ class TestBudgetWithNaturalFunction:
     def test_budget_with_natural_function(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(binding_name_to_value={"result": "classified"}),
+                StepCandidate(binding_name_to_value={"result": "classified"}),
             ]
         )
 

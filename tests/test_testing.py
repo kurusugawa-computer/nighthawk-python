@@ -6,18 +6,8 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepDefinition, StepOutcome
-from nighthawk.testing import (
-    CallbackExecutor,
-    ScriptedExecutor,
-    StepCall,
-    StepResponse,
-    break_response,
-    continue_response,
-    pass_response,
-    raise_response,
-    return_response,
-)
+from nighthawk.runtime import Break, Continue, Pass, Raise, Return, StepCandidate, StepDefinition, StepOutcome, StepRequest
+from nighthawk.testing import CallbackExecutor, ScriptedExecutor
 
 
 def _module_level_helper(query: str) -> list[str]:
@@ -33,7 +23,7 @@ class ReviewVerdict(BaseModel):
 
 class TestScriptedExecutorPassOutcome:
     def test_returns_binding_value(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": "hello"})])
+        executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": "hello"})])
 
         @nh.function
         def greet(name: str) -> str:
@@ -49,7 +39,7 @@ class TestScriptedExecutorPassOutcome:
         assert output == "hello"
 
     def test_records_call_metadata(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
+        executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": ""})])
 
         @nh.function
         def process(query: str) -> str:
@@ -62,35 +52,16 @@ class TestScriptedExecutorPassOutcome:
         with nh.run(executor):
             process("test")
 
-        assert len(executor.calls) == 1
-        call = executor.calls[0]
-        assert "query" in call.step_locals
-        assert call.step_locals["query"] == "test"
-        assert "result" in call.output_binding_names
-        assert "_module_level_helper" in call.step_globals
-        assert call.step_globals["_module_level_helper"] is _module_level_helper
-
-    def test_filters_globals_to_referenced_names_only(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"result": ""})])
-
-        @nh.function
-        def minimal(text: str) -> str:
-            result: str = ""
-            """execute
-            Summarize <text> and set <:result>.
-            """
-            return result
-
-        with nh.run(executor):
-            minimal("hello")
-
-        call = executor.calls[0]
-        assert "__builtins__" not in call.step_globals
-        assert "__name__" not in call.step_globals
+        assert len(executor.requests) == 1
+        request = executor.requests[0]
+        environment = request.step_context.environment
+        assert environment.resolve("query") == "test"
+        assert request.output_binding_names == ("result",)
+        assert environment.resolve("_module_level_helper") is _module_level_helper
 
     def test_default_response_used_when_responses_exhausted(self) -> None:
         executor = ScriptedExecutor(
-            [pass_response(binding_name_to_value={"result": "first"})], default_response=pass_response(binding_name_to_value={"result": "default"})
+            [StepCandidate(binding_name_to_value={"result": "first"})], default_response=StepCandidate(binding_name_to_value={"result": "default"})
         )
 
         @nh.function
@@ -106,13 +77,13 @@ class TestScriptedExecutorPassOutcome:
             assert f() == "default"
             assert f() == "default"
 
-        assert len(executor.calls) == 3
+        assert len(executor.requests) == 3
 
     def test_multiple_responses_consumed_in_order(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(binding_name_to_value={"result": "first"}),
-                pass_response(binding_name_to_value={"result": "second"}),
+                StepCandidate(binding_name_to_value={"result": "first"}),
+                StepCandidate(binding_name_to_value={"result": "second"}),
             ]
         )
 
@@ -132,7 +103,7 @@ class TestScriptedExecutorPassOutcome:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response_count", [0, 1])
 async def test_unexpected_invocation_fails_without_committing_outputs(execute: Callable[..., Awaitable[StepOutcome]], response_count: int) -> None:
-    executor = ScriptedExecutor([pass_response(binding_name_to_value={"value": 7}) for _ in range(response_count)])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"value": 7}) for _ in range(response_count)])
     definition = StepDefinition("Set <:value>.", output_binding_names=("value",), binding_name_to_type={"value": int})
     writes: list[tuple[str, object]] = []
 
@@ -143,13 +114,13 @@ async def test_unexpected_invocation_fails_without_committing_outputs(execute: C
         for _ in range(response_count):
             outcome = await execute(definition, name_to_value={}, write_binding=write_binding)
             assert isinstance(outcome, Pass)
-        with pytest.raises(nh.ExecutionError, match=f"no response for invocation {response_count + 1}") as caught:
+        with pytest.raises(nh.ExecutionError, match=f"no response for request {response_count + 1}") as caught:
             await execute(definition, name_to_value={}, write_binding=write_binding)
 
     assert isinstance(caught.value.__cause__, AssertionError)
     assert caught.value.step_failed is not None
     assert caught.value.step_failed.failure_stage == "executor"
-    assert len(executor.calls) == response_count + 1
+    assert len(executor.requests) == response_count + 1
     assert writes == [("value", 7)] * response_count
 
 
@@ -157,7 +128,7 @@ class TestScriptedExecutorRaiseOutcome:
     def test_raises_exception_by_default(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                raise_response("something went wrong"),
+                StepCandidate(outcome=Raise("something went wrong")),
             ]
         )
 
@@ -176,7 +147,7 @@ class TestScriptedExecutorRaiseOutcome:
     def test_raises_custom_error_type(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                raise_response("bad input", error_type=ValueError),
+                StepCandidate(outcome=Raise("bad input", ValueError)),
             ]
         )
 
@@ -197,9 +168,9 @@ class TestScriptedExecutorBreakOutcome:
     def test_breaks_loop(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(),
-                pass_response(),
-                break_response(),
+                StepCandidate(),
+                StepCandidate(),
+                StepCandidate(outcome=Break()),
             ]
         )
 
@@ -221,9 +192,9 @@ class TestScriptedExecutorContinueOutcome:
     def test_continues_loop(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                continue_response(),
-                pass_response(),
-                continue_response(),
+                StepCandidate(outcome=Continue()),
+                StepCandidate(),
+                StepCandidate(outcome=Continue()),
             ]
         )
 
@@ -247,7 +218,7 @@ class TestScriptedExecutorReturnOutcome:
     def test_early_return(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                return_response("early", binding_name_to_value={"result": "early"}),
+                StepCandidate(outcome=Return("early"), binding_name_to_value={"result": "early"}),
             ]
         )
 
@@ -270,7 +241,7 @@ class TestScriptedExecutorReturnOutcome:
 @pytest.mark.parametrize("value", ["effects.append('evaluated')", None, object()])
 async def test_resolved_return_preserves_values_without_expression_effects(callback: bool, asynchronous: bool, value: object) -> None:
     effects: list[str] = []
-    response = return_response(value, binding_name_to_value={"value": "independent output"})
+    response = StepCandidate(outcome=Return(value), binding_name_to_value={"value": "independent output"})
     executor = CallbackExecutor(lambda call: response) if callback else ScriptedExecutor([response])
 
     @nh.function
@@ -295,12 +266,12 @@ async def test_resolved_return_preserves_values_without_expression_effects(callb
         result = await asynchronous_function() if asynchronous else synchronous()
     assert result is value
     assert effects == []
-    assert len(executor.calls) == 1
+    assert len(executor.requests) == 1
 
 
 class TestScriptedExecutorAllowedOutcomeKinds:
     def test_records_allowed_outcome_kinds_in_loop(self) -> None:
-        executor = ScriptedExecutor(responses=[break_response()])
+        executor = ScriptedExecutor([StepCandidate(outcome=Break())])
 
         @nh.function
         def f() -> None:
@@ -312,12 +283,12 @@ class TestScriptedExecutorAllowedOutcomeKinds:
         with nh.run(executor):
             f()
 
-        call = executor.calls[0]
+        call = executor.requests[0]
         assert "break" in call.allowed_outcome_kinds
         assert "continue" in call.allowed_outcome_kinds
 
     def test_records_allowed_outcome_kinds_outside_loop(self) -> None:
-        executor = ScriptedExecutor(responses=[pass_response()])
+        executor = ScriptedExecutor([StepCandidate()])
 
         @nh.function
         def f() -> None:
@@ -328,7 +299,7 @@ class TestScriptedExecutorAllowedOutcomeKinds:
         with nh.run(executor):
             f()
 
-        call = executor.calls[0]
+        call = executor.requests[0]
         assert "break" not in call.allowed_outcome_kinds
         assert "continue" not in call.allowed_outcome_kinds
 
@@ -337,7 +308,7 @@ class TestScriptedExecutorBindingFiltering:
     def test_rejects_extra_bindings_not_in_declared_outputs(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(binding_name_to_value={"result": "hello", "extra": "invalid"}),
+                StepCandidate(binding_name_to_value={"result": "hello", "extra": "invalid"}),
             ]
         )
 
@@ -355,11 +326,11 @@ class TestScriptedExecutorBindingFiltering:
 
 class TestCallbackExecutor:
     def test_delegates_to_handler(self) -> None:
-        def handler(call: StepCall) -> StepResponse:
-            text = call.step_locals.get("text", "")
+        def handler(request: StepRequest) -> StepCandidate:
+            text = request.step_context.environment.resolve("text")
             if isinstance(text, str) and "urgent" in text:
-                return pass_response(binding_name_to_value={"category": "high"})
-            return pass_response(binding_name_to_value={"category": "normal"})
+                return StepCandidate(binding_name_to_value={"category": "high"})
+            return StepCandidate(binding_name_to_value={"category": "normal"})
 
         executor = CallbackExecutor(handler)
 
@@ -375,12 +346,12 @@ class TestCallbackExecutor:
             assert classify("server down") == "normal"
             assert classify("urgent outage") == "high"
 
-    def test_handler_receives_step_locals(self) -> None:
-        received_locals: dict[str, object] = {}
+    def test_handler_receives_live_environment(self) -> None:
+        received_values: list[object] = []
 
-        def handler(call: StepCall) -> StepResponse:
-            received_locals.update(call.step_locals)
-            return pass_response(binding_name_to_value={"result": "ok"})
+        def handler(request: StepRequest) -> StepCandidate:
+            received_values.append(request.step_context.environment.resolve("data"))
+            return StepCandidate(binding_name_to_value={"result": "ok"})
 
         executor = CallbackExecutor(handler)
 
@@ -395,10 +366,10 @@ class TestCallbackExecutor:
         with nh.run(executor):
             f("input_value")
 
-        assert received_locals["data"] == "input_value"
+        assert received_values == ["input_value"]
 
-    def test_records_calls(self) -> None:
-        executor = CallbackExecutor(lambda _: pass_response(binding_name_to_value={"result": ""}))
+    def test_records_requests(self) -> None:
+        executor = CallbackExecutor(lambda _: StepCandidate(binding_name_to_value={"result": ""}))
 
         @nh.function
         def f() -> str:
@@ -412,48 +383,22 @@ class TestCallbackExecutor:
             f()
             f()
 
-        assert len(executor.calls) == 2
+        assert len(executor.requests) == 2
 
 
-class TestConvenienceFactories:
-    def test_pass_response_creates_pass_outcome(self) -> None:
-        response = pass_response(binding_name_to_value={"x": 1, "y": "two"})
-        assert response.outcome.kind == "pass"
-        assert response.binding_name_to_value == {"x": 1, "y": "two"}
-
-    def test_raise_response_creates_raise_outcome(self) -> None:
-        response = raise_response("boom", error_type=ValueError)
-        assert response.outcome.kind == "raise"
-        assert response.outcome.message == "boom"  # type: ignore[union-attr]
-        assert response.outcome.error_type is ValueError  # type: ignore[union-attr]
-
-    def test_raise_response_without_error_type(self) -> None:
-        response = raise_response("fail")
-        assert response.outcome.error_type is Exception  # type: ignore[union-attr]
-
-    def test_return_response_creates_return_outcome(self) -> None:
-        response = return_response(42, binding_name_to_value={"result": 42})
-        assert response.outcome.kind == "return"
-        assert response.outcome.value == 42  # type: ignore[union-attr]
-        assert response.binding_name_to_value == {"result": 42}
-
-    def test_break_response_creates_break_outcome(self) -> None:
-        response = break_response()
-        assert response.outcome.kind == "break"
-        assert response.binding_name_to_value is nh.UNSET
-
-    def test_continue_response_creates_continue_outcome(self) -> None:
-        response = continue_response()
-        assert response.outcome.kind == "continue"
-        assert response.binding_name_to_value is nh.UNSET
+class TestStepCandidateDefaults:
+    def test_defaults_to_pass_with_automatic_output_selection(self) -> None:
+        candidate = StepCandidate()
+        assert candidate.outcome == Pass()
+        assert candidate.binding_name_to_value is nh.UNSET
 
 
 class TestCarryPatternMock:
-    def test_carry_visible_in_step_locals_across_steps(self) -> None:
+    def test_carry_visible_in_environment_across_steps(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(binding_name_to_value={"result": 10}),
-                pass_response(binding_name_to_value={"result": 20}),
+                StepCandidate(binding_name_to_value={"result": 10}),
+                StepCandidate(binding_name_to_value={"result": 20}),
             ]
         )
 
@@ -480,14 +425,14 @@ class TestCarryPatternMock:
 
         assert r1 == 10
         assert r2 == 20
-        assert executor.calls[0].step_locals["carry"] == ["seed"]
-        assert executor.calls[1].step_locals["carry"] == ["seed"]
+        assert executor.requests[0].step_context.environment.resolve("carry") == ["seed"]
+        assert executor.requests[1].step_context.environment.resolve("carry") == ["seed"]
 
     def test_carry_branching_produces_independent_copies(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                pass_response(binding_name_to_value={"result": 105}),
-                pass_response(binding_name_to_value={"result": 200}),
+                StepCandidate(binding_name_to_value={"result": 105}),
+                StepCandidate(binding_name_to_value={"result": 200}),
             ]
         )
 
@@ -510,15 +455,15 @@ class TestCarryPatternMock:
 
         assert result_a == 105
         assert result_b == 200
-        assert executor.calls[0].step_locals["carry"] == ["original", "branch_a_extra"]
-        assert executor.calls[1].step_locals["carry"] == ["original"]
+        assert executor.requests[0].step_context.environment.resolve("carry") == ["original", "branch_a_extra"]
+        assert executor.requests[1].step_context.environment.resolve("carry") == ["original"]
 
     def test_carry_mutation_via_callback(self) -> None:
-        def handler(call: StepCall) -> StepResponse:
-            carry = call.step_locals.get("carry")
+        def handler(request: StepRequest) -> StepCandidate:
+            carry = request.step_context.environment.resolve("carry")
             if isinstance(carry, list):
                 carry.append(f"step_{len(carry) + 1}")
-            return pass_response(binding_name_to_value={"result": (len(carry) if isinstance(carry, list) else 0) * 10})
+            return StepCandidate(binding_name_to_value={"result": (len(carry) if isinstance(carry, list) else 0) * 10})
 
         executor = CallbackExecutor(handler)
 
@@ -544,7 +489,7 @@ class TestPydanticReturnTypeCoercion:
     def test_dict_coerced_to_pydantic_model_on_return(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                return_response({"approved": False, "reason": "uses eval()", "risk_level": "high"}),
+                StepCandidate(outcome=Return({"approved": False, "reason": "uses eval()", "risk_level": "high"})),
             ]
         )
 
@@ -567,9 +512,9 @@ class TestFStringNaturalBlock:
     def test_fstring_injection_resolved_before_executor(self) -> None:
         received_programs: list[str] = []
 
-        def handler(call: StepCall) -> StepResponse:
-            received_programs.append(call.natural_program)
-            return pass_response(binding_name_to_value={"result": "ok"})
+        def handler(request: StepRequest) -> StepCandidate:
+            received_programs.append(request.processed_natural_program)
+            return StepCandidate(binding_name_to_value={"result": "ok"})
 
         executor = CallbackExecutor(handler)
 
@@ -599,8 +544,8 @@ def test_scripted_decision_reports_block_kind_and_explicit_evidence() -> None:
         """
         return result
 
-    executor = ScriptedExecutor([pass_response(binding_name_to_value={"result": True})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": True})])
     with nh.run(executor):
         assert supported("evidence")
-    assert executor.calls[0].block_kind == "decide"
-    assert executor.calls[0].input_binding_name_to_value == {"document": "evidence"}
+    assert executor.requests[0].block_kind == "decide"
+    assert executor.requests[0].input_binding_name_to_value == {"document": "evidence"}

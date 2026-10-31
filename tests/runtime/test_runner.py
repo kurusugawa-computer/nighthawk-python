@@ -7,8 +7,8 @@ from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
-from nighthawk.testing import ScriptedExecutor, break_response, continue_response, pass_response, return_response
+from nighthawk.runtime import Break, Continue, Pass, Return, StepCandidate, StepRequest
+from nighthawk.testing import ScriptedExecutor
 
 GLOBAL_NUMBER = 7
 
@@ -117,7 +117,7 @@ def test_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_async_natural_function_updates_output_binding_via_docstring_step():
-    with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": 11}))):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate(binding_name_to_value={"result": 11}))):
 
         @nh.function
         async def f(x: int) -> int:
@@ -133,7 +133,7 @@ def test_async_natural_function_updates_output_binding_via_docstring_step():
 
 
 def test_pass_step_finalize_coerces_committed_model_binding() -> None:
-    with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": {"child": {"value": "7"}}}))):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate(binding_name_to_value={"result": {"child": {"value": "7"}}}))):
 
         @nh.function
         def f() -> str:
@@ -150,7 +150,7 @@ def test_pass_step_finalize_coerces_committed_model_binding() -> None:
 
 def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
     with nh.run(
-        ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": {"proposals": [{"kind": "approve", "score": "5"}]}}))
+        ScriptedExecutor(default_response=StepCandidate(binding_name_to_value={"result": {"proposals": [{"kind": "approve", "score": "5"}]}}))
     ):
 
         @nh.function
@@ -167,7 +167,7 @@ def test_pass_step_finalize_coerces_discriminated_union_list_items() -> None:
 
 
 def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
-    with nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"decision": {"should_update": True, "next_plan": None}}))):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate(binding_name_to_value={"decision": {"should_update": True, "next_plan": None}}))):
 
         @nh.function
         def f() -> int:
@@ -224,12 +224,12 @@ def test_resolved_return_value_is_validated() -> None:
         """
         return 0
 
-    with nh.run(ScriptedExecutor([return_response("not an int")])), pytest.raises(ExecutionError):
+    with nh.run(ScriptedExecutor([StepCandidate(outcome=Return("not an int"))])), pytest.raises(ExecutionError):
         workflow()
 
 
 def test_resolved_continue_effect_skips_following_statements():
-    with nh.run(ScriptedExecutor(default_response=continue_response())):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate(outcome=Continue()))):
 
         @nh.function
         def f() -> int:
@@ -246,7 +246,7 @@ def test_resolved_continue_effect_skips_following_statements():
 
 
 def test_resolved_break_effect_breaks_loop():
-    with nh.run(ScriptedExecutor(default_response=break_response())):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate(outcome=Break()))):
 
         @nh.function
         def f() -> int:
@@ -263,7 +263,7 @@ def test_resolved_break_effect_breaks_loop():
 
 
 def test_resolved_break_outside_loop_raises():
-    with nh.run(ScriptedExecutor(default_response=break_response())):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate(outcome=Break()))):
 
         @nh.function
         def f() -> int:
@@ -319,7 +319,7 @@ def test_compound_annotation_rejects_out_of_range_value() -> None:
         return result
 
     with (
-        nh.run(ScriptedExecutor(default_response=pass_response(binding_name_to_value={"result": 11}))),
+        nh.run(ScriptedExecutor(default_response=StepCandidate(binding_name_to_value={"result": 11}))),
         pytest.raises(nh.ExecutionError, match="less than or equal to 10"),
     ):
         workflow()
@@ -335,7 +335,7 @@ def test_initialized_output_is_validated_without_executor_assignment() -> None:
         """
         return result
 
-    with nh.run(ScriptedExecutor(default_response=pass_response())):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate())):
         assert workflow() == "draft"
 
 
@@ -349,5 +349,5 @@ def test_invalid_initialized_output_fails_without_executor_assignment() -> None:
         """
         return result
 
-    with nh.run(ScriptedExecutor(default_response=pass_response())), pytest.raises(nh.ExecutionError, match="greater than or equal to 0"):
+    with nh.run(ScriptedExecutor(default_response=StepCandidate())), pytest.raises(nh.ExecutionError, match="greater than or equal to 0"):
         workflow()

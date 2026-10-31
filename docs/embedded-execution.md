@@ -91,19 +91,19 @@ This example uses the same executor with synchronous and asynchronous entry poin
 import asyncio
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepDefinition, StepRequest, execute_step, execute_step_async
+from nighthawk.runtime import StepCandidate, StepDefinition, StepRequest, execute_step, execute_step_async
 
 
 class Executor:
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         selection = request.processed_natural_program
         if selection == "automatic":
-            return StepCandidate(outcome=Pass())
+            return StepCandidate()
         if selection == "empty":
-            return StepCandidate(outcome=Pass(), binding_name_to_value={})
+            return StepCandidate(binding_name_to_value={})
         if selection == "explicit":
-            return StepCandidate(outcome=Pass(), binding_name_to_value={"first": 7})
-        return StepCandidate(outcome=Pass(), binding_name_to_value={**request.snapshot_output_bindings(), "first": 7})
+            return StepCandidate(binding_name_to_value={"first": 7})
+        return StepCandidate(binding_name_to_value={**request.snapshot_output_bindings(), "first": 7})
 
 
 async def main() -> None:
@@ -153,8 +153,8 @@ The host explicitly saves into its mapping, and terminal delivery observes the s
 ```py
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, StepDefinition, execute_step
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import Pass, StepCandidate, StepDefinition, execute_step
+from nighthawk.testing import ScriptedExecutor
 
 name_to_value = {
     "observations": ["The trial passed."],
@@ -175,7 +175,7 @@ definition = StepDefinition(
     binding_name_to_type={"summary": str},
     source_location="trusted_summary:1",
 )
-executor = ScriptedExecutor([pass_response(binding_name_to_value={"summary": "The trial passed."})])
+executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"summary": "The trial passed."})])
 with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
     outcome = execute_step(definition, name_to_value=name_to_value, write_binding=name_to_value.__setitem__)
 
@@ -200,8 +200,8 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, StepDefinition, execute_step_async
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import Pass, StepCandidate, StepDefinition, execute_step_async
+from nighthawk.testing import ScriptedExecutor
 
 
 class Selection(BaseModel):
@@ -227,7 +227,7 @@ async def main() -> None:
         binding_name_to_type={"selected": "Selection"},
         source_location="trusted_selection:1",
     )
-    executor = ScriptedExecutor([pass_response(binding_name_to_value={"selected": {"label": "alpha"}})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"selected": {"label": "alpha"}})])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
         outcome = await execute_step_async(definition, name_to_value={"candidates": ["alpha", "beta"], "Selection": Selection}, write_binding=write)
     assert outcome == Pass()

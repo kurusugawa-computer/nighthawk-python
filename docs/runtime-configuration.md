@@ -143,8 +143,8 @@ The example uses a deterministic executor and needs no model credentials.
 <!-- runnable-example:shared_values_sync -->
 ```py
 import nighthawk as nh
-from nighthawk.runtime import StepDefinition, StepEnvironment, execute_step
-from nighthawk.testing import CallbackExecutor, StepCall, StepResponse, pass_response
+from nighthawk.runtime import StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step
+from nighthawk.testing import CallbackExecutor
 
 
 @nh.function
@@ -161,9 +161,9 @@ def select_shared_references(environment: StepEnvironment) -> dict[str, object]:
 selected_policy = ["Use direct evidence."]
 
 
-def respond(call: StepCall) -> StepResponse:
-    context = nh.get_step_context()
-    if call.natural_program == "parent":
+def respond(request: StepRequest) -> StepCandidate:
+    context = request.step_context
+    if request.processed_natural_program == "parent":
         context.record_assignment("parent_temporary", 42)
         with nh.scope(task_references=select_shared_references(context.environment)):
             child(6)
@@ -174,7 +174,7 @@ def respond(call: StepCall) -> StepResponse:
         assert context.environment.describe("policy")["origin"] == "task"
         assert context.environment.describe("conversation_input")["origin"] is None
         assert context.environment.describe("parent_temporary")["origin"] is None
-    return pass_response()
+    return StepCandidate()
 
 
 with nh.run(CallbackExecutor(respond)):
@@ -197,7 +197,7 @@ Scopes restore their references on normal exit, exceptions, and cancellation, an
 import asyncio
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step_async
+from nighthawk.runtime import StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step_async
 
 
 @nh.function
@@ -228,7 +228,7 @@ class Executor:
             assert context.environment.describe("policy")["origin"] == "task"
             assert context.environment.describe("conversation_input")["origin"] is None
             assert context.environment.describe("parent_temporary")["origin"] is None
-        return StepCandidate(outcome=Pass())
+        return StepCandidate()
 
 
 async def main() -> None:

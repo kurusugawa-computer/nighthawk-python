@@ -16,7 +16,7 @@ from pydantic import AfterValidator, BaseModel
 import nighthawk as nh
 from nighthawk.lifecycle import FailureStage, StepCompleted, StepDeliveryError, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
 from nighthawk.runtime import Pass, StepCandidate, StepRequest, scoping
-from nighthawk.testing import ScriptedExecutor, StepResponse
+from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 
 
@@ -228,7 +228,7 @@ def test_success_ledger_preserves_identity_and_validates_once() -> None:
         """
         return value
 
-    executor = ScriptedExecutor([StepResponse(binding_name_to_value={"value": original})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"value": original})])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(ledger.finished)):
         assert workflow() is original
     event = next(iter(ledger.execution_id_to_event.values()))
@@ -258,10 +258,10 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
         Finish.
         """
 
-    executor = ScriptedExecutor([StepResponse()])
+    executor = ScriptedExecutor([StepCandidate()])
     with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(StepDeliveryError) as caught:
         workflow()
-    assert len(attempts) == len(executor.calls) == 1
+    assert len(attempts) == len(executor.requests) == 1
     assert len(ledger.execution_id_to_event) == int(append_first)
     assert caught.value.execution_reference == attempts[0].execution_reference
     assert caught.value.delivery_cause is storage_error is caught.value.__cause__

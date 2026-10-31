@@ -3,8 +3,8 @@ from collections.abc import AsyncIterator
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Break, Continue
-from nighthawk.testing import ScriptedExecutor, StepResponse
+from nighthawk.runtime import Break, Continue, StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 @pytest.mark.parametrize("loop_kind", ["for", "while"])
@@ -28,10 +28,10 @@ def test_loop_else_has_no_loop_outcomes(loop_kind: str) -> None:
                 """
         return result
 
-    executor = ScriptedExecutor([StepResponse(binding_name_to_value={"result": 7})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": 7})])
     with nh.run(executor):
         assert workflow() == 7
-    assert set(executor.calls[0].allowed_outcome_kinds) == {"pass", "return", "raise"}
+    assert set(executor.requests[0].allowed_outcome_kinds) == {"pass", "return", "raise"}
 
 
 async def empty_values() -> AsyncIterator[int]:
@@ -52,10 +52,10 @@ async def test_async_loop_else_has_no_loop_outcomes() -> None:
             """
         return result
 
-    executor = ScriptedExecutor([StepResponse(binding_name_to_value={"result": 9})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"result": 9})])
     with nh.run(executor):
         assert await workflow() == 9
-    assert set(executor.calls[0].allowed_outcome_kinds) == {"pass", "return", "raise"}
+    assert set(executor.requests[0].allowed_outcome_kinds) == {"pass", "return", "raise"}
 
 
 @pytest.mark.parametrize("outcome", [Break(), Continue()])
@@ -75,8 +75,8 @@ def test_inner_loop_else_controls_the_enclosing_loop(outcome: Break | Continue) 
             effects.append("outer loop exhausted")
         return effects
 
-    executor = ScriptedExecutor(default_response=StepResponse(outcome=outcome))
+    executor = ScriptedExecutor(default_response=StepCandidate(outcome=outcome))
     with nh.run(executor):
         assert workflow() == ([] if isinstance(outcome, Break) else ["outer loop exhausted"])
-    assert len(executor.calls) == (1 if isinstance(outcome, Break) else 2)
-    assert all({"break", "continue"} <= set(call.allowed_outcome_kinds) for call in executor.calls)
+    assert len(executor.requests) == (1 if isinstance(outcome, Break) else 2)
+    assert all({"break", "continue"} <= set(call.allowed_outcome_kinds) for call in executor.requests)

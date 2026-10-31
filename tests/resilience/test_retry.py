@@ -12,8 +12,9 @@ from tenacity import RetryCallState, wait_none
 
 import nighthawk as nh
 from nighthawk.resilience import retrying
+from nighthawk.runtime import Raise, StepCandidate
 from nighthawk.runtime import scoping as runtime_scoping
-from nighthawk.testing import ScriptedExecutor, pass_response, raise_response
+from nighthawk.testing import ScriptedExecutor
 
 
 @pytest.fixture
@@ -226,8 +227,8 @@ class TestRetryingWithNaturalFunction:
     def test_retries_natural_function(self) -> None:
         executor = ScriptedExecutor(
             responses=[
-                raise_response("transient failure"),
-                pass_response(binding_name_to_value={"result": "success"}),
+                StepCandidate(outcome=Raise("transient failure")),
+                StepCandidate(binding_name_to_value={"result": "success"}),
             ]
         )
 
@@ -244,4 +245,4 @@ class TestRetryingWithNaturalFunction:
         with nh.run(executor):
             assert classify("hello") == "success"
 
-        assert len(executor.calls) == 2
+        assert len(executor.requests) == 2

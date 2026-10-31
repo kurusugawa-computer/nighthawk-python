@@ -192,42 +192,43 @@ import pytest
 from quotes import quote_batch
 
 import nighthawk as nh
-from nighthawk.testing import ScriptedExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import ScriptedExecutor
 
 
 def test_quote_batch_processes_each_message_and_uses_host_price():
     messages = ["A dozen, please.", "Please send three."]
     executor = ScriptedExecutor(
-        responses=[
-            pass_response(binding_name_to_value={"order": {"quantity": 12}}),
-            pass_response(binding_name_to_value={"order": {"quantity": 3}}),
-        ],
+        [
+            StepCandidate(binding_name_to_value={"order": {"quantity": 12}}),
+            StepCandidate(binding_name_to_value={"order": {"quantity": 3}}),
+        ]
     )
     with nh.run(executor):
         assert quote_batch(messages, unit_price_cents=250) == [3000, 750]
-    assert [call.step_locals["message"] for call in executor.calls] == messages
+    assert [request.step_context.environment.resolve("message") for request in executor.requests] == messages
 
 
 def test_quote_batch_stops_when_quantity_is_unclear():
-    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"order": {"quantity": None}})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"order": {"quantity": None}})])
     with nh.run(executor), pytest.raises(ValueError, match="Quantity needs clarification"):
         quote_batch(["A few, please.", "Then three more."], unit_price_cents=250)
-    assert len(executor.calls) == 1
+    assert len(executor.requests) == 1
 
 
 def test_quote_batch_rejects_invalid_model_output():
-    executor = ScriptedExecutor(responses=[pass_response(binding_name_to_value={"order": {"quantity": 0}})])
+    executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"order": {"quantity": 0}})])
     with nh.run(executor), pytest.raises(nh.ExecutionError):
         quote_batch(["One, please."], unit_price_cents=250)
 ```
 
-`ScriptedExecutor` supplies fixed response sequences and records calls.
-Use `CallbackExecutor` when scripted responses need to depend on inputs.
+`ScriptedExecutor` returns ordinary `StepCandidate` values in order and records each `StepRequest`.
+Use `CallbackExecutor` with a function from `StepRequest` to `StepCandidate` when scripted results need to depend on inputs.
 Add checks for the relevant application effects, branches, and failure paths as the design grows.
-To test control outcomes, import `return_response` and `raise_response` from `nighthawk.testing`.
-`return_response("bug")` returns a literal Python value, and `raise_response("failed", error_type=ValueError)` requests an application exception using its resolved class.
+To test control outcomes, import `Return` and `Raise` from `nighthawk.runtime`:
+`StepCandidate(outcome=Return("bug"))` returns a literal Python value, and `StepCandidate(outcome=Raise("failed", ValueError))` requests an application exception using its resolved class.
 For a block that denies those outcomes, assert `nh.ExecutionError` and verify that dependent work did not run.
-Also test `pass_response()` without assignments when retaining an initial value could conceal a missing result.
+Also test `StepCandidate()` without assignments when retaining an initial value could conceal a missing result.
 
 The scripted quantity of 12 does not demonstrate that the prompt understands "a dozen".
 Run separate, opt-in real-model tests with clear quantities, alternative phrasings, ambiguous requests, and out-of-range requests.

@@ -7,7 +7,8 @@ from pydantic import ValidationError
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
-from nighthawk.testing import CallbackExecutor, StepCall, StepResponse, pass_response
+from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.testing import CallbackExecutor
 
 
 @pytest.mark.parametrize("invalid_output", [False, True], ids=["validated-average", "invalid-output"])
@@ -24,17 +25,18 @@ def test_readme_example(
     example_path.write_text(match.group(1))
     computed_values: list[float] = []
 
-    def respond(call: StepCall) -> StepResponse:
-        assert call.step_locals["numbers"] == [1, "2", "three", "cuatro"]
-        assert call.binding_name_to_type["result"] is float
-        helper = call.step_globals["python_average"]
+    def respond(request: StepRequest) -> StepCandidate:
+        environment = request.step_context.environment
+        assert environment.resolve("numbers") == [1, "2", "three", "cuatro"]
+        assert request.binding_name_to_type["result"] is float
+        helper = environment.resolve("python_average")
         assert callable(helper)
         # Only the language interpretation is scripted; execute the published helper.
         average = helper([1.0, 2.0, 3.0, 4.0])
         assert isinstance(average, float)
         computed_values.append(average)
         # A numeric string exercises coercion through the actual output contract.
-        return pass_response(binding_name_to_value={"result": "invalid" if invalid_output else str(average)})
+        return StepCandidate(binding_name_to_value={"result": "invalid" if invalid_output else str(average)})
 
     executor = CallbackExecutor(respond)
 
@@ -59,5 +61,5 @@ def test_readme_example(
         assert type(result) is float
         assert result == 2.5
 
-    assert len(executor.calls) == (1 if invalid_output else 2)
-    assert computed_values == [2.5] * len(executor.calls)
+    assert len(executor.requests) == (1 if invalid_output else 2)
+    assert computed_values == [2.5] * len(executor.requests)

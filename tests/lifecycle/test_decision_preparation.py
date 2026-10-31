@@ -55,7 +55,7 @@ async def test_decision_identity_survives_failure_before_preparation(asynchronou
         else:
             judge(instruction)
 
-    assert executor.calls == []
+    assert executor.requests == []
     assert rendered == ([] if failure.startswith("started_delivery") else [True])
     assert len(events) == len(started) == 1
     event = events[0]
@@ -107,7 +107,7 @@ async def test_embedded_decision_identity_survives_early_failure(execute: Callab
             write_binding=None if failure == "writer" else write_binding,
         )
 
-    assert executor.calls == []
+    assert executor.requests == []
     assert len(events) == 1
     event = events[0]
     assert isinstance(event, (StepFailed, StepInterrupted))

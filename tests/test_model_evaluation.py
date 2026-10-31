@@ -33,14 +33,15 @@ def evaluation_project(tmp_path: Path) -> Path:
 import pytest
 import nighthawk as nh
 from pydantic_ai.usage import RunUsage
-from nighthawk.testing import CallbackExecutor, pass_response
+from nighthawk.runtime import StepCandidate
+from nighthawk.testing import CallbackExecutor
 
 @pytest.fixture(autouse=True)
 def local_executor(monkeypatch):
-    def respond(call):
+    def respond(request):
         nh.get_usage_meter().record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
-        call.input_binding_name_to_value["items"].append(9)
-        return pass_response(binding_name_to_value={"result": None})
+        request.input_binding_name_to_value["items"].append(9)
+        return StepCandidate(binding_name_to_value={"result": None})
     monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", lambda self, selection: CallbackExecutor(respond))
 """)
     (tmp_path / "test_trials.py").write_text("""
