@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
+- Skipped operations after a rejection return the same tool error shape, with guidance not to repeat operations that already completed and to reissue the skipped operation when still needed. In live probes this stopped models from replaying completed calls in the same response.
 - Breaking: `OperationRejection.model_feedback()` returns the tool error shape (`kind`, `status`, identities, `message`, `guidance`, `phase`, `evaluation_started`), so tool denials, output retries, and ordered-batch denied returns give the model one payload. The reason is reported as `message`.
 - The Claude Code CLI and SDK backends share `max_budget_usd` and `claude_allowed_tool_names`, request schema construction, and tool-access guidance. SDK responses report `provider_name="claude-code-sdk"`, and Codex responses report the selected model name without the `codex:` prefix, or `None` for the CLI default.
 - Breaking: backend `working_directory` defaults to `None` instead of an empty-string sentinel. Positive backend limits use Pydantic field constraints.

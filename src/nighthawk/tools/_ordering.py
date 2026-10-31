@@ -81,12 +81,15 @@ async def _skip_call(processor: Any, call: ToolCallPart, *, output: bool = False
         tool_call_id=call.tool_call_id,
         outcome="failed",
         content={
+            "kind": "oversight",
             "status": "skipped",
             "operation_id": request.operation_id,
             "step_execution_id": request.execution_reference.step_execution_id,
             "blocked_by_operation_id": rejection.request.operation_id,
+            "message": "Not executed because an earlier operation in this response was rejected.",
+            "guidance": "Operations completed before the rejection keep their effects; do not repeat them. Reissue this operation in a new response if it is still needed.",
+            "phase": "admission",
             "evaluation_started": False,
-            "message": "Not executed after an operation rejection. Choose the next operations in a new response.",
         },
     )
 

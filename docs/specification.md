@@ -1034,6 +1034,7 @@ Pydantic AI capability hooks cannot reorder an ordered batch across this boundar
 Argument validation is included in that ordering.
 After a recoverable rejection, the remaining calls in that model response are skipped before validation or execution, including output proposals and pending deferred calls.
 Each skipped call receives an operation Id and an `OperationFinished(status="skipped", phase="admission", evaluation_started=False)` with `blocked_by_operation_id` referring to the refused operation.
+Its model-visible return uses the same tool error shape with `status="skipped"`, telling the model that completed operations keep their effects and that it may reissue the skipped operation.
 Skipped output proposals use request kind `"output"`; an accepted candidate has no artificial output operation, but its expressions use the normal operation pipeline.
 An earlier accepted candidate in the same response is discarded if a later operation is rejected; its already completed expression effects remain.
 A subsequent model response makes new operation requests, each inspected normally.
