@@ -27,7 +27,7 @@ def environment_with_capabilities() -> StepEnvironment:
 
 
 def assert_continuation(page: Any, environment: StepEnvironment) -> None:
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     references = page.get("references") or [entry["reference"] for entry in page["names"]]
     assert references
     for i, reference in enumerate(references):

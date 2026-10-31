@@ -49,7 +49,7 @@ def test_unbound_local_and_cell_stop_fallback() -> None:
         with pytest.raises(UnboundLocalError):
             environment.resolve(name)
         with pytest.raises(UnboundLocalError):
-            assert name in environment.expression_namespace()
+            assert name in environment._expression_namespace()
         assert environment.describe(name)["unbound"] is True
 
 
@@ -101,7 +101,7 @@ def test_views_are_shallow_read_only() -> None:
 )
 def test_nested_expression_scopes_use_effective_lookup(expression: str, expected: object) -> None:
     environment = StepEnvironment(python_name_to_value={"value": 7}, python_globals={})
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     assert eval(expression, namespace, namespace) == expected
 
 
@@ -114,7 +114,7 @@ def test_expression_namespace_membership_follows_live_lookup() -> None:
         task_name_to_value={"injected": 4},
         runtime_name_set=frozenset({"hidden"}),
     )
-    namespace = environment.expression_namespace({"override": None})
+    namespace = environment._expression_namespace({"override": None})
     for name in ("local", "global_value", "cell", "injected", "override", "len", "__builtins__", environment.runtime_reference):
         assert name in namespace
     assert "missing" not in namespace
@@ -192,7 +192,7 @@ def test_application_prefix_keeps_lexical_priority_and_qualified_access(name: st
     assert environment.resolve(name) is None
     assert environment.describe(name)["origin"] == "python"
     assert name in environment.python_name_to_value
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     assert eval(environment.reference(name, source="python"), namespace, namespace) is None
     assert environment.resolve(name, source="task") == 9
     environment.assign(name, 7)
@@ -245,5 +245,5 @@ def test_falsey_mappings_keep_live_values_and_explicit_none() -> None:
     assert environment.resolve("task") is value
     assert environment.resolve("none") is None
     assert environment.binding_name_to_type == {"local": list}
-    assert environment.expression_namespace(FalseyMapping({"local": None}))["local"] is None
+    assert environment._expression_namespace(FalseyMapping({"local": None}))["local"] is None
     assert isinstance(environment.task_name_to_value, Mapping)

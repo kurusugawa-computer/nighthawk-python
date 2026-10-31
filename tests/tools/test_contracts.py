@@ -179,7 +179,7 @@ def test_text_projection_preserves_usable_discovery_continuation_under_budget(bu
     rendered = render_tool_result_json_text(value=page, error=None, max_tokens=budget, encoding=encoding, style="default")
     observed = json.loads(rendered)["value"]
     assert len(encoding.encode(json.dumps(observed, separators=(",", ":")))) <= budget
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     next_page = eval(observed["continuation"], namespace, namespace)
     references = observed.get("references") or [entry["reference"] for entry in observed["names"]]
     for i, reference in enumerate(references):

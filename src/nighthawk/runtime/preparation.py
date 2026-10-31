@@ -70,7 +70,7 @@ class StepPreparation:
     def resolve_step_annotation(annotation: object, *, caller_frame: FrameType | None, environment: StepEnvironment) -> object:
         if caller_frame is not None:
             return resolve_contract(annotation, python_globals=caller_frame.f_globals, python_locals=dict(caller_frame.f_locals))
-        namespace = environment.expression_namespace()
+        namespace = environment._expression_namespace()
         return resolve_contract(annotation, python_globals=namespace, python_locals=namespace)
 
     def _prepare_python_environment(

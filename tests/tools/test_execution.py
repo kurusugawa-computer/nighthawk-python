@@ -367,7 +367,7 @@ def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None
             tool_name_to_tool["nh_evaluate"],
         )
         assert result["metadata_omitted"] is True
-        namespace = context.environment.expression_namespace()
+        namespace = context.environment._expression_namespace()
         assert eval(result["continuation"], namespace, namespace)["names"][0]["name"] == "capability_01"
         assert eval(result["references"][0], namespace, namespace) is context.environment.task_name_to_value["capability_00"]
 

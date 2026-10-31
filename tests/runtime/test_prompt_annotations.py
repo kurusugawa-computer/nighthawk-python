@@ -76,7 +76,7 @@ def test_omitted_contract_remains_discoverable_with_a_colliding_runtime_name() -
     discovery_expression = f"{runtime_reference}.environment.discover()"
     description_expression = f"{runtime_reference}.environment.describe('name')"
     assert discovery_expression in section and description_expression in section
-    namespace = context.environment.expression_namespace()
+    namespace = context.environment._expression_namespace()
     listing = eval(discovery_expression, namespace, namespace)
     discovered_names = {item["name"] for item in listing["names"]}
     while "continuation" in listing:

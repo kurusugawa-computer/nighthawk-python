@@ -20,7 +20,7 @@ def test_runtime_access_preserves_application_names_and_reserves_its_own_root() 
         task_name_to_value={"__nighthawk_runtime_2": "task"},
     )
     assert environment.runtime_reference == "__nighthawk_runtime_3"
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     assert eval("inspect", namespace, namespace) == "application"
     result = eval(f"{environment.runtime_reference}.environment.describe('inspect')", namespace, namespace)
     assert result["origin"] == "python"
@@ -32,7 +32,7 @@ def test_runtime_access_preserves_application_names_and_reserves_its_own_root() 
 @pytest.mark.parametrize("name", ["inspect", "describe_value"])
 def test_unbound_local_keeps_python_meaning_with_explicit_task_references(name: str) -> None:
     environment = StepEnvironment(python_name_to_value={}, python_globals={}, local_name_set=frozenset({name}), task_name_to_value={name: "shared"})
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     with pytest.raises(UnboundLocalError):
         eval(name, namespace, namespace)
     assert eval(environment.reference(name, source="task"), namespace, namespace) == "shared"
@@ -55,7 +55,7 @@ def test_explicit_value_description_uses_ordinary_binding_and_rendering(source: 
     assert "Return bounded metadata (type, members, preview) for a Python value." in prompt
     assert ("metadata: Callable" in locals_section(prompt)) is (source == "local")
     assert context.environment.resolve("metadata") is describe_value
-    namespace = context.environment.expression_namespace()
+    namespace = context.environment._expression_namespace()
     assert eval("metadata(7)", namespace, namespace)["preview"] == 7
     with pytest.raises(NameError):
         eval("describe_value", namespace, namespace)
@@ -69,7 +69,7 @@ def test_opaque_names_are_discoverable_and_source_references_resolve_live_bindin
     listing = environment.discover(source="task")
     metadata = listing["names"][0]  # type: ignore[index]
     assert metadata["origin"] == "task"
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     assert eval(metadata["reference"], namespace, namespace) == "task"
     reference = environment.describe("opaque")["reference"]
     assert eval(reference, namespace, namespace) is original  # type: ignore[arg-type]
@@ -84,7 +84,7 @@ def test_environment_name_pages_progress_and_recover_when_membership_changes() -
     third: Any = environment.discover(source="task", max_items=2, cursor=second["next_cursor"])
     assert [item["name"] for page in (first, second, third) for item in page["names"]] == [f"name_{i}" for i in range(5)]
     assert third["next_cursor"] is None
-    namespace = environment.expression_namespace()
+    namespace = environment._expression_namespace()
     assert eval(first["continuation"], namespace, namespace) == second
     invalid = environment.discover(source="python", cursor=first["next_cursor"])
     assert "without a cursor" in str(invalid["recovery"])

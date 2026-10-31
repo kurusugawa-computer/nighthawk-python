@@ -55,7 +55,7 @@ class _PythonEnvironmentView(Mapping[str, object]):
         return sum(1 for _ in self)
 
     def __contains__(self, name: object) -> bool:
-        return isinstance(name, str) and self._environment.has_python_name(name)
+        return isinstance(name, str) and self._environment._has_python_name(name)
 
 
 class _ExpressionNamespace(dict[str, object]):
@@ -151,7 +151,7 @@ class StepEnvironment:
         """The contracts selected at step entry, independent of working assignments."""
         return MappingProxyType(self._binding_name_to_type)
 
-    def has_python_name(self, name: str) -> bool:
+    def _has_python_name(self, name: str) -> bool:
         return not self._is_runtime_name(name) and (
             name in self._local_name_set
             or name in self._python_name_to_value
@@ -194,12 +194,12 @@ class StepEnvironment:
                 continue
         raise MissingEnvironmentNameError(f"Name {name!r} is absent from the {source} environment", name=name)
 
-    def check_assignment(self, name: str) -> None:
-        if name == self.runtime_reference or (self.has_python_name(name) and name not in self._output_name_set):
+    def _check_assignment(self, name: str) -> None:
+        if name == self.runtime_reference or (self._has_python_name(name) and name not in self._output_name_set):
             raise ValueError(f"Cannot rebind Python name {name!r}; declare <:{name}> for Python writeback")
 
     def assign(self, name: str, value: object) -> None:
-        self.check_assignment(name)
+        self._check_assignment(name)
         self._step_name_to_value[name] = value
 
     def snapshot_working_state(self) -> dict[str, object]:
@@ -220,7 +220,7 @@ class StepEnvironment:
         name_to_value.update(self.step_name_to_value)
         return name_to_value
 
-    def expression_namespace(self, overrides: Mapping[str, object] = _EMPTY_NAME_TO_VALUE) -> dict[str, object]:
+    def _expression_namespace(self, overrides: Mapping[str, object] = _EMPTY_NAME_TO_VALUE) -> dict[str, object]:
         return _ExpressionNamespace(self, _copy_name_to_value(overrides, "overrides"))
 
     def reference(self, name: str, *, source: EnvironmentSource = "effective") -> str:
@@ -285,7 +285,7 @@ class StepEnvironment:
             "unbound": unbound,
             "write_eligible": source in ("effective", "step")
             and name != self.runtime_reference
-            and (name in self._output_name_set or not self.has_python_name(name)),
+            and (name in self._output_name_set or not self._has_python_name(name)),
             "annotation": None if annotation is MISSING_ANNOTATION else annotation_text(annotation),
             "output_contract": None if contract is MISSING_ANNOTATION else annotation_text(contract),
             "reference": self.reference(name, source=source),

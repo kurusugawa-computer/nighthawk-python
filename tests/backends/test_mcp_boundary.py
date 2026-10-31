@@ -56,7 +56,7 @@ def test_discovery_content_uses_selected_rendering_policy(budget: int, explicit:
     if budget == 64:
         assert "recovery" in observed
     else:
-        namespace = environment.expression_namespace()
+        namespace = environment._expression_namespace()
         next_page = eval(observed["continuation"], namespace, namespace)
         assert next_page["names"]
 

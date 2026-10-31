@@ -52,7 +52,7 @@ def admit_assignment(step_context: StepContext, target_path: str) -> tuple[str, 
         )
     try:
         if len(parsed) == 1:
-            step_context.environment.check_assignment(parsed[0])
+            step_context.environment._check_assignment(parsed[0])
         else:
             step_context.environment.resolve(parsed[0])
     except (ValueError, NameError) as exception:
