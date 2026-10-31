@@ -44,6 +44,16 @@ def resolve_tool_result_rendering_policy(policy: ToolResultRenderingPolicy | Non
 
 
 @dataclass
+class OperationState:
+    """Runtime-owned serialization and terminal failure state for one step's operations."""
+
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    failure: BaseException | None = None
+    failure_stage: FailureStage | None = None
+    abort: StepAbortedError | None = None
+
+
+@dataclass
 class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
@@ -60,10 +70,7 @@ class StepContext:
     type_alias_reference_names: frozenset[str] = frozenset()
     model_result: AgentRunResult[Any] | None = None
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
-    operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
-    operation_failure: BaseException | None = field(default=None, init=False, repr=False)
-    operation_failure_stage: FailureStage | None = field(default=None, init=False)
-    operation_abort: StepAbortedError | None = field(default=None, init=False, repr=False)
+    _operation_state: OperationState = field(default_factory=OperationState, init=False, repr=False)
 
     def record_assignment(self, name: str, value: object) -> None:
         """Assign a tracked step value without validation or operation records."""

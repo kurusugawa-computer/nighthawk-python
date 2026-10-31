@@ -98,15 +98,15 @@ async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]], st
     try:
         value = await tool_call()
     except OperationRejectedError as exception:
-        if step_context.operation_failure is not None:
-            raise step_context.operation_failure from step_context.operation_failure.__cause__
+        if step_context._operation_state.failure is not None:
+            raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
         record_response_rejection(step_context, exception.rejection)
         return rejection_tool_outcome(exception.rejection)
     except (ModelRetry, CallDeferred, ApprovalRequired):
         raise
     except OperationError as exception:
-        if step_context.operation_failure is not None:
-            raise step_context.operation_failure from step_context.operation_failure.__cause__
+        if step_context._operation_state.failure is not None:
+            raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
         outcome = _normalize_tool_failure(
             kind=exception.kind,
             message=str(exception),

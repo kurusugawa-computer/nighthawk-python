@@ -71,8 +71,8 @@ class _OperationFailureGuard(AbstractCapability[StepContext]):
     async def before_model_request(self, ctx: RunContext[StepContext], request_context: ModelRequestContext) -> ModelRequestContext:
         # Pydantic AI can classify a body ValidationError as retryable or let a capability supply a substitute result.
         # Neither clears our operation failure, and neither may cause another model request for this step.
-        if ctx.deps.operation_failure is not None:
-            raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
+        if ctx.deps._operation_state.failure is not None:
+            raise ctx.deps._operation_state.failure from ctx.deps._operation_state.failure.__cause__
         return request_context
 
 
@@ -86,16 +86,16 @@ class _StepOutputBoundary(_OperationFailureGuard):
     async def after_output_process(self, ctx: RunContext[StepContext], *, output_context: OutputContext, output: Any) -> Any:
         if ctx.partial_output:
             return output
-        if ctx.deps.operation_failure is not None:
-            raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
+        if ctx.deps._operation_state.failure is not None:
+            raise ctx.deps._operation_state.failure from ctx.deps._operation_state.failure.__cause__
         rejection = get_response_rejection(ctx.deps)
         if rejection is not None:
             raise ModelRetry(json.dumps(rejection.model_feedback(), ensure_ascii=False))
         try:
             return await resolve_model_candidate(self.request, _parse_model_outcome(output))
         except OperationRejectedError as exception:
-            if ctx.deps.operation_failure is not None:
-                raise ctx.deps.operation_failure from ctx.deps.operation_failure.__cause__
+            if ctx.deps._operation_state.failure is not None:
+                raise ctx.deps._operation_state.failure from ctx.deps._operation_state.failure.__cause__
             record_response_rejection(ctx.deps, exception.rejection)
             raise ModelRetry(json.dumps(exception.rejection.model_feedback(), ensure_ascii=False)) from exception
 
@@ -436,14 +436,14 @@ class AgentStepExecutor:
                     structured_output_type=structured_output_type,
                 )
             except Exception:
-                failure = step_context.operation_failure
+                failure = step_context._operation_state.failure
                 if failure is None:
                     raise
                 # Preserve the operation exception and its original cause instead of a secondary retry-limit or capability exception.
                 raise failure from failure.__cause__
 
-        if step_context.operation_failure is not None:
-            raise step_context.operation_failure from step_context.operation_failure.__cause__
+        if step_context._operation_state.failure is not None:
+            raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
 
         if isinstance(result, AgentRunResult):
             step_context.model_result = result

@@ -149,8 +149,8 @@ async def _call_tool(self: Any, tool_call: Any, *, tool_call_result: Any) -> Any
     result = await _original_call_tool(self, tool_call, tool_call_result=tool_call_result)
     if _requires_ordered_validation(self):
         context = self.tool_manager.ctx.deps
-        if context.operation_failure is not None:
-            raise context.operation_failure
+        if context._operation_state.failure is not None:
+            raise context._operation_state.failure
         rejection = get_response_rejection(context)
         if before is None and rejection is not None:
             call = tool_call.call if isinstance(tool_call, ValidatedToolCall) else tool_call

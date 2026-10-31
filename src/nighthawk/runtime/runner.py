@@ -125,11 +125,11 @@ class Runner:
     def _classify_finished(
         self, original_exception: BaseException | None, execution_reference: ExecutionReference, step_span: Span
     ) -> tuple[StepFinished, BaseException | None]:
-        if self.preparation is not None and self.preparation.step_context.operation_failure_stage is not None:
-            self.failure_stage = self.preparation.step_context.operation_failure_stage
+        if self.preparation is not None and self.preparation.step_context._operation_state.failure_stage is not None:
+            self.failure_stage = self.preparation.step_context._operation_state.failure_stage
         finished: StepFinished
         if isinstance(original_exception, Exception):
-            operation_abort = self.preparation.step_context.operation_abort if self.preparation is not None else None
+            operation_abort = self.preparation.step_context._operation_state.abort if self.preparation is not None else None
             rejection = (
                 original_exception
                 if isinstance(original_exception, StepAbortedError)
@@ -216,7 +216,7 @@ class Runner:
         if isinstance(finished, StepFailed):
             if finished.original_exception is self.commit_abort:
                 raise finished.original_exception
-            if self.preparation is not None and self.preparation.step_context.operation_failure is finished.original_exception:
+            if self.preparation is not None and self.preparation.step_context._operation_state.failure is finished.original_exception:
                 raise finished.original_exception
             raise ExecutionError(finished, description=self.failure_description) from finished.original_exception
         if original_exception is not None:
@@ -409,8 +409,8 @@ class Runner:
         return_annotation: object,
     ) -> StepEnvelope:
         step_context = preparation.step_context
-        if step_context.operation_failure is not None:
-            raise step_context.operation_failure
+        if step_context._operation_state.failure is not None:
+            raise step_context._operation_state.failure
         self.failure_stage = "outcome_validation"
         if not isinstance(candidate, StepCandidate):
             raise ExecutionError("Step executor must return StepCandidate")

@@ -248,7 +248,7 @@ def test_backend_native_body_validation_error_propagates_without_retry() -> None
             )
             with pytest.raises(ValidationError) as caught:
                 await tool_name_to_handler["action"]({})
-        assert context.deps.operation_failure is caught.value
+        assert context.deps._operation_state.failure is caught.value
 
     asyncio.run(execute())
     assert calls == ["hook", "body"]
@@ -275,7 +275,7 @@ def test_explicit_native_model_retry_does_not_abort_transport() -> None:
 
         result = await ToolTransport().run(request)
         assert result == {"kind": "retry_prompt", "retry_text": "Try the documented alternative"}
-        assert context.deps.operation_failure is None
+        assert context.deps._operation_state.failure is None
 
     asyncio.run(execute())
     assert calls == ["body"]
@@ -310,7 +310,7 @@ def test_codex_mcp_executes_on_owner_loop_and_preserves_original_failure(tmp_pat
             if fail:
                 with pytest.raises(ValueError) as caught:
                     await asyncio.wait_for(agent.run("Call application.", deps=context, toolsets=[tools], model_settings=settings), timeout=10)
-                assert caught.value is context.operation_failure is failure
+                assert caught.value is context._operation_state.failure is failure
             else:
                 result = await asyncio.wait_for(agent.run("Call application.", deps=context, toolsets=[tools], model_settings=settings), timeout=10)
                 assert "nh_evaluate_text" in result.output

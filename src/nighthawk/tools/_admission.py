@@ -38,8 +38,8 @@ class ToolAdmissionCapability(AbstractCapability[StepContext]):
         handler: Callable[[str | dict[str, Any]], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
         # These keyword names belong to Pydantic AI's capability interface.
-        if ctx.deps.operation_failure is not None:
-            raise ctx.deps.operation_failure
+        if ctx.deps._operation_state.failure is not None:
+            raise ctx.deps._operation_state.failure
         recorded_errors: list[BaseException] = []
         token = _recorded_admission_errors.set(recorded_errors)
         try:
@@ -47,7 +47,7 @@ class ToolAdmissionCapability(AbstractCapability[StepContext]):
         except (ApprovalRequired, CallDeferred, SkipToolValidation, _ValidationDeferral):
             raise
         except BaseException as exception:
-            if any(exception is recorded for recorded in recorded_errors) or ctx.deps.operation_failure is exception:
+            if any(exception is recorded for recorded in recorded_errors) or ctx.deps._operation_state.failure is exception:
                 raise
             await self._record_failure(ctx, call=call, tool_def=tool_def, args=args, error=exception)
             raise AssertionError("A failed admission must propagate its original exception") from exception

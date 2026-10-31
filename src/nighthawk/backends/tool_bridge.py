@@ -141,8 +141,8 @@ async def execute_tool_call(
     tool_call_id: str,
 ) -> ToolHandlerResult:
     with set_current_run_context(run_context):
-        if run_context.deps.operation_failure is not None:
-            raise run_context.deps.operation_failure
+        if run_context.deps._operation_state.failure is not None:
+            raise run_context.deps._operation_state.failure
         parent_manager = run_context.tool_manager
         observed_toolset = _ObservedToolset(toolset.wrapped)
         manager = ToolManager(
@@ -154,8 +154,8 @@ async def execute_tool_call(
         try:
             value = await manager.handle_call(ToolCallPart(tool_name, arguments, tool_call_id), wrap_validation_errors=False)
         except ValidationError as exception:
-            if run_context.deps.operation_failure is not None:
-                raise run_context.deps.operation_failure from run_context.deps.operation_failure.__cause__
+            if run_context.deps._operation_state.failure is not None:
+                raise run_context.deps._operation_state.failure from run_context.deps._operation_state.failure.__cause__
             if observed_toolset.outcome is not None and (observed_toolset.outcome["error"] or {}).get("status") == "rejected":
                 return build_tool_result_observation(tool_outcome=observed_toolset.outcome)
             # MCP and SDK transports mark retry prompts as errors, so the text omits Pydantic AI's error wrapper.
@@ -168,14 +168,14 @@ async def execute_tool_call(
             ).model_response_str(wrap_if_error=False)
             return _build_retry_prompt_observation(retry_text=retry_text)
         except ModelRetry as exception:
-            if run_context.deps.operation_failure is not None:
-                raise run_context.deps.operation_failure from run_context.deps.operation_failure.__cause__
+            if run_context.deps._operation_state.failure is not None:
+                raise run_context.deps._operation_state.failure from run_context.deps._operation_state.failure.__cause__
             if observed_toolset.outcome is not None and (observed_toolset.outcome["error"] or {}).get("status") == "rejected":
                 return build_tool_result_observation(tool_outcome=observed_toolset.outcome)
             return _build_retry_prompt_observation(retry_text=exception.message)
 
-        if run_context.deps.operation_failure is not None:
-            raise run_context.deps.operation_failure
+        if run_context.deps._operation_state.failure is not None:
+            raise run_context.deps._operation_state.failure
         recorded_error = observed_toolset.outcome["error"] if observed_toolset.outcome is not None else None
         if recorded_error is not None and recorded_error.get("status") == "rejected":
             # A capability may replace a return value, but cannot turn a refused body into a success.

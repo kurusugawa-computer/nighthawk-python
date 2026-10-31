@@ -51,9 +51,9 @@ async def execute_operation_async(
     active_scope = optional_scope()
     if _active_operation_context.get() is step_context:
         raise NighthawkError("A runtime operation cannot await another operation on its own step; use ordinary Python composition")
-    async with step_context.operation_lock:
-        if step_context.operation_failure is not None:
-            raise step_context.operation_failure
+    async with step_context._operation_state.lock:
+        if step_context._operation_state.failure is not None:
+            raise step_context._operation_state.failure
         execution = OperationExecution(request)
         token = _active_operation_context.set(step_context)
         outcome: object = None
@@ -87,7 +87,7 @@ async def execute_operation_async(
                         raise rejection_error
                     if isinstance(decision, AbortStep):
                         abort_error = StepAbortedError(decision.reason, subject="operation")
-                        step_context.operation_abort = abort_error
+                        step_context._operation_state.abort = abort_error
                         raise abort_error
                 if blocked_by is None:
                     execution.phase = "evaluation"
@@ -112,8 +112,8 @@ async def execute_operation_async(
                     and not recoverable_admission
                     and (not isinstance(exception, (OperationError, ModelRetry, ApprovalRequired, CallDeferred)) or execution.phase == "inspection")
                 ):
-                    step_context.operation_failure = exception
-                    step_context.operation_failure_stage = "operation_inspection" if execution.phase == "inspection" else "operation_execution"
+                    step_context._operation_state.failure = exception
+                    step_context._operation_state.failure_stage = "operation_inspection" if execution.phase == "inspection" else "operation_execution"
             finished = OperationFinished(
                 request=request,
                 status=status,
@@ -137,12 +137,12 @@ async def execute_operation_async(
                         chain_cleanup_errors(original_exception, delivery_cause)
                         raise original_exception from original_exception.__cause__
                     if not isinstance(delivery_cause, Exception):
-                        step_context.operation_failure = delivery_cause
-                        step_context.operation_failure_stage = "operation_delivery"
+                        step_context._operation_state.failure = delivery_cause
+                        step_context._operation_state.failure_stage = "operation_delivery"
                         raise
                     error = OperationDeliveryError(finished, delivery_cause)
-                    step_context.operation_failure = error
-                    step_context.operation_failure_stage = "operation_delivery"
+                    step_context._operation_state.failure = error
+                    step_context._operation_state.failure_stage = "operation_delivery"
                     raise error from (original_exception if original_exception is not None else delivery_cause)
             if original_exception is not None:
                 raise original_exception

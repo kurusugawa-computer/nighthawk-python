@@ -127,7 +127,7 @@ def test_backend_native_validation_preserves_records_and_control_signals(failure
         if failure_kind in ("schema", "retry"):
             result = asyncio.run(execute())
             assert result["kind"] == "retry_prompt"
-            assert context.operation_failure is None
+            assert context._operation_state.failure is None
         else:
             with pytest.raises(type(original)) as caught:
                 asyncio.run(execute())
@@ -135,7 +135,7 @@ def test_backend_native_validation_preserves_records_and_control_signals(failure
 
     assert body_calls == 0
     if failure_kind in ("approval", "deferred"):
-        assert context.operation_failure is None
+        assert context._operation_state.failure is None
         assert not operations
     else:
         assert len(operations) == 1
@@ -146,7 +146,7 @@ def test_backend_native_validation_preserves_records_and_control_signals(failure
         else:
             assert operations[0].original_exception is original
         if failure_kind == "python":
-            assert context.operation_failure is original
+            assert context._operation_state.failure is original
 
 
 @pytest.mark.parametrize(
