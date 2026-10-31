@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime.scoping import _current_task_references
+from nighthawk.runtime.scoping import get_scope
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 from tests.support.host_controls import PreservingExecutor, RecordingHandler, RequestObserver, block, deterministic_model
@@ -56,25 +56,25 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
 
     class Handler(RecordingHandler):
         async def invoke_async(self, call: nh.FunctionCall, proceed: Callable) -> object:
-            assert nh.get_step_executor() is executor
+            assert nh.get_scope().step_executor is executor
             try:
                 return await super().invoke_async(call, proceed)
             finally:
-                assert nh.get_step_executor() is executor
+                assert nh.get_scope().step_executor is executor
 
     @nh.function
     async def child() -> None:
         with nh.scope(execution_model="allowed:B"):
-            active = nh.get_step_executor()
+            active = nh.get_scope().step_executor
             assert isinstance(active, PreservingExecutor)
             selected.append(active.executor.configuration.execution_model)
             assert active.observer is observer
             assert active.executor.configuration.execution_model_settings == {"temperature": 0.25}
             assert active.executor.configuration.user_prompt_suffix_fragments == ("inherited",)
-            assert nh.get_usage_meter() is meter
-            assert nh.get_capabilities() == (observer,)
-            assert nh.get_oversight() is oversight
-            assert nh.get_lifecycle() is lifecycle
+            assert nh.get_scope().usage_meter is meter
+            assert nh.get_scope().capabilities == (observer,)
+            assert nh.get_scope().oversight is oversight
+            assert nh.get_scope().lifecycle is lifecycle
             if outcome == "failure":
                 raise ValueError("failed child")
             if outcome == "cancel":
@@ -90,11 +90,12 @@ def test_model_selection_preserves_controls_and_unwinds_before_handler(outcome: 
         else:
             with pytest.raises(ValueError if outcome == "failure" else asyncio.CancelledError):
                 asyncio.run(child())
-        assert nh.get_step_executor() is executor
+        assert nh.get_scope().step_executor is executor
         with nh.scope(execution_model=nh.UNSET):
-            assert nh.get_step_executor() is executor
+            assert nh.get_scope().step_executor is executor
         replacement = nh.StepExecutorConfiguration(execution_model=second)
-        with nh.scope(step_executor_configuration=replacement) as replaced:
+        with nh.scope(step_executor_configuration=replacement) as replaced_scope:
+            replaced = replaced_scope.step_executor
             assert isinstance(replaced, PreservingExecutor)
             assert replaced.executor.configuration is replacement
             assert replaced.executor.configuration.execution_model_settings == {}
@@ -127,15 +128,15 @@ def test_rejected_model_and_explicit_executor_replacement() -> None:
     with nh.run(executor), nh.scope(capabilities=[observer]):
         with pytest.raises(PermissionError), nh.scope(execution_model="not:allowed"):
             pass
-        assert nh.get_step_executor() is executor
+        assert nh.get_scope().step_executor is executor
         assert observer.records == []
         replacement = StubExecutor()
         with nh.scope(step_executor=replacement, capabilities=[]):
-            assert nh.get_step_executor() is replacement
-            assert nh.get_capabilities() == ()
+            assert nh.get_scope().step_executor is replacement
+            assert nh.get_scope().capabilities == ()
         with nh.run(replacement):
-            assert nh.get_capabilities() == ()
-        assert nh.get_capabilities() == (observer,)
+            assert nh.get_scope().capabilities == ()
+        assert nh.get_scope().capabilities == (observer,)
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -149,7 +150,7 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
     handler = RecordingHandler()
 
     def check_configuration() -> None:
-        active = nh.get_step_executor()
+        active = nh.get_scope().step_executor
         assert isinstance(active, nh.AgentStepExecutor)
         assert active.configuration is replacement
         assert active.configuration.execution_model is second
@@ -171,7 +172,7 @@ def test_full_function_configuration_replaces_defaults_and_restores(asynchronous
             asyncio.run(async_function())
         else:
             function()
-        assert nh.get_step_executor() is executor
+        assert nh.get_scope().step_executor is executor
     assert len(handler.calls) == 1
 
 
@@ -190,9 +191,9 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
 
         @nh.function
         def inherited_prefix() -> None:
-            active = nh.get_step_executor()
+            active = nh.get_scope().step_executor
             assert isinstance(active, PreservingExecutor)
-            assert _current_task_references()["policy"] is observer
+            assert get_scope().task_references["policy"] is observer
             selected.append(active.executor.configuration.execution_model)
             block()
 
@@ -212,7 +213,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
             try:
                 await alias()
             finally:
-                assert nh.get_step_executor() is executor
+                assert nh.get_scope().step_executor is executor
                 assert nh.get_function_call() is None
 
         async def sibling() -> None:
@@ -221,7 +222,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
                 sibling_entered.set()
                 await release.wait()
                 inherited_prefix()
-            assert nh.get_step_executor() is executor
+            assert nh.get_scope().step_executor is executor
 
         with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer], task_references={"policy": observer}):
             async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
@@ -230,7 +231,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
                 try:
                     await child_entered.wait()
                     await sibling_entered.wait()
-                    assert nh.get_step_executor() is executor
+                    assert nh.get_scope().step_executor is executor
                     child_task.cancel("cancel selected child")
                     with pytest.raises(asyncio.CancelledError, match="cancel selected child"):
                         await child_task
@@ -239,7 +240,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
                     release.set()
             sibling_task.result()
             inherited_prefix()
-            assert nh.get_step_executor() is executor
+            assert nh.get_scope().step_executor is executor
         assert selected == [second, third, second, third, first]
         assert [record.configured_model for record in observer.records] == ["B", "C", "B", "C", "A"]
         assert observer.observed_tokens == 300
@@ -274,11 +275,11 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
 
     executor = Executor()
     with nh.run(executor):
-        reference = nh.get_execution_reference()
+        reference = nh.get_scope().execution_reference
         with pytest.raises(TypeError), nh.scope(execution_model="test:model", task_references=None):  # type: ignore[arg-type]
             pytest.fail("Invalid scope entered")
-        assert nh.get_execution_reference() is reference
-        assert nh.get_step_executor() is executor
+        assert nh.get_scope().execution_reference is reference
+        assert nh.get_scope().step_executor is executor
     assert resolutions == []
 
 

@@ -162,7 +162,8 @@ Scopes restore the exact parent executor on exit or error, and the host retains 
 - `nighthawk.get_step_context() -> StepContext`
     - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
-See [Section 10](#10-runtime-scoping) for additional runtime accessors (`get_step_executor`, `get_execution_reference`).
+- `nighthawk.get_scope() -> Scope`
+    - Get the active run and scope configuration. Raises if no run is active. See [Section 10](#10-runtime-scoping).
 
 ## 6. Natural block detection
 
@@ -624,7 +625,7 @@ Declaration API:
 - A repeated identical plain callable or exact explicit `Tool` object is idempotent, preserving the first normalized tool and its order. That normalized object can itself be supplied again. Different wrappers, or a plain callable versus a distinct explicit wrapper, conflict even if their function is identical.
 - Names colliding with built-ins or distinct declarations raise `ToolNameConflictError`, which is both `ToolDeclarationError` and `NameConflictError`. Invalid entries or names raise `ToolDeclarationError`. Declaration checks never call user-defined equality. Tool names and task-reference names are separate namespaces.
 - Built-in tool names cannot be declared in any mode.
-- `nighthawk.get_tools()` returns the scoped tools (excluding built-in tools) for the current scope.
+- `nighthawk.get_scope().tools` holds the scoped tools (excluding built-in tools) for the current scope.
 
 Example:
 
@@ -929,10 +930,12 @@ API:
     - Executor replacement precedes model selection. Selection delegates to the active `ConfigurableStepExecutor`; direct `AgentStepExecutor` resolution respects managed/external ownership.
     - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
     - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.
-- `nighthawk.get_step_executor() -> StepExecutor`
-    - Get the current step executor. Raises if unset.
-- `nighthawk.get_execution_reference() -> ExecutionReference`
-    - Get the current runtime execution identity. Raises if unset.
+- `nighthawk.get_scope() -> Scope`
+    - Returns the active frozen `Scope`; `run()` and `scope()` yield the same record for their body.
+    - Fields mirror the `scope()` parameters they hold: `step_executor`, `usage_meter`, `oversight`, `lifecycle`, `context_builder`, `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, `task_references`, `tools`, and `capabilities`, plus the current `execution_reference`.
+    - Model selections are resolved into `step_executor` rather than stored separately.
+    - Inside a step, `execution_reference` carries that step's identity.
+    - Prompt suffix fields exclude configuration-level baselines; `tools` excludes built-in tools; `task_references` is a shallow read-only mapping.
 
 `UNSET` represents an omitted argument where the signature accepts it; the receiving API defines the default behavior.
 Ordinary values select the complete value, including empty collections; `None` requires an explicitly supported absent or disabled value.
@@ -940,7 +943,7 @@ Ordinary values select the complete value, including empty collections; `None` r
 Configuration value objects resolve their own defaults rather than storing unresolved `UNSET` fields.
 These rules apply to the argument itself: `{"name": None}` supplies a value and never deletes the key.
 
-All run-scoped public getters, including `get_usage_meter()`, `get_oversight()`, and `get_lifecycle()`, require an active run and raise `NighthawkError` outside it. The meter is non-optional; oversight and lifecycle may be `None` inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Private optional meter discovery preserves budget behavior outside runs.
+`get_scope()` requires an active run and raises `NighthawkError` outside it. The meter is non-optional; oversight and lifecycle may be `None` inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Budget checks outside a run observe no meter and impose no limit.
 
 ### 10.1. Observability contract (OpenTelemetry span/event)
 
@@ -1111,7 +1114,7 @@ See [operation feedback](operation-feedback.md) for executable examples and the 
 `on_step_started` runs before preparation, and `on_operation_finished` delivers operation facts.
 All three callbacks support direct and asynchronous completion. Omission or `UNSET` inherits; `None` clears. A new run resets lifecycle. Each execution captures the configuration on entry, before preparation. If that configuration has a handler, core attempts notification once while Python can unwind normally; a cleared or absent handler receives no notification. Definition-time parsing, decorator compilation, and failure to enter a required run are outside this boundary. Identity, step context when established, and the step span remain active during delivery and restore afterward, including when delivery fails.
 
-The public `nh.get_lifecycle()` returns the currently scoped configuration object, or `None`, and requires an active run. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. The getter observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; application exceptions recorded by the operation pipeline propagate unchanged.
+`nh.get_scope().lifecycle` is the currently scoped configuration object, or `None`. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. Reading it observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; application exceptions recorded by the operation pipeline propagate unchanged.
 
 Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
 

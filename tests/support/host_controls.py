@@ -54,7 +54,7 @@ class RequestObserver(AbstractCapability[nh.StepContext]):
                 len(self.records) + 1,
                 self.host_unit,
                 call.call_id if call else None,
-                nh.get_execution_reference().step_execution_id,
+                nh.get_scope().execution_reference.step_execution_id,
                 request_context.model.model_name,
             )
             self.records.append(record)
@@ -126,11 +126,11 @@ class PreservingExecutor:
         return PreservingExecutor(nh.AgentStepExecutor(configuration=configuration), self.model_name_to_model, self.observer)
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
-        assert self.observer in nh.get_capabilities()
+        assert self.observer in nh.get_scope().capabilities
         return self.executor.run_step(request=request)
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-        assert self.observer in nh.get_capabilities()
+        assert self.observer in nh.get_scope().capabilities
         return await self.executor.run_step_async(request=request)
 
 

@@ -12,7 +12,7 @@ from .annotations import SourceAnnotation, module_annotations, resolve_contract
 from .bindings import MISSING_ANNOTATION, infer_binding_types, normalize_binding_names
 from .description import discover_type_alias_reference_names
 from .environment import StepEnvironment
-from .scoping import _current_task_references, get_execution_reference
+from .scoping import get_scope
 from .step_context import StepContext, ToolResultRenderingPolicy, get_python_cell_scope_stack
 from .step_definition import BlockKind
 from .step_executor import StepExecutor
@@ -192,7 +192,7 @@ class StepPreparation:
             ("pass",) if block_kind == "decide" else _compute_allowed_outcome_kinds(is_in_loop, denied_outcome_kinds)
         )
         self.allowed_outcome_kinds = allowed_outcome_kinds
-        scoped_task_name_to_value = _current_task_references()
+        scoped_task_name_to_value = get_scope().task_references
         if name_to_value is None:
             assert caller_frame is not None
             environment, step_locals = self._prepare_python_environment(
@@ -223,7 +223,7 @@ class StepPreparation:
         )
 
         step_context = StepContext(
-            execution_reference=get_execution_reference(),
+            execution_reference=get_scope().execution_reference,
             step_globals=step_globals,
             step_locals=step_locals,
             binding_commit_targets=binding_commit_targets,

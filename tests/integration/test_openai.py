@@ -164,7 +164,7 @@ async def test_embedded_selection_and_request_observation():
     executor = nh.AgentStepExecutor(configuration=configuration)
     with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer]):
         assert await child() == 17
-        assert nh.get_step_executor() is executor
+        assert nh.get_scope().step_executor is executor
     assert len(handler.calls) == 1
     assert observer.records
     assert all(record.call_id == handler.calls[0].call_id for record in observer.records)

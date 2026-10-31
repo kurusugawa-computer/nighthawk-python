@@ -30,7 +30,7 @@ def test_nested_model_changes_account_once_before_next_admission() -> None:
             asyncio.run(parent())
         assert isinstance(caught.value.__cause__, RequestRefusedError)
         assert observer.observed_tokens == 120
-        assert nh.get_usage_meter().total_tokens == 120
+        assert nh.get_scope().usage_meter.total_tokens == 120
     assert [record.configured_model for record in observer.records] == ["A", "B", "A"]
     assert [record.status for record in observer.records] == ["succeeded", "succeeded", "refused"]
     assert len({record.request_id for record in observer.records}) == 3
@@ -166,4 +166,4 @@ def test_budget_stops_third_request_inside_one_unfinished_block() -> None:
         assert len({record.step_execution_id for record in observer.records}) == 1
         assert [record.status for record in observer.records] == ["succeeded", "succeeded", "refused"]
         # The independent aggregate only records an agent run that returned.
-        assert nh.get_usage_meter().total_tokens == 0
+        assert nh.get_scope().usage_meter.total_tokens == 0

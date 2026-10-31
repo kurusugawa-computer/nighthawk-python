@@ -12,7 +12,7 @@ from opentelemetry.trace import get_current_span
 from pydantic_ai.usage import RunUsage
 
 from ..errors import NighthawkError
-from ..runtime.scoping import _optional_usage_meter
+from ..runtime.scoping import optional_scope
 
 _logger = logging.getLogger("nighthawk.resilience")
 
@@ -115,10 +115,11 @@ class _BudgetHandle:
 
     @contextmanager
     def _check_call(self, arguments: tuple[Any, ...], keyword_name_to_value: dict[str, Any]) -> Generator[None]:
-        meter = _optional_usage_meter()
-        if meter is None:
+        active_scope = optional_scope()
+        if active_scope is None:
             yield
             return
+        meter = active_scope.usage_meter
 
         before = meter.snapshot()
         if self._tokens is not None and before.total_tokens >= self._tokens:

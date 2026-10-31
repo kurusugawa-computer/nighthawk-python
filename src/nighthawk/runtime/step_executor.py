@@ -25,7 +25,7 @@ from ..tools.declarations import get_visible_tools
 from ..tools.execution import ToolResultWrapperToolset
 from ._user_content import try_project_user_prompt_value
 from .async_bridge import run_coroutine_synchronously
-from .context import DefaultContextBuilder, build_context_content, build_context_request
+from .context import build_context_content, build_context_request
 from .model_candidate import resolve_model_candidate
 from .model_outcome import (
     ModelOutcome,
@@ -36,20 +36,14 @@ from .model_outcome import (
 from .model_response import get_response_rejection, record_response_rejection
 from .operation_contract import OperationRejectedError
 from .prompt import build_system_prompt, extract_references_and_program, resolve_system_prompt_template_text
-from .scoping import (
-    _context_builder_var,
-    _current_capabilities,
-    _current_system_prompt_suffix_fragments,
-    get_usage_meter,
-    system_prompt_suffix_fragment_scope,
-)
+from .scoping import get_scope, system_prompt_suffix_fragment_scope
 from .step_context import (
     StepContext,
     ToolResultRenderingPolicy,
     resolve_name_in_step_context,
     step_context_scope,
 )
-from .step_outcome import OUTCOME_KINDS, OutcomeKind, Pass
+from .step_outcome import OUTCOME_KINDS, OutcomeKind
 from .step_request import StepCandidate, StepRequest
 
 
@@ -203,7 +197,7 @@ def _create_execution_agent(
     def _system_prompt_suffixes() -> str | None:  # pyright: ignore[reportUnusedFunction]
         suffix_fragments = (
             *configuration.system_prompt_suffix_fragments,
-            *_current_system_prompt_suffix_fragments(),
+            *get_scope().system_prompt_suffix_fragments,
         )
         if not suffix_fragments:
             return None
@@ -326,12 +320,12 @@ class AgentStepExecutor:
             model_settings=cast(ModelSettings, self.configuration.decision_model_settings),
         )
         with step_context_scope(request.step_context):
-            result = await agent.run(content, deps=request.step_context, capabilities=[*_current_capabilities(), _DecisionBoundary()])
+            result = await agent.run(content, deps=request.step_context, capabilities=[*get_scope().capabilities, _DecisionBoundary()])
         # Accessing response requires a real response from this invocation, even if a capability supplies output.
         _ = result.response
         request.step_context.model_result = result
-        get_usage_meter().record(result.usage)
-        return StepCandidate(outcome=Pass(), binding_name_to_value={output_name: result.output})
+        get_scope().usage_meter.record(result.usage)
+        return StepCandidate(binding_name_to_value={output_name: result.output})
 
     async def _run_agent(
         self,
@@ -348,7 +342,7 @@ class AgentStepExecutor:
             user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
         )
         # First means last for after_output_process: resolve the output after application hooks.
-        capabilities = [_StepOutputBoundary(request), *_current_capabilities(), ToolAdmissionCapability()]
+        capabilities = [_StepOutputBoundary(request), *get_scope().capabilities, ToolAdmissionCapability()]
 
         if isinstance(self.agent, AsyncExecutionAgent):
             return await self.agent.run(
@@ -423,10 +417,7 @@ class AgentStepExecutor:
             step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
 
         context_request = build_context_request(request, self.configuration)
-        context_builder = _context_builder_var.get()
-        if context_builder is None:
-            context_builder = DefaultContextBuilder()
-        user_prompt = build_context_content(context_request, context_builder)
+        user_prompt = build_context_content(context_request, get_scope().context_builder)
 
         visible_tool_list = get_visible_tools()
         toolset = ToolResultWrapperToolset(FunctionToolset(visible_tool_list))
@@ -462,7 +453,7 @@ class AgentStepExecutor:
         if isinstance(result, AgentRunResult):
             step_context.model_result = result
         if hasattr(result, "usage"):
-            get_usage_meter().record(result.usage)
+            get_scope().usage_meter.record(result.usage)
 
         if isinstance(result.output, StepCandidate):
             return result.output

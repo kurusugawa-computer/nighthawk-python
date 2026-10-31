@@ -340,7 +340,7 @@ def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStag
     host_exceptions: list[NaturalExecutionError] = []
 
     def record_early_failure() -> None:
-        reference = nh.get_execution_reference()
+        reference = nh.get_scope().execution_reference
         assert reference.step_execution_id is not None
         event = StepFailed(execution_reference=reference, failure_stage=boundary, original_exception=original_cause)
         ledger.execution_id_to_event[reference.step_execution_id] = event
@@ -350,7 +350,7 @@ def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStag
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            assert request.step_context.execution_reference == nh.get_execution_reference()
+            assert request.step_context.execution_reference == nh.get_scope().execution_reference
             if boundary == "executor":
                 record_early_failure()
             return StepCandidate(outcome=Pass(), binding_name_to_value={})

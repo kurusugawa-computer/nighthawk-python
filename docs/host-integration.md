@@ -97,14 +97,14 @@ executor = AllowedModels(
 with nh.run(executor):
     work()
     asyncio.run(child())
-    assert nh.get_step_executor() is executor
+    assert nh.get_scope().step_executor is executor
     work()
     try:
         with nh.scope(execution_model="unapproved:model"):
             raise AssertionError("Unapproved model should have been refused")
     except PermissionError:
         pass
-    assert nh.get_step_executor() is executor
+    assert nh.get_scope().step_executor is executor
 
 assert requested_models == ["A", "B", "A"]
 print("models=A,B,A; unapproved_model_refused=True")
@@ -305,7 +305,7 @@ with nh.run(executor), nh.scope(capabilities=[budget]):
     else:
         raise AssertionError("Third request should have been refused")
     # The unfinished agent run never returned an aggregate to this meter.
-    assert nh.get_usage_meter().total_tokens == 0
+    assert nh.get_scope().usage_meter.total_tokens == 0
 
 assert request_count == 2
 assert budget.observed_tokens == 120

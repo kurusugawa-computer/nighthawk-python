@@ -45,7 +45,7 @@ def test_resolved_executor_value_is_never_evaluated_as_python(asynchronous: bool
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             requests.append(request)
-            assert request.execution_reference == nh.get_execution_reference()
+            assert request.execution_reference == nh.get_scope().execution_reference
             assert request.step_context is nh.get_step_context()
             assert request.output_binding_names == ("value",)
             assert request.binding_name_to_type == {"value": int}

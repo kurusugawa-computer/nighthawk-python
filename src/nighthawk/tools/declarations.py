@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
-from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,15 +24,10 @@ _builtin_tools_registered = False
 
 
 @dataclass(frozen=True)
-class _ToolDeclaration:
+class ToolDeclaration:
     tool: Tool[StepContext]
     origin: ToolEntry
 
-
-scoped_tools_var: ContextVar[tuple[_ToolDeclaration, ...]] = ContextVar(
-    "nighthawk_scoped_tools",
-    default=(),
-)
 
 _VALID_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -77,9 +71,9 @@ def _normalize_tool_entry(entry: ToolEntry) -> Tool[StepContext]:
 
 
 def resolve_scoped_tools(
-    current: tuple[_ToolDeclaration, ...],
+    current: tuple[ToolDeclaration, ...],
     entries: Sequence[ToolEntry],
-) -> tuple[_ToolDeclaration, ...]:
+) -> tuple[ToolDeclaration, ...]:
     """Append novel declarations, retaining the first normalized tool and order."""
     ensure_builtin_tools_registered()
     resolved = list(current)
@@ -94,16 +88,15 @@ def resolve_scoped_tools(
             if entry is previous.origin or entry is previous.tool:
                 continue
             raise ToolNameConflictError(f"Tool name conflict: {tool.name!r}")
-        declaration = _ToolDeclaration(tool, entry)
+        declaration = ToolDeclaration(tool, entry)
         name_to_declaration[tool.name] = declaration
         resolved.append(declaration)
     return tuple(resolved)
 
 
-def get_scoped_tools() -> tuple[Tool[StepContext], ...]:
-    return tuple(declaration.tool for declaration in scoped_tools_var.get())
-
-
 def get_visible_tools() -> list[Tool[StepContext]]:
+    from ..runtime.scoping import optional_scope
+
     ensure_builtin_tools_registered()
-    return [*_builtin_tool_name_to_tool.values(), *get_scoped_tools()]
+    active_scope = optional_scope()
+    return [*_builtin_tool_name_to_tool.values(), *(active_scope.tools if active_scope is not None else ())]

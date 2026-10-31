@@ -63,8 +63,8 @@ def test_sync_step_execution_sets_execution_reference_step_execution_id() -> Non
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_outcome_kinds
-            observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
-            assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
+            observed_step_execution_ids.append(nh.get_scope().execution_reference.step_execution_id)
+            assert nh.get_scope().execution_reference.step_execution_id == step_context.execution_reference.step_execution_id
             return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 11})
 
     with nh.run(StepIdAssertingExecutor()):
@@ -79,9 +79,9 @@ def test_sync_step_execution_sets_execution_reference_step_execution_id() -> Non
             _ = x
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        assert nh.get_execution_reference().step_execution_id is None
+        assert nh.get_scope().execution_reference.step_execution_id is None
         assert f(10) == 11
-        assert nh.get_execution_reference().step_execution_id is None
+        assert nh.get_scope().execution_reference.step_execution_id is None
 
     assert observed_step_execution_ids and observed_step_execution_ids[0] is not None
 
@@ -195,8 +195,8 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
             _ = processed_natural_program
             _ = binding_names
             _ = allowed_outcome_kinds
-            observed_step_execution_ids.append(nh.get_execution_reference().step_execution_id)
-            assert nh.get_execution_reference().step_execution_id == step_context.execution_reference.step_execution_id
+            observed_step_execution_ids.append(nh.get_scope().execution_reference.step_execution_id)
+            assert nh.get_scope().execution_reference.step_execution_id == step_context.execution_reference.step_execution_id
             return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 13})
 
     with nh.run(AsyncStepIdAssertingExecutor()):
@@ -209,9 +209,9 @@ def test_async_step_execution_sets_execution_reference_step_execution_id() -> No
             """
             return result  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
 
-        assert nh.get_execution_reference().step_execution_id is None
+        assert nh.get_scope().execution_reference.step_execution_id is None
         assert asyncio.run(f()) == 13
-        assert nh.get_execution_reference().step_execution_id is None
+        assert nh.get_scope().execution_reference.step_execution_id is None
 
     assert observed_step_execution_ids and observed_step_execution_ids[0] is not None
 

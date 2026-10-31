@@ -112,7 +112,7 @@ def test_decision_uses_typed_answer_full_inputs_and_per_step_details(decision_ba
     with nh.run(decision_model=model), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=finished.append)):
         assert (asyncio.run(supported_async(evidence)) if asynchronous else supported(evidence)) is True
         assert supported("second") is True
-        assert nh.get_usage_meter().total_tokens == 24
+        assert nh.get_scope().usage_meter.total_tokens == 24
     assert len(finished) == 2
     assert finished[0].execution_reference.step_execution_id != finished[1].execution_reference.step_execution_id
     assert all(record.block_kind == "decide" for record in finished)
@@ -200,14 +200,14 @@ def test_models_inherit_independently_and_decision_settings_apply(decision_backe
     model, transport = decision_backend
     configuration = nh.StepExecutorConfiguration(decision_model=model, decision_model_settings={"decision_boolean_threshold": 0.9})
     with nh.run(step_executor_configuration=configuration):
-        parent = nh.get_step_executor()
+        parent = nh.get_scope().step_executor
         assert supported("evidence") is False
         with nh.scope(execution_model=FunctionModel(lambda messages, information: ModelResponse(parts=[]))):
             assert supported("evidence") is False
-        assert nh.get_step_executor() is parent
+        assert nh.get_scope().step_executor is parent
         with nh.scope(decision_model=None), pytest.raises(nh.ExecutionError, match="decision_model"):
             supported("evidence")
-        assert nh.get_step_executor() is parent
+        assert nh.get_scope().step_executor is parent
     assert len(transport.requests) == 2
 
 
@@ -231,17 +231,19 @@ def test_borrowed_execution_agent_keeps_ownership_across_decision_model_selectio
     with nh.run(executor):
         act()
         assert supported("first evidence") is True
-        with nh.scope(decision_model=None) as selected:
+        with nh.scope(decision_model=None) as selected_scope:
+            selected = selected_scope.step_executor
             assert isinstance(selected, nh.AgentStepExecutor)
             assert selected.agent is agent
             act()
             with pytest.raises(nh.ExecutionError, match="decision_model"):
                 supported("unconfigured decision")
-            with nh.scope(decision_model=decision_model) as restored:
+            with nh.scope(decision_model=decision_model) as restored_scope:
+                restored = restored_scope.step_executor
                 assert isinstance(restored, nh.AgentStepExecutor)
                 assert restored.agent is agent
                 assert supported("second evidence") is True
-        assert nh.get_step_executor() is executor
+        assert nh.get_scope().step_executor is executor
     assert executions == ["execute", "execute"]
     assert len(transport.requests) == 2
 
@@ -413,20 +415,20 @@ def test_concurrent_decision_scopes_and_nested_runs_restore_selection(decision_b
 
     async def execute():
         with nh.run(decision_model=model):
-            parent = nh.get_step_executor()
+            parent = nh.get_scope().step_executor
 
             async def child(threshold: float):
                 configuration = nh.StepExecutorConfiguration(decision_model=model, decision_model_settings={"decision_boolean_threshold": threshold})
                 with nh.scope(step_executor_configuration=configuration):
                     await asyncio.sleep(0)
                     result = await supported_async("evidence")
-                assert nh.get_step_executor() is parent
+                assert nh.get_scope().step_executor is parent
                 return result
 
             assert await asyncio.gather(child(0.5), child(0.9)) == [True, False]
             with nh.run(), pytest.raises(nh.ExecutionError, match="decision_model"):
                 await supported_async("evidence")
-            assert nh.get_step_executor() is parent
+            assert nh.get_scope().step_executor is parent
             assert await supported_async("evidence")
 
     asyncio.run(execute())
@@ -466,7 +468,7 @@ def test_cancelled_decision_is_interrupted_without_assignment(decision_backend) 
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            assert nh.get_usage_meter().total_tokens == 0
+            assert nh.get_scope().usage_meter.total_tokens == 0
 
     asyncio.run(execute())
     assert len(finished) == 1 and isinstance(finished[0], nh.lifecycle.StepInterrupted)

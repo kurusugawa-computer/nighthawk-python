@@ -4,7 +4,7 @@ import pytest
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
-from nighthawk.runtime.scoping import UsageMeter, get_usage_meter
+from nighthawk.runtime.scoping import UsageMeter, get_scope
 from tests.support.executors import StubExecutor
 
 
@@ -39,32 +39,32 @@ class TestUsageMeterRecord:
 class TestUsageMeterContextVariable:
     def test_requires_active_run(self) -> None:
         with pytest.raises(nh.NighthawkError):
-            get_usage_meter()
+            get_scope()
 
     def test_returns_meter_inside_run(self) -> None:
         with nh.run(StubExecutor()):
-            meter = get_usage_meter()
+            meter = get_scope().usage_meter
             assert isinstance(meter, UsageMeter)
 
     def test_meter_is_reset_after_run_exits(self) -> None:
         with nh.run(StubExecutor()):
-            assert get_usage_meter() is not None
+            assert get_scope().usage_meter is not None
         with pytest.raises(nh.NighthawkError):
-            get_usage_meter()
+            get_scope()
 
     def test_nested_runs_have_independent_meters(self) -> None:
         with nh.run(StubExecutor()):
-            outer_meter = get_usage_meter()
+            outer_meter = get_scope().usage_meter
             assert outer_meter is not None
             outer_meter.record(RunUsage(input_tokens=100, output_tokens=50))
 
             with nh.run(StubExecutor()):
-                inner_meter = get_usage_meter()
+                inner_meter = get_scope().usage_meter
                 assert inner_meter is not None
                 assert inner_meter is not outer_meter
                 assert inner_meter.total_tokens == 0
 
-            assert get_usage_meter() is outer_meter
+            assert get_scope().usage_meter is outer_meter
             assert outer_meter.total_tokens == 150
 
 
@@ -81,23 +81,23 @@ class TestHostInstalledUsageMeter:
     def test_run_accepts_usage_meter(self) -> None:
         meter = UsageMeter()
         with nh.run(StubExecutor(), usage_meter=meter):
-            assert get_usage_meter() is meter
+            assert get_scope().usage_meter is meter
         with pytest.raises(nh.NighthawkError):
-            get_usage_meter()
+            get_scope()
 
     def test_scope_replaces_meter_and_restores_parent(self) -> None:
         scoped_meter = UsageMeter()
         with nh.run(StubExecutor()):
-            run_meter = get_usage_meter()
+            run_meter = get_scope().usage_meter
             with nh.scope(usage_meter=scoped_meter):
-                assert get_usage_meter() is scoped_meter
-            assert get_usage_meter() is run_meter
+                assert get_scope().usage_meter is scoped_meter
+            assert get_scope().usage_meter is run_meter
 
     def test_scope_without_usage_meter_inherits(self) -> None:
         with nh.run(StubExecutor()):
-            run_meter = get_usage_meter()
+            run_meter = get_scope().usage_meter
             with nh.scope():
-                assert get_usage_meter() is run_meter
+                assert get_scope().usage_meter is run_meter
 
     def test_step_records_into_scoped_meter_only(self) -> None:
         scoped_meter = UsageMeter()
@@ -110,7 +110,7 @@ class TestHostInstalledUsageMeter:
             """
 
         with nh.run(step_executor):
-            run_meter = get_usage_meter()
+            run_meter = get_scope().usage_meter
             assert run_meter is not None
             with nh.scope(usage_meter=scoped_meter):
                 natural_pass_function()

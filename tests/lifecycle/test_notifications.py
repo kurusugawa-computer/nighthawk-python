@@ -22,7 +22,7 @@ def test_async_notifications_are_awaited_in_order(asynchronous: bool) -> None:
     identities: list[nh.ExecutionReference] = []
 
     async def started(event: StepStarted) -> None:
-        assert nh.get_execution_reference() == event.execution_reference
+        assert nh.get_scope().execution_reference == event.execution_reference
         identities.append(event.execution_reference)
         events.append("starting")
         await asyncio.sleep(0)
@@ -30,7 +30,7 @@ def test_async_notifications_are_awaited_in_order(asynchronous: bool) -> None:
 
     async def finished(event: StepFinished) -> None:
         assert isinstance(event, StepCompleted)
-        assert nh.get_execution_reference() == event.execution_reference
+        assert nh.get_scope().execution_reference == event.execution_reference
         identities.append(event.execution_reference)
         assert event.assigned_binding_name_to_value == {"value": 7}
         await asyncio.sleep(0)

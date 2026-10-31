@@ -33,9 +33,7 @@ from .scoping import (
     SCOPE_ID,
     SOURCE_LOCATION,
     STEP_EXECUTION_ID,
-    get_execution_reference,
-    get_lifecycle,
-    get_oversight,
+    get_scope,
     span,
     step_execution_reference_scope,
 )
@@ -109,7 +107,7 @@ class Runner:
     @contextmanager
     def _execution_scope(self, source_location: str) -> Generator[tuple[ExecutionReference, Span, StepLifecycle | None]]:
         with step_execution_reference_scope(source_location=source_location) as execution_reference:
-            lifecycle = get_lifecycle()
+            lifecycle = get_scope().lifecycle
             with (
                 span(
                     "nighthawk.step",
@@ -340,10 +338,10 @@ class Runner:
         bindings: dict[str, object],
         return_annotation: object,
     ) -> tuple[StepOutcome, dict[str, object]]:
-        oversight = get_oversight()
+        oversight = get_scope().oversight
         if oversight is None or oversight.inspect_step_commit is None:
             return outcome, bindings
-        execution_reference = get_execution_reference()
+        execution_reference = get_scope().execution_reference
         step_commit = StepCommit(
             execution_reference=execution_reference,
             processed_natural_program=preparation.processed_program,

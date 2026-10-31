@@ -122,7 +122,7 @@ async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callab
         assert request.step_context.environment.resolve("result") == 0
         assert request.step_context.environment.resolve("shared_policy") == "explicit policy"
         assert request.step_context.environment.describe("shared_policy")["origin"] == "task"
-        assert nh.get_lifecycle() is not None
+        assert nh.get_scope().lifecycle is not None
         return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 99})
 
     with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(events.append), task_references={"shared_policy": "explicit policy"}):

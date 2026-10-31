@@ -6,7 +6,7 @@ from inspect import isawaitable
 
 from .async_bridge import run_coroutine_synchronously
 from .runner import Runner
-from .scoping import get_step_executor
+from .scoping import get_scope
 from .step_definition import StepDefinition
 from .step_outcome import StepOutcome
 
@@ -43,7 +43,7 @@ def execute_step(
     Return, Break, and Continue are values for the host to dispatch; a final Raise propagates its exception after notification.
     Synchronous executor and writer bodies run on the caller thread; awaitables use the usual synchronous bridge.
     """
-    runner = Runner(get_step_executor(), block_kind=definition.block_kind)
+    runner = Runner(get_scope().step_executor, block_kind=definition.block_kind)
     with runner.execution(source_location=definition.source_location):
         if not isinstance(name_to_value, Mapping):
             raise TypeError("name_to_value must be an explicit mapping")
@@ -81,7 +81,7 @@ async def execute_step_async(
     Cancellation propagates through the writer and its cleanup before terminal notification.
     Host writers own any effects performed before raising or before cancellation.
     """
-    runner = Runner(get_step_executor(), block_kind=definition.block_kind)
+    runner = Runner(get_scope().step_executor, block_kind=definition.block_kind)
     async with runner.execution_async(source_location=definition.source_location):
         if not isinstance(name_to_value, Mapping):
             raise TypeError("name_to_value must be an explicit mapping")

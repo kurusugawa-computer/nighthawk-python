@@ -202,7 +202,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         ),
     ):
         assert (asyncio.run(workflow_async()) if asynchronous else workflow()) == 42
-        assert nh.get_usage_meter().total_tokens > 0
+        assert nh.get_scope().usage_meter.total_tokens > 0
     assert invoked == ["eval", "custom", "eval", "custom"]
     assert tool_calls == ["evaluation", "custom_tool", "assignment"] * 2 + ["return"]
     assert len(commits) == 2
@@ -298,12 +298,12 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
             with nh.run(parent):
                 assert await workflow() == 7
                 with nh.scope(step_executor_configuration=configurations[1]):
-                    child = nh.get_step_executor()
+                    child = nh.get_scope().step_executor
                     assert isinstance(child, nh.AgentStepExecutor)
                     assert child.configuration.execution_model is selected_models[1]
                     assert child.agent is not None and child.agent.model is selected_models[1]  # type: ignore[attr-defined]
                     assert await workflow() == 7
-                assert nh.get_step_executor() is parent
+                assert nh.get_scope().step_executor is parent
                 assert not closed
                 for exception in (RuntimeError, nh.oversight.StepAbortedError):
                     with (
@@ -317,7 +317,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                     if exception is not RuntimeError:
                         assert isinstance(caught.value, nh.oversight.StepAbortedError)
                         assert caught.value.subject == "step_commit"
-                    assert nh.get_step_executor() is parent
+                    assert nh.get_scope().step_executor is parent
                 derived = configurations[0].model_copy(update={"prompts": nh.StepPromptTemplates(system_prompt_template="Replacement system prompt")})
                 with nh.scope(step_executor_configuration=derived):
                     assert derived.execution_model is selected_models[0]
@@ -330,7 +330,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                 with nh.run(executor):
                     await asyncio.sleep(0)
                     result = await workflow()
-                    assert nh.get_step_executor() is executor
+                    assert nh.get_scope().step_executor is executor
                     return result
 
             assert await asyncio.gather(*(independent(configuration) for configuration in configurations)) == [7, 7]

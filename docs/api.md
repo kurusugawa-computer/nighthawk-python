@@ -23,16 +23,9 @@
         - get_function_call
         - run
         - scope
+        - Scope
+        - get_scope
         - ExecutionReference
-        - get_capabilities
-        - get_usage_meter
-        - get_execution_reference
-        - get_oversight
-        - get_lifecycle
-        - get_step_executor
-        - get_system_prompt_suffix_fragments
-        - get_tools
-        - get_user_prompt_suffix_fragments
         - UsageMeter
 
 ## Errors

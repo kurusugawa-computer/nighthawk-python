@@ -73,7 +73,7 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
             if request.processed_natural_program == "parent":
                 context.record_assignment("parent_temporary", "PARENT_TEMPORARY_MARKER")
                 with nh.scope(task_references=select_shared_references(environment)):
-                    assert nh.get_execution_reference().step_execution_id == context.execution_reference.step_execution_id
+                    assert nh.get_scope().execution_reference.step_execution_id == context.execution_reference.step_execution_id
                     if asynchronous_child:
                         await asynchronous_child_function(shared)
                     else:

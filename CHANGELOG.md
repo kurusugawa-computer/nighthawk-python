@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
+- Breaking: `nh.get_scope()` returns the active frozen `nh.Scope`, whose fields mirror the `nh.scope()` parameters plus the current `execution_reference`. `nh.run()` and `nh.scope()` yield that record. It replaces `get_step_executor`, `get_execution_reference`, `get_usage_meter`, `get_oversight`, `get_lifecycle`, `get_tools`, `get_capabilities`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`, and also exposes `task_references` and `context_builder`.
 - Breaking: `nighthawk.testing` uses the executor protocol's own values. `ScriptedExecutor` and `CallbackExecutor` return `StepCandidate` values and record each live `StepRequest` in `requests`; a callback receives the `StepRequest`. `StepCandidate.outcome` defaults to `Pass()`. `StepResponse`, `StepCall`, and the `pass_response`, `return_response`, `raise_response`, `break_response`, and `continue_response` factories are removed; construct `StepCandidate(outcome=Return(value))` and the other outcomes from `nighthawk.runtime`.
 
 ## [0.18.0]

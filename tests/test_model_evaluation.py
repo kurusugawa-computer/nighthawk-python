@@ -39,7 +39,7 @@ from nighthawk.testing import CallbackExecutor
 @pytest.fixture(autouse=True)
 def local_executor(monkeypatch):
     def respond(request):
-        nh.get_usage_meter().record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
+        nh.get_scope().usage_meter.record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
         request.input_binding_name_to_value["items"].append(9)
         return StepCandidate(binding_name_to_value={"result": None})
     monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", lambda self, selection: CallbackExecutor(respond))
@@ -170,7 +170,7 @@ import nighthawk as nh
 from pydantic_ai.usage import RunUsage
 
 async def test_interrupt(model_evaluation):
-    nh.get_usage_meter().record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
+    nh.get_scope().usage_meter.record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
     model_evaluation.name_to_observation["retained_effect"] = True
     raise {interruption}()
 

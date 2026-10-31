@@ -130,7 +130,7 @@ def test_agent_backend_commits_only_on_assignment() -> None:
     with nh.run(nh.AgentStepExecutor.from_agent(agent=FakeAgent())):
         from nighthawk.runtime.runner import Runner
 
-        runner = Runner(nh.get_step_executor())
+        runner = Runner(nh.get_scope().step_executor)
         import inspect
 
         frame = inspect.currentframe()

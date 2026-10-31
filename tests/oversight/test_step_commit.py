@@ -16,7 +16,7 @@ from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.model_outcome import ModelRaise
-from nighthawk.runtime.scoping import get_oversight
+from nighthawk.runtime.scoping import get_scope
 from tests.support.executors import StubExecutor
 
 
@@ -32,18 +32,18 @@ def test_scope_oversight_inherits_and_can_clear() -> None:
     oversight = nh.oversight.Oversight()
 
     with nh.run(StubExecutor()):
-        assert get_oversight() is None
+        assert get_scope().oversight is None
 
         with nh.scope(oversight=oversight):
-            assert get_oversight() is oversight
+            assert get_scope().oversight is oversight
 
             with nh.scope():
-                assert get_oversight() is oversight
+                assert get_scope().oversight is oversight
 
             with nh.scope(oversight=None):
-                assert get_oversight() is None
+                assert get_scope().oversight is None
 
-            assert get_oversight() is oversight
+            assert get_scope().oversight is oversight
 
 
 def test_step_commit_reject_records_failed_step_trace(step_span_exporter: InMemorySpanExporter) -> None:

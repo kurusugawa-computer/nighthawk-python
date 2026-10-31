@@ -6,7 +6,8 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import copy
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from opentelemetry.trace import Span, get_tracer_provider
@@ -17,7 +18,7 @@ from pydantic_ai.usage import RunUsage
 from ..composition import UNSET, Extend, Merge, UnsetType
 from ..configuration import ModelSelection, StepExecutorConfiguration, _model_selection
 from ..errors import NameConflictError, NighthawkError
-from ..tools.declarations import ToolEntry, get_scoped_tools, resolve_scoped_tools, scoped_tools_var
+from ..tools.declarations import ToolDeclaration, ToolEntry, resolve_scoped_tools
 from ..ulid import generate_ulid
 from .execution_reference import ExecutionReference
 
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
 class UsageMeter:
     """Accumulates LLM token usage across all steps in a run.
 
-    Thread-safe. Created automatically by :func:`run` and accessible via :func:`get_usage_meter`.
+    Thread-safe. Created by :func:`run` and available as ``get_scope().usage_meter``.
     """
 
     def __init__(self) -> None:
@@ -81,229 +82,92 @@ def span(span_name: str, /, **attributes: Any) -> Generator[Span]:
         yield current_span
 
 
-_step_executor_var: ContextVar[StepExecutor | None] = ContextVar(
-    "nighthawk_step_executor",
-    default=None,
-)
+@dataclass(frozen=True, kw_only=True)
+class Scope:
+    """The run and scope configuration observed by Natural blocks started here.
 
-_execution_reference_var: ContextVar[ExecutionReference | None] = ContextVar(
-    "nighthawk_execution_reference",
-    default=None,
-)
+    ``run`` creates one and ``scope`` derives another; both yield it, and ``get_scope`` returns the active one.
+    Inside a step, ``execution_reference`` carries the step identity.
+    Collections are shallow snapshots; contained objects retain identity.
+    """
 
-_usage_meter_var: ContextVar[UsageMeter | None] = ContextVar(
-    "nighthawk_usage_meter",
-    default=None,
-)
+    execution_reference: ExecutionReference
+    step_executor: StepExecutor
+    usage_meter: UsageMeter
+    oversight: Oversight | None = None
+    lifecycle: StepLifecycle | None = None
+    context_builder: ContextBuilder
+    system_prompt_suffix_fragments: tuple[str, ...] = ()
+    user_prompt_suffix_fragments: tuple[str, ...] = ()
+    task_references: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    capabilities: tuple[AbstractCapability[StepContext], ...] = ()
+    _tool_declarations: tuple[ToolDeclaration, ...] = field(default=(), repr=False)
 
-
-_lifecycle_var: ContextVar[StepLifecycle | None] = ContextVar("nighthawk_lifecycle", default=None)
-
-
-_oversight_var: ContextVar[Oversight | None] = ContextVar(
-    "nighthawk_oversight",
-    default=None,
-)
-
-
-_system_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
-    "nighthawk_system_prompt_suffix_fragments",
-    default=(),
-)
-
-_user_prompt_suffix_fragments_var: ContextVar[tuple[str, ...]] = ContextVar(
-    "nighthawk_user_prompt_suffix_fragments",
-    default=(),
-)
-
-_context_builder_var: ContextVar[ContextBuilder | None] = ContextVar("nighthawk_context_builder", default=None)
+    @property
+    def tools(self) -> tuple[Tool[StepContext], ...]:
+        """Tools declared through ``scope(tools=...)``, excluding built-in tools."""
+        return tuple(declaration.tool for declaration in self._tool_declarations)
 
 
-_task_name_to_value_var: ContextVar[dict[str, object]] = ContextVar(
-    "nighthawk_task_name_to_value",
-    default={},  # noqa: B039
-)
-
-_capabilities_var: ContextVar[tuple[AbstractCapability[StepContext], ...]] = ContextVar(
-    "nighthawk_capabilities",
-    default=(),
-)
+_scope_var: ContextVar[Scope | None] = ContextVar("nighthawk_scope", default=None)
 
 
-def _merge_task_name_to_value_with_conflict_check(
-    current_task_name_to_value: dict[str, object],
-    scope_task_name_to_value: Mapping[str, object],
-) -> dict[str, object]:
-    merged_task_name_to_value = dict(current_task_name_to_value)
-    for task_reference_name, scope_task_reference_value in scope_task_name_to_value.items():
-        if task_reference_name in merged_task_name_to_value:
-            current_task_reference_value = merged_task_name_to_value[task_reference_name]
-            if current_task_reference_value is not scope_task_reference_value:
-                current_task_reference_type_name = type(current_task_reference_value).__name__
-                scope_task_reference_type_name = type(scope_task_reference_value).__name__
-                raise NameConflictError(
-                    f"Conflict for task reference {task_reference_name!r}: "
-                    f"current scope has {current_task_reference_type_name}, "
-                    f"new scope has {scope_task_reference_type_name}"
-                )
-
-        merged_task_name_to_value[task_reference_name] = scope_task_reference_value
-
-    return merged_task_name_to_value
-
-
-def _require_active_run(function_name: str) -> None:
-    if _step_executor_var.get() is None:
-        raise NighthawkError(f"{function_name} requires an active nighthawk.run() context")
-
-
-def get_step_executor() -> StepExecutor:
-    """Return the active step executor.
+def get_scope() -> Scope:
+    """Return the active scope.
 
     Raises:
-        NighthawkError: If no step executor is set (i.e. called outside a run context).
+        NighthawkError: If called outside ``nighthawk.run()``.
     """
-    step_executor = _step_executor_var.get()
-    if step_executor is None:
-        raise NighthawkError("StepExecutor is not set")
-    return step_executor
+    active_scope = _scope_var.get()
+    if active_scope is None:
+        raise NighthawkError("get_scope requires an active nighthawk.run() context")
+    return active_scope
 
 
-def get_execution_reference() -> ExecutionReference:
-    """Return the active execution identity.
-
-    Raises:
-        NighthawkError: If no execution identity is set (i.e. called outside a run context).
-    """
-    execution_reference = _execution_reference_var.get()
-    if execution_reference is None:
-        raise NighthawkError("ExecutionReference is not set")
-    return execution_reference
+def optional_scope() -> Scope | None:
+    return _scope_var.get()
 
 
-def _optional_usage_meter() -> UsageMeter | None:
-    return _usage_meter_var.get()
-
-
-def get_usage_meter() -> UsageMeter:
-    """Return the active usage meter; require an active run."""
-    _require_active_run("get_usage_meter")
-    meter = _usage_meter_var.get()
-    assert meter is not None
-    return meter
-
-
-def get_oversight() -> Oversight | None:
-    """Return the oversight hooks active in the current scope, or ``None`` if none are installed."""
-    _require_active_run("get_oversight")
-    return _oversight_var.get()
-
-
-def get_lifecycle() -> StepLifecycle | None:
-    """Return the current terminal delivery configuration; require an active run."""
-    _require_active_run("get_lifecycle")
-    return _lifecycle_var.get()
+@contextmanager
+def _derived_scope(**changes: Any) -> Generator[Scope]:
+    derived = replace(get_scope(), **changes)
+    token = _scope_var.set(derived)
+    try:
+        yield derived
+    finally:
+        _scope_var.reset(token)
 
 
 @contextmanager
 def step_execution_reference_scope(*, source_location: str) -> Generator[ExecutionReference]:
-    current_execution_reference = get_execution_reference()
+    current_execution_reference = get_scope().execution_reference
     step_execution_reference = replace(
         current_execution_reference,
         step_execution_id=generate_ulid(),
         source_location=source_location,
         parent_step_execution_id=current_execution_reference.step_execution_id,
     )
-    step_execution_reference_token = _execution_reference_var.set(step_execution_reference)
-    try:
+    with _derived_scope(execution_reference=step_execution_reference):
         yield step_execution_reference
-    finally:
-        _execution_reference_var.reset(step_execution_reference_token)
-
-
-def _current_system_prompt_suffix_fragments() -> tuple[str, ...]:
-    return _system_prompt_suffix_fragments_var.get()
-
-
-def _current_user_prompt_suffix_fragments() -> tuple[str, ...]:
-    return _user_prompt_suffix_fragments_var.get()
-
-
-def _current_task_references() -> Mapping[str, object]:
-    return dict(_task_name_to_value_var.get())
-
-
-def _current_capabilities() -> tuple[AbstractCapability[StepContext], ...]:
-    return _capabilities_var.get()
-
-
-def get_system_prompt_suffix_fragments() -> tuple[str, ...]:
-    """Return the system prompt suffix fragments active in the current scope.
-
-    Configuration-level baseline fragments from ``StepExecutorConfiguration``
-    are not included; only fragments accumulated via ``scope`` are returned.
-
-    Raises:
-        NighthawkError: If called outside a run context.
-    """
-    _require_active_run("get_system_prompt_suffix_fragments")
-    return _current_system_prompt_suffix_fragments()
-
-
-def get_user_prompt_suffix_fragments() -> tuple[str, ...]:
-    """Return the user prompt suffix fragments active in the current scope.
-
-    Configuration-level baseline fragments from ``StepExecutorConfiguration``
-    are not included; only fragments accumulated via ``scope`` are returned.
-
-    Raises:
-        NighthawkError: If called outside a run context.
-    """
-    _require_active_run("get_user_prompt_suffix_fragments")
-    return _current_user_prompt_suffix_fragments()
-
-
-def get_tools() -> tuple[Tool[StepContext], ...]:
-    """Return the tools declared for the current scope, excluding built-in tools.
-
-    Raises:
-        NighthawkError: If called outside a run context.
-    """
-    _require_active_run("get_tools")
-    return get_scoped_tools()
-
-
-def get_capabilities() -> tuple[AbstractCapability[StepContext], ...]:
-    """Return the Pydantic AI capabilities active in the current scope.
-
-    Capabilities are passed to ``Agent.run(capabilities=...)`` on every model
-    request made by an :class:`AgentStepExecutor` within the scope.
-
-    Raises:
-        NighthawkError: If called outside a run context.
-    """
-    _require_active_run("get_capabilities")
-    return _current_capabilities()
 
 
 @contextmanager
 def system_prompt_suffix_fragment_scope(fragment: str) -> Generator[None]:
-    current = _system_prompt_suffix_fragments_var.get()
-    token = _system_prompt_suffix_fragments_var.set((*current, fragment))
-    try:
+    with _derived_scope(system_prompt_suffix_fragments=(*get_scope().system_prompt_suffix_fragments, fragment)):
         yield
-    finally:
-        _system_prompt_suffix_fragments_var.reset(token)
 
 
-@contextmanager
-def user_prompt_suffix_fragment_scope(fragment: str) -> Generator[None]:
-    current = _user_prompt_suffix_fragments_var.get()
-    token = _user_prompt_suffix_fragments_var.set((*current, fragment))
-    try:
-        yield
-    finally:
-        _user_prompt_suffix_fragments_var.reset(token)
+def _merge_task_references(current: Mapping[str, object], supplied: Mapping[str, object]) -> Mapping[str, object]:
+    merged_task_name_to_value = dict(current)
+    for name, value in supplied.items():
+        if name in merged_task_name_to_value and merged_task_name_to_value[name] is not value:
+            raise NameConflictError(
+                f"Conflict for task reference {name!r}: "
+                f"current scope has {type(merged_task_name_to_value[name]).__name__}, "
+                f"new scope has {type(value).__name__}"
+            )
+        merged_task_name_to_value[name] = value
+    return MappingProxyType(merged_task_name_to_value)
 
 
 def _resolve_model_selection(step_executor: StepExecutor, selection: ModelSelection) -> StepExecutor:
@@ -333,28 +197,26 @@ def run(
     step_executor_configuration: StepExecutorConfiguration | UnsetType = UNSET,
     run_id: str | UnsetType = UNSET,
     usage_meter: UsageMeter | UnsetType = UNSET,
-) -> Generator[None]:
-    """Start a run with independent execution and decision model selections.
+) -> Generator[Scope]:
+    """Start a run whose fresh scope makes the step executor available to Natural blocks.
 
-    Establishes a run-scoped context that makes the step executor
-    available to all Natural blocks executed within this scope.
+    A run starts from default scope settings and a new execution identity; it does not inherit an enclosing scope.
 
     Args:
         step_executor: Optional custom executor; omission creates a managed AgentStepExecutor.
         execution_model: Model for execute blocks; omission leaves the executor selection unchanged.
         decision_model: Model for decide blocks; omission leaves the executor selection unchanged.
         step_executor_configuration: Full configuration replacement, exclusive with model selections.
-        run_id: Nonempty identifier for the run. Omission or UNSET generates
-            a fresh ULID. None and empty strings are invalid.
-        usage_meter: Optional meter that accumulates LLM usage for the run.
-            If not provided, a fresh :class:`UsageMeter` is created.
+        run_id: Nonempty identifier for the run; omission generates a fresh ULID.
+        usage_meter: Meter that accumulates LLM usage for the run; omission creates a fresh one.
 
     Yields:
-        None
+        The run's scope.
 
     Raises:
         TypeError: If the executor does not implement either execution protocol or the usage meter is invalid.
     """
+    from .context import DefaultContextBuilder
     from .step_executor import AgentStepExecutor
 
     if not isinstance(run_id, (str, UnsetType)):
@@ -369,45 +231,21 @@ def run(
     _validate_step_executor(step_executor)
     if selection is not None:
         step_executor = _resolve_model_selection(step_executor, selection)
-    execution_reference = ExecutionReference(
-        run_id=generate_ulid() if isinstance(run_id, UnsetType) else run_id,
-        scope_id=generate_ulid(),
-        step_execution_id=None,
-        source_location=None,
+    run_scope = Scope(
+        execution_reference=ExecutionReference(
+            run_id=generate_ulid() if isinstance(run_id, UnsetType) else run_id,
+            scope_id=generate_ulid(),
+        ),
+        step_executor=step_executor,
+        usage_meter=UsageMeter() if isinstance(usage_meter, UnsetType) else usage_meter,
+        context_builder=DefaultContextBuilder(),
     )
-    run_usage_meter = UsageMeter() if isinstance(usage_meter, UnsetType) else usage_meter
-
-    step_executor_token = _step_executor_var.set(step_executor)
-    execution_reference_token = _execution_reference_var.set(execution_reference)
-    lifecycle_token = _lifecycle_var.set(None)
-    oversight_token = _oversight_var.set(None)
-    system_fragments_token = _system_prompt_suffix_fragments_var.set(())
-    user_fragments_token = _user_prompt_suffix_fragments_var.set(())
-    context_builder_token = _context_builder_var.set(None)
-    task_name_to_value_token = _task_name_to_value_var.set({})
-    tools_token = scoped_tools_var.set(())
-    capabilities_token = _capabilities_var.set(())
-    usage_meter_token = _usage_meter_var.set(run_usage_meter)
+    token = _scope_var.set(run_scope)
     try:
-        with span(
-            "nighthawk.run",
-            **{
-                RUN_ID: execution_reference.run_id,
-            },
-        ):
-            yield
+        with span("nighthawk.run", **{RUN_ID: run_scope.execution_reference.run_id}):
+            yield run_scope
     finally:
-        _usage_meter_var.reset(usage_meter_token)
-        _capabilities_var.reset(capabilities_token)
-        scoped_tools_var.reset(tools_token)
-        _task_name_to_value_var.reset(task_name_to_value_token)
-        _context_builder_var.reset(context_builder_token)
-        _user_prompt_suffix_fragments_var.reset(user_fragments_token)
-        _system_prompt_suffix_fragments_var.reset(system_fragments_token)
-        _lifecycle_var.reset(lifecycle_token)
-        _oversight_var.reset(oversight_token)
-        _execution_reference_var.reset(execution_reference_token)
-        _step_executor_var.reset(step_executor_token)
+        _scope_var.reset(token)
 
 
 def _compose_sequence[T](current: tuple[T, ...], supplied: Sequence[T] | Extend[T] | UnsetType) -> tuple[T, ...]:
@@ -436,8 +274,8 @@ def scope(
     context_builder: ContextBuilder | UnsetType = UNSET,
     tools: Sequence[ToolEntry] | Extend[ToolEntry] | UnsetType = UNSET,
     capabilities: Sequence[AbstractCapability[StepContext]] | Extend[AbstractCapability[StepContext]] | UnsetType = UNSET,
-) -> Generator[StepExecutor]:
-    """Compose a nested execution scope and restore its parent on exit.
+) -> Generator[Scope]:
+    """Derive a nested scope from the active one and restore it on exit.
 
     Omission or UNSET inherits. Ordinary values replace; empty collections clear.
     Extend appends ordered entries; Merge combines task references by identity.
@@ -447,15 +285,17 @@ def scope(
     execution_model and decision_model replace their respective models; step_executor_configuration replaces all configuration
     fields. Supplying both is invalid. Selection preserves unrelated scoped controls.
     A new scope retains the active step identity and its source location.
+
+    Yields:
+        The derived scope.
     """
     from ..lifecycle import StepLifecycle
     from ..oversight import Oversight
     from .context import ContextBuilder
 
-    current_step_executor = get_step_executor()
+    current = get_scope()
     if not isinstance(context_builder, (UnsetType, ContextBuilder)):
         raise TypeError("context_builder must implement ContextBuilder or be UNSET")
-    current_execution_reference = get_execution_reference()
     if not isinstance(step_executor, UnsetType):
         _validate_step_executor(step_executor)
     if not isinstance(step_executor_configuration, (UnsetType, StepExecutorConfiguration)):
@@ -466,64 +306,54 @@ def scope(
         raise TypeError("oversight must be Oversight, None, or UNSET")
     if lifecycle is not None and not isinstance(lifecycle, (UnsetType, StepLifecycle)):
         raise TypeError("lifecycle must be StepLifecycle, None, or UNSET")
-    next_step_executor = current_step_executor if isinstance(step_executor, UnsetType) else step_executor
     selection = _model_selection(execution_model, decision_model, step_executor_configuration)
-    next_execution_reference = replace(current_execution_reference, scope_id=generate_ulid())
-    next_usage_meter = get_usage_meter() if isinstance(usage_meter, UnsetType) else usage_meter
-    next_oversight = _oversight_var.get() if isinstance(oversight, UnsetType) else oversight
-    next_system_prompt_suffix_fragments = _compose_sequence(_system_prompt_suffix_fragments_var.get(), system_prompt_suffix_fragments)
-    next_user_prompt_suffix_fragments = _compose_sequence(_user_prompt_suffix_fragments_var.get(), user_prompt_suffix_fragments)
+    next_system_prompt_suffix_fragments = _compose_sequence(current.system_prompt_suffix_fragments, system_prompt_suffix_fragments)
+    next_user_prompt_suffix_fragments = _compose_sequence(current.user_prompt_suffix_fragments, user_prompt_suffix_fragments)
     if any(not isinstance(fragment, str) for fragment in (*next_system_prompt_suffix_fragments, *next_user_prompt_suffix_fragments)):
         raise TypeError("Prompt fragments must be strings")
-    next_capabilities = _compose_sequence(_capabilities_var.get(), capabilities)
+    next_capabilities = _compose_sequence(current.capabilities, capabilities)
     if any(not isinstance(capability, AbstractCapability) for capability in next_capabilities):
         raise TypeError("Capabilities must be AbstractCapability instances")
-    next_task_name_to_value = _task_name_to_value_var.get()
+    next_task_references = current.task_references
     if isinstance(task_references, Merge):
-        next_task_name_to_value = _merge_task_name_to_value_with_conflict_check(next_task_name_to_value, task_references.name_to_value)
+        next_task_references = _merge_task_references(next_task_references, task_references.name_to_value)
     elif not isinstance(task_references, UnsetType):
         if not isinstance(task_references, Mapping) or any(not isinstance(name, str) for name in task_references):
             raise TypeError("task_references requires a string-keyed mapping, Merge, or UNSET")
-        next_task_name_to_value = dict(task_references)
-    next_tools = scoped_tools_var.get()
+        next_task_references = MappingProxyType(dict(task_references))
+    next_tool_declarations = current._tool_declarations
     if isinstance(tools, Extend):
-        next_tools = resolve_scoped_tools(next_tools, tools.values)
+        next_tool_declarations = resolve_scoped_tools(next_tool_declarations, tools.values)
     elif not isinstance(tools, UnsetType):
-        entries = _compose_sequence((), tools)
-        next_tools = resolve_scoped_tools((), entries)
+        next_tool_declarations = resolve_scoped_tools((), _compose_sequence((), tools))
 
+    next_step_executor = current.step_executor if isinstance(step_executor, UnsetType) else step_executor
     if selection is not None:
         next_step_executor = _resolve_model_selection(next_step_executor, selection)
 
-    step_executor_token = _step_executor_var.set(next_step_executor)
-    execution_reference_token = _execution_reference_var.set(next_execution_reference)
-    usage_meter_token = _usage_meter_var.set(next_usage_meter)
-    lifecycle_token = _lifecycle_var.set(_lifecycle_var.get() if isinstance(lifecycle, UnsetType) else lifecycle)
-    oversight_token = _oversight_var.set(next_oversight)
-    system_fragments_token = _system_prompt_suffix_fragments_var.set(next_system_prompt_suffix_fragments)
-    user_fragments_token = _user_prompt_suffix_fragments_var.set(next_user_prompt_suffix_fragments)
-    context_builder_token = _context_builder_var.set(_context_builder_var.get() if isinstance(context_builder, UnsetType) else context_builder)
-    task_name_to_value_token = _task_name_to_value_var.set(next_task_name_to_value)
-    tools_token = scoped_tools_var.set(next_tools)
-    capabilities_token = _capabilities_var.set(next_capabilities)
+    next_scope = replace(
+        current,
+        execution_reference=replace(current.execution_reference, scope_id=generate_ulid()),
+        step_executor=next_step_executor,
+        usage_meter=current.usage_meter if isinstance(usage_meter, UnsetType) else usage_meter,
+        oversight=current.oversight if isinstance(oversight, UnsetType) else oversight,
+        lifecycle=current.lifecycle if isinstance(lifecycle, UnsetType) else lifecycle,
+        context_builder=current.context_builder if isinstance(context_builder, UnsetType) else context_builder,
+        system_prompt_suffix_fragments=next_system_prompt_suffix_fragments,
+        user_prompt_suffix_fragments=next_user_prompt_suffix_fragments,
+        task_references=next_task_references,
+        capabilities=next_capabilities,
+        _tool_declarations=next_tool_declarations,
+    )
+    token = _scope_var.set(next_scope)
     try:
         with span(
             "nighthawk.scope",
             **{
-                RUN_ID: next_execution_reference.run_id,
-                SCOPE_ID: next_execution_reference.scope_id,
+                RUN_ID: next_scope.execution_reference.run_id,
+                SCOPE_ID: next_scope.execution_reference.scope_id,
             },
         ):
-            yield next_step_executor
+            yield next_scope
     finally:
-        _capabilities_var.reset(capabilities_token)
-        scoped_tools_var.reset(tools_token)
-        _task_name_to_value_var.reset(task_name_to_value_token)
-        _context_builder_var.reset(context_builder_token)
-        _user_prompt_suffix_fragments_var.reset(user_fragments_token)
-        _system_prompt_suffix_fragments_var.reset(system_fragments_token)
-        _lifecycle_var.reset(lifecycle_token)
-        _oversight_var.reset(oversight_token)
-        _usage_meter_var.reset(usage_meter_token)
-        _execution_reference_var.reset(execution_reference_token)
-        _step_executor_var.reset(step_executor_token)
+        _scope_var.reset(token)

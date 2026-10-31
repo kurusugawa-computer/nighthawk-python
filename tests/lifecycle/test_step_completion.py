@@ -4,6 +4,7 @@ import ast
 import asyncio
 import inspect
 import json
+from dataclasses import replace
 from typing import Annotated
 
 import pytest
@@ -26,7 +27,7 @@ def test_completion_runs_after_caller_assignments(asynchronous: bool) -> None:
     def finished(event: StepFinished) -> None:
         assert value == 7
         assert event.assigned_binding_name_to_value == {"value": 7}
-        assert nh.get_execution_reference() == event.execution_reference
+        assert nh.get_scope().execution_reference == event.execution_reference
         assert nh.get_step_context().execution_reference == event.execution_reference
         events.append(event)
 
@@ -48,7 +49,7 @@ def test_completion_runs_after_caller_assignments(asynchronous: bool) -> None:
 
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)):
         asyncio.run(asynchronous_function()) if asynchronous else synchronous()
-        assert nh.get_execution_reference().step_execution_id is None
+        assert nh.get_scope().execution_reference.step_execution_id is None
     assert len(events) == 1 and isinstance(events[0], StepCompleted)
 
 
@@ -99,7 +100,7 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
         assert request.expression == "calculate()"
         assert request.expected_type is int
         assert request.kind == "return"
-        assert request.execution_reference == nh.get_execution_reference()
+        assert request.execution_reference == nh.get_scope().execution_reference
         return nh.oversight.AbortStep("return forbidden")
 
     with (
@@ -177,7 +178,7 @@ def test_execution_identity_distinguishes_repeated_and_concurrent_calls() -> Non
             step_context = request.step_context
             identities.append(step_context.execution_reference)
             await asyncio.sleep(0)
-            assert nh.get_execution_reference() == step_context.execution_reference
+            assert nh.get_scope().execution_reference == step_context.execution_reference
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     @nh.function
@@ -235,7 +236,7 @@ def test_cancellation_preserves_interruption_and_delivers_once(delivery_fails: b
         assert event.original_exception is caught.value
         if delivery_fails:
             assert caught.value.__cause__ is delivery_exception
-        assert nh.get_execution_reference().step_execution_id is None
+        assert nh.get_scope().execution_reference.step_execution_id is None
 
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)):
         asyncio.run(execute())
@@ -306,16 +307,16 @@ def test_nested_calls_and_scope_configuration_restore() -> None:
     configuration = StepLifecycle(events.append)
     with nh.run(StubExecutor()), nh.scope(lifecycle=configuration):
         with nh.scope():
-            assert nh.get_lifecycle() is configuration
+            assert nh.get_scope().lifecycle is configuration
             outer()
         with nh.scope(lifecycle=None):
             inner()
         with nh.scope(lifecycle=StepLifecycle(other_events.append)):
             inner()
         with nh.run(StubExecutor()):
-            assert nh.get_lifecycle() is None
+            assert nh.get_scope().lifecycle is None
             inner()
-        assert nh.get_lifecycle() is configuration
+        assert nh.get_scope().lifecycle is configuration
     assert len(events) == 2 and len(other_events) == 1
     assert events[0].execution_reference != events[1].execution_reference
 
@@ -333,7 +334,7 @@ def test_partial_assignment_failure_reports_only_completed_writes() -> None:
         def execution(self, *, block_kind):
             frame = inspect.currentframe()
             assert frame is not None and frame.f_back is not None
-            return Runner(nh.get_step_executor(), block_kind=block_kind).execution(caller_frame=frame.f_back)
+            return Runner(nh.get_scope().step_executor, block_kind=block_kind).execution(caller_frame=frame.f_back)
 
     statements = build_runtime_call_and_assignments(
         ast.Constant("Assign."), (), ("first", "second"), ast.Dict(keys=[], values=[]), ast.Constant(None), is_in_loop=False, is_async_function=False
@@ -419,7 +420,7 @@ def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
             step_context = request.step_context
             assert threading.get_ident() != caller_thread
-            references.append(nh.get_execution_reference())
+            references.append(nh.get_scope().execution_reference)
             assert references[-1] == step_context.execution_reference
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
@@ -491,7 +492,8 @@ def test_lifecycle_is_captured_before_executor_work(monkeypatch: pytest.MonkeyPa
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            monkeypatch.setattr(runner, "get_lifecycle", lambda: StepLifecycle(redirected.append))
+            redirected_scope = replace(nh.get_scope(), lifecycle=StepLifecycle(redirected.append))
+            monkeypatch.setattr(runner, "get_scope", lambda: redirected_scope)
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
     @nh.function
@@ -564,7 +566,7 @@ def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
             step_context = request.step_context
-            if nh.get_lifecycle() is not configuration:
+            if nh.get_scope().lifecycle is not configuration:
                 # The host boundary must record bypass itself: delivery has been cleared.
                 bypass_references.append(step_context.execution_reference)
                 raise RuntimeError("mediation bypass")
@@ -582,9 +584,9 @@ def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() 
         assert caught.value.step_failed is not None
         assert caught.value.step_failed.execution_reference == bypass_references[0]
         assert events == []
-        assert nh.get_lifecycle() is configuration
+        assert nh.get_scope().lifecycle is configuration
         workflow()
     assert len(bypass_references) == len(events) == 1
     assert events[0].execution_reference != bypass_references[0]
     with pytest.raises(nh.NighthawkError):
-        nh.get_lifecycle()
+        nh.get_scope()

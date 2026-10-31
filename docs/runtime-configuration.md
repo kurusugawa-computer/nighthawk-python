@@ -79,7 +79,7 @@ Composition is selected by each supplied value:
 
 `oversight` and `lifecycle` accept `None`, which clears their hooks. The two model fields accept `None` to clear their selections. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Invalid argument shapes fail before model resolution; resolution errors leave the parent context intact.
 
-The context manager yields the resolved `StepExecutor` for the scope.
+The context manager yields the resulting `nh.Scope`, the same record `nh.get_scope()` returns inside its body.
 
 ## Scoped task references
 
@@ -319,12 +319,18 @@ System suffixes expand `$tool_result_max_tokens`; use `$$` for a literal dollar 
 
 ## Reading the active scope
 
-Use `nh.get_step_executor()`, `nh.get_lifecycle()`, or `nh.get_capabilities()` to inspect the selected configuration.
-Scope getters require an active run and raise `NighthawkError` outside it.
-`nh.get_step_context()` additionally requires an active step and exposes `environment.task_name_to_value` for task references.
+`nh.get_scope()` returns the active `nh.Scope`, a frozen record whose fields mirror the `nh.scope()` parameters, such as `step_executor`, `lifecycle`, `task_references`, `tools`, and `capabilities`.
+It requires an active run and raises `NighthawkError` outside it.
+Its prompt suffix fields hold scope fragments without configuration-level baselines, and `tools` excludes built-in tools.
+`nh.get_step_context()` additionally requires an active step.
 
-Prompt suffix getters return scope fragments without configuration-level baselines.
-See [API reference](api.md) for the accessor inventory and return types.
+```py
+with nh.run(step_executor) as run_scope:
+    with nh.scope(task_references={"search_repository": search_repository}) as child_scope:
+        assert nh.get_scope() is child_scope
+        assert child_scope.task_references["search_repository"] is search_repository
+    assert nh.get_scope() is run_scope
+```
 
 ## Record completed executions
 
@@ -486,7 +492,7 @@ See [Specification Section 8.2](specification.md#82-prompt-context) for the full
 Each `nh.run()` generates an `ExecutionReference` with a unique `run_id` (trace root) and `scope_id`. Nested `nh.scope()` calls generate new `scope_id` values while keeping the same `run_id`.
 
 ```py
-execution_reference = nh.get_execution_reference()
+execution_reference = nh.get_scope().execution_reference
 execution_reference.run_id  # trace root -- stable across nested scopes
 execution_reference.scope_id  # current scope -- changes with each nh.scope()
 execution_reference.step_execution_id  # Unique per block execution; None outside a step
@@ -509,12 +515,12 @@ Pass `nh.run(step_executor, usage_meter=meter)` to supply your own meter, and `n
 
 ```py
 with nh.run(step_executor):
-    meter = nh.get_usage_meter()
+    meter = nh.get_scope().usage_meter
     meter.total_tokens  # cumulative tokens
     meter.snapshot()  # independent RunUsage copy of current totals
 ```
 
-`get_usage_meter()` requires an active `nh.run()` context.
+`nh.get_scope()` requires an active `nh.run()` context.
 Use it for aggregate decisions between calls; [Patterns: Budget](patterns.md#budget) describes the function-level budget transformer.
 For admission between requests within an unfinished block, use [request usage and admission](host-integration.md#request-usage-and-admission).
 

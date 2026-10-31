@@ -133,10 +133,10 @@ def test_invalid_builder_leaves_scope_configuration_intact(invalid: object) -> N
     agent = RecordingAgent()
     parent = NamedBuilder("parent")
     with nh.run(nh.AgentStepExecutor.from_agent(agent=agent)), nh.scope(context_builder=parent):
-        reference = nh.get_execution_reference()
+        reference = nh.get_scope().execution_reference
         with pytest.raises(TypeError), nh.scope(context_builder=invalid):  # type: ignore[arg-type]
             pass
-        assert nh.get_execution_reference() is reference
+        assert nh.get_scope().execution_reference is reference
         asyncio.run(workflow(None))
     assert agent.prompts == ["parent"]
 

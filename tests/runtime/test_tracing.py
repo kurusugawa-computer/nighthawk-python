@@ -206,7 +206,7 @@ def test_step_span_records_failure_event_for_executor_exception(step_span_export
 
 def test_step_span_attributes_include_run_scope_and_step_identity(step_span_exporter: InMemorySpanExporter) -> None:
     with nh.run(StubExecutor(), run_id="trace-run"):
-        expected_scope_id = nh.get_execution_reference().scope_id
+        expected_scope_id = nh.get_scope().execution_reference.scope_id
 
         @nh.function
         def natural_value_function() -> int:

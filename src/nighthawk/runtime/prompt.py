@@ -24,8 +24,7 @@ from .scoping import (
     RUN_ID,
     SCOPE_ID,
     STEP_EXECUTION_ID,
-    _current_user_prompt_suffix_fragments,
-    get_execution_reference,
+    optional_scope,
 )
 from .step_context import _MISSING, StepContext, resolve_name_in_step_context
 
@@ -379,12 +378,10 @@ def _render_reference_and_value_list_section(
                 "nighthawk.prompt_context.dropped_multimodal": dropped_multimodal,
             }
             # Token truncation can drop explicit dotted multimodal leaves; section ordering and budgets remain authoritative.
-            try:
-                execution_reference = get_execution_reference()
-                log_attributes[RUN_ID] = execution_reference.run_id
-                log_attributes[SCOPE_ID] = execution_reference.scope_id
-            except Exception:
-                pass
+            active_scope = optional_scope()
+            if active_scope is not None:
+                log_attributes[RUN_ID] = active_scope.execution_reference.run_id
+                log_attributes[SCOPE_ID] = active_scope.execution_reference.scope_id
             logging.getLogger("nighthawk").info("prompt_context_truncated %s", log_attributes)
 
     return coalesce_user_content(content_part_list)
@@ -695,9 +692,10 @@ def _build_user_prompt_content(
 
 
 def append_user_prompt_suffixes(prompt_content: PromptContentTuple, *, configuration: StepExecutorConfiguration) -> PromptContentTuple:
+    active_scope = optional_scope()
     suffix_fragments = (
         *configuration.user_prompt_suffix_fragments,
-        *_current_user_prompt_suffix_fragments(),
+        *(active_scope.user_prompt_suffix_fragments if active_scope is not None else ()),
     )
     if suffix_fragments:
         content_part_list: list[UserContent] = list(prompt_content)

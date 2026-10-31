@@ -7,7 +7,7 @@ from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
-from nighthawk.runtime.scoping import get_usage_meter
+from nighthawk.runtime.scoping import get_scope
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,7 @@ def test_agent_executor_records_run_result_usage() -> None:
             """
 
         f()
-        usage_meter = get_usage_meter()
+        usage_meter = get_scope().usage_meter
         assert usage_meter is not None
         assert usage_meter.snapshot().total_tokens == 18
 
@@ -220,7 +220,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
             _ = user_prompt
             _ = kwargs
 
-            current_step_executor = nh.get_step_executor()
+            current_step_executor = nh.get_scope().step_executor
             assert isinstance(current_step_executor, nh.AgentStepExecutor)
             current_model_identifier = current_step_executor.configuration.execution_model
             assert isinstance(current_model_identifier, str)
@@ -268,7 +268,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
 
         with pytest.raises(nh.NighthawkError, match="external agent owns model selection"):
             f()
-        assert nh.get_step_executor() is step_executor
+        assert nh.get_scope().step_executor is step_executor
 
     assert recording_agent.seen_model_identifiers == [initial_model_identifier]
 

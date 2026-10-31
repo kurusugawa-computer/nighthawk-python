@@ -46,8 +46,9 @@ async def execute_operation_async(
     recoverable_admission_error: BaseException | None = None,
     blocked_by: OperationRejection | None = None,
 ) -> object:
-    from .scoping import _lifecycle_var, _oversight_var
+    from .scoping import optional_scope
 
+    active_scope = optional_scope()
     if _active_operation_context.get() is step_context:
         raise NighthawkError("A runtime operation cannot await another operation on its own step; use ordinary Python composition")
     async with step_context.operation_lock:
@@ -67,7 +68,7 @@ async def execute_operation_async(
                 else:
                     admit()
                 execution.phase = "inspection"
-                oversight = _oversight_var.get()
+                oversight = active_scope.oversight if active_scope is not None else None
                 if blocked_by is None and oversight is not None and oversight.inspect_operation is not None:
                     decision = oversight.inspect_operation(request)
                     if inspect.isawaitable(decision):
@@ -123,7 +124,7 @@ async def execute_operation_async(
                 rejection=rejection_error.rejection if rejection_error is not None else None,
                 blocked_by_operation_id=blocked_by.request.operation_id if blocked_by is not None else None,
             )
-            lifecycle = _lifecycle_var.get()
+            lifecycle = active_scope.lifecycle if active_scope is not None else None
             if lifecycle is not None and lifecycle.on_operation_finished is not None:
                 try:
                     await await_notification(

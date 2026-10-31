@@ -20,21 +20,7 @@ from .function_call import FunctionCall, FunctionCallError, FunctionCallHandler,
 from .json_renderer import JsonableValue, to_jsonable_value
 from .natural.decorator import function, get_transformed_function
 from .natural.definition import FunctionDefinition, get_function_definition
-from .runtime.scoping import (
-    ExecutionReference,
-    UsageMeter,
-    get_capabilities,
-    get_execution_reference,
-    get_lifecycle,
-    get_oversight,
-    get_step_executor,
-    get_system_prompt_suffix_fragments,
-    get_tools,
-    get_usage_meter,
-    get_user_prompt_suffix_fragments,
-    run,
-    scope,
-)
+from .runtime.scoping import ExecutionReference, Scope, UsageMeter, get_scope, run, scope
 from .runtime.step_context import StepContext, get_step_context
 from .runtime.step_executor import AgentStepExecutor, ConfigurableStepExecutor, StepExecutor
 
@@ -68,22 +54,15 @@ __all__ = [
     "StepPromptTemplates",
     "ToolDeclarationError",
     "UsageMeter",
-    "get_capabilities",
     "get_step_context",
-    "get_usage_meter",
-    "get_execution_reference",
-    "get_oversight",
-    "get_step_executor",
-    "get_tools",
-    "get_system_prompt_suffix_fragments",
-    "get_user_prompt_suffix_fragments",
     "oversight",
     "lifecycle",
-    "get_lifecycle",
     "function",
     "get_transformed_function",
     "resilience",
     "run",
+    "Scope",
+    "get_scope",
     "scope",
     "to_jsonable_value",
 ]
