@@ -50,9 +50,9 @@ def vote(
     decide: Callable[[list[Any]], Any] = plurality,
     min_success: int | None = None,
 ):
-    """Create a majority voting transformer.
+    """Create a voting transformer.
 
-    Calls the wrapped function *count* times and aggregates results using the *decide* function.
+    Calls the wrapped function *count* times and aggregates successful results using the *decide* function.
 
     For async functions, all calls execute concurrently via :func:`asyncio.gather`. For sync functions, calls execute sequentially.
     Raised :class:`Exception` instances count as failed votes; returned exception objects are ordinary values.
@@ -99,9 +99,8 @@ def vote(
                         raise exception
 
                 if len(results) < effective_min_success:
-                    if last_exception is not None:
-                        raise last_exception
-                    raise RuntimeError(f"vote: {len(results)} successful calls, need at least {effective_min_success}")
+                    assert last_exception is not None
+                    raise last_exception
 
                 return decide(results)
 
@@ -110,7 +109,7 @@ def vote(
         @wraps(function)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             results: list[Any] = []
-            last_exception: BaseException | None = None
+            last_exception: Exception | None = None
 
             for _ in range(count):
                 try:
@@ -120,9 +119,8 @@ def vote(
                     _logger.info("Vote: call to %s failed: %s", function.__name__, exception)
 
             if len(results) < effective_min_success:
-                if last_exception is not None:
-                    raise last_exception
-                raise RuntimeError(f"vote: {len(results)} successful calls, need at least {effective_min_success}")
+                assert last_exception is not None
+                raise last_exception
 
             return decide(results)
 

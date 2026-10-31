@@ -42,11 +42,11 @@ class _CircuitBreakerState:
     def __init__(
         self,
         *,
-        fail_threshold: int,
+        failure_threshold: int,
         reset_timeout: float,
         on: type[BaseException] | tuple[type[BaseException], ...],
     ) -> None:
-        self._fail_threshold = fail_threshold
+        self._failure_threshold = failure_threshold
         self._reset_timeout = reset_timeout
         self._on = on
         self._lock = threading.Lock()
@@ -100,7 +100,7 @@ class _CircuitBreakerState:
                 return
             self._failure_count += 1
             self._last_failure_time = time.monotonic()
-            if self._failure_count >= self._fail_threshold:
+            if self._failure_count >= self._failure_threshold:
                 self._state = CircuitState.OPEN
                 # Calls admitted before this transition cannot overwrite recovery or a manual reset.
                 self._generation += 1
@@ -110,7 +110,7 @@ class _CircuitBreakerState:
             get_current_span().add_event(
                 "nighthawk.resilience.circuit.opened",
                 {
-                    "nighthawk.resilience.circuit.fail_threshold": self._fail_threshold,
+                    "nighthawk.resilience.circuit.failure_threshold": self._failure_threshold,
                     "nighthawk.resilience.circuit.failure_count": opened_failure_count,
                     "nighthawk.resilience.circuit.exception_type": type(exception).__name__,
                 },
@@ -187,13 +187,13 @@ class _CircuitBreakerWrapper[**P, R]:
 
 def circuit_breaker(
     *,
-    fail_threshold: int = 5,
+    failure_threshold: int = 5,
     reset_timeout: float = 60.0,
     on: type[BaseException] | tuple[type[BaseException], ...] = Exception,
 ):
     """Create a circuit breaker transformer.
 
-    Tracks failures and opens the circuit after *fail_threshold*
+    Tracks failures and opens the circuit after *failure_threshold*
     consecutive failures. While open, calls are rejected immediately
     with :class:`CircuitOpenError`. After *reset_timeout* seconds, the
     circuit enters half-open state and allows one probe call. Success
@@ -215,7 +215,7 @@ def circuit_breaker(
     Decorating an instance method shares its circuit across instances, while preserving normal method binding.
 
     Args:
-        fail_threshold: Number of consecutive failures before opening.
+        failure_threshold: Number of consecutive failures before opening.
         reset_timeout: Seconds to wait before transitioning to half-open.
         on: Exception type(s) that count as failures. Defaults to
             :class:`Exception`.
@@ -224,7 +224,7 @@ def circuit_breaker(
         decorator (Callable): A decorator that wraps a function with circuit breaker logic.
     """
     breaker_state = _CircuitBreakerState(
-        fail_threshold=fail_threshold,
+        failure_threshold=failure_threshold,
         reset_timeout=reset_timeout,
         on=on,
     )

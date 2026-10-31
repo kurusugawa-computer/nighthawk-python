@@ -468,7 +468,7 @@ async def test_estimated_cost_uses_predicted_total(budget_target: _BudgetTarget,
         get_scope().usage_meter.record(RunUsage(input_tokens=repetitions))
         return text * repetitions
 
-    def estimate_usage(arguments: tuple[object, ...], keywords: dict[str, object]) -> RunUsage:
+    def estimate_usage(*arguments: object, **keywords: object) -> RunUsage:
         estimates.append((arguments, keywords))
         return RunUsage(input_tokens=1)
 

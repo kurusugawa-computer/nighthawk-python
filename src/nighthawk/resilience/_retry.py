@@ -15,6 +15,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential_jitter,
 )
+from tenacity.wait import wait_base
 
 from nighthawk.errors import ExecutionError
 
@@ -22,6 +23,8 @@ type ExceptionTypeOrTuple = type[BaseException] | tuple[type[BaseException], ...
 type RetryIfFunction = Callable[[BaseException], bool]
 
 _logger = logging.getLogger("nighthawk.resilience")
+
+_DEFAULT_WAIT = wait_exponential_jitter()
 
 
 def _emit_retry_attempt_event(retry_state: RetryCallState) -> None:
@@ -121,7 +124,7 @@ def _build_retrying(
     *,
     attempts: int,
     on: ExceptionTypeOrTuple,
-    wait: Any,
+    wait: wait_base,
     on_retry: Callable[[RetryCallState], None] | None,
     retry_if: RetryIfFunction | None,
 ) -> Retrying:
@@ -143,7 +146,7 @@ def _build_async_retrying(
     *,
     attempts: int,
     on: ExceptionTypeOrTuple,
-    wait: Any,
+    wait: wait_base,
     on_retry: Callable[[RetryCallState], None] | None,
     retry_if: RetryIfFunction | None,
 ) -> AsyncRetrying:
@@ -166,7 +169,7 @@ def _wrap_with_retry[**P, R](
     *,
     attempts: int,
     on: ExceptionTypeOrTuple,
-    wait: Any,
+    wait: wait_base,
     on_retry: Callable[[RetryCallState], None] | None,
     retry_if: RetryIfFunction | None,
 ) -> Callable[P, R]:
@@ -207,7 +210,7 @@ class _RetryingHandle:
         *,
         attempts: int,
         on: ExceptionTypeOrTuple,
-        wait: Any,
+        wait: wait_base,
         on_retry: Callable[[RetryCallState], None] | None,
         retry_if: RetryIfFunction | None,
     ) -> None:
@@ -252,33 +255,28 @@ def retrying(
     *,
     attempts: int = 3,
     on: ExceptionTypeOrTuple = ExecutionError,
-    wait: Any | None = None,
+    wait: wait_base = _DEFAULT_WAIT,
     on_retry: Callable[[RetryCallState], None] | None = None,
     retry_if: RetryIfFunction | None = None,
 ) -> _RetryingHandle:
     """Create a retry transformer.
 
-    Retry decision order:
-    1. ``on`` (type-level eligibility)
-    2. ``retry_if`` (content-level eligibility)
-    3. ``wait`` (interval strategy)
-    4. ``on_retry`` (side-effect hook)
+    An exception is retried when it matches ``on`` and, if supplied, ``retry_if`` accepts it.
 
     Args:
         attempts: Maximum number of attempts (including the initial call).
-        on: Exception type(s) eligible for retry checks.
-        wait: Tenacity wait strategy. Defaults to ``wait_exponential_jitter()``.
-        on_retry: Callback invoked when a retry is decided.
+        on: Exception type(s) eligible for retry.
+        wait: Tenacity wait strategy between attempts.
+        on_retry: Callback invoked when a retry is decided, replacing the default INFO log.
         retry_if: Optional predicate evaluated after ``on`` matching.
 
     Returns:
         A handle usable as a decorator factory or tenacity-style iterator.
     """
-    effective_wait = wait if wait is not None else wait_exponential_jitter()
     return _RetryingHandle(
         attempts=attempts,
         on=on,
-        wait=effective_wait,
+        wait=wait,
         on_retry=on_retry,
         retry_if=retry_if,
     )

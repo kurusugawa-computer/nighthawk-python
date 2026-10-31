@@ -17,7 +17,7 @@ from tests.support.executors import StubExecutor
 
 
 def test_open_circuit_can_be_caught_as_a_library_failure() -> None:
-    @circuit_breaker(fail_threshold=1, on=ValueError)
+    @circuit_breaker(failure_threshold=1, on=ValueError)
     def failing() -> None:
         raise ValueError("unavailable")
 
@@ -60,7 +60,7 @@ def _require_event_attribute(event: object, key: str) -> object:
 
 class TestCircuitBreakerTracing:
     def test_emits_circuit_opened_event(self, run_span_exporter: InMemorySpanExporter) -> None:
-        @circuit_breaker(fail_threshold=2, on=ValueError)
+        @circuit_breaker(failure_threshold=2, on=ValueError)
         def failing() -> str:
             raise ValueError("boom")
 
@@ -78,7 +78,7 @@ class TestCircuitBreakerTracing:
 
 class TestCircuitBreakerSync:
     def test_closed_allows_calls(self) -> None:
-        @circuit_breaker(fail_threshold=3)
+        @circuit_breaker(failure_threshold=3)
         def succeed() -> str:
             return "ok"
 
@@ -88,7 +88,7 @@ class TestCircuitBreakerSync:
     def test_opens_after_threshold_failures(self) -> None:
         call_count = 0
 
-        @circuit_breaker(fail_threshold=3, on=ValueError)
+        @circuit_breaker(failure_threshold=3, on=ValueError)
         def failing() -> str:
             nonlocal call_count
             call_count += 1
@@ -104,7 +104,7 @@ class TestCircuitBreakerSync:
         assert call_count == 3
 
     def test_rejects_calls_when_open(self) -> None:
-        @circuit_breaker(fail_threshold=2, reset_timeout=100, on=ValueError)
+        @circuit_breaker(failure_threshold=2, reset_timeout=100, on=ValueError)
         def failing() -> str:
             raise ValueError("boom")
 
@@ -121,7 +121,7 @@ class TestCircuitBreakerSync:
         assert error.time_remaining > 0
 
     def test_half_open_after_reset_timeout(self) -> None:
-        @circuit_breaker(fail_threshold=2, reset_timeout=0.1, on=ValueError)
+        @circuit_breaker(failure_threshold=2, reset_timeout=0.1, on=ValueError)
         def failing() -> str:
             raise ValueError("boom")
 
@@ -137,7 +137,7 @@ class TestCircuitBreakerSync:
     def test_half_open_success_closes(self) -> None:
         call_count = 0
 
-        @circuit_breaker(fail_threshold=2, reset_timeout=0.1, on=ValueError)
+        @circuit_breaker(failure_threshold=2, reset_timeout=0.1, on=ValueError)
         def sometimes_fail() -> str:
             nonlocal call_count
             call_count += 1
@@ -156,7 +156,7 @@ class TestCircuitBreakerSync:
         assert sometimes_fail.state == CircuitState.CLOSED
 
     def test_half_open_failure_reopens(self) -> None:
-        @circuit_breaker(fail_threshold=2, reset_timeout=0.1, on=ValueError)
+        @circuit_breaker(failure_threshold=2, reset_timeout=0.1, on=ValueError)
         def always_fail() -> str:
             raise ValueError("fail")
 
@@ -172,7 +172,7 @@ class TestCircuitBreakerSync:
         assert always_fail.state == CircuitState.OPEN
 
     def test_manual_reset(self) -> None:
-        @circuit_breaker(fail_threshold=2, on=ValueError)
+        @circuit_breaker(failure_threshold=2, on=ValueError)
         def failing() -> str:
             raise ValueError("fail")
 
@@ -187,7 +187,7 @@ class TestCircuitBreakerSync:
     def test_non_matching_exception_does_not_count(self) -> None:
         call_count = 0
 
-        @circuit_breaker(fail_threshold=2, on=ValueError)
+        @circuit_breaker(failure_threshold=2, on=ValueError)
         def raise_type_error() -> str:
             nonlocal call_count
             call_count += 1
@@ -201,7 +201,7 @@ class TestCircuitBreakerSync:
         assert call_count == 5
 
     def test_preserves_function_metadata(self) -> None:
-        @circuit_breaker(fail_threshold=3)
+        @circuit_breaker(failure_threshold=3)
         def my_function() -> str:
             """My doc."""
             return "ok"
@@ -212,7 +212,7 @@ class TestCircuitBreakerSync:
     def test_success_resets_failure_count(self) -> None:
         call_count = 0
 
-        @circuit_breaker(fail_threshold=3, on=ValueError)
+        @circuit_breaker(failure_threshold=3, on=ValueError)
         def intermittent() -> str:
             nonlocal call_count
             call_count += 1
@@ -234,7 +234,7 @@ class TestCircuitBreakerAsync:
     def test_async_circuit_breaker(self) -> None:
         call_count = 0
 
-        @circuit_breaker(fail_threshold=2, on=ValueError)
+        @circuit_breaker(failure_threshold=2, on=ValueError)
         async def async_failing() -> str:
             nonlocal call_count
             call_count += 1
@@ -250,7 +250,7 @@ class TestCircuitBreakerAsync:
         assert call_count == 2
 
     def test_async_success(self) -> None:
-        @circuit_breaker(fail_threshold=2)
+        @circuit_breaker(failure_threshold=2)
         async def async_succeed() -> str:
             return "ok"
 

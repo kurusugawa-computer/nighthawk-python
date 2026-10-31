@@ -16,7 +16,7 @@ from nighthawk.resilience import _circuit_breaker as circuit_module
 async def test_async_circuit_composes_with_retry_timeout_vote_and_fallback() -> None:
     call_count = 0
 
-    @circuit_breaker(fail_threshold=3, on=ValueError)
+    @circuit_breaker(failure_threshold=3, on=ValueError)
     async def unreliable(value: str) -> str:
         nonlocal call_count
         call_count += 1
@@ -30,7 +30,7 @@ async def test_async_circuit_composes_with_retry_timeout_vote_and_fallback() -> 
     assert inspect.iscoroutinefunction(unreliable)
     assert inspect.signature(unreliable) == inspect.signature(unreliable.__wrapped__)
 
-    @circuit_breaker(fail_threshold=1, on=ValueError)
+    @circuit_breaker(failure_threshold=1, on=ValueError)
     async def unavailable(value: str) -> str:
         raise ValueError(value)
 
@@ -70,11 +70,11 @@ async def test_decorated_methods_bind_the_instance(asynchronous: bool) -> None:
 
 
 def test_nested_circuits_keep_their_own_state_and_call_chain() -> None:
-    @circuit_breaker(fail_threshold=1, on=ValueError)
+    @circuit_breaker(failure_threshold=1, on=ValueError)
     def unavailable() -> None:
         raise ValueError("unavailable")
 
-    outer = circuit_breaker(fail_threshold=2, on=ValueError)(unavailable)
+    outer = circuit_breaker(failure_threshold=2, on=ValueError)(unavailable)
     with pytest.raises(ValueError):
         outer()
     assert unavailable.state == CircuitState.OPEN
@@ -109,7 +109,7 @@ async def test_only_one_recovery_probe_runs_and_always_releases_its_slot(
     async def async_operation(*, delayed: bool, exception_type: type[BaseException] | None) -> str:
         return await asyncio.to_thread(operation, delayed=delayed, exception_type=exception_type)
 
-    protected = circuit_breaker(fail_threshold=1, reset_timeout=10, on=ValueError)(async_operation if asynchronous else operation)
+    protected = circuit_breaker(failure_threshold=1, reset_timeout=10, on=ValueError)(async_operation if asynchronous else operation)
 
     async def call(*, delayed: bool = False, exception_type: type[BaseException] | None = None):
         if asynchronous:
@@ -172,7 +172,7 @@ async def test_late_results_cannot_change_a_new_circuit_generation(
     async def async_operation(*, delayed: bool, failing: bool) -> str:
         return await asyncio.to_thread(operation, delayed=delayed, failing=failing)
 
-    protected = circuit_breaker(fail_threshold=1, reset_timeout=10, on=ValueError)(async_operation if asynchronous else operation)
+    protected = circuit_breaker(failure_threshold=1, reset_timeout=10, on=ValueError)(async_operation if asynchronous else operation)
 
     async def call(*, delayed: bool = False, failing: bool = False):
         if asynchronous:

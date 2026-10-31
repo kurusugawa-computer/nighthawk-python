@@ -89,7 +89,7 @@ class TestCircuitBreakerWithFallback:
     def test_circuit_open_triggers_fallback(self) -> None:
         primary_count = 0
 
-        @circuit_breaker(fail_threshold=2, on=ValueError)
+        @circuit_breaker(failure_threshold=2, on=ValueError)
         def primary(_text: str) -> str:
             nonlocal primary_count
             primary_count += 1

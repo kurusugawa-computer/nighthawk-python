@@ -544,14 +544,7 @@ For sync functions, the wrapper runs the function in a `ThreadPoolExecutor`; tim
 The synchronous wrapper copies the caller's context variables, so Natural functions inherit the active `nh.run()` and host scopes.
 Worker context variable rebindings do not flow back to the caller; referenced objects remain shared, and hosts must support their use from the worker thread.
 An upstream `TimeoutError` is preserved without recording a wrapper deadline event unless the wrapper's own deadline expired.
-The async context manager form is:
-
-```py
-async with timeout(seconds=30):
-    result = await slow_operation()
-```
-
-The same timeout handle can be nested or shared by concurrent tasks; each entry has its own deadline.
+To bound a block of asynchronous code rather than a function, use the standard `asyncio.timeout`.
 
 ### Budget
 
@@ -567,7 +560,7 @@ result = safe_classify(text)
 
 `tokens` checks recorded cumulative usage before invocation and after normal return; `tokens_per_call` checks the meter delta after normal return.
 Checks use the meter active at invocation; usage recorded into a separate meter in a nested scope is excluded.
-An optional `estimate_usage(arguments, keyword_name_to_value)` receives the call's positional-argument tuple and keyword-argument dictionary and returns a `RunUsage` estimate.
+An optional `estimate_usage` receives the same arguments as the wrapped call and returns a `RunUsage` estimate.
 It applies the same limits to the estimated call and predicted cumulative usage before invocation, without reserving usage or guaranteeing the final cost.
 The meter records returned agent-run aggregates, so failed runs can consume unrecorded usage, and concurrent calls sharing a meter can contribute to the same measured delta.
 These checks do not stop requests within an unfinished block or guarantee a strict spending cap.
@@ -603,12 +596,12 @@ budgeted = budget(cost=1.00, cost_function=dollar_cost)(classify)
 
 ### Circuit breaker
 
-Prevent repeated calls to a failing service. After `fail_threshold` consecutive failures, the circuit opens and rejects calls immediately with `CircuitOpenError`. After `reset_timeout` seconds, one probe call is allowed.
+Prevent repeated calls to a failing service. After `failure_threshold` consecutive failures, the circuit opens and rejects calls immediately with `CircuitOpenError`. After `reset_timeout` seconds, one probe call is allowed.
 
 ```py
 from nighthawk.resilience import circuit_breaker, CircuitState
 
-protected_api = circuit_breaker(fail_threshold=5, reset_timeout=60)(call_api)
+protected_api = circuit_breaker(failure_threshold=5, reset_timeout=60)(call_api)
 protected_api.state  # CircuitState.CLOSED
 protected_api.reset()  # manual reset
 ```

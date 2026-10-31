@@ -213,59 +213,6 @@ class TestTimeoutDecoratorAsync:
         assert wrapped.__doc__ == "Async doc."
 
 
-class TestTimeoutAsyncContextManager:
-    @pytest.mark.asyncio
-    async def test_shared_handle_can_be_nested(self) -> None:
-        handle = timeout(seconds=5)
-        async with handle:
-            async with handle:
-                await asyncio.sleep(0)
-            await asyncio.sleep(0)
-
-    @pytest.mark.asyncio
-    async def test_shared_handle_has_separate_concurrent_scopes(self) -> None:
-        handle = timeout(seconds=5)
-        first_entered = asyncio.Event()
-        second_entered = asyncio.Event()
-        first_finished = asyncio.Event()
-
-        async def first() -> None:
-            async with handle:
-                first_entered.set()
-                await second_entered.wait()
-            first_finished.set()
-
-        async def second() -> None:
-            await first_entered.wait()
-            async with handle:
-                second_entered.set()
-                await first_finished.wait()
-
-        await asyncio.gather(first(), second())
-
-    def test_async_with_completes(self) -> None:
-        async def run() -> str:
-            async with timeout(seconds=5):
-                return "ok"
-
-        assert asyncio.run(run()) == "ok"
-
-    def test_async_with_times_out(self) -> None:
-        async def run() -> str:
-            async with timeout(seconds=0.1):
-                await asyncio.sleep(5)
-                return "ok"
-
-        with pytest.raises(TimeoutError):
-            asyncio.run(run())
-
-
-class TestTimeoutSyncContextManager:
-    def test_sync_context_manager_raises_not_implemented(self) -> None:
-        with pytest.raises(NotImplementedError, match="Sync timeout context manager is not supported"), timeout(seconds=5):
-            pass
-
-
 @nh.function
 def _read_scoped_value() -> str:
     result = ""

@@ -19,7 +19,7 @@ _logger = logging.getLogger("nighthawk.resilience")
 type BudgetLimitKind = Literal["tokens", "tokens_per_call", "cost", "cost_per_call"]
 
 type CostFunction = Callable[[RunUsage], float]
-type EstimateUsageFunction = Callable[[tuple[Any, ...], dict[str, Any]], RunUsage]
+type EstimateUsageFunction = Callable[..., RunUsage]
 
 
 class BudgetExceededError(NighthawkError):
@@ -137,7 +137,7 @@ class _BudgetHandle:
                 limit_value=self._cost,
             )
         if self._estimate_usage is not None:
-            estimated_call_usage = self._estimate_usage(arguments, keyword_name_to_value)
+            estimated_call_usage = self._estimate_usage(*arguments, **keyword_name_to_value)
             self._check_budget(before + estimated_call_usage, estimated_call_usage)
 
         yield
@@ -188,8 +188,8 @@ def budget(
         cost: Cumulative recorded-cost threshold. Requires *cost_function*.
         cost_per_call: Recorded-cost delta threshold. Requires *cost_function*.
         cost_function: Callable that converts :class:`RunUsage` to a monetary cost (float). Required when *cost* or *cost_per_call* is set.
-        estimate_usage: Optional callable receiving the positional-argument tuple and keyword-argument dictionary.
-            Returns predicted usage for the next call; cumulative checks apply to the current usage plus that estimate.
+        estimate_usage: Optional callable receiving the same arguments as the wrapped call.
+            Returns predicted usage for that call; cumulative checks apply to the current usage plus that estimate.
             Rejects predicted over-limit work before execution, without reserving usage or guaranteeing actual cost.
 
     Returns:
