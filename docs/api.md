@@ -160,7 +160,6 @@
         - StepFailed
         - StepInterrupted
         - FailureStage
-        - StepDeliveryError
 
 ## Embedded steps and binding processing
 

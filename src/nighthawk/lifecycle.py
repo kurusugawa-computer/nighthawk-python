@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from pydantic_ai import AgentRunResult
 
-from .errors import NighthawkError
 from .runtime.execution_reference import ExecutionReference
 from .runtime.operation_contract import OperationFinished
 from .runtime.step_definition import BlockKind
@@ -129,20 +128,9 @@ class StepLifecycle:
             raise ValueError("interruption_delivery_timeout must be finite and positive")
 
 
-class StepDeliveryError(NighthawkError):
-    """Host adapter delivery failure; does not assert that persistence succeeded."""
-
-    def __init__(self, execution_reference: ExecutionReference, cause: BaseException) -> None:
-        self.execution_reference = execution_reference
-        self.delivery_cause = cause
-        super().__init__(f"Step terminal delivery failed: {cause}")
-        self.__cause__ = cause
-
-
 __all__ = [
     "FailureStage",
     "StepCompleted",
-    "StepDeliveryError",
     "StepFailed",
     "StepFinished",
     "StepInterrupted",

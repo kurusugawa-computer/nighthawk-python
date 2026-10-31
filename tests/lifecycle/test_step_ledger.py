@@ -14,7 +14,7 @@ from opentelemetry.trace import StatusCode
 from pydantic import AfterValidator, BaseModel
 
 import nighthawk as nh
-from nighthawk.lifecycle import FailureStage, StepCompleted, StepDeliveryError, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
+from nighthawk.lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
 from nighthawk.runtime import Pass, StepCandidate, StepRequest, scoping
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
@@ -240,6 +240,13 @@ def test_success_ledger_preserves_identity_and_validates_once() -> None:
         event.assigned_binding_name_to_value["value"] = 0  # type: ignore[index]
 
 
+class LedgerDeliveryError(Exception):
+    def __init__(self, event: StepFinished, cause: BaseException) -> None:
+        super().__init__(f"Step terminal delivery failed: {cause}")
+        self.event = event
+        self.__cause__ = cause
+
+
 @pytest.mark.parametrize("append_first", [False, True])
 def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: bool) -> None:
     ledger = Ledger()
@@ -250,7 +257,7 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
         attempts.append(event)
         if append_first:
             ledger.finished(event)
-        raise StepDeliveryError(event.execution_reference, storage_error)
+        raise LedgerDeliveryError(event, storage_error)
 
     @nh.function
     def workflow() -> None:
@@ -259,12 +266,12 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
         """
 
     executor = ScriptedExecutor([StepCandidate()])
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)), pytest.raises(StepDeliveryError) as caught:
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)), pytest.raises(LedgerDeliveryError) as caught:
         workflow()
     assert len(attempts) == len(executor.requests) == 1
     assert len(ledger.execution_id_to_event) == int(append_first)
-    assert caught.value.execution_reference == attempts[0].execution_reference
-    assert caught.value.delivery_cause is storage_error is caught.value.__cause__
+    assert caught.value.event is attempts[0]
+    assert caught.value.__cause__ is storage_error
 
 
 def test_preparation_failure_has_identity_and_unknown_fields() -> None:

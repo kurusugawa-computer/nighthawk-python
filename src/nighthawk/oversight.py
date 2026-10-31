@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Literal
 
 from opentelemetry.trace import get_current_span
 
@@ -20,9 +21,9 @@ def _reference_mapping(name_to_value: Mapping[str, object]) -> Mapping[str, obje
 class StepAbortedError(NighthawkError):
     """An explicit host decision ending the inspected step, without rollback."""
 
-    def __init__(self, reason: str, *, subject: str = "operation") -> None:
+    def __init__(self, reason: str, *, subject: Literal["operation", "step_commit"]) -> None:
         self.reason = reason
-        self.subject = subject
+        self.subject: Literal["operation", "step_commit"] = subject
         super().__init__(reason)
 
 

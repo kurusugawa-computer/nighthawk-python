@@ -148,7 +148,7 @@ class Runner:
                 original_exception=original_exception,
                 attempted_outcome=self.attempted_outcome,
                 validated_binding_name_to_value=self.validated_binding_name_to_value,
-                inspection_subject=cast(typing.Literal["step_commit", "operation"], rejection.subject) if rejection else None,
+                inspection_subject=rejection.subject if rejection else None,
                 abort_reason=rejection.reason if rejection else None,
             )
             _record_internal_step_failure(step_span=step_span, exception=original_exception)

@@ -217,8 +217,6 @@ class AgentStepExecutor:
     Attributes:
         configuration: The step executor configuration.
         agent: The execution agent, or None until an execution model is selected.
-        token_encoding: The tiktoken encoding resolved from the configuration.
-        tool_result_rendering_policy: Policy for rendering tool results.
         agent_is_managed: Whether the agent was created internally from
             the configuration (True) or provided externally (False).
     """
@@ -244,9 +242,8 @@ class AgentStepExecutor:
         self.agent = (
             agent if agent is not None else (_create_execution_agent(self.configuration) if self.configuration.execution_model is not None else None)
         )
-        self.token_encoding = self.configuration.resolve_token_encoding()
-        self.tool_result_rendering_policy = ToolResultRenderingPolicy(
-            tokenizer_encoding_name=self.token_encoding.name,
+        self._tool_result_rendering_policy = ToolResultRenderingPolicy(
+            tokenizer_encoding_name=self.configuration.resolve_token_encoding().name,
             tool_result_max_tokens=(self.configuration.context_limits.tool_result_max_tokens),
             json_renderer_style=self.configuration.json_renderer_style,
         )
@@ -409,7 +406,7 @@ class AgentStepExecutor:
         processed_natural_program = request.processed_natural_program
         allowed_outcome_kinds = request.allowed_outcome_kinds
         if step_context.tool_result_rendering_policy is None:
-            step_context.tool_result_rendering_policy = self.tool_result_rendering_policy
+            step_context.tool_result_rendering_policy = self._tool_result_rendering_policy
 
         context_request = build_context_request(request, self.configuration)
         user_prompt = build_context_content(context_request, get_scope().context_builder)
