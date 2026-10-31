@@ -890,7 +890,7 @@ Runtime execution identity is modeled separately in `ExecutionReference`:
 
 Nighthawk does not own workspace filesystem concerns (such as include resolution or host file operations). Those concerns belong to the host application layer that embeds Nighthawk.
 
-Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When empty (default `""`), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
+Working directory selection for provider backends is configured via `ModelSettings["working_directory"]` (absolute, resolved). When `None` (the default), backends omit the working-directory option and use the provider default (typically the parent process current working directory).
 API:
 
 - `nighthawk.run(step_executor=UNSET, *, execution_model=UNSET, decision_model=UNSET, step_executor_configuration=UNSET, run_id=UNSET, usage_meter=UNSET)`

@@ -182,7 +182,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
                 options_keyword_arguments["setting_sources"] = claude_code_model_settings.setting_sources
             if claude_code_model_settings.max_turns is not None:
                 options_keyword_arguments["max_turns"] = claude_code_model_settings.max_turns
-            if working_directory:
+            if working_directory is not None:
                 options_keyword_arguments["cwd"] = working_directory
 
             options = ClaudeAgentOptions(**options_keyword_arguments)

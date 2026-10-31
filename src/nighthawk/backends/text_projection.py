@@ -325,7 +325,5 @@ def project_request_prompt_part_list_to_text(
     )
 
 
-def resolve_text_projection_staging_root_directory(*, working_directory: str) -> Path:
-    if working_directory:
-        return Path(working_directory)
-    return Path.cwd()
+def resolve_text_projection_staging_root_directory(*, working_directory: str | None) -> Path:
+    return Path.cwd() if working_directory is None else Path(working_directory)

@@ -7,7 +7,7 @@ import os
 import tempfile
 from typing import IO, TypedDict
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import ModelRequestParameters
@@ -33,20 +33,13 @@ class ClaudeCodeCliModelSettings(ClaudeCodeModelSettings):
     """
 
     executable: str = "claude"
-    max_budget_usd: float | None = None
+    max_budget_usd: float | None = Field(default=None, gt=0)
 
     @field_validator("executable")
     @classmethod
     def _validate_executable(cls, value: str) -> str:
         if value.strip() == "":
             raise ValueError("executable must be a non-empty string")
-        return value
-
-    @field_validator("max_budget_usd")
-    @classmethod
-    def _validate_max_budget_usd(cls, value: float | None) -> float | None:
-        if value is not None and value <= 0:
-            raise ValueError("max_budget_usd must be greater than 0")
         return value
 
 
@@ -237,7 +230,7 @@ class ClaudeCodeCliModel(BackendModelBase):
                     claude_arguments.extend(["--json-schema", json.dumps(schema)])
 
                 working_directory = claude_code_cli_model_settings.working_directory
-                cwd: str | None = working_directory if working_directory else None
+                cwd = working_directory
 
                 # Build subprocess environment: inherit current environment but remove CLAUDECODE
                 # to avoid nested-session detection. Unlike the SDK backend, this does not modify

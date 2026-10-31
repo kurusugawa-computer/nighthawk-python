@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
+- Breaking: backend `working_directory` defaults to `None` instead of an empty-string sentinel. Positive backend limits use Pydantic field constraints.
 - Breaking: resilience transformers use one form per contract. `timeout(seconds=...)` is a decorator only; use the standard `asyncio.timeout` to bound a block. `circuit_breaker` takes `failure_threshold` instead of `fail_threshold`, and its opened event reports `nighthawk.resilience.circuit.failure_threshold`. `budget(estimate_usage=...)` receives the wrapped call's own arguments. `retrying(wait=...)` defaults to an exponential jitter strategy instead of `None`.
 - Breaking: `OperationError` carries its own `kind`, `phase`, `evaluation_started`, and `guidance`; the separate `ToolBoundaryError` base is removed because application tools raising it were never converted into model feedback. Tool error kinds are limited to the produced `invalid_input`, `resolution`, and `oversight`.
 - Breaking: `StepContext` no longer carries write-only bookkeeping (`assigned_binding_names`, `dirty_output_binding_names`, `step_locals_revision`, `record_output_binding_mutation`, `processed_natural_program`); `StepRequest` already supplies the processed program.

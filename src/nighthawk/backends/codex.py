@@ -262,7 +262,7 @@ class CodexModel(BackendModelBase):
                     codex_arguments.extend(["--output-schema", output_schema_file.name])
 
                 working_directory = codex_model_settings.working_directory
-                if working_directory:
+                if working_directory is not None:
                     codex_arguments.extend(["--cd", working_directory])
 
                 process = await asyncio.create_subprocess_exec(

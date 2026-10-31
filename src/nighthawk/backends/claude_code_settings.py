@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field
 
 from .base import BackendModelSettings
 
@@ -21,13 +21,6 @@ class ClaudeCodeModelSettings(BackendModelSettings):
         setting_sources: Configuration sources to load.
     """
 
-    max_turns: int | None = None
+    max_turns: int | None = Field(default=None, gt=0)
     permission_mode: PermissionMode | None = None
     setting_sources: list[SettingSource] | None = None
-
-    @field_validator("max_turns")
-    @classmethod
-    def _validate_max_turns(cls, value: int | None) -> int | None:
-        if value is not None and value <= 0:
-            raise ValueError("max_turns must be greater than 0")
-        return value

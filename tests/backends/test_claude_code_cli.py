@@ -86,7 +86,7 @@ def test_parse_json_output_raises_on_non_object() -> None:
 def test_settings_defaults() -> None:
     settings = ClaudeCodeCliModelSettings()
     assert settings.executable == "claude"
-    assert settings.working_directory == ""
+    assert settings.working_directory is None
     assert settings.max_turns is None
     assert settings.max_budget_usd is None
     assert settings.permission_mode is None

@@ -53,7 +53,7 @@ This differs from provider-backed executors that can pass a `tuple[UserContent, 
 
 ### Working directory
 
-All three backends accept `working_directory` in their model settings. This absolute path determines:
+All three backends accept `working_directory` in their model settings. Omit it to use the CLI default; an absolute path determines:
 
 - Where the CLI resolves project-scoped files (CLAUDE.md, AGENTS.md, skills, settings)
 - The working directory for CLI execution
@@ -116,7 +116,7 @@ The `claude` CLI must be installed separately (it is a system tool, not a Python
 ### Environment
 
 - **Authentication:** Requires `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an active Claude Code session.
-- **CLI invocation:** Nighthawk invokes `claude -p --output-format json --no-session-persistence` as a subprocess. Additional flags (`--model`, `--system-prompt-file`, `--permission-mode`, `--max-turns`, `--max-budget-usd`, `--mcp-config`, `--json-schema`, `--allowedTools`) are appended based on `ClaudeCodeCliModelSettings`.
+- **CLI invocation:** Nighthawk invokes `claude -p --output-format json --no-session-persistence` as a subprocess. Additional flags (`--model`, `--append-system-prompt-file`, `--permission-mode`, `--max-turns`, `--max-budget-usd`, `--mcp-config`, `--json-schema`, `--allowedTools`) are appended based on `ClaudeCodeCliModelSettings`.
 - **MCP tool exposure:** An HTTP MCP server is started in a background thread on a random local port. The Claude Code CLI connects via `--mcp-config`. Tool names are prefixed with `mcp__nighthawk__` in the Claude Code environment.
 - **Working directory:** Passed as the `cwd` parameter to `create_subprocess_exec`.
 - **Project-scoped files:** Resolved from `working_directory` following Claude Code's own rules (CLAUDE.md, .claude/CLAUDE.md, .claude/settings.json, .claude/skills/).
@@ -140,7 +140,7 @@ configuration = nh.StepExecutorConfiguration(
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `working_directory` | `str` | `""` (CLI default) | Absolute path to the project directory |
+| `working_directory` | `str` \| `None` | `None` (CLI default) | Absolute path to the project directory |
 | `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
 | `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode. `None` delegates to the CLI default. |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load |
@@ -185,7 +185,7 @@ configuration = nh.StepExecutorConfiguration(
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `working_directory` | `str` | `""` (CLI default) | Absolute path to the project directory |
+| `working_directory` | `str` \| `None` | `None` (CLI default) | Absolute path to the project directory |
 | `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
 | `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode. `None` delegates to the SDK default. |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load (`SettingSource` is `"user"`, `"project"`, or `"local"`) |
@@ -229,7 +229,7 @@ configuration = nh.StepExecutorConfiguration(
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `working_directory` | `str` | `""` (CLI default) | Absolute path to the project directory |
+| `working_directory` | `str` \| `None` | `None` (CLI default) | Absolute path to the project directory |
 | `allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Nighthawk tool names exposed to the model |
 | `executable` | `str` | `"codex"` | Path or name of the Codex CLI executable |
 | `sandbox_mode` | `"read-only"` \| `"workspace-write"` \| `"danger-full-access"` \| `None` | `None` | Sandbox policy for CLI commands |

@@ -253,18 +253,18 @@ class BackendModelSettings(BaseModel):
 
     Attributes:
         allowed_tool_names: Nighthawk tool names exposed to the model.
-        working_directory: Absolute path to the working directory.
+        working_directory: Absolute working directory; None uses the backend's default.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     allowed_tool_names: tuple[str, ...] | None = None
-    working_directory: str = ""
+    working_directory: str | None = None
 
     @field_validator("working_directory")
     @classmethod
-    def _validate_working_directory(cls, value: str) -> str:
-        if value and not Path(value).is_absolute():
+    def _validate_working_directory(cls, value: str | None) -> str | None:
+        if value is not None and not Path(value).is_absolute():
             raise ValueError("working_directory must be an absolute path")
         return value
 
