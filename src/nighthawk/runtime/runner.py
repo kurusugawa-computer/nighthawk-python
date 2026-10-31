@@ -512,11 +512,9 @@ class Runner:
         return StepRequest(
             block_kind=preparation.block_kind,
             input_binding_name_to_value=preparation.input_binding_name_to_value,
-            execution_reference=preparation.step_context.execution_reference,
             processed_natural_program=preparation.processed_program,
             step_context=preparation.step_context,
             output_binding_names=tuple(output_binding_names),
-            binding_name_to_type=preparation.binding_name_to_type,
             return_annotation=return_annotation,
             allowed_outcome_kinds=preparation.allowed_outcome_kinds,
             allow_awaitable_return=allow_awaitable_return,

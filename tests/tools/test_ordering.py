@@ -56,11 +56,9 @@ def test_ordered_model_batch_remains_ordered_across_async_capability_hooks(rejec
     executor = nh.AgentStepExecutor.from_agent(agent=Agent(FunctionModel(model_function), deps_type=nh.StepContext, end_strategy=end_strategy))
     context = new_context()
     request = StepRequest(
-        execution_reference=context.execution_reference,
         processed_natural_program="Record one then two.",
         step_context=context,
         output_binding_names=(),
-        binding_name_to_type={},
         return_annotation=object,
         allowed_outcome_kinds=("pass",),
     )

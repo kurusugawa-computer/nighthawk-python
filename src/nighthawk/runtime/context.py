@@ -1,10 +1,9 @@
 """Replaceable presentation of one live Natural environment."""
 
 from collections.abc import Mapping, Sequence
-from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, InstanceOf, field_validator
+from pydantic import BaseModel, ConfigDict, InstanceOf
 from pydantic_ai.messages import CachePoint, UserContent, is_multi_modal_content
 
 from ..configuration import StepContextLimits, StepExecutorConfiguration
@@ -25,20 +24,21 @@ class ContextRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
-    execution_reference: ExecutionReference
     processed_natural_program: str
     step_context: InstanceOf[StepContext]
     explicit_reference_names: tuple[str, ...]
     explicit_reference_paths: tuple[str, ...]
     output_binding_names: tuple[str, ...]
-    binding_name_to_type: Mapping[str, object]
     return_annotation: object
     configuration: StepExecutorConfiguration
 
-    @field_validator("binding_name_to_type", mode="after")
-    @classmethod
-    def freeze_contracts(cls, value: Mapping[str, object]) -> Mapping[str, object]:
-        return MappingProxyType(dict(value))
+    @property
+    def execution_reference(self) -> ExecutionReference:
+        return self.step_context.execution_reference
+
+    @property
+    def binding_name_to_type(self) -> Mapping[str, object]:
+        return self.step_context.environment.binding_name_to_type
 
     @property
     def environment(self) -> StepEnvironment:
@@ -74,13 +74,11 @@ def build_context_request(request: StepRequest, configuration: StepExecutorConfi
 
     references, paths, _ = extract_reference_data_and_program(request.processed_natural_program)
     return ContextRequest(
-        execution_reference=request.execution_reference,
         processed_natural_program=request.processed_natural_program,
         step_context=request.step_context,
         explicit_reference_names=tuple(sorted(references)),
         explicit_reference_paths=tuple(sorted(paths)),
         output_binding_names=request.output_binding_names,
-        binding_name_to_type=request.binding_name_to_type,
         return_annotation=request.return_annotation,
         configuration=configuration,
     )

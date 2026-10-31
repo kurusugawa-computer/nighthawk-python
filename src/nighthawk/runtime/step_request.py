@@ -29,22 +29,28 @@ def _snapshot_output_bindings(environment: StepEnvironment, output_binding_names
 class StepRequest(BaseModel):
     """One execution boundary and its selected contracts.
 
-    The context owns the environment. Contract mappings are shallow snapshots;
-    neither request construction nor validation copies application values.
+    The context owns the execution identity and the environment, including output contracts.
+    Neither request construction nor validation copies application values.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid", validate_default=True)
 
     block_kind: BlockKind = "execute"
     input_binding_name_to_value: Mapping[str, object] = {}
-    execution_reference: ExecutionReference
     processed_natural_program: str
     step_context: InstanceOf[StepContext]
     output_binding_names: tuple[str, ...]
-    binding_name_to_type: Mapping[str, object]
     return_annotation: object
     allowed_outcome_kinds: tuple[OutcomeKind, ...]
     allow_awaitable_return: bool = False
+
+    @property
+    def execution_reference(self) -> ExecutionReference:
+        return self.step_context.execution_reference
+
+    @property
+    def binding_name_to_type(self) -> Mapping[str, object]:
+        return self.step_context.environment.binding_name_to_type
 
     def snapshot_output_bindings(self) -> dict[str, object]:
         """Snapshot initialized declared outputs in declaration order.
@@ -57,15 +63,13 @@ class StepRequest(BaseModel):
         """
         return _snapshot_output_bindings(self.step_context.environment, self.output_binding_names)
 
-    @field_validator("binding_name_to_type", "input_binding_name_to_value", mode="after")
+    @field_validator("input_binding_name_to_value", mode="after")
     @classmethod
-    def freeze_contracts(cls, value: Mapping[str, object]) -> Mapping[str, object]:
+    def freeze_inputs(cls, value: Mapping[str, object]) -> Mapping[str, object]:
         return MappingProxyType(dict(value))
 
     @model_validator(mode="after")
     def validate_boundary(self) -> "StepRequest":
-        if self.execution_reference != self.step_context.execution_reference:
-            raise ValueError("StepRequest execution reference must match its context")
         if len(set(self.output_binding_names)) != len(self.output_binding_names):
             raise ValueError("StepRequest output names must be unique")
         if set(self.binding_name_to_type) != set(self.output_binding_names):

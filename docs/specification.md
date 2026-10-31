@@ -550,8 +550,8 @@ An invalid builder is rejected before any scope state changes.
 
 `ContextBuilder.build(request: ContextRequest) -> Sequence[UserContent]` is synchronous.
 `UserContent` is the native Pydantic AI type; asynchronous retrieval belongs in tools.
-The request supplies `execution_reference`, `processed_natural_program`, `step_context`, ordered `explicit_reference_names` and `explicit_reference_paths`, `output_binding_names`, `binding_name_to_type`, `return_annotation`, and `configuration`.
-`environment` exposes the same live environment used by operations, and `context_limits` exposes the configured budgets.
+The request supplies `processed_natural_program`, `step_context`, ordered `explicit_reference_names` and `explicit_reference_paths`, `output_binding_names`, `return_annotation`, and `configuration`.
+`execution_reference`, `environment`, and `binding_name_to_type` read the step context and its live environment, and `context_limits` exposes the configured budgets.
 Output contracts have shallow read-only mapping structure.
 
 A builder may prioritize, omit, or summarize presentation without changing runtime lookup, object identity, or final validation.
@@ -1247,8 +1247,8 @@ The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the unio
 Executor protocols, requests, candidates, resolved outcomes, and runtime operations are available from `nighthawk.runtime`.
 Its public exports participate in ordinary Python `dir()` and attribute inspection without requiring an active run.
 
-`StepRequest` holds `block_kind`, `input_binding_name_to_value`, `execution_reference`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `binding_name_to_type`, `return_annotation`, `allowed_outcome_kinds`, and `allow_awaitable_return`.
-Its context owns the environment; no second namespace is assembled for the executor.
+`StepRequest` holds `block_kind`, `input_binding_name_to_value`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `return_annotation`, `allowed_outcome_kinds`, and `allow_awaitable_return`.
+Its context owns the execution identity and environment; `execution_reference` and `binding_name_to_type` read them, and no second namespace is assembled for the executor.
 Both methods return `StepCandidate(outcome=..., binding_name_to_value=...)` containing live values.
 `StepRequest.snapshot_output_bindings()` returns an independent dictionary of initialized declared outputs in declaration order using the automatic-selection rule.
 It preserves value identity, excludes unbound outputs and task-only references, and neither validates nor writes values.
