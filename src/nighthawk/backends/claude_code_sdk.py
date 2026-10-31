@@ -14,34 +14,19 @@ from ..json_renderer import to_jsonable_value
 from ..tools.declarations import get_visible_tools
 from ._claude_code_usage import normalize_claude_code_usage
 from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
-from .claude_code_settings import ClaudeCodeModelSettings
+from .claude_code_settings import NIGHTHAWK_MCP_TOOL_PREFIX, TOOL_ACCESS_SYSTEM_PROMPT_FRAGMENT, ClaudeCodeModelSettings, output_json_schema
 from .mcp_boundary import call_tool_for_claude_code_sdk
 from .text_projection import resolve_text_projection_staging_root_directory
 from .tool_bridge import ToolHandler, resolve_current_tool_result_rendering_policy
 
 
 class ClaudeCodeSdkModelSettings(ClaudeCodeModelSettings):
-    """Settings for the Claude Code SDK backend.
-
-    Attributes:
-        claude_allowed_tool_names: Additional Claude Code native tool names to allow.
-    """
-
-    claude_allowed_tool_names: tuple[str, ...] | None = None
+    """Settings for the Claude Code SDK backend."""
 
 
 def _build_json_schema_output_format(model_request_parameters: ModelRequestParameters) -> dict[str, Any] | None:
-    output_object = model_request_parameters.output_object
-    if output_object is None:
-        return None
-
-    schema = dict(output_object.json_schema)
-    if output_object.name:
-        schema["title"] = output_object.name
-    if output_object.description:
-        schema["description"] = output_object.description
-
-    return {"type": "json_schema", "schema": schema}
+    schema = output_json_schema(model_request_parameters)
+    return None if schema is None else {"type": "json_schema", "schema": schema}
 
 
 class ClaudeCodeSdkModel(BackendModelBase):
@@ -142,7 +127,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
 
             sdk_server = create_sdk_mcp_server("nighthawk", tools=mcp_tools)
 
-            allowed_tools_for_claude = [f"mcp__nighthawk__{tool_name}" for tool_name in allowed_tool_names]
+            allowed_tools_for_claude = [f"{NIGHTHAWK_MCP_TOOL_PREFIX}{tool_name}" for tool_name in allowed_tool_names]
 
             claude_allowed_tool_names = claude_code_model_settings.claude_allowed_tool_names or ()
             merged_allowed_tools = list(dict.fromkeys([*claude_allowed_tool_names, *allowed_tools_for_claude]))
@@ -150,15 +135,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
             working_directory = claude_code_model_settings.working_directory
 
             if allowed_tool_names:
-                system_prompt_text = "\n".join(
-                    [
-                        system_prompt_text,
-                        "",
-                        "Tool access:",
-                        "- Nighthawk tools are exposed via MCP; tool names are prefixed with: mcp__nighthawk__",
-                        "- Example: to call nh_evaluate(...), use: mcp__nighthawk__nh_evaluate",
-                    ]
-                )
+                system_prompt_text += TOOL_ACCESS_SYSTEM_PROMPT_FRAGMENT
 
             options_keyword_arguments: dict[str, Any] = {
                 "tools": {
@@ -182,6 +159,8 @@ class ClaudeCodeSdkModel(BackendModelBase):
                 options_keyword_arguments["setting_sources"] = claude_code_model_settings.setting_sources
             if claude_code_model_settings.max_turns is not None:
                 options_keyword_arguments["max_turns"] = claude_code_model_settings.max_turns
+            if claude_code_model_settings.max_budget_usd is not None:
+                options_keyword_arguments["max_budget_usd"] = claude_code_model_settings.max_budget_usd
             if working_directory is not None:
                 options_keyword_arguments["cwd"] = working_directory
 
@@ -226,6 +205,7 @@ class ClaudeCodeSdkModel(BackendModelBase):
             return ModelResponse(
                 parts=[TextPart(content=output_text)],
                 model_name=assistant_model_name,
+                provider_name="claude-code-sdk",
                 usage=normalize_claude_code_usage(result_message.usage),
             )
         finally:

@@ -7,7 +7,7 @@ import os
 import tempfile
 from typing import IO, TypedDict
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import ModelRequestParameters
@@ -18,7 +18,7 @@ from pydantic_ai.usage import RequestUsage
 from ..tools.declarations import get_visible_tools
 from ._claude_code_usage import normalize_claude_code_usage
 from .base import BackendModelBase, append_text_projected_tool_result_preview_prompt
-from .claude_code_settings import ClaudeCodeModelSettings
+from .claude_code_settings import NIGHTHAWK_MCP_TOOL_PREFIX, TOOL_ACCESS_SYSTEM_PROMPT_FRAGMENT, ClaudeCodeModelSettings, output_json_schema
 from .mcp_server import mcp_server_if_needed
 from .process_management import stop_process
 from .text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
@@ -29,11 +29,9 @@ class ClaudeCodeCliModelSettings(ClaudeCodeModelSettings):
 
     Attributes:
         executable: Path or name of the Claude Code CLI executable.
-        max_budget_usd: Maximum dollar amount to spend on API calls.
     """
 
     executable: str = "claude"
-    max_budget_usd: float | None = Field(default=None, gt=0)
 
     @field_validator("executable")
     @classmethod
@@ -161,17 +159,7 @@ class ClaudeCodeCliModel(BackendModelBase):
 
             if allowed_tool_names:
                 system_prompt_text = append_text_projected_tool_result_preview_prompt(system_prompt_text=system_prompt_text)
-                system_prompt_text = "\n".join(
-                    [
-                        system_prompt_text,
-                        "",
-                        "Tool access:",
-                        "- Nighthawk tools are exposed via MCP; tool names are prefixed with: mcp__nighthawk__",
-                        "- Example: to call nh_evaluate(...), use: mcp__nighthawk__nh_evaluate",
-                    ]
-                )
-
-            output_object = model_request_parameters.output_object
+                system_prompt_text += TOOL_ACCESS_SYSTEM_PROMPT_FRAGMENT
 
             async with mcp_server_if_needed(
                 tool_name_to_tool_definition=tool_name_to_tool_definition,
@@ -213,28 +201,22 @@ class ClaudeCodeCliModel(BackendModelBase):
                 if max_budget_usd is not None:
                     claude_arguments.extend(["--max-budget-usd", str(max_budget_usd)])
 
+                allowed_tool_patterns = list(claude_code_cli_model_settings.claude_allowed_tool_names or ())
                 if mcp_server_url is not None:
                     mcp_configuration_file = _build_mcp_configuration_file(mcp_server_url)
                     claude_arguments.extend(["--mcp-config", mcp_configuration_file.name])
+                    allowed_tool_patterns.extend(f"{NIGHTHAWK_MCP_TOOL_PREFIX}{tool_name}" for tool_name in allowed_tool_names)
+                for pattern in dict.fromkeys(allowed_tool_patterns):
+                    claude_arguments.extend(["--allowedTools", pattern])
 
-                    allowed_tool_patterns = [f"mcp__nighthawk__{tool_name}" for tool_name in allowed_tool_names]
-                    for pattern in allowed_tool_patterns:
-                        claude_arguments.extend(["--allowedTools", pattern])
-
-                if output_object is not None:
-                    schema = dict(output_object.json_schema)
-                    if output_object.name:
-                        schema["title"] = output_object.name
-                    if output_object.description:
-                        schema["description"] = output_object.description
+                schema = output_json_schema(model_request_parameters)
+                if schema is not None:
                     claude_arguments.extend(["--json-schema", json.dumps(schema)])
 
                 working_directory = claude_code_cli_model_settings.working_directory
                 cwd = working_directory
 
-                # Build subprocess environment: inherit current environment but remove CLAUDECODE
-                # to avoid nested-session detection. Unlike the SDK backend, this does not modify
-                # the process-global environment.
+                # Remove CLAUDECODE from the child environment to avoid nested-session detection.
                 subprocess_environment = {key: value for key, value in os.environ.items() if key != "CLAUDECODE"}
 
                 process = await asyncio.create_subprocess_exec(

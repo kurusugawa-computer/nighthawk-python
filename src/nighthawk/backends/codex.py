@@ -328,7 +328,7 @@ class CodexModel(BackendModelBase):
                 return ModelResponse(
                     parts=[TextPart(content=output_text)],
                     usage=turn_outcome["usage"],
-                    model_name=self.model_name,
+                    model_name=self._model_name,
                     provider_name="codex",
                     provider_details=provider_details,
                 )

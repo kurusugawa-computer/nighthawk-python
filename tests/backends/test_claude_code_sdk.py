@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.settings import ModelSettings
 
-from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModel
+from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModel, ClaudeCodeSdkModelSettings
 from nighthawk.runtime.step_context import StepContext
 from tests.support.contexts import new_context
 
@@ -64,3 +66,44 @@ async def test_request_preserves_host_environment(monkeypatch: pytest.MonkeyPatc
     assert closed == [True]
     assert environment_values == ["host-session"] * 3
     assert os.environ["CLAUDECODE"] == "host-session"
+
+
+@pytest.mark.asyncio
+async def test_shared_claude_settings_reach_sdk_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    sdk = pytest.importorskip("claude_agent_sdk")
+    captured_options: list[Any] = []
+
+    class Client:
+        def __init__(self, *, options) -> None:
+            captured_options.append(options)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *arguments: object) -> None:
+            return None
+
+        async def query(self, prompt: str) -> None:
+            return None
+
+        async def receive_response(self):
+            yield sdk.ResultMessage(
+                subtype="success",
+                duration_ms=1,
+                duration_api_ms=1,
+                is_error=False,
+                num_turns=1,
+                session_id="test-session",
+                result="completed",
+                usage={},
+            )
+
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
+    agent = Agent(ClaudeCodeSdkModel(), deps_type=StepContext)
+    settings = ClaudeCodeSdkModelSettings(max_budget_usd=2.5, claude_allowed_tool_names=("Read",))
+    result = await agent.run("Read the evidence", deps=new_context(), model_settings=cast(ModelSettings, settings.model_dump()))
+
+    options = captured_options[0]
+    assert options.max_budget_usd == 2.5
+    assert "Read" in options.allowed_tools
+    assert result.response.provider_name == "claude-code-sdk"

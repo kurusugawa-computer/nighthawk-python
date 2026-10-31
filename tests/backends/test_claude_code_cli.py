@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
+from pydantic_ai import Agent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.settings import ModelSettings
 
 from nighthawk.backends.claude_code_cli import (
+    ClaudeCodeCliModel,
     ClaudeCodeCliModelSettings,
     _parse_claude_code_json_output,
 )
+from nighthawk.runtime.step_context import StepContext
+from tests.support.contexts import new_context
 
 
 def test_parse_json_output_extracts_result_text() -> None:
@@ -136,3 +144,25 @@ def test_settings_accepts_positive_max_budget() -> None:
 def test_settings_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         ClaudeCodeCliModelSettings(unknown_field="value")  # type: ignore[call-arg]
+
+
+@pytest.mark.asyncio
+async def test_shared_claude_settings_reach_cli_arguments(tmp_path: Path) -> None:
+    arguments_path = tmp_path / "arguments.json"
+    executable = tmp_path / "claude-stub"
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        f"open({str(arguments_path)!r}, 'w').write(json.dumps(sys.argv[1:]))\n"
+        "print(json.dumps({'type': 'result', 'is_error': False, 'result': 'completed', 'usage': {}, 'modelUsage': {}}))\n"
+    )
+    executable.chmod(0o755)
+    settings = ClaudeCodeCliModelSettings(executable=str(executable), max_budget_usd=2.5, claude_allowed_tool_names=("Read",))
+    agent = Agent(ClaudeCodeCliModel(), deps_type=StepContext)
+
+    result = await agent.run("Read the evidence", deps=new_context(), model_settings=cast(ModelSettings, settings.model_dump()))
+
+    arguments = json.loads(arguments_path.read_text())
+    assert arguments[arguments.index("--max-budget-usd") + 1] == "2.5"
+    assert arguments[arguments.index("--allowedTools") + 1] == "Read"
+    assert result.output == "completed"

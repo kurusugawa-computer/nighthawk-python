@@ -92,8 +92,8 @@ All three backends share `working_directory` and `allowed_tool_names` (described
 | `setting_sources` | `list[SettingSource] | None` | `list[SettingSource] | None` | -- |
 | `max_turns` | `int | None` | `int | None` | -- |
 | `executable` | `str`, default `"claude"` | -- | `str`, default `"codex"` |
-| `max_budget_usd` | `float | None` | -- | -- |
-| `claude_allowed_tool_names` | -- | `tuple[str, ...] | None` | -- |
+| `max_budget_usd` | `float | None` | `float | None` | -- |
+| `claude_allowed_tool_names` | `tuple[str, ...] | None` | `tuple[str, ...] | None` | -- |
 | `sandbox_mode` | -- | -- | 3 modes or `None` |
 | `model_reasoning_effort` | -- | -- | 5 levels or `None` |
 
@@ -145,8 +145,9 @@ configuration = nh.StepExecutorConfiguration(
 | `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode. `None` delegates to the CLI default. |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load |
 | `max_turns` | `int` \| `None` | `None` | Maximum conversation turns |
-| `executable` | `str` | `"claude"` | Path or name of the Claude Code CLI executable |
 | `max_budget_usd` | `float` \| `None` | `None` | Maximum dollar amount to spend on API calls |
+| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow |
+| `executable` | `str` | `"claude"` | Path or name of the Claude Code CLI executable |
 
 ## Claude Code (SDK)
 
@@ -190,7 +191,8 @@ configuration = nh.StepExecutorConfiguration(
 | `permission_mode` | `"default"` \| `"acceptEdits"` \| `"plan"` \| `"bypassPermissions"` \| `None` | `None` | Claude Code permission mode. `None` delegates to the SDK default. |
 | `setting_sources` | `list[SettingSource]` \| `None` | `None` | Setting source scopes to load (`SettingSource` is `"user"`, `"project"`, or `"local"`) |
 | `max_turns` | `int` \| `None` | `None` | Maximum conversation turns. `None` delegates to the SDK default. |
-| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow (SDK only; CLI does not support this field) |
+| `max_budget_usd` | `float` \| `None` | `None` | Maximum dollar amount to spend on API calls |
+| `claude_allowed_tool_names` | `tuple[str, ...]` \| `None` | `None` | Additional Claude Code native tool names to allow |
 
 ## Codex
 
