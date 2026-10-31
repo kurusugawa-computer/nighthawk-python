@@ -119,9 +119,9 @@ class StepLifecycle:
     Host deduplication must match both execution identity and the stored event.
     """
 
-    on_step_finished: Callable[[StepFinished], None | Awaitable[None]] | None = None
-    on_operation_finished: Callable[[OperationFinished], None | Awaitable[None]] | None = None
     on_step_started: Callable[[StepStarted], None | Awaitable[None]] | None = None
+    on_operation_finished: Callable[[OperationFinished], None | Awaitable[None]] | None = None
+    on_step_finished: Callable[[StepFinished], None | Awaitable[None]] | None = None
     interruption_delivery_timeout: float = 1.0
 
     def __post_init__(self) -> None:
