@@ -9,27 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Breaking: `nh.get_scope()` returns the active frozen `nh.Scope`, whose fields mirror the `nh.scope()` parameters plus the current `execution_reference`; `nh.run()` and `nh.scope()` yield that record.
+  It replaces `get_step_executor`, `get_execution_reference`, `get_usage_meter`, `get_oversight`, `get_lifecycle`, `get_tools`, `get_capabilities`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`, and also exposes `task_references` and `context_builder`.
+- Breaking: `nighthawk.testing` uses the executor protocol's own values.
+  `ScriptedExecutor` and `CallbackExecutor` return `StepCandidate` values and record each live `StepRequest` in `requests`; a callback receives the `StepRequest`.
+  `StepCandidate.outcome` defaults to `Pass()`.
+  `StepResponse`, `StepCall`, and the `pass_response`, `return_response`, `raise_response`, `break_response`, and `continue_response` factories are removed; construct `StepCandidate(outcome=Return(value))` and the other outcomes from `nighthawk.runtime`.
+- Breaking: the top-level namespace keeps the ordinary application path.
+  `StepExecutor`, `ConfigurableStepExecutor`, and `ModelSelection` are exported only from `nighthawk.runtime`, and `nighthawk.oversight` no longer re-exports the resolved outcomes.
+  `to_jsonable_value` is internal, and `JsonableValue` is replaced by Pydantic's `JsonValue`.
+- Breaking: `nh.get_function_definition(function).transformed_function` is the one accessor for a Natural function's compiled body; `nh.get_transformed_function` is removed.
+  `@nh.function` is applied bare; the empty-call `@nh.function()` form is removed.
+- Breaking: `StepExecutorConfiguration` holds `system_prompt_template` and `user_prompt_template` directly beside the matching suffix fragments; `StepPromptTemplates` and the `prompts` field are removed.
+- Breaking: `StepLifecycle` and `Oversight` accept only keyword arguments, such as `StepLifecycle(on_step_finished=record)`; lifecycle hooks are ordered chronologically.
+- Breaking: `StepContext` receives its prepared `environment` and keeps runtime-owned operation state private.
+  Declared outputs and their contracts are read from `environment.output_name_set` and `environment.binding_name_to_type`.
+  The duplicated `binding_commit_targets` and `binding_name_to_type` fields, the `task_name_to_value` constructor argument, the `operation_*` fields, and write-only bookkeeping (`assigned_binding_names`, `dirty_output_binding_names`, `step_locals_revision`, `record_output_binding_mutation`, `processed_natural_program`) are removed.
+- Breaking: `StepRequest` and `ContextRequest` read `execution_reference` and `binding_name_to_type` from their step context instead of accepting separate copies.
+  `StepCommit.output_binding_names` is the declared output order as a tuple, replacing `output_binding_name_set`.
+- Breaking: `OperationError` carries its own `kind`, `phase`, `evaluation_started`, and `guidance`; the `ToolBoundaryError` base is removed because application tools raising it were never converted into model feedback.
+  Tool error kinds are limited to the produced `invalid_input`, `resolution`, and `oversight`.
+- Breaking: rejection feedback has one payload.
+  `OperationRejection.model_feedback()` returns the tool error shape (`kind`, `status`, identities, `message`, `guidance`, `phase`, `evaluation_started`) for tool denials, output retries, and ordered-batch denied returns.
+  Skipped operations use the same shape, with guidance not to repeat operations that already completed and to reissue the skipped operation when still needed; in live probes this stopped models from replaying completed calls.
+- Breaking: protocol agents supplied through `AgentStepExecutor.from_agent` return the `ModelStepResponse` envelope; a bare outcome is no longer accepted.
+- Breaking: resilience transformers use one form per contract.
+  `timeout(seconds=...)` is a decorator only; use the standard `asyncio.timeout` to bound a block.
+  `circuit_breaker` takes `failure_threshold`, and its opened event reports `nighthawk.resilience.circuit.failure_threshold`.
+  `budget(estimate_usage=...)` receives the wrapped call's own arguments, and `retrying(wait=...)` defaults to an exponential jitter strategy.
+- Breaking: backend `working_directory` defaults to `None` instead of an empty-string sentinel, and positive backend limits use Pydantic field constraints.
+- The Claude Code CLI and SDK backends share `max_budget_usd` and `claude_allowed_tool_names`, request schema construction, and tool-access guidance.
+  SDK responses report `provider_name="claude-code-sdk"`, and Codex responses report the selected model name without the `codex:` prefix, or `None` for the CLI default.
+- `nighthawk.runtime` imports its exports eagerly.
+- The API reference documents only symbols with an external use; tool transport records, backend request internals, rendering policies, and individual model outcome variants are internal.
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
-- Skipped operations after a rejection return the same tool error shape, with guidance not to repeat operations that already completed and to reissue the skipped operation when still needed. In live probes this stopped models from replaying completed calls in the same response.
-- Breaking: `OperationRejection.model_feedback()` returns the tool error shape (`kind`, `status`, identities, `message`, `guidance`, `phase`, `evaluation_started`), so tool denials, output retries, and ordered-batch denied returns give the model one payload. The reason is reported as `message`.
-- The Claude Code CLI and SDK backends share `max_budget_usd` and `claude_allowed_tool_names`, request schema construction, and tool-access guidance. SDK responses report `provider_name="claude-code-sdk"`, and Codex responses report the selected model name without the `codex:` prefix, or `None` for the CLI default.
-- Breaking: backend `working_directory` defaults to `None` instead of an empty-string sentinel. Positive backend limits use Pydantic field constraints.
-- Breaking: resilience transformers use one form per contract. `timeout(seconds=...)` is a decorator only; use the standard `asyncio.timeout` to bound a block. `circuit_breaker` takes `failure_threshold` instead of `fail_threshold`, and its opened event reports `nighthawk.resilience.circuit.failure_threshold`. `budget(estimate_usage=...)` receives the wrapped call's own arguments. `retrying(wait=...)` defaults to an exponential jitter strategy instead of `None`.
-- Breaking: `OperationError` carries its own `kind`, `phase`, `evaluation_started`, and `guidance`; the separate `ToolBoundaryError` base is removed because application tools raising it were never converted into model feedback. Tool error kinds are limited to the produced `invalid_input`, `resolution`, and `oversight`.
-- Breaking: `StepRequest` and `ContextRequest` read `execution_reference` and `binding_name_to_type` from their step context instead of accepting separate copies that had to be validated as equal.
-- Breaking: `StepContext` keeps runtime-owned operation serialization and failure state in a private record; `operation_lock`, `operation_failure`, `operation_failure_stage`, and `operation_abort` are no longer public fields.
-- Breaking: `StepContext` receives its prepared `environment` instead of rebuilding one from `task_name_to_value`; declared outputs and their contracts are read from `environment.output_name_set` and `environment.binding_name_to_type` rather than duplicated `binding_commit_targets` and `binding_name_to_type` fields.
-- Breaking: `StepContext` no longer carries write-only bookkeeping (`assigned_binding_names`, `dirty_output_binding_names`, `step_locals_revision`, `record_output_binding_mutation`, `processed_natural_program`); `StepRequest` already supplies the processed program.
-- Breaking: protocol agents supplied through `AgentStepExecutor.from_agent` return the `ModelStepResponse` envelope; a bare outcome is no longer accepted.
-- The API reference documents only symbols with an external use. Tool transport records, backend request internals, rendering policies, and individual model outcome variants are internal.
-- Breaking: the top-level namespace keeps the ordinary application path. `StepExecutor`, `ConfigurableStepExecutor`, and `ModelSelection` are exported only from `nighthawk.runtime`, beside the other executor-boundary contracts. `nighthawk.oversight` no longer re-exports the resolved outcomes; import them from `nighthawk.runtime`. `to_jsonable_value` is internal, and `JsonableValue` is replaced by Pydantic's `JsonValue`.
-- Breaking: `nh.get_function_definition(function).transformed_function` is the one accessor for a Natural function's compiled body; `nh.get_transformed_function` is removed. `@nh.function` is applied bare; the empty-call `@nh.function()` form is removed.
-- Breaking: `StepExecutorConfiguration` holds `system_prompt_template` and `user_prompt_template` directly beside the matching suffix fragments; `StepPromptTemplates` and the `prompts` field are removed.
-- Breaking: `StepLifecycle` and `Oversight` accept only keyword arguments, such as `StepLifecycle(on_step_finished=record)`.
-- Breaking: `StepCommit.output_binding_names` is the declared output order as a tuple, matching `StepRequest`; `output_binding_name_set` is removed.
-- Breaking: `nh.get_scope()` returns the active frozen `nh.Scope`, whose fields mirror the `nh.scope()` parameters plus the current `execution_reference`. `nh.run()` and `nh.scope()` yield that record. It replaces `get_step_executor`, `get_execution_reference`, `get_usage_meter`, `get_oversight`, `get_lifecycle`, `get_tools`, `get_capabilities`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`, and also exposes `task_references` and `context_builder`.
-- Breaking: `nighthawk.testing` uses the executor protocol's own values. `ScriptedExecutor` and `CallbackExecutor` return `StepCandidate` values and record each live `StepRequest` in `requests`; a callback receives the `StepRequest`. `StepCandidate.outcome` defaults to `Pass()`. `StepResponse`, `StepCall`, and the `pass_response`, `return_response`, `raise_response`, `break_response`, and `continue_response` factories are removed; construct `StepCandidate(outcome=Return(value))` and the other outcomes from `nighthawk.runtime`.
+
+### Fixed
+
+- The Claude Code backend guide names the `--append-system-prompt-file` flag the CLI backend actually passes.
 
 ## [0.18.0]
 
