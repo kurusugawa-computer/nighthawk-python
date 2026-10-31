@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Breaking: backend `working_directory` defaults to `None` instead of an empty-string sentinel, and positive backend limits use Pydantic field constraints.
 - The Claude Code CLI and SDK backends share `max_budget_usd` and `claude_allowed_tool_names`, request schema construction, and tool-access guidance.
   SDK responses report `provider_name="claude-code-sdk"`, and Codex responses report the selected model name without the `codex:` prefix, or `None` for the CLI default.
-- `nighthawk.runtime` imports its exports eagerly.
+- `nighthawk.runtime` imports its exports eagerly and exports every runtime contract rendered in the API reference, including the execution agent protocols, operation kinds, phases, statuses, and the model step response schema.
 - The API reference documents only symbols with an external use; tool transport records, backend request internals, rendering policies, and individual model outcome variants are internal.
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
