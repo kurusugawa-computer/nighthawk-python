@@ -107,7 +107,7 @@ class StepStarted:
     execution_reference: ExecutionReference
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StepLifecycle:
     """Scoped notifications, inherited with UNSET and cleared by None.
 

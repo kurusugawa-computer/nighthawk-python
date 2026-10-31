@@ -29,7 +29,7 @@ def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytes
         function()
     assert not constructions
     with pytest.raises(ValueError, match="exclusively"):
-        nh.ModelSelection(execution_model="test:A", configuration=nh.StepExecutorConfiguration())
+        nh.runtime.ModelSelection(execution_model="test:A", configuration=nh.StepExecutorConfiguration())
     with (
         nh.run(StubExecutor()),
         pytest.raises(ValueError, match="exclusively"),
@@ -37,8 +37,8 @@ def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytes
     ):
         pass
     with pytest.raises(ValueError):
-        nh.ModelSelection()
-    assert nh.ModelSelection(execution_model=None).apply(nh.StepExecutorConfiguration()).execution_model is None
+        nh.runtime.ModelSelection()
+    assert nh.runtime.ModelSelection(execution_model=None).apply(nh.StepExecutorConfiguration()).execution_model is None
 
 
 @pytest.mark.parametrize("outcome", ["success", "failure", "cancel"])
@@ -107,7 +107,7 @@ def test_unsupported_resolvers_and_subclasses_fail_without_unwrapping() -> None:
         pass
 
     class Invalid(StubExecutor):
-        def resolve_model_selection(self, selection: nh.ModelSelection) -> Any:
+        def resolve_model_selection(self, selection: nh.runtime.ModelSelection) -> Any:
             return object()
 
     with nh.run(Invalid()), pytest.raises(nh.NighthawkError, match="return a StepExecutor"), nh.scope(execution_model="test:B"):
@@ -285,7 +285,7 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
 
 @pytest.mark.parametrize("argument_name, value", [("run_id", None), ("run_id", ""), ("usage_meter", None)])
 def test_invalid_run_input_does_not_call_model_resolver(argument_name: str, value: object) -> None:
-    resolutions: list[nh.ModelSelection] = []
+    resolutions: list[nh.runtime.ModelSelection] = []
 
     class Executor:
         def run_step(self, *, request):

@@ -94,12 +94,12 @@ Authorization does not change supported source forms.
 - `nighthawk.function`
     - Decorator that compiles a function containing Natural blocks into an LLM-backed implementation.
     - Compilation happens at decoration time; blocks execute when the synchronous body runs or the asynchronous coroutine executes.
-    - Bare `@nh.function` and empty `@nh.function()` forms are supported. Models belong to `run` and `scope`; the decorator accepts no model configuration.
+    - Apply it bare, as `@nh.function`; it accepts no configuration. Models belong to `run` and `scope`.
     - Decoration does not initialize providers. Optional whole-function admission precedes body effects; see [embedded execution boundaries](#embedded-execution-boundaries).
     - Note: The decorator requires the function source to be available for inspection.
-    - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional. `nh.get_transformed_function(function)` exposes the compiled body sharing the original module globals. It follows outer wrappers and supported method descriptors, requires no run, and raises `TypeError` for invalid inputs or wrapper cycles. Execute through the decorated function to establish runtime context.
+    - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional.
     - Instrumentation preserves original defaults without evaluating them again, live closure cells, and defining module globals. Generated helper names avoid application bindings, including names appearing inside Natural text.
-    - `nh.get_function_definition(function)` supplies exact transformation correspondence without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions).
+    - `nh.get_function_definition(function)` supplies the original function, public wrapper, and compiled body sharing the original module globals, without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions). Execute through the decorated function to establish runtime context.
 
 ### 5.2. Configuration
 
@@ -112,9 +112,8 @@ Authorization does not change supported source forms.
     - `decision_model_settings`: Decision model settings, defaulting to an empty dictionary; accepts the same forms as `execution_model_settings`.
     - `execution_model_settings`: execution model/backend overrides, defaulting to an empty dictionary. Accepts a `dict[str, Any]` or a backend-specific `BaseModel` instance (auto-converted to dict); rejects `None` and `UNSET`. An empty dictionary adds no overrides and preserves model-owned defaults. Forwarded to Pydantic AI Agent calls. Each coding agent backend defines a settings class (`CodexModelSettings`, `ClaudeCodeSdkModelSettings`, `ClaudeCodeCliModelSettings`) -- see [Coding agent backends](coding-agent-backends.md) for field-level documentation.
     - `tokenizer_encoding`: tokenizer encoding identifier for approximate token budgeting. `None` means auto-resolve by model name, then fallback to `o200k_base`.
-    - `prompts`: prompt templates used for execution.
-        - `system_prompt_template`: system prompt template that defines the step execution protocol.
-        - `user_prompt_template`: full user prompt template including section delimiters.
+    - `system_prompt_template`: system prompt template that defines the step execution protocol.
+    - `user_prompt_template`: full user prompt template including section delimiters.
     - `context_limits`: limits for rendering dynamic context into the prompt.
     - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and projected tool-result previews. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
@@ -140,15 +139,9 @@ Scopes restore the exact parent executor on exit or error, and the host retains 
 
 ### 5.3. Supporting types
 
-- `StepPromptTemplates`
-    - Prompt templates used for step execution.
-    - `system_prompt_template`: system prompt template.
-    - `user_prompt_template`: user prompt template.
 - `StepContextLimits`
     - Limits for rendering dynamic context into the LLM prompt.
     - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
-- `JsonableValue`
-    - Type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`).
 - `ExecutionReference`
     - Frozen dataclass representing runtime execution identity.
     - `run_id`: the Id of the active run; nested runs create independent identities unless an Id is supplied explicitly.
@@ -1501,7 +1494,6 @@ Detached application tasks, unjoined threads, external service work, hard proces
 Its `original_function`, `function`, and `transformed_function` fields are the actual objects.
 Copied attributes, raw source/body functions, and unrelated outer wrappers are not exact registration evidence.
 The registry uses weak ownership; a snapshot held by the application intentionally retains its functions.
-`get_transformed_function()` follows conventional wrapper chains for inspection.
 
 ### Model declarations and observation
 

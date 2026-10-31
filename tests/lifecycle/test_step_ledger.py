@@ -124,7 +124,7 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
     with (
         nh.run(Executor()),
         nh.scope(
-            lifecycle=StepLifecycle(ledger.finished),
+            lifecycle=StepLifecycle(on_step_finished=ledger.finished),
             oversight=nh.oversight.Oversight(
                 inspect_step_commit=inspect_commit,
                 inspect_operation=inspect_expression,
@@ -159,7 +159,7 @@ def test_inner_python_handler_does_not_hide_step_failure() -> None:
             return exception
         return None
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)):
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)):
         error = workflow()
     assert isinstance(error, NaturalExecutionError)
     assert list(ledger.execution_id_to_event.values()) == [error.event]
@@ -188,7 +188,7 @@ def test_return_await_failure_is_recorded_and_translated(tracing: bool, monkeypa
         """
         return 0
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
         asyncio.run(workflow())
     event = caught.value.event
     assert list(ledger.execution_id_to_event.values()) == [event]
@@ -229,7 +229,7 @@ def test_success_ledger_preserves_identity_and_validates_once() -> None:
         return value
 
     executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"value": original})])
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(ledger.finished)):
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)):
         assert workflow() is original
     event = next(iter(ledger.execution_id_to_event.values()))
     assert isinstance(event, StepCompleted)
@@ -259,7 +259,7 @@ def test_delivery_failure_does_not_retry_or_invent_persistence(append_first: boo
         """
 
     executor = ScriptedExecutor([StepCandidate()])
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(StepDeliveryError) as caught:
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)), pytest.raises(StepDeliveryError) as caught:
         workflow()
     assert len(attempts) == len(executor.requests) == 1
     assert len(ledger.execution_id_to_event) == int(append_first)
@@ -280,7 +280,7 @@ def test_preparation_failure_has_identity_and_unknown_fields() -> None:
         {preparation_text}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
         workflow()
     event = caught.value.event
     assert isinstance(event, StepFailed) and event.failure_stage == "preparation"
@@ -300,7 +300,7 @@ def test_dsl_raise_translates_from_prepared_exception() -> None:
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "ValueError"}, "bindings": {}}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
         workflow()
     event = caught.value.event
     assert isinstance(event, StepRaised)
@@ -325,7 +325,7 @@ def test_cancellation_is_stored_without_host_translation() -> None:
         """
         return 0
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(asyncio.CancelledError):
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)), pytest.raises(asyncio.CancelledError):
         asyncio.run(workflow())
     event = next(iter(ledger.execution_id_to_event.values()))
     assert isinstance(event, StepInterrupted) and event.original_exception is interruption
@@ -378,7 +378,7 @@ def test_pre_recorded_host_exception_is_not_recorded_twice(boundary: FailureStag
     with (
         nh.run(Executor()),
         nh.scope(
-            lifecycle=StepLifecycle(finished),
+            lifecycle=StepLifecycle(on_step_finished=finished),
             oversight=nh.oversight.Oversight(inspect_step_commit=inspect_commit),
         ),
         pytest.raises(NaturalExecutionError) as caught,
@@ -410,7 +410,7 @@ def test_nested_host_exception_still_records_each_execution() -> None:
         {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=ledger.finished)), pytest.raises(NaturalExecutionError) as caught:
         outer()
     assert len(ledger.execution_id_to_event) == 2
     inner_event, outer_event = ledger.execution_id_to_event.values()
@@ -439,7 +439,7 @@ def test_returning_handler_does_not_preserve_host_exception_type() -> None:
         Finish.
         """
 
-    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(notifications.append)), pytest.raises(nh.ExecutionError) as caught:
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=notifications.append)), pytest.raises(nh.ExecutionError) as caught:
         workflow()
     assert len(notifications) == 1
     assert caught.value.__cause__ is original

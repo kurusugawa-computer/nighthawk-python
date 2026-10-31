@@ -12,7 +12,7 @@ from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
 @pytest.mark.parametrize("error_type", ["MissingException", "invalid_exception"])
-@pytest.mark.parametrize("decision", [nh.oversight.Accept(), nh.oversight.Rewrite(outcome=nh.oversight.Pass())])
+@pytest.mark.parametrize("decision", [nh.oversight.Accept(), nh.oversight.Rewrite(outcome=nh.runtime.Pass())])
 def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: nh.oversight.StepCommitDecision) -> None:
     inspected: list[nh.oversight.StepCommit] = []
     invalid_exception = int  # noqa: F841

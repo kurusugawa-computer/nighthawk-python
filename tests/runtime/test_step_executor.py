@@ -36,7 +36,7 @@ async def test_executor_exposes_exception_binding_aliases(error_type: type[Excep
         Raise <selected_error> with message 'invalid input'.
         """
 
-    with nh.run(execution_model=FunctionModel(respond)), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(events.append)):
+    with nh.run(execution_model=FunctionModel(respond)), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
         with pytest.raises(error_type if selection is not None else Exception, match="^invalid input$") as caught:
             if embedded:
                 await nh.runtime.execute_step_async(

@@ -151,7 +151,7 @@ def test_invalid_builder_content_fails_before_model_execution(invalid_content: o
     agent = RecordingAgent()
     with (
         nh.run(nh.AgentStepExecutor.from_agent(agent=agent)),
-        nh.scope(context_builder=Builder(), lifecycle=StepLifecycle(events.append)),
+        nh.scope(context_builder=Builder(), lifecycle=StepLifecycle(on_step_finished=events.append)),
         pytest.raises(nh.ExecutionError, match="ContextBuilder.build"),
     ):
         asyncio.run(workflow(None))
@@ -172,7 +172,7 @@ def test_builder_failure_has_one_terminal_record_and_no_model_request() -> None:
     agent = RecordingAgent()
     with (
         nh.run(nh.AgentStepExecutor.from_agent(agent=agent)),
-        nh.scope(context_builder=Builder(), lifecycle=StepLifecycle(events.append)),
+        nh.scope(context_builder=Builder(), lifecycle=StepLifecycle(on_step_finished=events.append)),
         pytest.raises(nh.ExecutionError) as caught,
     ):
         asyncio.run(workflow(None))

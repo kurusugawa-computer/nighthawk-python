@@ -17,7 +17,6 @@ def test_exact_correspondence_and_descriptors() -> None:
     assert definition is not None
     assert definition.original_function is original
     assert definition.function is function
-    assert definition.transformed_function is nh.get_transformed_function(function)
     assert inspect.signature(function) == inspect.signature(original)
 
     @wraps(function)
@@ -39,7 +38,7 @@ def test_exact_correspondence_and_descriptors() -> None:
         assert nh.get_function_definition(descriptor) is definition
     for other in (original, definition.transformed_function, outer, None, [], 3):
         assert nh.get_function_definition(other) is None
-    assert nh.get_transformed_function(outer) is definition.transformed_function
+    assert nh.get_function_definition(outer.__wrapped__) is definition  # type: ignore[attr-defined]
 
 
 def test_registry_does_not_retain_abandoned_namespace() -> None:

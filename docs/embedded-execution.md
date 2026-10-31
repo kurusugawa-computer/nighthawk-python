@@ -176,7 +176,7 @@ definition = StepDefinition(
     source_location="trusted_summary:1",
 )
 executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"summary": "The trial passed."})])
-with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
+with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
     outcome = execute_step(definition, name_to_value=name_to_value, write_binding=name_to_value.__setitem__)
 
 assert outcome == Pass()
@@ -228,7 +228,7 @@ async def main() -> None:
         source_location="trusted_selection:1",
     )
     executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"selected": {"label": "alpha"}})])
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
         outcome = await execute_step_async(definition, name_to_value={"candidates": ["alpha", "beta"], "Selection": Selection}, write_binding=write)
     assert outcome == Pass()
     assert len(events) == 1 and isinstance(events[0], StepCompleted)

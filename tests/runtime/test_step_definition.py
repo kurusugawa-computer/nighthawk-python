@@ -56,7 +56,7 @@ async def test_reused_definition_resolves_each_invocations_environment(execute: 
         observed.append(dict(request.binding_name_to_type))
         return StepCandidate(outcome=Return("7"), binding_name_to_value={"result": "7", "inferred": "8"})
 
-    with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)):
         for selected_type, initial, expected_result, expected_inferred in [(int, 0, 7, 8), (str, "", "7", "8")]:
             saved_name_to_value: dict[str, object] = {}
             outcome = await execute(

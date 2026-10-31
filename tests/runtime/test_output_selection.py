@@ -54,7 +54,7 @@ async def test_candidate_selects_exact_outputs_before_validation_and_assignment(
         nh.scope(
             task_references={"task_only": 30},
             oversight=Oversight(inspect_step_commit=inspect),
-            lifecycle=StepLifecycle(events.append),
+            lifecycle=StepLifecycle(on_step_finished=events.append),
         ),
     ):
         await execute(

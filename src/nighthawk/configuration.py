@@ -58,21 +58,6 @@ def _validate_model_identifier(model: str) -> str:
     return model
 
 
-class StepPromptTemplates(BaseModel):
-    """Prompt templates for execute blocks; decide uses typed questions and explicit evidence.
-
-    Attributes:
-        system_prompt_template: System prompt template sent to the LLM.
-        user_prompt_template: User prompt template with $program, $locals,
-            and $globals placeholders.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
-    user_prompt_template: str = DEFAULT_STEP_USER_PROMPT_TEMPLATE
-
-
 class StepContextLimits(BaseModel):
     """Presentation limits for execute blocks; decide sends complete explicit evidence.
 
@@ -107,31 +92,36 @@ class StepExecutorConfiguration(BaseModel):
     """Configuration for a step executor.
 
     Attributes:
-        execution_model: Provider-qualified identifier or borrowed Pydantic AI Model instance.
+        execution_model: Provider-qualified identifier or borrowed Pydantic AI Model for execute blocks.
             Instances retain identity; the host owns client lifetime. Serialization
             must explicitly exclude a live model field, including in nested records.
             Configuration representations omit the model to avoid traversing credentials.
-        decision_model: Model for typed decisions; omitted models fail when their block is executed.
-        decision_model_settings: Settings for the decision model.
-        execution_model_settings: Execution model provider-specific overrides. Defaults to an empty dict;
-            accepts a dict or a backend-specific BaseModel (converted to dict).
-            None and UNSET are invalid. An empty dict preserves model-owned defaults.
-        prompts: Prompt templates for execute blocks.
+        execution_model_settings: Execution model provider-specific overrides. Accepts a dict or a
+            backend-specific BaseModel (converted to dict); an empty dict preserves model-owned defaults.
+        decision_model: Model for decide blocks; a missing model fails when its block is executed.
+        decision_model_settings: Settings for the decision model, in the same forms as execution_model_settings.
+        system_prompt_template: System prompt template for execute blocks.
+        system_prompt_suffix_fragments: Fragments appended to the system prompt.
+        user_prompt_template: User prompt template for execute blocks, with $program, $locals, and $globals placeholders.
+        user_prompt_suffix_fragments: Fragments appended to the user prompt.
         context_limits: Token and item limits for execute context previews, not decision evidence.
         json_renderer_style: Headson rendering style for JSON summarization.
-        tokenizer_encoding: Explicit tiktoken encoding name. If not set, inferred
-            from the model.
-        system_prompt_suffix_fragments: Additional fragments appended to the system
-            prompt.
-        user_prompt_suffix_fragments: Additional fragments appended to the user prompt.
+        tokenizer_encoding: Explicit tiktoken encoding name; omission infers it from the execution model.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     execution_model: str | InstanceOf[Model] | None = Field(default=None, repr=False)
+    execution_model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
     decision_model: str | InstanceOf[Model] | None = Field(default=None, repr=False)
     decision_model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
-    execution_model_settings: dict[str, Any] | BaseModel = Field(default_factory=dict)
+    system_prompt_template: str = DEFAULT_STEP_SYSTEM_PROMPT_TEMPLATE
+    system_prompt_suffix_fragments: tuple[str, ...] = ()
+    user_prompt_template: str = DEFAULT_STEP_USER_PROMPT_TEMPLATE
+    user_prompt_suffix_fragments: tuple[str, ...] = ()
+    context_limits: StepContextLimits = StepContextLimits()
+    json_renderer_style: JsonRendererStyle = "default"
+    tokenizer_encoding: str | None = None
 
     @field_validator("execution_model_settings", "decision_model_settings", mode="before")
     @classmethod
@@ -139,13 +129,6 @@ class StepExecutorConfiguration(BaseModel):
         if isinstance(value, BaseModel):
             return value.model_dump()
         return value
-
-    prompts: StepPromptTemplates = StepPromptTemplates()
-    context_limits: StepContextLimits = StepContextLimits()
-    json_renderer_style: JsonRendererStyle = "default"
-    tokenizer_encoding: str | None = None
-    system_prompt_suffix_fragments: tuple[str, ...] = ()
-    user_prompt_suffix_fragments: tuple[str, ...] = ()
 
     @field_validator("execution_model", "decision_model")
     @classmethod

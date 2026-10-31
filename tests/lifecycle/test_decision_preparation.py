@@ -49,7 +49,11 @@ async def test_decision_identity_survives_failure_before_preparation(asynchronou
             raise original_exception
 
     expected_exception = asyncio.CancelledError if failure.endswith("interrupted") else nh.ExecutionError
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(events.append, on_step_started=on_started)), pytest.raises(expected_exception) as caught:
+    with (
+        nh.run(executor),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append, on_step_started=on_started)),
+        pytest.raises(expected_exception) as caught,
+    ):
         if asynchronous:
             await judge_async(instruction)
         else:
@@ -100,7 +104,11 @@ async def test_embedded_decision_identity_survives_early_failure(execute: Callab
         pytest.fail("Writer must not run")
 
     expected_exception = asyncio.CancelledError if failure.endswith("interrupted") else nh.ExecutionError
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(events.append, on_step_started=on_started)), pytest.raises(expected_exception):
+    with (
+        nh.run(executor),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append, on_step_started=on_started)),
+        pytest.raises(expected_exception),
+    ):
         await execute(
             definition,
             name_to_value=None if failure == "namespace" else {},

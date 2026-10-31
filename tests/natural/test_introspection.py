@@ -5,13 +5,17 @@ import inspect
 from functools import wraps
 from typing import Any, cast
 
-import pytest
-
 import nighthawk as nh
 from tests.support.executors import StubExecutor
 
 
-def test_original_unwrap_signature_and_transformed_accessor() -> None:
+def _transformed(function: object) -> Any:
+    definition = nh.get_function_definition(function)
+    assert definition is not None
+    return definition.transformed_function
+
+
+def test_original_unwrap_signature_and_transformed_body() -> None:
     def original(value: int = 3) -> int:
         """execute
         <value>
@@ -28,7 +32,7 @@ def test_original_unwrap_signature_and_transformed_accessor() -> None:
     assert inspect.unwrap(decorated) is original
     assert inspect.unwrap(outer) is original
     assert inspect.signature(outer) == inspect.signature(original)
-    transformed = nh.get_transformed_function(outer)
+    transformed = _transformed(outer.__wrapped__)  # type: ignore[attr-defined]
     assert transformed is not original
     assert transformed.__globals__ is original.__globals__
     assert transformed.__name__ == original.__name__
@@ -50,7 +54,7 @@ def test_async_and_method_descriptors() -> None:
 
     decorated = nh.function(original)
     assert inspect.unwrap(decorated) is original
-    assert inspect.iscoroutinefunction(nh.get_transformed_function(decorated))
+    assert inspect.iscoroutinefunction(_transformed(decorated))
 
     class Container:
         method = cast(Any, decorated)
@@ -58,18 +62,6 @@ def test_async_and_method_descriptors() -> None:
         class_method = classmethod(cast(Any, decorated))
 
     for function in (Container.static, Container.__dict__["static"], Container.class_method, Container.__dict__["class_method"], Container().method):
-        assert nh.get_transformed_function(function) is nh.get_transformed_function(decorated)
+        assert _transformed(function) is _transformed(decorated)
     with nh.run(StubExecutor()):
         assert asyncio.run(decorated()) == 4
-
-
-def test_invalid_inputs_and_cycles() -> None:
-    def ordinary() -> None:
-        pass
-
-    for function in (ordinary, None, 1):
-        with pytest.raises(TypeError):
-            nh.get_transformed_function(function)  # type: ignore[arg-type]
-    ordinary.__wrapped__ = ordinary  # type: ignore[attr-defined]
-    with pytest.raises(TypeError):
-        nh.get_transformed_function(ordinary)

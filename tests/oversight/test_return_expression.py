@@ -86,14 +86,14 @@ def test_name_only_policy_does_not_skip_return_validation() -> None:
         nh.run(executor),
         nh.scope(
             oversight=Oversight(inspect_operation=approve_name_expression),
-            lifecycle=StepLifecycle(events.append),
+            lifecycle=StepLifecycle(on_step_finished=events.append),
         ),
     ):
         assert workflow() == 2
     assert validations == [1, 1]  # Output and resolved return values are independently validated.
     assert len(events) == 1
     event = events[0]
-    assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.oversight.Return)
+    assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.runtime.Return)
     assert event.assigned_binding_name_to_value == {"value": 2}
     assert event.outcome.value == 2
 
@@ -148,7 +148,7 @@ def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
     with (
         nh.run(executor),
         nh.scope(
-            lifecycle=StepLifecycle(events.append),
+            lifecycle=StepLifecycle(on_step_finished=events.append),
             oversight=Oversight(
                 inspect_operation=approve_name_expression,
                 inspect_step_commit=lambda commit: nh.oversight.Rewrite(binding_name_to_value={"value": 9}),
@@ -157,7 +157,7 @@ def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
     ):
         assert workflow() == 4
     event = events[0]
-    assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.oversight.Return)
+    assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.runtime.Return)
     assert event.outcome.value == 4
     assert event.assigned_binding_name_to_value == {"value": 9}
 

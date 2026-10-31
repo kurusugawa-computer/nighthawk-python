@@ -34,7 +34,7 @@ async def test_documented_generation_is_followed_by_a_decision(summary_assessmen
         ]
     )
     events: list[nh.lifecycle.StepFinished] = []
-    with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(events.append)):
+    with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
         assert await summary_assessment(document) == (summary, 0.9)
 
     assert [call.block_kind for call in executor.requests] == ["execute", "decide"]

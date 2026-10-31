@@ -100,7 +100,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         assert "configured-user" in prompt and "scoped-user" in prompt
         assert "<<<NH:PROGRAM>>>" in prompt
         assert any(
-            isinstance(part, SystemPromptPart) and part.content.startswith(configuration.prompts.system_prompt_template)
+            isinstance(part, SystemPromptPart) and part.content.startswith(configuration.system_prompt_template)
             for message in messages
             for part in message.parts
         )
@@ -318,7 +318,7 @@ def test_in_memory_authentication_scope_restoration_and_borrowed_clients(monkeyp
                         assert isinstance(caught.value, nh.oversight.StepAbortedError)
                         assert caught.value.subject == "step_commit"
                     assert nh.get_scope().step_executor is parent
-                derived = configurations[0].model_copy(update={"prompts": nh.StepPromptTemplates(system_prompt_template="Replacement system prompt")})
+                derived = configurations[0].model_copy(update={"system_prompt_template": "Replacement system prompt"})
                 with nh.scope(step_executor_configuration=derived):
                     assert derived.execution_model is selected_models[0]
                     assert await workflow() == 7

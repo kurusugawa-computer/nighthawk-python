@@ -26,7 +26,7 @@ def guide_examples(tmp_path: Path) -> list[Path]:
 def test_working_template(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"label": "bug"})])
 
-    def select_executor(self: nh.AgentStepExecutor, selection: nh.ModelSelection) -> ScriptedExecutor:
+    def select_executor(self: nh.AgentStepExecutor, selection: nh.runtime.ModelSelection) -> ScriptedExecutor:
         assert selection.apply(self.configuration).execution_model is not None
         return executor
 

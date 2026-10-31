@@ -12,7 +12,6 @@
         - UnsetType
         - Extend
         - Merge
-        - get_transformed_function
         - function
         - FunctionDefinition
         - get_function_definition
@@ -37,19 +36,8 @@
 ::: nighthawk.configuration
     options:
       members:
-        - ModelSelection
         - StepExecutorConfiguration
-        - StepPromptTemplates
         - StepContextLimits
-
-## Value rendering
-
-::: nighthawk.json_renderer
-    options:
-      members:
-        - JsonableValue
-        - JsonRendererStyle
-        - to_jsonable_value
 
 ## Backends
 
@@ -239,6 +227,11 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
         - AsyncExecutionAgent
         - SyncStepExecutor
         - AsyncStepExecutor
+
+::: nighthawk.configuration
+    options:
+      members:
+        - ModelSelection
 
 ::: nighthawk.runtime.step_outcome
     options:

@@ -42,7 +42,7 @@ class StepCommit:
     outcome: StepOutcome
     binding_name_to_value: Mapping[str, object]
     allowed_outcome_kinds: tuple[OutcomeKind, ...]
-    output_binding_name_set: frozenset[str]
+    output_binding_names: tuple[str, ...]
     binding_name_to_type: Mapping[str, object]
 
     def __post_init__(self) -> None:
@@ -56,11 +56,7 @@ class StepCommit:
             "binding_name_to_value",
             _reference_mapping(self.binding_name_to_value),
         )
-        object.__setattr__(
-            self,
-            "output_binding_name_set",
-            frozenset(self.output_binding_name_set),
-        )
+        object.__setattr__(self, "output_binding_names", tuple(self.output_binding_names))
         object.__setattr__(
             self,
             "binding_name_to_type",
@@ -129,7 +125,7 @@ type OperationDecision = Accept | RejectOperation | AbortStep
 type StepCommitDecision = Accept | Rewrite | AbortStep
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Oversight:
     inspect_operation: Callable[[OperationRequest], OperationDecision | Awaitable[OperationDecision]] | None = None
     inspect_step_commit: Callable[[StepCommit], StepCommitDecision | Awaitable[StepCommitDecision]] | None = None
@@ -166,19 +162,13 @@ def record_oversight_decision(
 
 
 __all__ = [
-    "Pass",
-    "Return",
-    "Break",
-    "Continue",
-    "Raise",
-    "StepOutcome",
     "Accept",
     "AbortStep",
     "OperationDecision",
     "Oversight",
     "RejectOperation",
-    "StepAbortedError",
     "Rewrite",
+    "StepAbortedError",
     "StepCommit",
     "StepCommitDecision",
 ]

@@ -38,7 +38,7 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
         output_binding_names=("result",),
         binding_name_to_type={"result": "OutputType"},
     )
-    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(executor), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
         if asynchronous:
             outcome = await execute_step_async(
                 definition,

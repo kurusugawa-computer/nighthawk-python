@@ -114,7 +114,7 @@ class PreservingExecutor:
         self.model_name_to_model = model_name_to_model
         self.observer = observer
 
-    def resolve_model_selection(self, selection: nh.ModelSelection) -> PreservingExecutor:
+    def resolve_model_selection(self, selection: nh.runtime.ModelSelection) -> PreservingExecutor:
         configuration = selection.apply(self.executor.configuration)
         model = configuration.execution_model
         if isinstance(model, str):

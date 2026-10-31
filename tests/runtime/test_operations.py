@@ -236,7 +236,7 @@ def test_return_expression_and_async_commit_inspection_do_not_replay_effects() -
     async def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         commits.append(commit)
         await asyncio.sleep(0)
-        return nh.oversight.Rewrite(outcome=nh.oversight.Return(9))
+        return nh.oversight.Rewrite(outcome=nh.runtime.Return(9))
 
     with (
         nh.run(StubExecutor()),
@@ -312,7 +312,9 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
 
     with (
         nh.run(Executor()),
-        nh.scope(oversight=Oversight(inspect_operation=lambda request: AbortStep("denied")), lifecycle=StepLifecycle(terminal.append)),
+        nh.scope(
+            oversight=Oversight(inspect_operation=lambda request: AbortStep("denied")), lifecycle=StepLifecycle(on_step_finished=terminal.append)
+        ),
         pytest.raises(StepAbortedError),
     ):
         asyncio.run(workflow())

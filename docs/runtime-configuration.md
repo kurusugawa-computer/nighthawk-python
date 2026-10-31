@@ -354,7 +354,7 @@ def record_finished(event: nh.lifecycle.StepFinished) -> None:
 
 
 # Inside an active nh.run(executor):
-with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(record_finished)):
+with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=record_finished)):
     result = my_natural_function()
 ```
 

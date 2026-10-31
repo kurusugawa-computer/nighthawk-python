@@ -188,19 +188,17 @@ def test_user_prompt_template_can_inject_tool_result_max_tokens() -> None:
         python_locals={"x": 10},
     )
     configuration = nh.StepExecutorConfiguration(
-        prompts=nh.StepPromptTemplates(
-            user_prompt_template=(
-                "<<<NH:PROGRAM>>>\n"
-                "$program\n"
-                "<<<NH:END_PROGRAM>>>\n\n"
-                "limit=$tool_result_max_tokens\n\n"
-                "<<<NH:LOCALS>>>\n"
-                "$locals\n"
-                "<<<NH:END_LOCALS>>>\n\n"
-                "<<<NH:GLOBALS>>>\n"
-                "$globals\n"
-                "<<<NH:END_GLOBALS>>>\n"
-            )
+        user_prompt_template=(
+            "<<<NH:PROGRAM>>>\n"
+            "$program\n"
+            "<<<NH:END_PROGRAM>>>\n\n"
+            "limit=$tool_result_max_tokens\n\n"
+            "<<<NH:LOCALS>>>\n"
+            "$locals\n"
+            "<<<NH:END_LOCALS>>>\n\n"
+            "<<<NH:GLOBALS>>>\n"
+            "$globals\n"
+            "<<<NH:END_GLOBALS>>>\n"
         ),
         context_limits=nh.StepContextLimits(
             locals_max_tokens=8_000,
@@ -296,9 +294,7 @@ def test_custom_user_prompt_template_preserves_multimodal_placeholder_order() ->
         python_globals={"__builtins__": builtins},
         python_locals={"photo": BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png")},
     )
-    configuration = nh.StepExecutorConfiguration(
-        prompts=nh.StepPromptTemplates(user_prompt_template=("before\n$locals\nbetween\n$program\nafter\n$globals\n"))
-    )
+    configuration = nh.StepExecutorConfiguration(user_prompt_template="before\n$locals\nbetween\n$program\nafter\n$globals\n")
 
     prompt_content = build_user_prompt_content(
         processed_natural_program="Inspect <photo>.",

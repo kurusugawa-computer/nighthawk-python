@@ -615,7 +615,7 @@ def resolve_system_prompt_template_text(
 
 def _resolve_step_system_prompt_text(*, configuration: StepExecutorConfiguration) -> str:
     return resolve_system_prompt_template_text(
-        template_text=configuration.prompts.system_prompt_template,
+        template_text=configuration.system_prompt_template,
         tool_result_max_tokens=configuration.context_limits.tool_result_max_tokens,
     )
 
@@ -649,7 +649,7 @@ def _build_user_prompt_content(
     step_context: StepContext,
     configuration: StepExecutorConfiguration,
 ) -> PromptContentTuple:
-    template_text = configuration.prompts.user_prompt_template
+    template_text = configuration.user_prompt_template
     context_limits = configuration.context_limits
     token_encoding = configuration.resolve_token_encoding()
 

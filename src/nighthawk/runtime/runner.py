@@ -349,7 +349,7 @@ class Runner:
             outcome=outcome,
             binding_name_to_value=bindings,
             allowed_outcome_kinds=preparation.allowed_outcome_kinds,
-            output_binding_name_set=frozenset(preparation.output_binding_names),
+            output_binding_names=preparation.output_binding_names,
             binding_name_to_type=preparation.binding_name_to_type,
         )
         decision = oversight.inspect_step_commit(step_commit)

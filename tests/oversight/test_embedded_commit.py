@@ -27,7 +27,7 @@ async def test_initialized_output_finalization_and_empty_rewrite(execute: Callab
 
     with (
         nh.run(InspectingExecutor(lambda request: StepCandidate(outcome=Pass()))),
-        nh.scope(oversight=Oversight(inspect_step_commit=inspect), lifecycle=StepLifecycle(events.append)),
+        nh.scope(oversight=Oversight(inspect_step_commit=inspect), lifecycle=StepLifecycle(on_step_finished=events.append)),
     ):
         await execute(
             StepDefinition(
@@ -48,7 +48,9 @@ async def test_validation_and_commit_rejection_never_write(execute: Callable[...
     events: list[StepFinished] = []
     with (
         nh.run(InspectingExecutor(lambda request: StepCandidate(outcome=Pass(), binding_name_to_value={"result": 1 if reject else "bad"}))),
-        nh.scope(oversight=Oversight(inspect_step_commit=lambda commit: AbortStep("refused")), lifecycle=StepLifecycle(events.append)),
+        nh.scope(
+            oversight=Oversight(inspect_step_commit=lambda commit: AbortStep("refused")), lifecycle=StepLifecycle(on_step_finished=events.append)
+        ),
         pytest.raises(nh.oversight.StepAbortedError if reject else nh.ExecutionError),
     ):
         await execute(

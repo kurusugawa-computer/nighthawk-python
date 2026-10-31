@@ -419,11 +419,10 @@ def compute_score(score_input: ScoreInput) -> int:
 
 When input needs interpretation, accept text or another suitable input type and use Natural to produce a typed result or intermediate value:
 
-`JsonableValue` is a type alias for JSON-serializable Python values (`dict | list | str | int | float | bool | None`). See [Specification Section 5.3](specification.md#53-supporting-types) for the full definition.
+Pydantic's `JsonValue` names JSON-compatible Python data when an input may be text or structured data.
 
 ```py
-from pydantic import BaseModel
-from nighthawk import JsonableValue
+from pydantic import BaseModel, JsonValue
 
 
 class ReviewVerdict(BaseModel):
@@ -433,7 +432,7 @@ class ReviewVerdict(BaseModel):
 
 
 @nh.function
-def judge_review(review_data: str | JsonableValue) -> ReviewVerdict:
+def judge_review(review_data: str | JsonValue) -> ReviewVerdict:
     verdict: ReviewVerdict
     """execute
     Analyze <review_data> and produce a structured <:verdict>.

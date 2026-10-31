@@ -28,7 +28,7 @@ async def test_partial_write_failure_records_only_completed_writes(execute: Call
 
     with (
         nh.run(InspectingExecutor(lambda request: StepCandidate(outcome=Pass(), binding_name_to_value={"second": 2, "first": 1}))),
-        nh.scope(lifecycle=StepLifecycle(events.append)),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)),
         pytest.raises(nh.ExecutionError, match="storage failed"),
     ):
         await execute(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)
@@ -48,7 +48,7 @@ async def test_final_raise_discards_invalid_output_and_delivers_before_propagati
         request.step_context.record_assignment("result", "invalid")
         return StepCandidate(outcome=Raise("domain error", error_type=LookupError))
 
-    with nh.run(InspectingExecutor(candidate)), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(LookupError):
+    with nh.run(InspectingExecutor(candidate)), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(LookupError):
         await execute(
             StepDefinition("raise", output_binding_names=("result",)), name_to_value={"result": 0}, write_binding=saved_name_to_value.__setitem__
         )
@@ -68,7 +68,7 @@ async def test_terminal_failure_preserves_successful_write_without_redelivery(ex
 
     with (
         nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"result": 7})])),
-        nh.scope(lifecycle=StepLifecycle(finished)),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)),
         pytest.raises(RuntimeError, match="notification failed"),
     ):
         await execute(StepDefinition("write", output_binding_names=("result",)), name_to_value={}, write_binding=saved_name_to_value.__setitem__)
@@ -97,7 +97,10 @@ async def test_cancellation_during_write_joins_cleanup_and_records_completed_wri
         assert cleaned_up.is_set()
         events.append(event)
 
-    with nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])), nh.scope(lifecycle=StepLifecycle(finished)):
+    with (
+        nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)),
+    ):
         task = asyncio.create_task(
             execute_step_async(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)
         )
@@ -149,7 +152,7 @@ async def test_normal_and_embedded_execution_have_same_validation_and_lifecycle_
         nh.run(InspectingExecutor(inspect_request)),
         nh.scope(
             oversight=Oversight(inspect_step_commit=inspect_commit),
-            lifecycle=StepLifecycle(finished, on_step_started=lambda event: order.append("started")),
+            lifecycle=StepLifecycle(on_step_finished=finished, on_step_started=lambda event: order.append("started")),
         ),
     ):
         assert normal() == "result"

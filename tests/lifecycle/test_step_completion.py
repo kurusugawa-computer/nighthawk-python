@@ -47,7 +47,7 @@ def test_completion_runs_after_caller_assignments(asynchronous: bool) -> None:
         {"step_outcome": {"kind": "pass"}, "bindings": {"value": 7}}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
         asyncio.run(asynchronous_function()) if asynchronous else synchronous()
         assert nh.get_scope().execution_reference.step_execution_id is None
     assert len(events) == 1 and isinstance(events[0], StepCompleted)
@@ -73,7 +73,7 @@ def test_delivery_exception_does_not_reenter_completion(outcome: str) -> None:
             """
         return 0
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(RuntimeError, match="delivery"):
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)), pytest.raises(RuntimeError, match="delivery"):
         workflow()
     assert value == 7
     assert len(events) == 1 and isinstance(events[0], StepCompleted)
@@ -105,7 +105,7 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(lifecycle=StepLifecycle(events.append), oversight=nh.oversight.Oversight(inspect_operation=reject)),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append), oversight=nh.oversight.Oversight(inspect_operation=reject)),
         pytest.raises(nh.oversight.StepAbortedError) as caught,
     ):
         workflow()
@@ -152,13 +152,13 @@ def test_return_expression_acceptance_evaluates_and_awaits_once() -> None:
     def finished(event: StepFinished) -> None:
         calls.append("finished")
         assert isinstance(event, StepCompleted)
-        assert event.outcome == nh.oversight.Return(4)
+        assert event.outcome == nh.runtime.Return(4)
         assert event.assigned_binding_name_to_value == {"value": 9}
 
     with (
         nh.run(StubExecutor()),
         nh.scope(
-            lifecycle=StepLifecycle(finished),
+            lifecycle=StepLifecycle(on_step_finished=finished),
             oversight=nh.oversight.Oversight(
                 inspect_operation=inspect_expression,
                 inspect_step_commit=lambda commit: nh.oversight.Rewrite(binding_name_to_value={"value": 9}),
@@ -192,7 +192,7 @@ def test_execution_identity_distinguishes_repeated_and_concurrent_calls() -> Non
         await workflow()
         await asyncio.gather(workflow(), workflow())
 
-    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)):
         asyncio.run(execute())
     assert len(events) == 4
     assert len({event.execution_reference.step_execution_id for event in events}) == 4
@@ -238,7 +238,7 @@ def test_cancellation_preserves_interruption_and_delivers_once(delivery_fails: b
             assert caught.value.__cause__ is delivery_exception
         assert nh.get_scope().execution_reference.step_execution_id is None
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
         asyncio.run(execute())
 
 
@@ -258,7 +258,7 @@ def test_raise_constructor_failure_is_not_domain_raise() -> None:
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "DomainError"}, "bindings": {}}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(nh.ExecutionError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(nh.ExecutionError) as caught:
         workflow()
     assert len(events) == 1
     event = events[0]
@@ -280,7 +280,7 @@ def test_domain_nighthawk_error_is_a_raised_record() -> None:
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "DomainError"}, "bindings": {}}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(DomainError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(DomainError) as caught:
         workflow()
     assert len(events) == 1
     assert isinstance(events[0], StepRaised) and events[0].exception is caught.value
@@ -304,14 +304,14 @@ def test_nested_calls_and_scope_configuration_restore() -> None:
         {"step_outcome": {"kind": "return", "return_expression": "inner()"}, "bindings": {}}
         """
 
-    configuration = StepLifecycle(events.append)
+    configuration = StepLifecycle(on_step_finished=events.append)
     with nh.run(StubExecutor()), nh.scope(lifecycle=configuration):
         with nh.scope():
             assert nh.get_scope().lifecycle is configuration
             outer()
         with nh.scope(lifecycle=None):
             inner()
-        with nh.scope(lifecycle=StepLifecycle(other_events.append)):
+        with nh.scope(lifecycle=StepLifecycle(on_step_finished=other_events.append)):
             inner()
         with nh.run(StubExecutor()):
             assert nh.get_scope().lifecycle is None
@@ -344,7 +344,7 @@ def test_partial_assignment_failure_reports_only_completed_writes() -> None:
     namespace = Namespace(__nighthawk_runner__=Proxy())
     with (
         nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])),
-        nh.scope(lifecycle=StepLifecycle(events.append)),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)),
         pytest.raises(nh.ExecutionError, match="assignment failed"),
     ):
         exec(compile(module, "<assignment-prototype>", "exec"), namespace)
@@ -369,7 +369,7 @@ def test_process_control_is_interruption(exception: BaseException) -> None:
         Finish.
         """
 
-    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(type(exception)) as caught:
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(type(exception)) as caught:
         workflow()
     assert caught.value is exception
     assert len(events) == 1 and isinstance(events[0], StepInterrupted)
@@ -401,7 +401,7 @@ def test_pre_await_failure_preserves_original_exception(asynchronous: bool) -> N
         """
         return 0
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(events.append)), pytest.raises(ValueError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(ValueError) as caught:
         asyncio.run(asynchronous_function()) if asynchronous else synchronous()
     assert len(events) == 1
     event = events[0]
@@ -437,7 +437,7 @@ def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:
     async def execute() -> None:
         workflow()
 
-    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(finished)):
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)):
         asyncio.run(execute())
     assert [event.execution_reference for event in events] == references
 
@@ -457,7 +457,11 @@ def test_invalid_inspection_decision_keeps_inspection_stage(subject: str) -> Non
         inspect_operation=(lambda request: None) if subject == "return_expression" else None,  # type: ignore[arg-type]
         inspect_step_commit=(lambda commit: None) if subject == "step_commit" else None,  # type: ignore[arg-type]
     )
-    with nh.run(StubExecutor()), nh.scope(oversight=oversight, lifecycle=StepLifecycle(events.append)), pytest.raises(nh.NighthawkError):
+    with (
+        nh.run(StubExecutor()),
+        nh.scope(oversight=oversight, lifecycle=StepLifecycle(on_step_finished=events.append)),
+        pytest.raises(nh.NighthawkError),
+    ):
         workflow()
     assert len(events) == 1
     event = events[0]
@@ -478,7 +482,7 @@ def test_distinct_blocks_have_distinct_source_locations() -> None:
         Finish second.
         """
 
-    with nh.run(ScriptedExecutor([StepCandidate(), StepCandidate()])), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(ScriptedExecutor([StepCandidate(), StepCandidate()])), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)):
         workflow()
     assert len(events) == 2
     assert events[0].execution_reference.source_location != events[1].execution_reference.source_location
@@ -492,7 +496,7 @@ def test_lifecycle_is_captured_before_executor_work(monkeypatch: pytest.MonkeyPa
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            redirected_scope = replace(nh.get_scope(), lifecycle=StepLifecycle(redirected.append))
+            redirected_scope = replace(nh.get_scope(), lifecycle=StepLifecycle(on_step_finished=redirected.append))
             monkeypatch.setattr(runner, "get_scope", lambda: redirected_scope)
             return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
@@ -502,7 +506,7 @@ def test_lifecycle_is_captured_before_executor_work(monkeypatch: pytest.MonkeyPa
         Finish.
         """
 
-    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)):
         workflow()
     assert len(events) == 1 and not redirected
 
@@ -528,7 +532,7 @@ def test_handler_rethrowing_interruption_preserves_its_cause(interruption: BaseE
         Finish.
         """
 
-    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(type(interruption)) as caught:
+    with nh.run(Executor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)), pytest.raises(type(interruption)) as caught:
         workflow()
     assert caught.value is interruption
     assert caught.value.__cause__ is original_cause
@@ -550,7 +554,7 @@ def test_handler_rethrowing_prepared_domain_exception_has_no_self_cause() -> Non
         {"step_outcome": {"kind": "raise", "raise_message": "domain", "raise_error_type": "ValueError"}, "bindings": {}}
         """
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(finished)), pytest.raises(ValueError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=finished)), pytest.raises(ValueError) as caught:
         workflow()
     assert caught.value.__cause__ is None
     assert len(notifications) == 1
@@ -561,7 +565,7 @@ def test_handler_rethrowing_prepared_domain_exception_has_no_self_cause() -> Non
 def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() -> None:
     events: list[StepFinished] = []
     bypass_references: list[nh.ExecutionReference] = []
-    configuration = StepLifecycle(events.append)
+    configuration = StepLifecycle(on_step_finished=events.append)
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:

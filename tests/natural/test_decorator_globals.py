@@ -90,7 +90,9 @@ def test_decoration_and_execution_preserve_module_globals() -> None:
     module_name_to_value = workflow.__globals__
     original_name_to_value = dict(module_name_to_value)
     decorated = nh.function(workflow)
-    transformed = nh.get_transformed_function(decorated)
+    definition = nh.get_function_definition(decorated)
+    assert definition is not None
+    transformed = definition.transformed_function
     assert transformed.__globals__ is module_name_to_value
     assert module_name_to_value.keys() == original_name_to_value.keys()
     assert all(module_name_to_value[name] is value for name, value in original_name_to_value.items())

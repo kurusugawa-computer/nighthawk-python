@@ -36,7 +36,7 @@ def test_documented_error_handler(example_name: str, example_name_to_path: dict[
         return StepCandidate(outcome=Raise("invalid input", error_type))
 
     executor = CallbackExecutor(respond)
-    with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(events.append)):
+    with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
         namespace = runpy.run_path(str(example_name_to_path[example_name]), init_globals={"nh": nh})
 
     assert len(executor.requests) == len(events) == 1

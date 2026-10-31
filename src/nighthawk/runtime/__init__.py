@@ -27,7 +27,7 @@ if TYPE_CHECKING:
         OperationRequest,
     )
     from .step_definition import BlockKind, StepDefinition
-    from .step_executor import AsyncStepExecutor, ConfigurableStepExecutor, StepExecutor, SyncStepExecutor
+    from .step_executor import AsyncStepExecutor, ConfigurableStepExecutor, ModelSelection, StepExecutor, SyncStepExecutor
     from .step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
     from .step_request import StepCandidate, StepRequest
 
@@ -39,6 +39,7 @@ _name_to_module = {
     "SyncStepExecutor": "step_executor",
     "StepOutcome": "step_outcome",
     "StepDefinition": "step_definition",
+    "ModelSelection": "step_executor",
     "BlockKind": "step_definition",
     "BindingDeclarationError": "bindings",
     "BindingError": "bindings",
@@ -78,6 +79,7 @@ __all__ = [
     "OutcomeKind",
     "AsyncStepExecutor",
     "ConfigurableStepExecutor",
+    "ModelSelection",
     "StepExecutor",
     "SyncStepExecutor",
     "StepOutcome",

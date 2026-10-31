@@ -36,7 +36,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime import ModelSelection, StepCandidate, StepRequest
 
 
 class AllowedModels:
@@ -44,7 +44,7 @@ class AllowedModels:
         self.executor = executor
         self.model_name_to_model = model_name_to_model
 
-    def resolve_model_selection(self, selection: nh.ModelSelection) -> AllowedModels:
+    def resolve_model_selection(self, selection: ModelSelection) -> AllowedModels:
         configuration = selection.apply(self.executor.configuration)
         model = configuration.execution_model
         if isinstance(model, str):

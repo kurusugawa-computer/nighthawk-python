@@ -24,7 +24,7 @@ async def test_missing_reads_do_not_fall_back(execute: Callable[..., Awaitable[S
     events: list[StepFinished] = []
     with (
         nh.run(executor),
-        nh.scope(task_references={"injected": 42}, lifecycle=StepLifecycle(events.append)),
+        nh.scope(task_references={"injected": 42}, lifecycle=StepLifecycle(on_step_finished=events.append)),
         pytest.raises(nh.ExecutionError) as caught,
     ):
         await execute(StepDefinition("Read required input.", input_binding_names=(name,)), name_to_value={}, write_binding=lambda name, value: None)

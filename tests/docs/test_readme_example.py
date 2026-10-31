@@ -40,7 +40,7 @@ def test_readme_example(
 
     executor = CallbackExecutor(respond)
 
-    def select_executor(self: nh.AgentStepExecutor, selection: nh.ModelSelection) -> CallbackExecutor:
+    def select_executor(self: nh.AgentStepExecutor, selection: nh.runtime.ModelSelection) -> CallbackExecutor:
         assert selection.apply(self.configuration).execution_model is not None
         return executor
 

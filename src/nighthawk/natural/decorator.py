@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import wraps
 from types import CellType, FunctionType
-from typing import Any, cast, overload
+from typing import Any, cast
 
 from ..errors import NighthawkError
 from ..function_call import _invoke, _invoke_async
@@ -101,25 +101,19 @@ def _build_transformed_factory_module(
     return factory_module
 
 
-@overload
-def function[**P, R](func: Callable[P, R]) -> Callable[P, R]: ...
-
-
-@overload
-def function[**P, R]() -> Callable[[Callable[P, R]], Callable[P, R]]: ...
-
-
-def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCallable:
+def function[**P, R](func: Callable[P, R]) -> Callable[P, R]:
     """Instrument execute and decide blocks while preserving the Python signature.
 
     Models and execution controls are selected by the active run and scope.
     """
-    if func is None:
-        return function
+    return cast(Callable[P, R], _instrument(func))
+
+
+def _instrument(func: NaturalFunctionCallable) -> NaturalFunctionCallable:
     if isinstance(func, staticmethod):
-        return cast(NaturalFunctionCallable, staticmethod(function(func.__func__)))
+        return cast(NaturalFunctionCallable, staticmethod(_instrument(func.__func__)))
     if isinstance(func, classmethod):
-        return cast(NaturalFunctionCallable, classmethod(function(func.__func__)))
+        return cast(NaturalFunctionCallable, classmethod(_instrument(func.__func__)))
 
     if sys.implementation.name != "cpython" or sys.version_info < (3, 13):
         raise NighthawkError("Natural source instrumentation requires CPython 3.13 or later")
@@ -223,7 +217,6 @@ def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCall
 
         definition = FunctionDefinition(func, async_wrapper, transformed)
         _register_definition(definition)
-        async_wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
         return cast(NaturalFunctionCallable, async_wrapper)  # type: ignore[return-value]
 
     @wraps(func)
@@ -232,28 +225,4 @@ def function(func: NaturalFunctionCallable | None = None) -> NaturalFunctionCall
 
     definition = FunctionDefinition(func, wrapper, transformed)
     _register_definition(definition)
-    wrapper.__nighthawk_transformed_function__ = transformed  # type: ignore[attr-defined]
     return cast(NaturalFunctionCallable, wrapper)  # type: ignore[return-value]
-
-
-def get_transformed_function(function: Callable[..., object]) -> Callable[..., object]:
-    """Find a Natural function's compiled body through conventional wrapper chains.
-
-    Standard inspect.unwrap follows the original source. This accessor exposes the
-    transformed body for inspection; normal execution should use the decorated callable
-    to establish its runtime context. Invalid inputs and wrapper cycles raise TypeError.
-    """
-    current: object = function
-    seen_identity_set: set[int] = set()
-    while id(current) not in seen_identity_set:
-        seen_identity_set.add(id(current))
-        if isinstance(current, (staticmethod, classmethod)) or inspect.ismethod(current):
-            current = current.__func__
-            continue
-        transformed = getattr(current, "__nighthawk_transformed_function__", None)
-        if callable(transformed):
-            return transformed
-        current = getattr(current, "__wrapped__", None)
-        if current is None:
-            break
-    raise TypeError("Expected a Natural function or a conventional wrapper around one")

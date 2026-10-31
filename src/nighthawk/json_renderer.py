@@ -7,13 +7,11 @@ from typing import Literal
 
 import headson
 import tiktoken
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from .runtime.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
 
 type JsonRendererStyle = Literal["strict", "default", "detailed"]
-
-type JsonableValue = dict[str, "JsonableValue"] | list["JsonableValue"] | str | int | float | bool | None
 
 _SENTINEL_CYCLE = "<cycle>"
 _SENTINEL_NONSERIALIZABLE = "<nonserializable>"
@@ -129,13 +127,13 @@ def render_json_text(
     return summarized, summarized_token_count
 
 
-def to_jsonable_value(value: object) -> JsonableValue:
-    """Convert a Python value to a JsonableValue, replacing non-serializable values with sentinels."""
+def to_jsonable_value(value: object) -> JsonValue:
+    """Convert a Python value to JSON data, replacing non-serializable values with sentinels."""
     active_object_id_set: set[int] = set()
     return _to_jsonable_value_inner(value, active_object_id_set=active_object_id_set)
 
 
-def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -> JsonableValue:
+def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -> JsonValue:
     if value is None:
         return None
 
@@ -197,7 +195,7 @@ def _is_namedtuple_instance(value: object) -> bool:
     return isinstance(value, tuple) and hasattr(value, "_fields") and callable(getattr(value, "_asdict", None))
 
 
-def _namedtuple_to_jsonable(value: object, *, active_object_id_set: set[int]) -> JsonableValue:
+def _namedtuple_to_jsonable(value: object, *, active_object_id_set: set[int]) -> JsonValue:
     as_dict_method = getattr(value, "_asdict", None)
     if not callable(as_dict_method):
         return _SENTINEL_NONSERIALIZABLE
@@ -207,7 +205,7 @@ def _namedtuple_to_jsonable(value: object, *, active_object_id_set: set[int]) ->
     return _mapping_to_jsonable(as_dict, active_object_id_set=active_object_id_set)
 
 
-def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set: set[int]) -> JsonableValue:
+def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set: set[int]) -> JsonValue:
     # Sort by the compact JSON rendering of each key so ordering is stable regardless of special characters.
     keyed_entries: list[tuple[str, str, object]] = []
     for key, item_value in value.items():
@@ -226,8 +224,8 @@ def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set
     }
 
 
-def _set_to_jsonable(value: set[object] | frozenset[object], *, active_object_id_set: set[int]) -> JsonableValue:
-    converted: list[tuple[str, JsonableValue]] = []
+def _set_to_jsonable(value: set[object] | frozenset[object], *, active_object_id_set: set[int]) -> JsonValue:
+    converted: list[tuple[str, JsonValue]] = []
     for item_value in value:
         jsonable = _to_jsonable_value_inner(item_value, active_object_id_set=active_object_id_set)
         converted.append((_render_compact_json(jsonable), jsonable))
@@ -236,7 +234,7 @@ def _set_to_jsonable(value: set[object] | frozenset[object], *, active_object_id
     return [jsonable for _, jsonable in converted]
 
 
-def _sequence_to_jsonable(value: Sequence[object], *, active_object_id_set: set[int]) -> JsonableValue:
+def _sequence_to_jsonable(value: Sequence[object], *, active_object_id_set: set[int]) -> JsonValue:
     try:
         items = list(value)
     except Exception:
@@ -282,7 +280,7 @@ def _maximize_headson_output_under_max_tokens(
     return best_output, best_output_token_count
 
 
-def _render_compact_json(value: JsonableValue) -> str:
+def _render_compact_json(value: JsonValue) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 

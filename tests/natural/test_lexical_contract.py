@@ -28,7 +28,9 @@ def test_natural_text_does_not_capture_outer_values() -> None:
 
     value = 7
     assert value == 7
-    assert "value" not in nh.get_transformed_function(workflow).__code__.co_freevars
+    definition = nh.get_function_definition(workflow)
+    assert definition is not None
+    assert "value" not in definition.transformed_function.__code__.co_freevars  # type: ignore[attr-defined]
     with nh.run(StubExecutor()):
         with pytest.raises(nh.ExecutionError) as caught:
             workflow()

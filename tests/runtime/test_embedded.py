@@ -38,7 +38,7 @@ async def test_explicit_environment_is_shared_by_reads_evaluation_discovery_and_
         assert "saved_name_to_value" not in request.step_context.step_globals
         return StepCandidate(outcome=Return(["done"]), binding_name_to_value={"result": "saved"})
 
-    with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(events.append)):
+    with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)):
         outcome = await execute(
             StepDefinition(
                 "Read <value> and write <:result>.",
@@ -125,7 +125,10 @@ async def test_nested_natural_uses_own_frame_and_preserves_scope(execute: Callab
         assert nh.get_scope().lifecycle is not None
         return StepCandidate(outcome=Pass(), binding_name_to_value={"result": 99})
 
-    with nh.run(InspectingExecutor(inspect)), nh.scope(lifecycle=StepLifecycle(events.append), task_references={"shared_policy": "explicit policy"}):
+    with (
+        nh.run(InspectingExecutor(inspect)),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append), task_references={"shared_policy": "explicit policy"}),
+    ):
         await execute(
             StepDefinition("parent"),
             name_to_value={"value": 7, "result": "outer", "child": child, "shared_policy": "parent policy"},
@@ -189,7 +192,7 @@ async def test_async_writer_is_awaited_even_by_sync_entry(execute: Callable[...,
 
     with (
         nh.run(ScriptedExecutor([StepCandidate(binding_name_to_value={"first": 1, "second": 2})])),
-        nh.scope(lifecycle=StepLifecycle(lambda event: order.append("finished"))),
+        nh.scope(lifecycle=StepLifecycle(on_step_finished=lambda event: order.append("finished"))),
     ):
         await execute(StepDefinition("write", output_binding_names=("first", "second")), name_to_value={}, write_binding=write)
     assert order == ["first", "second", "finished"]

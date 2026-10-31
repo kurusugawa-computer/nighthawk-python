@@ -186,7 +186,7 @@ def test_resolved_raise_is_constructed_only_after_commit_inspection() -> None:
 
     with (
         nh.run(Executor()),
-        nh.scope(oversight=Oversight(inspect_step_commit=inspect), lifecycle=StepLifecycle(terminal.append)),
+        nh.scope(oversight=Oversight(inspect_step_commit=inspect), lifecycle=StepLifecycle(on_step_finished=terminal.append)),
         pytest.raises(DomainError, match="domain") as caught,
     ):
         workflow()
