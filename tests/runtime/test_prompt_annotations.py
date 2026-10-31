@@ -12,11 +12,10 @@ from tests.support.prompts import build_step_context, build_user_prompt_content,
 
 def test_selected_contract_and_read_annotation_replace_runtime_types() -> None:
     context = build_step_context(python_globals={}, python_locals={"result": None, "items": [], "value": 1})
-    context.binding_commit_targets.update({"result", "priority"})
     context.environment = StepEnvironment(
         python_name_to_value=context.step_locals,
         python_globals={},
-        output_name_set=frozenset(context.binding_commit_targets),
+        output_name_set=frozenset({"result", "priority"}),
         binding_name_to_type={"result": int | None, "priority": Literal["routine", "urgent"]},
         binding_name_to_annotation={"result": "Alias", "items": "list[Record]", "value": "str"},
     )
@@ -59,7 +58,6 @@ def test_read_annotations_are_rendered_without_evaluation() -> None:
 
 def test_omitted_contract_remains_discoverable_with_a_colliding_runtime_name() -> None:
     context = build_step_context(python_globals={}, python_locals={"__nighthawk_runtime_0": "application", "message": "Outage."})
-    context.binding_commit_targets.add("selection")
     context.read_binding_names = frozenset({"message"})
     context.environment = StepEnvironment(
         python_name_to_value=context.step_locals,

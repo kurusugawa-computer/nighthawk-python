@@ -11,14 +11,15 @@ from nighthawk.tools.contracts import (
     ToolHandlerResult,
     ToolOutcome,
 )
+from tests.support.contexts import new_step_context
 
 
 def _new_step_context() -> StepContext:
-    return StepContext(
+    return new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_tool_boundary", "test_tool_boundary"),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
     )

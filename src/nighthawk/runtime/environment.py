@@ -143,6 +143,10 @@ class StepEnvironment:
         return name in self._runtime_name_set
 
     @property
+    def output_name_set(self) -> frozenset[str]:
+        return self._output_name_set
+
+    @property
     def binding_name_to_type(self) -> Mapping[str, object]:
         """The contracts selected at step entry, independent of working assignments."""
         return MappingProxyType(self._binding_name_to_type)

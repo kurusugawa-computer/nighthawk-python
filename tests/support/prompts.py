@@ -8,6 +8,7 @@ import nighthawk as nh
 from nighthawk.runtime.description import discover_type_alias_reference_names
 from nighthawk.runtime.prompt import build_user_prompt
 from nighthawk.runtime.step_context import StepContext
+from tests.support.contexts import new_step_context
 
 _DEFAULT_EXECUTOR_CONFIGURATION = nh.StepExecutorConfiguration()
 
@@ -41,11 +42,11 @@ def build_step_context(
         step_globals=python_globals,
         input_binding_names=input_binding_names,
     )
-    return StepContext(
+    return new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test", "test"),
         step_globals=python_globals,
         step_locals=python_locals,
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
         type_alias_reference_names=type_alias_reference_names,

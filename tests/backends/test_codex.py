@@ -18,6 +18,7 @@ from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.declarations import get_visible_tools
 from tests.support.codex import _write_executable_codex_stub
+from tests.support.contexts import new_step_context
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
@@ -174,13 +175,13 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
     step_executor = StubExecutor()
 
     with nh.run(step_executor):
-        step_context = StepContext(
+        step_context = new_step_context(
             execution_reference=nh.ExecutionReference(
                 "test-run", "test-scope", "test_codex_model_contract_calls_tool_via_mcp", "test_codex_model_contract_calls_tool_via_mcp"
             ),
             step_globals={"__builtins__": __builtins__},
             step_locals={},
-            binding_commit_targets=set(),
+            output_binding_names=set(),
             read_binding_names=frozenset(),
             task_name_to_value={},
         )
@@ -223,7 +224,7 @@ def test_codex_model_contract_calls_tool_via_mcp(tmp_path: Path) -> None:
 def test_codex_model_projects_multimodal_prompt_files_into_working_directory(tmp_path: Path) -> None:
     codex_executable = _write_executable_codex_prompt_echo_stub(directory=tmp_path)
 
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference(
             "test-run",
             "test-scope",
@@ -232,7 +233,7 @@ def test_codex_model_projects_multimodal_prompt_files_into_working_directory(tmp
         ),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
     )
@@ -274,7 +275,7 @@ def test_codex_model_projects_multimodal_prompt_files_into_current_working_direc
     current_working_directory.mkdir()
     monkeypatch.chdir(current_working_directory)
 
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference(
             "test-run",
             "test-scope",
@@ -283,7 +284,7 @@ def test_codex_model_projects_multimodal_prompt_files_into_current_working_direc
         ),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
     )

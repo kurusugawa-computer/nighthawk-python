@@ -9,14 +9,15 @@ from pydantic_ai.usage import RunUsage
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.provided import build_provided_tool_definitions
+from tests.support.contexts import new_step_context
 
 
 def _new_step_context() -> StepContext:
-    return StepContext(
+    return new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_provided_async", "test_provided_async"),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
     )

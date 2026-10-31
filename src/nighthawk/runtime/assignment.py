@@ -66,18 +66,18 @@ def assign_value(
     name = parsed[0]
     if len(parsed) == 1:
         execution.phase = "validation"
-        if name in step_context.binding_name_to_type:
+        if name in step_context.environment.binding_name_to_type:
             try:
-                value = TypeAdapter(cast(TypeForm[object], step_context.binding_name_to_type[name])).validate_python(value)
+                value = TypeAdapter(cast(TypeForm[object], step_context.environment.binding_name_to_type[name])).validate_python(value)
             except ValidationError as exception:
                 raise _failure(
-                    f"Target {name!r} failed contract {step_context.binding_name_to_type[name]!r}: {exception}",
+                    f"Target {name!r} failed contract {step_context.environment.binding_name_to_type[name]!r}: {exception}",
                     phase="validation",
                     evaluation_started=True,
                 ) from exception
         execution.phase = "assignment"
         step_context.record_assignment(name, value)
-        return AssignmentResult(target_path, value, "output" if name in step_context.binding_commit_targets else "temporary")
+        return AssignmentResult(target_path, value, "output" if name in step_context.environment.output_name_set else "temporary")
 
     execution.phase = "target_resolution"
     try:
@@ -134,7 +134,7 @@ async def assign_expression_async(step_context: StepContext, target_path: str, e
         kind="assignment",
         target_path=target_path,
         expression=expression,
-        expected_type=step_context.binding_name_to_type.get(target_path),
+        expected_type=step_context.environment.binding_name_to_type.get(target_path),
     )
     parsed: tuple[str, ...] = ()
     compiled: CodeType | None = None

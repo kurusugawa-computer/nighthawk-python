@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 import nighthawk as nh
 from nighthawk.runtime import OperationError, assign_expression
 from tests.support.contexts import new_context as context_for
+from tests.support.contexts import new_step_context
 
 
 def test_assignment_preserves_model_constraints_and_target_identity() -> None:
@@ -168,11 +169,11 @@ def test_admission_rejection_prevents_right_side_effects() -> None:
 
 def test_assignment_validation_failure_preserves_pending_value_and_right_side_effects() -> None:
     effects: list[str] = []
-    context = nh.StepContext(
+    context = new_step_context(
         execution_reference=nh.ExecutionReference("run", "scope", "step", "test"),
         step_globals={},
         step_locals={"value": 0, "effects": effects},
-        binding_commit_targets={"value"},
+        output_binding_names={"value"},
         read_binding_names=frozenset(),
         task_name_to_value={},
         binding_name_to_type={"value": Annotated[int, Field(ge=0)]},
@@ -191,7 +192,6 @@ def test_validation_failure_does_not_close_nested_application_awaitable() -> Non
     import pytest
 
     from nighthawk.runtime import OperationError, assign_expression_async
-    from tests.support.contexts import new_context
 
     async def inner() -> int:
         return 5
@@ -201,16 +201,7 @@ def test_validation_failure_does_not_close_nested_application_awaitable() -> Non
     async def outer():
         return retained
 
-    initial = new_context(outer=outer)
-    context = type(initial)(
-        execution_reference=initial.execution_reference,
-        step_globals={},
-        step_locals={"outer": outer},
-        binding_commit_targets={"result"},
-        binding_name_to_type={"result": int},
-        read_binding_names=frozenset(),
-        task_name_to_value={},
-    )
+    context = new_step_context(step_locals={"outer": outer}, output_binding_names={"result"}, binding_name_to_type={"result": int})
     try:
         with pytest.raises(OperationError):
             asyncio.run(assign_expression_async(context, "result", "outer()"))

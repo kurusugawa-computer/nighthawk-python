@@ -9,14 +9,15 @@ import nighthawk as nh
 from nighthawk.runtime import OperationError
 from nighthawk.runtime.step_context import StepContext
 from nighthawk.tools.assignment import assign_tool, assign_tool_async
+from tests.support.contexts import new_step_context
 
 
 def _new_step_context() -> StepContext:
-    return StepContext(
+    return new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_assignment_async", "test_assignment_async"),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
     )
@@ -36,11 +37,11 @@ def test_assign_tool_async_assigns_awaited_result() -> None:
 
 
 def test_assign_rejects_rebind_of_read_binding() -> None:
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_read_guard", "test_read_guard"),
         step_globals={"__builtins__": __builtins__},
         step_locals={"data": {"key": "old"}},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset({"data"}),
         task_name_to_value={},
     )
@@ -52,11 +53,11 @@ def test_assign_rejects_rebind_of_read_binding() -> None:
 
 
 def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_read_write", "test_read_write"),
         step_globals={"__builtins__": __builtins__},
         step_locals={"data": {"key": "old"}},
-        binding_commit_targets={"data"},
+        output_binding_names={"data"},
         read_binding_names=frozenset(),
         task_name_to_value={},
     )
@@ -68,11 +69,11 @@ def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
 
 
 def test_assign_allows_multiple_rebinds_of_new_local() -> None:
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_new_local", "test_new_local"),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset(),
         task_name_to_value={},
     )
@@ -88,11 +89,11 @@ def test_assign_dotted_path_updates_write_binding_root() -> None:
     class Model(BaseModel, validate_assignment=True):
         value: int = 0
 
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_write_root_dirty", "test_write_root_dirty"),
         step_globals={"__builtins__": __builtins__},
         step_locals={"model": Model()},
-        binding_commit_targets={"model"},
+        output_binding_names={"model"},
         read_binding_names=frozenset(),
         task_name_to_value={},
     )
@@ -106,11 +107,11 @@ def test_assign_dotted_path_updates_read_binding_root() -> None:
     class Model(BaseModel, validate_assignment=True):
         value: int = 0
 
-    step_context = StepContext(
+    step_context = new_step_context(
         execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_read_root_not_dirty", "test_read_root_not_dirty"),
         step_globals={"__builtins__": __builtins__},
         step_locals={"model": Model()},
-        binding_commit_targets=set(),
+        output_binding_names=set(),
         read_binding_names=frozenset({"model"}),
         task_name_to_value={},
     )

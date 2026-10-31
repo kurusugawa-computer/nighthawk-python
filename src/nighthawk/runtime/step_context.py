@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import InitVar, dataclass, field, replace
-from types import CellType, MappingProxyType
+from dataclasses import dataclass, field, replace
+from types import CellType
 from typing import TYPE_CHECKING, Any
 
 from pydantic_ai import AgentRunResult
@@ -47,41 +47,23 @@ def resolve_tool_result_rendering_policy(policy: ToolResultRenderingPolicy | Non
 class StepContext:
     """Mutable, per-step execution context passed to tools and executors.
 
-    ``environment`` owns effective lookup and tracked step assignments.
+    ``environment`` owns effective lookup, declared outputs and their contracts, and tracked step assignments.
     Use :meth:`record_assignment` or the common assignment operations to keep that environment and ``step_locals`` consistent.
     Finalization validates initialized declared outputs when the candidate omits its output selection; an explicit mapping supplies the complete selection.
     """
 
     execution_reference: ExecutionReference
-
+    environment: StepEnvironment
     step_globals: dict[str, object]
     step_locals: dict[str, object]
-
-    binding_commit_targets: set[str]
-    read_binding_names: frozenset[str]
-    task_name_to_value: InitVar[Mapping[str, object]]
-
-    # Ordinary user-provided binding (for example a global named "memory") may exist in step_locals.
-
+    read_binding_names: frozenset[str] = frozenset()
     type_alias_reference_names: frozenset[str] = frozenset()
     model_result: AgentRunResult[Any] | None = None
-    binding_name_to_type: Mapping[str, object] = field(default_factory=dict)
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
-    environment: StepEnvironment = field(init=False)
     operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     operation_failure: BaseException | None = field(default=None, init=False, repr=False)
     operation_failure_stage: FailureStage | None = field(default=None, init=False)
     operation_abort: StepAbortedError | None = field(default=None, init=False, repr=False)
-
-    def __post_init__(self, task_name_to_value: Mapping[str, object]) -> None:
-        self.binding_name_to_type = MappingProxyType(dict(self.binding_name_to_type))
-        self.environment = StepEnvironment(
-            python_name_to_value=self.step_locals,
-            python_globals=self.step_globals,
-            task_name_to_value=task_name_to_value,
-            output_name_set=frozenset(self.binding_commit_targets),
-            binding_name_to_type=self.binding_name_to_type,
-        )
 
     def record_assignment(self, name: str, value: object) -> None:
         """Assign a tracked step value without validation or operation records."""

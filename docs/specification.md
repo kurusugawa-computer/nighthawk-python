@@ -74,7 +74,7 @@ Authorization does not change supported source forms.
 - Step environment (`StepEnvironment`): provenance-preserving Python, task, and step views with one effective lookup contract.
 - Step globals (`step_globals`): internal namespace storage; it is not an independent lookup authority.
 - StepContext: a mutable, per-step object (one Natural block execution) passed to tools and executors.
-    - Required fields include `execution_reference`, containing invocation identity and source location.
+    - `execution_reference` contains invocation identity and source location; `environment` owns lookup, declared outputs, and their contracts.
     - Model selection and prompt policy are owned by `StepExecutorConfiguration`; StepContext does not carry model configuration.
 - Locals summary: a bounded presentation of selected working values and their available contracts, included in the LLM prompt.
 - Prompt suffix fragment: additional prompt text appended to the end of the effective system prompt or user prompt for the duration of a scoped override.
@@ -327,6 +327,7 @@ Optional constructor mappings default to empty and reject `None`; explicitly sup
 | `python_name_to_value` | Values accessible through the block's Python lexical environment, including enclosing cells, globals, and builtins. |
 | `task_name_to_value` | The resolved mapping injected by the active scope. |
 | `step_name_to_value` | Values explicitly assigned in this step, including pending declared outputs and temporary working names. |
+| `output_name_set` and `binding_name_to_type` | Declared outputs and their contracts, fixed at step entry. |
 | `resolve(name, *, source="effective")` | Resolve a name from the effective environment or specifically from `python`, `task`, or `step`. |
 | `describe(name)` | Describe the effective origin, shadowed alternatives, write eligibility, captured annotation, selected output contract, and usable references without evaluating the value's properties. |
 | `snapshot_working_state()` | Explicitly copy bound Python working locals and cells plus tracked assignments into a new dictionary; exclude module globals, builtins, task references, and runtime names. |

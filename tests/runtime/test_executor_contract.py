@@ -10,7 +10,7 @@ from pydantic import AfterValidator, TypeAdapter, ValidationError
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle, StepRaised
 from nighthawk.oversight import Accept, Oversight, Rewrite
-from nighthawk.runtime import OperationFinished, Pass, Raise, Return, StepCandidate, StepRequest
+from nighthawk.runtime import OperationFinished, Pass, Raise, Return, StepCandidate, StepEnvironment, StepRequest
 
 
 @dataclass
@@ -91,7 +91,13 @@ def test_resolved_executor_value_is_never_evaluated_as_python(asynchronous: bool
 def test_selected_contract_survives_executor_context_replacement() -> None:
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            request.step_context.binding_name_to_type = {"value": str}
+            context = request.step_context
+            context.environment = StepEnvironment(
+                python_name_to_value=context.step_locals,
+                python_globals=context.step_globals,
+                output_name_set=frozenset({"value"}),
+                binding_name_to_type={"value": str},
+            )
             return StepCandidate(outcome=Pass(), binding_name_to_value={"value": "7"})
 
     @nh.function

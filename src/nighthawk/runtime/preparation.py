@@ -209,10 +209,7 @@ class StepPreparation:
                 if name not in step_locals:
                     raise NameError(f"Read binding {name!r} is absent from the explicit namespace", name=name)
             self.input_binding_name_to_value = {name: step_locals[name] for name in input_binding_names}
-        binding_name_to_type = dict(environment.binding_name_to_type)
-
-        binding_commit_targets = set(output_binding_names)
-        read_binding_names = frozenset(input_binding_names) - binding_commit_targets
+        read_binding_names = frozenset(input_binding_names) - frozenset(output_binding_names)
         type_alias_reference_names = discover_type_alias_reference_names(
             step_locals=step_locals,
             step_globals=step_globals,
@@ -221,15 +218,12 @@ class StepPreparation:
 
         step_context = StepContext(
             execution_reference=get_scope().execution_reference,
+            environment=environment,
             step_globals=step_globals,
             step_locals=step_locals,
-            binding_commit_targets=binding_commit_targets,
             read_binding_names=read_binding_names,
-            task_name_to_value=scoped_task_name_to_value,
             type_alias_reference_names=type_alias_reference_names,
-            binding_name_to_type=binding_name_to_type,
         )
-        step_context.environment = environment
 
         input_binding_name_to_value = self.input_binding_name_to_value
         return PreparedStep(
@@ -239,5 +233,5 @@ class StepPreparation:
             step_context=step_context,
             input_binding_name_to_value=input_binding_name_to_value,
             output_binding_names=tuple(output_binding_names),
-            binding_name_to_type=step_context.binding_name_to_type,
+            binding_name_to_type=environment.binding_name_to_type,
         )

@@ -425,7 +425,7 @@ def _collect_explicit_multimodal_reference_and_value_list(
             continue
 
         root_reference = reference_path.split(".", 1)[0]
-        local_names = step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys() | step_context.binding_commit_targets
+        local_names = step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys() | step_context.environment.output_name_set
         if (root_reference in local_names) != include_locals:
             continue
 
@@ -466,7 +466,7 @@ def _render_locals_section(
         )
     )
     explicit_names = (
-        step_context.read_binding_names | step_context.binding_commit_targets | {path.split(".", 1)[0] for path in explicit_reference_paths}
+        step_context.read_binding_names | step_context.environment.output_name_set | {path.split(".", 1)[0] for path in explicit_reference_paths}
     )
     eligible_reference_and_value_list.sort(
         key=lambda item: (
@@ -522,7 +522,7 @@ def _render_globals_section(
         if (
             reference in step_context.step_locals
             or reference in step_context.environment.step_name_to_value
-            or reference in step_context.binding_commit_targets
+            or reference in step_context.environment.output_name_set
         ):
             continue
         try:
@@ -541,7 +541,7 @@ def _render_globals_section(
         )
     )
     explicit_names = (
-        step_context.read_binding_names | step_context.binding_commit_targets | {path.split(".", 1)[0] for path in explicit_reference_paths}
+        step_context.read_binding_names | step_context.environment.output_name_set | {path.split(".", 1)[0] for path in explicit_reference_paths}
     )
     eligible_reference_and_value_list.sort(key=lambda item: (item[0].split(".", 1)[0] not in explicit_names, item[0]))
 
@@ -665,7 +665,7 @@ def _build_user_prompt_content(
 
     locals_content = _render_locals_section(
         step_context=step_context,
-        references=step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys() | step_context.binding_commit_targets,
+        references=step_context.step_locals.keys() | step_context.environment.step_name_to_value.keys() | step_context.environment.output_name_set,
         explicit_reference_paths=explicit_reference_paths,
         render_context=render_context,
     )
