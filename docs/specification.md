@@ -247,8 +247,7 @@ The Natural program may contain bindings with angle brackets:
 
 Resolution note:
 
-- Read bindings use the same environment as runtime operations: step assignments, Python lexical names, then scoped task references.
-- An unbound Python local or closure cell blocks fallback to a same-name task value.
+- Read bindings resolve in the same [effective environment](#811-environment-views-and-lookup) as runtime operations.
 - If a read binding is missing or unbound, preparation fails with the original `NameError` or `UnboundLocalError` stored in `StepFailed.original_exception`. Unless terminal delivery supplies a host exception, the caller receives `ExecutionError` chained from that original exception (see [Section 10.4](#104-terminal-delivery-and-host-ledgers)).
 
 Constraints:
@@ -298,10 +297,8 @@ Clarifying note (bindings vs tool targets):
 
 ### 8.1. State layers: python locals and step locals
 
-`StepContext.environment` owns effective lookup and separate read-only views of Python, task, and step bindings.
-Lookup prefers tracked step assignments, then Python locals/cells/globals/builtins, then scoped task references.
+`StepContext.environment` owns [effective lookup](#811-environment-views-and-lookup) and separate read-only views of Python, task, and step bindings.
 Python locals are captured from the instrumented function at block entry; closure cells and defining module globals remain live.
-Unbound locals and cells retain Python's blocking semantics.
 Unrelated caller frames are not lexical dependencies.
 
 A child establishes its own Python lexical environment and receives the active scope's explicit task references.
@@ -621,8 +618,7 @@ The first parameter `run_context` is a Pydantic AI `RunContext[StepContext]` inj
 Role split with task references:
 
 - `task_references` supplies a distinct `StepEnvironment.task_name_to_value` mapping without modifying Python globals.
-  Effective lookup prefers step writes, then Python names, then task references.
-  Explicit source selection can retrieve a shadowed task value.
+  Python names shadow task references in [effective lookup](#811-environment-views-and-lookup); explicit source selection retrieves a shadowed task value.
 - `tools` exposes callables through native tool calling; they pass through the tool boundary (Section 8.3) and `Oversight.inspect_operation`, and are served to coding-agent backends over MCP.
 - A given callable SHOULD be exposed through one of the two, not both.
 
