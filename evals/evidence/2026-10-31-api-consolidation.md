@@ -43,3 +43,10 @@ Revision `3319e77`, source fingerprint `984eb9515c23…`, includes the [rejectio
 The shared suite runs once with the same settings: 49 passed and 1 failed, using 162 requests, 138,639 input tokens, 7,697 output tokens, and 270.5 summed trial seconds.
 The failure is again `test_explicit_task_source_survives_python_shadowing`, committing the Python value 7.
 The OpenAI integration tests pass: 10 passed, with coding-agent and opt-in evaluation cases skipped.
+
+## Single assignment path check
+
+Revision `ecd2c3c`, source fingerprint `89e2c43b7618…`, records tracked assignments only in `StepEnvironment` and reads them there for prompt ordering and exception-binding selection.
+The shared suite runs once with the same settings: 49 passed and 1 failed, using 159 requests, 132,216 input tokens, 6,630 output tokens, and 380.7 summed trial seconds.
+The failure is again `test_explicit_task_source_survives_python_shadowing`, committing the Python value 7; the repository owner chose to keep it as a known limitation.
+The OpenAI integration tests pass: 10 passed, with coding-agent and opt-in evaluation cases skipped.
