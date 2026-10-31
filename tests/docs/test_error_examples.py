@@ -62,5 +62,4 @@ def test_output_validation_handler_propagates_other_failure_stages(example_name_
     with nh.run(CallbackExecutor(respond)), pytest.raises(nh.ExecutionError) as caught:
         runpy.run_path(str(example_name_to_path["output_validation"]), init_globals={"nh": nh})
     assert caught.value.__cause__ is original
-    assert caught.value.step_failed is not None
     assert caught.value.step_failed.failure_stage == "executor"

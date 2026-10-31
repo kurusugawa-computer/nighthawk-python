@@ -17,7 +17,7 @@ from pydantic_core import to_json
 
 from ..composition import UNSET, UnsetType
 from ..configuration import ModelSelection, StepExecutorConfiguration
-from ..errors import ExecutionError, NighthawkError
+from ..errors import NighthawkError
 from ..tools._admission import ToolAdmissionCapability
 from ..tools._ordering import sequential_model_tools
 from ..tools.declarations import get_visible_tools
@@ -104,7 +104,7 @@ def _parse_model_outcome(raw_output: Any) -> ModelOutcome:
     try:
         return ModelStepResponse.model_validate(raw_output).result
     except Exception as exception:
-        raise ExecutionError(f"Step produced invalid step outcome: {exception}") from exception
+        raise NighthawkError(f"Step produced invalid step outcome: {exception}") from exception
 
 
 @runtime_checkable
@@ -328,7 +328,7 @@ class AgentStepExecutor:
         structured_output_type: object,
     ) -> Any:
         if self.agent is None:
-            raise ExecutionError("AgentStepExecutor.agent is not initialized")
+            raise NighthawkError("AgentStepExecutor.agent is not initialized")
 
         normalized_user_prompt: str | tuple[UserContent, ...] = (
             user_prompt[0] if len(user_prompt) == 1 and isinstance(user_prompt[0], str) else user_prompt
@@ -354,7 +354,7 @@ class AgentStepExecutor:
                 capabilities=capabilities,
             )
 
-        raise ExecutionError("AgentStepExecutor requires an agent with run(...) or run_sync(...)")
+        raise NighthawkError("AgentStepExecutor requires an agent with run(...) or run_sync(...)")
 
     def _build_structured_output_and_prompt_fragment(
         self,
@@ -365,7 +365,7 @@ class AgentStepExecutor:
     ) -> tuple[object, str]:
         unknown_kinds = set(allowed_outcome_kinds).difference(OUTCOME_KINDS)
         if unknown_kinds:
-            raise ExecutionError(f"Internal error: allowed_outcome_kinds contains unknown kinds: {tuple(sorted(unknown_kinds))}")
+            raise NighthawkError(f"Internal error: allowed_outcome_kinds contains unknown kinds: {tuple(sorted(unknown_kinds))}")
 
         allowed_kinds_deduplicated = tuple(dict.fromkeys(allowed_outcome_kinds))
         allowed_kinds_typed = cast(tuple[OutcomeKind, ...], allowed_kinds_deduplicated)

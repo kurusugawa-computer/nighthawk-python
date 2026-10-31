@@ -19,15 +19,11 @@ class NaturalParseError(NighthawkError):
 
 
 class ExecutionError(NighthawkError):
-    """Runtime failure exposing its terminal record and chaining the original error.
+    """A failed Natural block, exposing its terminal record and chaining the original exception."""
 
-    Internal helpers may supply a message; the runtime boundary attaches a
-    StepFailed record to every outward internal execution failure.
-    """
-
-    def __init__(self, failure: StepFailed | str, *, description: str | None = None) -> None:
-        self.step_failed = None if isinstance(failure, str) else failure
-        message = failure if isinstance(failure, str) else str(failure.original_exception)
+    def __init__(self, step_failed: StepFailed, *, description: str | None = None) -> None:
+        self.step_failed = step_failed
+        message = str(step_failed.original_exception)
         super().__init__(f"{description}: {message}" if description else message)
 
 

@@ -294,7 +294,7 @@ class Runner:
         allowed_outcome_kinds: tuple[OutcomeKind, ...],
     ) -> None:
         if step_outcome.kind not in allowed_outcome_kinds:
-            raise ExecutionError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_outcome_kinds}")
+            raise NighthawkError(f"Step '{step_outcome.kind}' is not allowed for this step. Allowed kinds: {allowed_outcome_kinds}")
 
     def _validate_and_coerce_output_bindings(
         self,
@@ -413,11 +413,11 @@ class Runner:
             raise step_context._operation_state.failure
         self.failure_stage = "outcome_validation"
         if not isinstance(candidate, StepCandidate):
-            raise ExecutionError("Step executor must return StepCandidate")
+            raise NighthawkError("Step executor must return StepCandidate")
         if preparation.block_kind == "decide" and (
             isinstance(candidate.binding_name_to_value, UnsetType) or set(candidate.binding_name_to_value) != set(preparation.output_binding_names)
         ):
-            raise ExecutionError("decide requires an explicit answer from the current invocation")
+            raise NighthawkError("decide requires an explicit answer from the current invocation")
         step_outcome = candidate.outcome
         self.attempted_outcome = step_outcome
         self._require_allowed_outcome_kind(step_outcome=step_outcome, allowed_outcome_kinds=preparation.allowed_outcome_kinds)
@@ -444,7 +444,7 @@ class Runner:
             return_annotation=return_annotation,
         )
         if preparation.block_kind == "decide" and set(validated_bindings) != set(preparation.output_binding_names):
-            raise ExecutionError("decide commit must retain its answer")
+            raise NighthawkError("decide commit must retain its answer")
         self.outcome = outcome
         self.attempted_outcome = outcome
         self.validated_binding_name_to_value = validated_bindings
@@ -494,13 +494,13 @@ class Runner:
         elif isinstance(executor, SyncStepExecutor):
             candidate = executor.run_step(request=request)
         else:
-            raise ExecutionError("Step executor must define run_step_async(...) or run_step(...)")
+            raise NighthawkError("Step executor must define run_step_async(...) or run_step(...)")
         return await self._finalize_step(preparation=preparation, candidate=candidate, return_annotation=return_annotation)
 
     @staticmethod
     def _validate_raise(outcome: Raise) -> None:
         if not isinstance(outcome.error_type, type) or not issubclass(outcome.error_type, BaseException):
-            raise ExecutionError("Raise error_type must be a resolved exception class")
+            raise NighthawkError("Raise error_type must be a resolved exception class")
 
     @staticmethod
     def _build_request(

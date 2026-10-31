@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 
 from ..composition import UNSET, UnsetType
-from ..errors import ExecutionError
+from ..errors import NighthawkError
 from .expression import evaluate_expression_operation
 from .model_outcome import ModelOutcome, ModelRaise, ModelReturn
 from .operation_contract import OperationError
@@ -18,7 +18,7 @@ async def resolve_model_candidate(
 ) -> StepCandidate:
     """Resolve a provider response once; leave commit validation to the runner."""
     if outcome.kind not in request.allowed_outcome_kinds:
-        raise ExecutionError(f"Step '{outcome.kind}' is not allowed for this step. Allowed kinds: {request.allowed_outcome_kinds}")
+        raise NighthawkError(f"Step '{outcome.kind}' is not allowed for this step. Allowed kinds: {request.allowed_outcome_kinds}")
     if not isinstance(binding_name_to_value, UnsetType) and (
         not isinstance(binding_name_to_value, Mapping) or any(not isinstance(name, str) for name in binding_name_to_value)
     ):
@@ -26,9 +26,9 @@ async def resolve_model_candidate(
     supplied_name_to_value = {} if isinstance(binding_name_to_value, UnsetType) else dict(binding_name_to_value)
     undeclared = supplied_name_to_value.keys() - set(request.output_binding_names)
     if undeclared:
-        raise ExecutionError(f"Undeclared output binding names: {sorted(undeclared)}")
+        raise NighthawkError(f"Undeclared output binding names: {sorted(undeclared)}")
     if isinstance(outcome, ModelRaise) and supplied_name_to_value:
-        raise ExecutionError("Raise cannot include output bindings")
+        raise NighthawkError("Raise cannot include output bindings")
     resolved: StepOutcome
     if isinstance(outcome, ModelReturn):
         value = await evaluate_expression_operation(
@@ -48,9 +48,9 @@ async def resolve_model_candidate(
                     request.step_context, outcome.raise_error_type, purpose="evaluation", allow_awaitable_result=False
                 )
             except OperationError as exception:
-                raise ExecutionError(f"Invalid raise_error_type: {outcome.raise_error_type!r}") from exception
+                raise NighthawkError(f"Invalid raise_error_type: {outcome.raise_error_type!r}") from exception
         if not isinstance(error_type, type) or not issubclass(error_type, BaseException):
-            raise ExecutionError(f"Invalid raise_error_type: {outcome.raise_error_type!r}")
+            raise NighthawkError(f"Invalid raise_error_type: {outcome.raise_error_type!r}")
         resolved = Raise(outcome.raise_message, error_type)
     else:
         resolved = {"pass": Pass, "break": Break, "continue": Continue}[outcome.kind]()

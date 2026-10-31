@@ -15,6 +15,7 @@ from nighthawk.resilience import retrying
 from nighthawk.runtime import Raise, StepCandidate
 from nighthawk.runtime import scoping as runtime_scoping
 from nighthawk.testing import ScriptedExecutor
+from tests.support.errors import execution_error
 
 
 @pytest.fixture
@@ -35,11 +36,12 @@ def _get_finished_run_spans(run_span_exporter: InMemorySpanExporter) -> list[Rea
     return [span_data for span_data in run_span_exporter.get_finished_spans() if span_data.name == "nighthawk.run"]
 
 
-def _counting_function(counter: list[int], *, fail_times: int = 0, error_type: type[Exception] = nh.ExecutionError) -> ...:
+def _counting_function(counter: list[int], *, fail_times: int = 0, error_type: type[Exception] | None = None) -> ...:
     def function() -> str:
         counter.append(1)
         if len(counter) <= fail_times:
-            raise error_type(f"fail #{len(counter)}")
+            message = f"fail #{len(counter)}"
+            raise execution_error(message) if error_type is None else error_type(message)
         return "ok"
 
     return function
@@ -49,7 +51,7 @@ def _async_counting_function(counter: list[int], *, fail_times: int = 0) -> ...:
     async def function() -> str:
         counter.append(1)
         if len(counter) <= fail_times:
-            raise nh.ExecutionError(f"fail #{len(counter)}")
+            raise execution_error(f"fail #{len(counter)}")
         return "ok"
 
     return function
@@ -195,7 +197,7 @@ class TestRetryingIteratorSync:
             with attempt:
                 counter.append(1)
                 if len(counter) < 3:
-                    raise nh.ExecutionError("not yet")
+                    raise execution_error("not yet")
         assert len(counter) == 3
 
     def test_for_attempt_exhausted(self) -> None:
@@ -204,7 +206,7 @@ class TestRetryingIteratorSync:
             for attempt in retrying(attempts=2, wait=wait_none()):
                 with attempt:
                     counter.append(1)
-                    raise nh.ExecutionError("always fails")
+                    raise execution_error("always fails")
         assert len(counter) == 2
 
 
@@ -217,7 +219,7 @@ class TestRetryingIteratorAsync:
                 with attempt:
                     counter.append(1)
                     if len(counter) < 3:
-                        raise nh.ExecutionError("not yet")
+                        raise execution_error("not yet")
 
         asyncio.run(run())
         assert len(counter) == 3

@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Breaking: rejection feedback has one payload.
   `OperationRejection.model_feedback()` returns the tool error shape (`kind`, `status`, identities, `message`, `guidance`, `phase`, `evaluation_started`) for tool denials, output retries, and ordered-batch denied returns.
   Skipped operations use the same shape, with guidance not to repeat operations that already completed and to reissue the skipped operation when still needed; in live probes this stopped models from replaying completed calls.
+- Breaking: `ExecutionError(step_failed)` always carries its `StepFailed` record; the string constructor is removed.
+  Violated step contracts are recorded as `NighthawkError` causes, and malformed frontmatter as `NaturalParseError`, instead of an `ExecutionError` nested inside another.
 - Breaking: `StepDeliveryError` is removed; Core never raised it, and host adapters reporting storage failure raise their own exception chained from the cause.
   `StepAbortedError.subject` is typed as `"operation"` or `"step_commit"` and has no default.
   `AgentStepExecutor.token_encoding` and `tool_result_rendering_policy` are internal derivations of `configuration`.

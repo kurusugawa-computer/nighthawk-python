@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter
 
 from nighthawk.composition import UNSET, UnsetType
-from nighthawk.errors import ExecutionError
+from nighthawk.errors import NighthawkError
 from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
@@ -26,29 +26,29 @@ class StubExecutor:
 
         json_start = processed_natural_program.find("{")
         if json_start == -1:
-            raise ExecutionError("Execution expected JSON object in stub mode")
+            raise NighthawkError("Execution expected JSON object in stub mode")
 
         try:
             data = json.loads(processed_natural_program[json_start:])
         except json.JSONDecodeError as e:
-            raise ExecutionError(f"Execution expected JSON (stub mode): {e}") from e
+            raise NighthawkError(f"Execution expected JSON (stub mode): {e}") from e
 
         if not isinstance(data, dict):
-            raise ExecutionError("Execution expected JSON object (stub mode)")
+            raise NighthawkError("Execution expected JSON object (stub mode)")
 
         if "step_outcome" not in data:
-            raise ExecutionError("Stub execution expected 'step_outcome' in envelope")
+            raise NighthawkError("Stub execution expected 'step_outcome' in envelope")
         if "bindings" not in data:
-            raise ExecutionError("Stub execution expected 'bindings' in envelope")
+            raise NighthawkError("Stub execution expected 'bindings' in envelope")
 
         try:
             step_outcome = TypeAdapter(ModelOutcome).validate_python(data["step_outcome"])
         except Exception as e:
-            raise ExecutionError(f"Stub execution has invalid step_outcome: {e}") from e
+            raise NighthawkError(f"Stub execution has invalid step_outcome: {e}") from e
 
         bindings_object = data["bindings"]
         if not isinstance(bindings_object, dict):
-            raise ExecutionError("Stub execution expected 'bindings' to be an object")
+            raise NighthawkError("Stub execution expected 'bindings' to be an object")
 
         bindings: dict[str, object] = {}
         for name in binding_names:

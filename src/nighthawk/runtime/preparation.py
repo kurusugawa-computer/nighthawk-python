@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import FrameType
 
-from ..errors import ExecutionError, NaturalParseError
+from ..errors import NighthawkError
 from ..natural.blocks import extract_bindings, parse_frontmatter, validate_frontmatter_deny
 from .annotations import SourceAnnotation, module_annotations, resolve_contract
 from .bindings import MISSING_ANNOTATION, infer_binding_types, normalize_binding_names
@@ -22,15 +22,8 @@ from .step_outcome import OutcomeKind
 def _split_frontmatter(
     processed_natural_program: str,
 ) -> tuple[str, tuple[str, ...]]:
-    try:
-        program_without_frontmatter, frontmatter = parse_frontmatter(processed_natural_program)
-    except NaturalParseError as e:
-        raise ExecutionError(str(e)) from e
-    try:
-        denied_outcome_kinds = validate_frontmatter_deny(frontmatter)
-    except NaturalParseError as e:
-        raise ExecutionError(str(e)) from e
-    return program_without_frontmatter, denied_outcome_kinds
+    program_without_frontmatter, frontmatter = parse_frontmatter(processed_natural_program)
+    return program_without_frontmatter, validate_frontmatter_deny(frontmatter)
 
 
 def _compute_allowed_outcome_kinds(is_in_loop: bool, denied_outcome_kinds: tuple[str, ...]) -> tuple[OutcomeKind, ...]:
@@ -175,7 +168,7 @@ class StepPreparation:
     ) -> PreparedStep:
         block_kind = self.block_kind
         if block_kind == "decide" and len(output_binding_names) != 1:
-            raise ExecutionError("decide requires exactly one output binding")
+            raise NighthawkError("decide requires exactly one output binding")
         normalize_binding_names(input_binding_names)
         normalize_binding_names(output_binding_names)
         processed_without_frontmatter, denied_outcome_kinds = _split_frontmatter(natural_program)
@@ -183,11 +176,11 @@ class StepPreparation:
         self.processed_natural_program = processed_without_frontmatter
         if block_kind == "decide":
             if denied_outcome_kinds:
-                raise ExecutionError("decide does not accept control-flow frontmatter")
+                raise NighthawkError("decide does not accept control-flow frontmatter")
             if not processed_without_frontmatter.strip():
-                raise ExecutionError("decide requires a judgment instruction")
+                raise NighthawkError("decide requires a judgment instruction")
             if extract_bindings(processed_without_frontmatter)[1]:
-                raise ExecutionError("decide instructions cannot declare output bindings")
+                raise NighthawkError("decide instructions cannot declare output bindings")
         allowed_outcome_kinds: tuple[OutcomeKind, ...] = (
             ("pass",) if block_kind == "decide" else _compute_allowed_outcome_kinds(is_in_loop, denied_outcome_kinds)
         )

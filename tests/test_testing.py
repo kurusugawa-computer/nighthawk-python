@@ -118,7 +118,6 @@ async def test_unexpected_invocation_fails_without_committing_outputs(execute: C
             await execute(definition, name_to_value={}, write_binding=write_binding)
 
     assert isinstance(caught.value.__cause__, AssertionError)
-    assert caught.value.step_failed is not None
     assert caught.value.step_failed.failure_stage == "executor"
     assert len(executor.requests) == response_count + 1
     assert writes == [("value", 7)] * response_count

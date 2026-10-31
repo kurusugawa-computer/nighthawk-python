@@ -1198,7 +1198,7 @@ Exception hierarchy:
     - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
 - `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
     - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
-- `ExecutionError(NighthawkError)`: runtime internal failure; `step_failed` holds its `StepFailed` record and `__cause__` holds the original exception.
+- `ExecutionError(NighthawkError)`: a failed Natural block; `step_failed` always holds its `StepFailed` record and `__cause__` holds the original exception, such as a `NighthawkError` describing a violated step contract.
     - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, or boundary value validation fails outside the operation pipeline.
     - A DSL Raise defaults to ordinary `Exception`; application operation failures retain their own exception types.
 - `OperationError(Exception)`: Recoverable runtime admission, name-resolution, or value-validation failure, with `kind`, `phase`, `evaluation_started`, and `guidance`. A failed `nh_assign` value validation raises it with `kind="invalid_input"`; the tool wrapper returns it to the model as a structured error. It is not a `NighthawkError` subclass, and an application tool raising it is not converted into feedback.

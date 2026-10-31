@@ -585,7 +585,6 @@ def test_admission_can_detect_a_cleared_lifecycle_without_relying_on_delivery() 
     with nh.run(Executor()), nh.scope(lifecycle=configuration):
         with nh.scope(lifecycle=None), pytest.raises(nh.ExecutionError, match="mediation bypass") as caught:
             workflow()
-        assert caught.value.step_failed is not None
         assert caught.value.step_failed.execution_reference == bypass_references[0]
         assert events == []
         assert nh.get_scope().lifecycle is configuration

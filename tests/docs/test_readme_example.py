@@ -49,7 +49,6 @@ def test_readme_example(
         with pytest.raises(ExecutionError) as failure:
             runpy.run_path(str(example_path))
         assert isinstance(failure.value.__cause__, ValidationError)
-        assert failure.value.step_failed is not None
         assert failure.value.step_failed.failure_stage == "binding_validation"
         assert capsys.readouterr().out == ""
     else:

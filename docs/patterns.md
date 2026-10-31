@@ -186,14 +186,13 @@ def extract_count(text: str) -> int:
 try:
     extract_count("several items")
 except nh.ExecutionError as error:
-    failure = error.step_failed
-    if failure is None or failure.failure_stage != "binding_validation":
+    if error.step_failed.failure_stage != "binding_validation":
         raise
     print("Output validation failed; review the input before retrying.")
 ```
 <!-- /error-example:output_validation -->
 
-The original validation exception remains available as `failure.original_exception` and `error.__cause__`.
+The original validation exception remains available as `error.step_failed.original_exception` and `error.__cause__`.
 Earlier helper calls and mutations may already have taken effect, so a retry requires an explicit recovery decision.
 Independent `validate_output_bindings()` calls instead raise `BindingValidationError`; see [Embedded execution](embedded-execution.md#reusing-binding-processing).
 For the exception hierarchy, see [Specification Section 13](specification.md#13-error-handling).

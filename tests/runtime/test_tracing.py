@@ -156,7 +156,7 @@ def test_step_span_records_failure_event_for_execution_error(step_span_exporter:
     event_name_to_attribute = {event.name: dict(event.attributes or {}) for event in step_span.events if event.name == "nighthawk.step.failed"}
     assert event_name_to_attribute == {
         "nighthawk.step.failed": {
-            "nighthawk.step.error_kind": "ExecutionError",
+            "nighthawk.step.error_kind": "NighthawkError",
             "nighthawk.step.error_message": "Step 'return' is not allowed for this step. Allowed kinds: ('pass', 'raise')",
         }
     }
@@ -166,7 +166,7 @@ def test_step_span_records_failure_event_for_execution_error(step_span_exporter:
 
 
 def test_step_span_records_failure_event_for_executor_exception(step_span_exporter: InMemorySpanExporter) -> None:
-    class CustomExecutionError(nh.ExecutionError):
+    class CustomExecutionError(nh.NighthawkError):
         def __str__(self) -> str:
             return "custom string message"
 
