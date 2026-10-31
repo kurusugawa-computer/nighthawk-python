@@ -244,7 +244,7 @@ The small model sample does not establish broad reliability, lower authoring eff
 No independent application case or comparative model-quality evaluation is recorded.
 
 A host may refuse a proposed operation while still permitting a different way to complete the task.
-Previously every operation-inspection rejection ended the step, even if an executor caught the exception.
+If every operation-inspection rejection ended the step, an executor that caught the exception still could not continue it.
 Ordinary helper return values can communicate expected domain findings, but cannot change that Core-owned inspection and finalization contract.
 Reimplementing the operation pipeline in application executors would duplicate state, notification, and termination responsibilities.
 

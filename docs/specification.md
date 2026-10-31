@@ -431,6 +431,7 @@ Ordering:
 
 - Explicit references and outputs precede other Python working locals.
   Ordering within a priority class is lexicographic.
+- Object methods are rendered before fields, each in lexicographic order by member name.
 
 Rendering format:
 
@@ -478,14 +479,6 @@ Rendering format:
 Context is a bounded description, not executable initialization code.
 Declaration spellings and native content need not form a complete Python program.
 
-Ordering:
-
-- Top-level entries follow the priority classes above and use lexicographic order within each class.
-- Object methods and fields are rendered in lexicographic order by member name.
-- Methods are rendered before fields for each object entry.
-- If an item or token budget prevents rendering all top-level entries, a `# <snipped>` comment is appended at the end of the section.
-  An adjacent omission comment names up to eight omitted entries and supplies `environment.discover()` and `environment.describe('name')` expressions using the live runtime reference.
-
 Safety:
 
 - Prompt rendering does not call user methods.
@@ -493,24 +486,15 @@ Safety:
   Known functions, ordinary instance dictionaries, standard slot storage, and supported native content supply static metadata; other values remain explicitly opaque.
 - Slot and field access failures are ignored for rendering purposes.
 
-Token budgeting:
+Budgets and truncation:
 
-- Section budgets remain governed by `locals_max_tokens` / `globals_max_tokens` and item budgets by `locals_max_items` / `globals_max_items`.
-- Object method and field expansion is additionally governed by object-specific limits listed above.
-- Line-level token counting includes newline separators during budget checks.
-- Each rendered multimodal content item is charged a fixed internal budgeting heuristic against the section budget so that multimodal-heavy sections still trigger truncation. This is not a provider-side token estimate.
-
-Observability:
-
-- Section-level token truncation emits `prompt_context_truncated` logs with section, reason, and configured max token details.
-- Object member omission due to object-specific member limits does not emit a separate log event.
-
-Truncation:
-
-- Rendering is bounded by `context_limits.locals_max_tokens` and `context_limits.locals_max_items`.
-- When the limit is reached before all entries are rendered, a `<snipped>` marker is appended and a diagnostic log message is emitted on the `nighthawk` logger.
-- Tight item or token budgets can omit even explicit references.
-  Omission notices identify omitted names and retain a usable environment-discovery reference.
+- The section is bounded by `context_limits.locals_max_tokens` and `context_limits.locals_max_items`; object expansion is additionally bounded by the object-specific limits above.
+- Line-level token counting includes newline separators.
+- Each rendered multimodal content item is charged a fixed internal heuristic against the section budget so that multimodal-heavy sections still truncate; it is not a provider-side token estimate.
+- When a budget prevents rendering all top-level entries, a `# <snipped>` comment ends the section.
+  An adjacent omission comment names up to eight omitted entries and supplies `environment.discover()` and `environment.describe('name')` expressions using the live runtime reference.
+  Tight budgets can omit even explicit references.
+- Section-level token truncation emits a `prompt_context_truncated` log on the `nighthawk` logger with the section, reason, and configured maximum; object member omission emits no separate log.
 
 #### 8.2.3. Globals summary
 
@@ -536,10 +520,9 @@ Rendering format:
 
 - Same rules as the locals summary (Section 8.2.2).
 
-Truncation:
+Budgets and truncation:
 
-- Rendering is bounded by `context_limits.globals_max_tokens` and `context_limits.globals_max_items`.
-- Truncation behavior is the same as the locals summary.
+- The section is bounded by `context_limits.globals_max_tokens` and `context_limits.globals_max_items`; otherwise the locals summary rules apply.
 
 
 #### 8.2.4. Replaceable context construction
