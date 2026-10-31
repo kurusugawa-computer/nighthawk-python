@@ -19,7 +19,7 @@ Operation oversight is the connection point for deciding whether an inspected op
 
 `OperationRejectedError.rejection` and the operation record share the same `OperationRejection`.
 Its `request` identifies the operation and step; `reason` and `guidance` are deliberately model-visible.
-`model_feedback()` returns those public fields and execution-start information without exposing live tool arguments or diagnostic exceptions.
+`model_feedback()` returns them in the tool error shape, with the reason as `message`, plus identities and execution-start information, without exposing live tool arguments or diagnostic exceptions.
 Reasons are nonempty strings; guidance is an optional string.
 
 An inspector must return a decision normally.

@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..errors import NighthawkError
-from ..tools.contracts import ErrorKind
+from ..tools.contracts import ErrorKind, ToolError
 from .execution_reference import ExecutionReference
 
 type OperationKind = Literal["evaluation", "assignment", "return", "native_tool", "inspection", "output"]
@@ -42,14 +42,16 @@ class OperationRejection:
     reason: str
     guidance: str | None = None
 
-    def model_feedback(self) -> dict[str, object]:
-        """Expose correlation and feedback, without serializing live arguments or diagnostics."""
+    def model_feedback(self) -> ToolError:
+        """Expose correlation and feedback in the tool error shape, without live arguments or diagnostics."""
         return {
+            "kind": "oversight",
             "status": "rejected",
             "operation_id": self.request.operation_id,
             "step_execution_id": self.request.execution_reference.step_execution_id,
-            "reason": self.reason,
+            "message": self.reason,
             "guidance": self.guidance,
+            "phase": "inspection",
             "evaluation_started": False,
         }
 

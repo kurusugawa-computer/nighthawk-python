@@ -392,7 +392,7 @@ def test_capability_cannot_replace_rejection_with_success_or_different_feedback(
         parts = [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
         assert parts[-1].outcome == "denied"
         content = parts[-1].content
-        assert isinstance(content, dict) and content["reason"] == "Host feedback"
+        assert isinstance(content, dict) and content["message"] == "Host feedback"
         return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
     @nh.function

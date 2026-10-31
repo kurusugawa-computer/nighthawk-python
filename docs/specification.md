@@ -1023,7 +1023,7 @@ Admission runs before inspection; inspection runs before any operation body or a
 `Accept` permits execution.
 `RejectOperation(reason, guidance=None)` prevents that operation's body and produces an `OperationRejection` with the request and deliberately model-visible feedback.
 Direct operation APIs raise `OperationRejectedError`, whose `rejection` exposes that same record; a custom executor may catch it and choose another operation in the same step.
-`OperationRejection.model_feedback()` exposes status, operation and step identities, reason, guidance, and `evaluation_started=False`, without serializing live arguments or diagnostic exceptions.
+`OperationRejection.model_feedback()` exposes the tool error shape: `kind="oversight"`, `status="rejected"`, operation and step identities, the reason as `message`, `guidance`, `phase="inspection"`, and `evaluation_started=False`, without serializing live arguments or diagnostic exceptions. Tool denials, output retries, and ordered-batch returns use this one payload.
 Reasons must be nonempty strings; guidance is an optional string.
 `AbortStep(reason)` prevents execution and ends the current step with `StepAbortedError`.
 It does not cancel an enclosing run or prohibit a calling Python helper from deliberately handling the child's failure.

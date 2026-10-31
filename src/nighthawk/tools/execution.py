@@ -89,19 +89,7 @@ def _build_standard_tool_return_value(*, tool_outcome: ToolOutcome) -> object:
 
 
 def rejection_tool_outcome(rejection: OperationRejection) -> ToolOutcome:
-    return {
-        "payload": None,
-        "error": {
-            "kind": "oversight",
-            "status": "rejected",
-            "operation_id": rejection.request.operation_id,
-            "step_execution_id": rejection.request.execution_reference.step_execution_id,
-            "message": rejection.reason,
-            "guidance": rejection.guidance,
-            "phase": "inspection",
-            "evaluation_started": False,
-        },
-    }
+    return {"payload": None, "error": rejection.model_feedback()}
 
 
 async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]], step_context: StepContext) -> ToolOutcome:
