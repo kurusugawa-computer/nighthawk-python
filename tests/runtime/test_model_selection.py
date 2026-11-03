@@ -193,7 +193,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
         def inherited_prefix() -> None:
             active = nh.get_scope().step_executor
             assert isinstance(active, PreservingExecutor)
-            assert get_scope().task_name_to_value["policy"] is observer
+            assert get_scope().task_references["policy"] is observer
             selected.append(active.executor.configuration.execution_model)
             block()
 
@@ -224,7 +224,7 @@ def test_concurrent_model_selection_and_actual_cancellation_restore_each_context
                 inherited_prefix()
             assert nh.get_scope().step_executor is executor
 
-        with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer], task_name_to_value={"policy": observer}):
+        with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer], task_references={"policy": observer}):
             async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
                 child_task = tasks.create_task(invoke_child())
                 sibling_task = tasks.create_task(sibling())
@@ -276,7 +276,7 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
     executor = Executor()
     with nh.run(executor):
         reference = nh.get_scope().execution_reference
-        with pytest.raises(TypeError), nh.scope(execution_model="test:model", task_name_to_value=None):  # type: ignore[arg-type]
+        with pytest.raises(TypeError), nh.scope(execution_model="test:model", task_references=None):  # type: ignore[arg-type]
             pytest.fail("Invalid scope entered")
         assert nh.get_scope().execution_reference is reference
         assert nh.get_scope().step_executor is executor

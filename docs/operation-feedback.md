@@ -99,7 +99,7 @@ def run_sync_example() -> int:
     with (
         nh.run(make_executor()),
         nh.scope(
-            task_name_to_value={"forbidden": forbidden},
+            task_references={"forbidden": forbidden},
             oversight=Oversight(inspect_operation=inspect_operation),
         ),
     ):
@@ -110,7 +110,7 @@ async def run_async_example() -> int:
     with (
         nh.run(make_executor()),
         nh.scope(
-            task_name_to_value={"forbidden": forbidden},
+            task_references={"forbidden": forbidden},
             oversight=Oversight(inspect_operation=inspect_operation_async),
         ),
     ):
@@ -159,7 +159,7 @@ class CorrectingExecutor:
 with (
     nh.run(CorrectingExecutor()),
     nh.scope(
-        task_name_to_value={"forbidden": forbidden},
+        task_references={"forbidden": forbidden},
         oversight=Oversight(inspect_operation=inspect_operation_async),
     ),
 ):

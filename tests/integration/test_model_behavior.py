@@ -456,7 +456,7 @@ async def test_application_inspect_and_task_collision(model_evaluation: ModelEva
 
     name_to_value: dict[str, object] = {}
     model_evaluation.name_to_observation.update(calls=calls, bindings=name_to_value)
-    with nh.scope(task_name_to_value={"inspect": "Task data, not the application function", "value": 100}):
+    with nh.scope(task_references={"inspect": "Task data, not the application function", "value": 100}):
         outcome = await execute_step_async(
             StepDefinition(
                 "Call the Python function <inspect> once with the Python <value>. Store its return value in <:result>.",

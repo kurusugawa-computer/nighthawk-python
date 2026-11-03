@@ -65,7 +65,7 @@ async def review_claims(document: str, claims: list[str]) -> list[tuple[str, flo
         "A before-and-after observation without a control group does not establish causation."
     )
     assessments: list[tuple[str, float]] = []
-    with nh.scope(task_name_to_value={"review_guidance": review_guidance}):
+    with nh.scope(task_references={"review_guidance": review_guidance}):
         """execute
         Use <review_guidance> to choose claims from <claims> that need closer review.
         Call <assess_claim> with <document> and each selected claim exactly once, awaiting each result.

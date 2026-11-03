@@ -45,7 +45,7 @@ Scoped configuration, execution identity, oversight, capabilities, and lifecycle
 Called Python functions retain their own closures and globals.
 Nested Natural functions use their own Python frames and the active scope's explicit task references.
 The explicit namespace and later parent temporaries do not become implicit inputs to those functions or their descendants.
-Pass values as arguments, or use a Python helper to select references for `nh.scope(task_name_to_value=...)` before calling the child.
+Pass values as arguments, or use a Python helper to select references for `nh.scope(task_references=...)` before calling the child.
 See the [synchronous and asynchronous sharing examples](runtime-configuration.md#selecting-shared-values-with-python).
 This selects an execution environment without isolating Python objects or restricting the authority of called functions.
 

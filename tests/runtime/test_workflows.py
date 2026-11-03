@@ -44,7 +44,7 @@ class TestExecutorSelectionPatterns:
             label = classify_ticket("tests are failing")
             with nh.scope(
                 step_executor=deep_executor,
-                task_name_to_value={"search_repository": helper},
+                task_references={"search_repository": helper},
             ):
                 report = write_analysis_report("tests are failing", "product context")
 

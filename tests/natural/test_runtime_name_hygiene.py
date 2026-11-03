@@ -87,7 +87,7 @@ def test_factory_capture_names_preserve_live_nonlocal_cells() -> None:
             return StepCandidate(outcome=Pass(), binding_name_to_value={"__nh_captured_values__": updated})
 
     __nh_captured_values__ = 8
-    with nh.run(Executor()), nh.scope(task_name_to_value={"__nh_captured_values__": 99}):
+    with nh.run(Executor()), nh.scope(task_references={"__nh_captured_values__": 99}):
         assert asyncio.run(workflow()) == 9
     assert __nh_captured_values__ == 9
 
@@ -119,7 +119,7 @@ def test_child_receives_shared_application_binding_even_when_its_own_helper_has_
                 assert context.environment.describe("__nh_execution__")["origin"] == "task"
                 await assign_expression_async(context, "result", "__nh_execution__ + 1")
             else:
-                with nh.scope(task_name_to_value={"__nh_execution__": context.environment.resolve("__nh_execution__")}):
+                with nh.scope(task_references={"__nh_execution__": context.environment.resolve("__nh_execution__")}):
                     assert await evaluate_expression_async(context, "child()") == 8
                 assert context.environment.resolve("__nh_execution__") == 7
                 await assign_expression_async(context, "result", "__nh_execution__")

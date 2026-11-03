@@ -352,7 +352,7 @@ async def assess_claim(document: str, claim: str) -> float:
 async def review_claims(document: str, claims: list[str]) -> list[tuple[str, float]]:
     review_guidance = "Check quantitative and causal claims against direct evidence."
     assessments: list[tuple[str, float]] = []
-    with nh.scope(task_name_to_value={"review_guidance": review_guidance}):
+    with nh.scope(task_references={"review_guidance": review_guidance}):
         """execute
         Use <review_guidance> to choose claims from <claims> that need closer review.
         Call <assess_claim> with <document> and each selected claim, awaiting each result.

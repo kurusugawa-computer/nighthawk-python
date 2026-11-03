@@ -94,7 +94,7 @@ def test_custom_executor_recovers_without_restarting_the_step(asynchronous_execu
     with (
         nh.run(Executor()),
         nh.scope(
-            task_name_to_value={"effects": effects, "forbidden": forbidden},
+            task_references={"effects": effects, "forbidden": forbidden},
             oversight=Oversight(inspect_operation=inspect_async if asynchronous_inspection else inspect, inspect_step_commit=commit),
             lifecycle=StepLifecycle(on_operation_finished=operations.append, on_step_finished=terminals.append),
         ),
@@ -264,7 +264,7 @@ def test_standard_model_receives_refusal_and_corrects_the_same_step(route: str) 
         nh.run(executor),
         nh.scope(
             tools=[forbidden],
-            task_name_to_value={"forbidden": forbidden},
+            task_references={"forbidden": forbidden},
             capabilities=[Hooks(before_model_request=before_request)],
             oversight=Oversight(inspect_operation=inspect),
             lifecycle=StepLifecycle(on_operation_finished=operations.append, on_step_finished=terminals.append),
@@ -324,7 +324,7 @@ def test_rejected_batch_skips_later_validation_bodies_and_output(end_strategy: A
         nh.run(executor),
         nh.scope(
             tools=[Tool(record, args_validator=validate)],
-            task_name_to_value={"record": record},
+            task_references={"record": record},
             oversight=Oversight(inspect_operation=inspect),
             lifecycle=StepLifecycle(on_operation_finished=operations.append),
         ),
@@ -367,7 +367,7 @@ def test_earlier_output_is_discarded_after_rejection_without_replaying_its_effec
         return 0
 
     executor = nh.AgentStepExecutor.from_agent(agent=Agent(FunctionModel(respond), deps_type=nh.StepContext, end_strategy=end_strategy))
-    with nh.run(executor), nh.scope(tools=[forbidden], task_name_to_value={"effects": effects}, oversight=Oversight(inspect_operation=inspect)):
+    with nh.run(executor), nh.scope(tools=[forbidden], task_references={"effects": effects}, oversight=Oversight(inspect_operation=inspect)):
         assert asyncio.run(workflow()) == 7
     assert effects == ["once"] and requests == 2
 
@@ -550,7 +550,7 @@ def test_child_abort_stays_terminal_while_python_controls_parent_recovery(catch_
     with (
         nh.run(Executor()),
         nh.scope(
-            task_name_to_value={"invoke_child": invoke_child},
+            task_references={"invoke_child": invoke_child},
             oversight=Oversight(inspect_operation=inspect),
             lifecycle=StepLifecycle(on_step_finished=terminals.append, on_operation_finished=operations.append),
         ),
@@ -613,7 +613,7 @@ def test_native_output_refusal_skips_coemitted_tools_and_respects_retry_limit(ou
         nh.run(nh.AgentStepExecutor.from_agent(agent=agent)),
         nh.scope(
             tools=[Tool(later, args_validator=validate)],
-            task_name_to_value={"forbidden": forbidden},
+            task_references={"forbidden": forbidden},
             oversight=Oversight(
                 inspect_operation=lambda request: RejectOperation("Host refusal") if request.expression == "forbidden()" else Accept()
             ),

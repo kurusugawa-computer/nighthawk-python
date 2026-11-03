@@ -72,7 +72,7 @@ async def test_embedded_children_and_grandchildren_only_receive_explicit_values(
             environment = context.environment
             if request.processed_natural_program == "parent":
                 context.environment.assign("parent_temporary", "PARENT_TEMPORARY_MARKER")
-                with nh.scope(task_name_to_value=select_shared_references(environment)):
+                with nh.scope(task_references=select_shared_references(environment)):
                     assert nh.get_scope().execution_reference.step_execution_id == context.execution_reference.step_execution_id
                     if asynchronous_child:
                         await asynchronous_child_function(shared)
@@ -182,12 +182,12 @@ async def test_missing_parent_read_fails_before_executor_and_writeback_through_c
     class Handler:
         def invoke(self, call: nh.FunctionCall, proceed: Callable[[], object]) -> object:
             calls.append(call)
-            with nh.scope(task_name_to_value={}):
+            with nh.scope(task_references={}):
                 return proceed()
 
         async def invoke_async(self, call: nh.FunctionCall, proceed: Callable[[], Awaitable[object]]) -> object:
             calls.append(call)
-            with nh.scope(task_name_to_value={}):
+            with nh.scope(task_references={}):
                 return await proceed()
 
     class Executor:
@@ -244,11 +244,11 @@ async def test_replaced_or_cleared_references_do_not_reappear_from_parent_workin
             if request.processed_natural_program.startswith("Parent:"):
                 request.step_context.environment.assign("shared_value", "parent working value")
                 await child(shared)
-                with nh.scope(task_name_to_value={"shared_value": replacement}):
+                with nh.scope(task_references={"shared_value": replacement}):
                     await child(replacement)
-                with nh.scope(task_name_to_value={}):
+                with nh.scope(task_references={}):
                     await child(None)
-                with pytest.raises(ValueError), nh.scope(task_name_to_value={}):
+                with pytest.raises(ValueError), nh.scope(task_references={}):
                     raise ValueError("restore references")
                 await child(shared)
                 assert environment.resolve("shared_value") == "parent working value"
@@ -261,7 +261,7 @@ async def test_replaced_or_cleared_references_do_not_reappear_from_parent_workin
                     assert environment.resolve("shared_value") is expected
             return StepCandidate(outcome=Pass())
 
-    with nh.run(Executor()), nh.scope(task_name_to_value={"shared_value": shared}):
+    with nh.run(Executor()), nh.scope(task_references={"shared_value": shared}):
         await parent()
 
 
@@ -289,14 +289,14 @@ async def test_async_reference_context_timing_concurrency_and_cancellation() -> 
             return StepCandidate(outcome=Return(value))
 
     async def worker(value: object) -> object:
-        with nh.scope(task_name_to_value={"shared_value": value}):
+        with nh.scope(task_references={"shared_value": value}):
             return await child()
 
     with nh.run(Executor()):
-        with nh.scope(task_name_to_value={"shared_value": first}):
+        with nh.scope(task_references={"shared_value": first}):
             coroutine = child()
             task = asyncio.create_task(child())
-        with nh.scope(task_name_to_value={"shared_value": second}):
+        with nh.scope(task_references={"shared_value": second}):
             assert await coroutine is second
             assert await task is first
             results = await asyncio.gather(worker(first), worker(second))

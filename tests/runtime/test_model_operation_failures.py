@@ -65,7 +65,7 @@ def test_application_validation_failure_stops_before_another_model_request(route
         nh.run(executor),
         nh.scope(
             tools=[Tool(action, max_retries=2)] if route == "native" else [],
-            task_name_to_value={"action": action},
+            task_references={"action": action},
             capabilities=[Hooks(tool_execute_error=on_error)],
             lifecycle=StepLifecycle(on_operation_finished=operations.append, on_step_finished=terminals.append),
         ),

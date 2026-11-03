@@ -215,7 +215,7 @@ A context builder can omit prompt content but cannot change preparation-time bin
 Requiring host executors to reconstruct Core preparation would move execution complexity into applications.
 
 Core therefore constructs each child's own Python environment and supplies only the active scope's explicit task references as additional names.
-Applications select values using ordinary Python helpers and pass dictionaries through `scope(task_name_to_value=...)`; no inheritance mode or environment-construction callback is required.
+Applications select values using ordinary Python helpers and pass dictionaries through `scope(task_references=...)`; no inheritance mode or environment-construction callback is required.
 Scopes preserve execution parentage and existing management contracts while replacing or clearing shared references.
 This simplifies an existing execution semantic; it does not establish a general object-isolation facility.
 

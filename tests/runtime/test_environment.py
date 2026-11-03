@@ -169,7 +169,7 @@ def test_nested_natural_counter_proof() -> None:
             parent_execution_id_list.append(context.execution_reference.step_execution_id)
             for i in range(1, 11):
                 await assign_expression_async(context, "i", str(i))
-                with nh.scope(task_name_to_value={"i": context.environment.resolve("i")}):
+                with nh.scope(task_references={"i": context.environment.resolve("i")}):
                     messages.append(await evaluate_expression_async(context, "block_two()"))
             return StepCandidate(outcome=Pass(), binding_name_to_value={"messages": messages})
 

@@ -12,7 +12,7 @@ from tests.support.executors import StubExecutor
 @pytest.mark.parametrize("invalid", [None, object(), 7])
 def test_invalid_executor_leaves_parent_context_intact(entry: str, invalid: object) -> None:
     executor = StubExecutor()
-    with nh.run(executor), nh.scope(task_name_to_value={"marker": executor}):
+    with nh.run(executor), nh.scope(task_references={"marker": executor}):
         reference = nh.get_scope().execution_reference
         meter = nh.get_scope().usage_meter
         with pytest.raises(TypeError, match="step executor protocol"), getattr(nh, entry)(step_executor=invalid):
@@ -20,7 +20,7 @@ def test_invalid_executor_leaves_parent_context_intact(entry: str, invalid: obje
         assert nh.get_scope().step_executor is executor
         assert nh.get_scope().execution_reference is reference
         assert nh.get_scope().usage_meter is meter
-        assert nh.get_scope().task_name_to_value == {"marker": executor}
+        assert nh.get_scope().task_references == {"marker": executor}
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -67,7 +67,7 @@ def test_run_and_scope_yield_the_active_frozen_scope() -> None:
         assert run_scope.tools == ()
         with nh.scope(
             lifecycle=lifecycle,
-            task_name_to_value={"helper": helper},
+            task_references={"helper": helper},
             tools=[helper],
             user_prompt_suffix_fragments=["Be brief."],
         ) as child_scope:
@@ -75,12 +75,12 @@ def test_run_and_scope_yield_the_active_frozen_scope() -> None:
             assert child_scope.execution_reference.run_id == run_scope.execution_reference.run_id
             assert child_scope.execution_reference.scope_id != run_scope.execution_reference.scope_id
             assert child_scope.lifecycle is lifecycle
-            assert child_scope.task_name_to_value["helper"] is helper
+            assert child_scope.task_references["helper"] is helper
             assert [tool.name for tool in child_scope.tools] == ["helper"]
             assert child_scope.user_prompt_suffix_fragments == ("Be brief.",)
             assert child_scope.usage_meter is run_scope.usage_meter
             with pytest.raises(TypeError):
-                child_scope.task_name_to_value["other"] = helper  # type: ignore[index]
+                child_scope.task_references["other"] = helper  # type: ignore[index]
         assert nh.get_scope() is run_scope
 
 
@@ -140,49 +140,49 @@ def test_scope_merge_combines_task_references_and_restores_parent() -> None:
     child_function = object()
 
     with nh.run(StubExecutor()):
-        assert nh.get_scope().task_name_to_value == {}
+        assert nh.get_scope().task_references == {}
 
-        with nh.scope(task_name_to_value={"parent": parent_function}):
-            assert nh.get_scope().task_name_to_value == {"parent": parent_function}
+        with nh.scope(task_references={"parent": parent_function}):
+            assert nh.get_scope().task_references == {"parent": parent_function}
 
-            with nh.scope(task_name_to_value=nh.Merge({"child": child_function, "parent": parent_function})):
-                assert nh.get_scope().task_name_to_value == {"parent": parent_function, "child": child_function}
+            with nh.scope(task_references=nh.Merge({"child": child_function, "parent": parent_function})):
+                assert nh.get_scope().task_references == {"parent": parent_function, "child": child_function}
 
-            assert nh.get_scope().task_name_to_value == {"parent": parent_function}
+            assert nh.get_scope().task_references == {"parent": parent_function}
 
-        assert nh.get_scope().task_name_to_value == {}
+        assert nh.get_scope().task_references == {}
 
 
 def test_scope_merge_rejects_conflicting_task_references() -> None:
     with (
         nh.run(StubExecutor()),
-        nh.scope(task_name_to_value={"shared": object()}),
+        nh.scope(task_references={"shared": object()}),
         pytest.raises(
             NighthawkError,
             match="Conflict for task reference",
         ),
-        nh.scope(task_name_to_value=nh.Merge({"shared": object()})),
+        nh.scope(task_references=nh.Merge({"shared": object()})),
     ):
         pass
 
 
 def test_scope_task_references_accepts_mapping() -> None:
-    with nh.run(StubExecutor()), nh.scope(task_name_to_value={"one": object(), "two": object()}):
-        assert set(nh.get_scope().task_name_to_value.keys()) == {"one", "two"}
+    with nh.run(StubExecutor()), nh.scope(task_references={"one": object(), "two": object()}):
+        assert set(nh.get_scope().task_references.keys()) == {"one", "two"}
 
 
 def test_scope_unset_inherits_task_references() -> None:
     parent_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(task_name_to_value={"parent": parent_function}), nh.scope(task_name_to_value=nh.UNSET):
-        assert nh.get_scope().task_name_to_value == {"parent": parent_function}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}), nh.scope(task_references=nh.UNSET):
+        assert nh.get_scope().task_references == {"parent": parent_function}
 
 
 def test_scope_empty_mapping_clears_task_references() -> None:
     parent_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(task_name_to_value={"parent": parent_function}), nh.scope(task_name_to_value={}):
-        assert nh.get_scope().task_name_to_value == {}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}), nh.scope(task_references={}):
+        assert nh.get_scope().task_references == {}
 
 
 def test_scope_unset_inherits_prompt_suffix_fragments() -> None:
@@ -219,13 +219,13 @@ def test_scope_mapping_replaces_task_references_and_restores_parent() -> None:
     parent_function = object()
     replacement_function = object()
 
-    with nh.run(StubExecutor()), nh.scope(task_name_to_value={"parent": parent_function}):
-        assert nh.get_scope().task_name_to_value == {"parent": parent_function}
+    with nh.run(StubExecutor()), nh.scope(task_references={"parent": parent_function}):
+        assert nh.get_scope().task_references == {"parent": parent_function}
 
-        with nh.scope(task_name_to_value={"replacement": replacement_function}):
-            assert nh.get_scope().task_name_to_value == {"replacement": replacement_function}
+        with nh.scope(task_references={"replacement": replacement_function}):
+            assert nh.get_scope().task_references == {"replacement": replacement_function}
 
-        assert nh.get_scope().task_name_to_value == {"parent": parent_function}
+        assert nh.get_scope().task_references == {"parent": parent_function}
 
 
 def test_scope_unset_inherits_step_executor() -> None:
