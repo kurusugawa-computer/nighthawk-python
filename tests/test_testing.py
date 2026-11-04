@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 from collections.abc import Awaitable, Callable
 
 import pytest
@@ -390,6 +392,94 @@ class TestStepCandidateDefaults:
         candidate = StepCandidate()
         assert candidate.outcome == Pass()
         assert candidate.binding_name_to_value is nh.UNSET
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handler_kind", ["synchronous", "asynchronous", "returns_awaitable"])
+async def test_callback_completes_once_in_the_active_scope(execute: Callable[..., Awaitable[StepOutcome]], handler_kind: str) -> None:
+    value = object()
+    completed: list[StepRequest] = []
+    writes: list[tuple[str, object]] = []
+    caller_thread = threading.get_ident()
+
+    def respond(request: StepRequest) -> StepCandidate:
+        assert nh.get_step_context() is request.step_context
+        assert nh.get_scope().task_references["value"] is value
+        completed.append(request)
+        return StepCandidate(binding_name_to_value={"result": value})
+
+    def synchronous(request: StepRequest) -> StepCandidate:
+        assert threading.get_ident() == caller_thread
+        return respond(request)
+
+    async def asynchronous(request: StepRequest) -> StepCandidate:
+        await asyncio.sleep(0)
+        return respond(request)
+
+    def returns_awaitable(request: StepRequest) -> Awaitable[StepCandidate]:
+        assert threading.get_ident() == caller_thread
+        return asynchronous(request)
+
+    handler = synchronous if handler_kind == "synchronous" else asynchronous if handler_kind == "asynchronous" else returns_awaitable
+    executor = CallbackExecutor(handler)
+
+    def write_binding(name: str, selected: object) -> None:
+        assert completed == executor.requests
+        writes.append((name, selected))
+
+    with nh.run(executor), nh.scope(task_references={"value": value}):
+        outcome = await execute(
+            StepDefinition("Choose a result.", output_binding_names=("result",), binding_name_to_type={"result": object}),
+            name_to_value={},
+            write_binding=write_binding,
+        )
+
+    assert isinstance(outcome, Pass)
+    assert len(completed) == len(executor.requests) == 1
+    assert writes == [("result", value)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interrupted", [False, True])
+async def test_callback_failure_finishes_before_terminal_delivery(execute: Callable[..., Awaitable[StepOutcome]], interrupted: bool) -> None:
+    failure = asyncio.CancelledError("interrupted callback") if interrupted else ValueError("failed callback")
+    effects: list[str] = []
+    events: list[nh.lifecycle.StepFinished] = []
+    writes: list[tuple[str, object]] = []
+
+    async def handler(request: StepRequest) -> StepCandidate:
+        try:
+            await asyncio.sleep(0)
+            raise failure
+        finally:
+            effects.append("finished")
+
+    def record_finished(event: nh.lifecycle.StepFinished) -> None:
+        assert effects == ["finished"]
+        events.append(event)
+
+    def write_binding(name: str, value: object) -> None:
+        writes.append((name, value))
+
+    executor = CallbackExecutor(handler)
+    with (
+        nh.run(executor),
+        nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=record_finished)),
+        pytest.raises(asyncio.CancelledError if interrupted else nh.ExecutionError) as caught,
+    ):
+        await execute(
+            StepDefinition("Choose a result.", output_binding_names=("result",)),
+            name_to_value={"result": "initial"},
+            write_binding=write_binding,
+        )
+
+    assert len(executor.requests) == len(events) == 1
+    event = events[0]
+    assert isinstance(event, nh.lifecycle.StepInterrupted if interrupted else nh.lifecycle.StepFailed)
+    assert event.original_exception is failure
+    assert event.failure_stage == "executor"
+    assert (caught.value if interrupted else caught.value.__cause__) is failure
+    assert writes == []
 
 
 class TestCarryPatternMock:

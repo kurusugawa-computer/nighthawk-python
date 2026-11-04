@@ -5,8 +5,11 @@ Both executors return ordinary ``StepCandidate`` values and record each live ``S
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import inspect
+from collections.abc import Awaitable, Callable, Sequence
+from typing import cast
 
+from .runtime.async_bridge import run_awaitable_value_synchronously
 from .runtime.step_request import StepCandidate, StepRequest
 
 
@@ -40,15 +43,23 @@ class ScriptedExecutor:
 
 
 class CallbackExecutor:
-    """Answer each request with ``handler(request)`` and record every request."""
+    """Answer each request with ``handler(request)`` and record every request.
 
-    def __init__(self, handler: Callable[[StepRequest], StepCandidate]) -> None:
+    The handler returns a StepCandidate directly or an awaitable resolving to one.
+    Synchronous execution calls the handler on the caller thread and joins any returned awaitable through the runtime bridge.
+    Asynchronous execution awaits it in the caller's task.
+    Handler failures and cancellation propagate through the ordinary step lifecycle.
+    """
+
+    def __init__(self, handler: Callable[[StepRequest], StepCandidate | Awaitable[StepCandidate]]) -> None:
         self.handler = handler
         self.requests: list[StepRequest] = []
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         self.requests.append(request)
-        return self.handler(request)
+        return cast(StepCandidate, run_awaitable_value_synchronously(self.handler(request)))
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-        return self.run_step(request=request)
+        self.requests.append(request)
+        response = self.handler(request)
+        return await response if inspect.isawaitable(response) else response

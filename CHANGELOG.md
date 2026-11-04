@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It replaces `get_step_executor`, `get_execution_reference`, `get_usage_meter`, `get_oversight`, `get_lifecycle`, `get_tools`, `get_capabilities`, `get_system_prompt_suffix_fragments`, and `get_user_prompt_suffix_fragments`, and also exposes `task_references` and `context_builder`.
 - Breaking: `nighthawk.testing` uses the executor protocol's own values.
   `ScriptedExecutor` and `CallbackExecutor` return `StepCandidate` values and record each live `StepRequest` in `requests`; a callback receives the `StepRequest`.
+  Callback handlers may return a candidate directly or asynchronously, with completion joined before output validation and writeback.
   `StepCandidate.outcome` defaults to `Pass()`.
   `StepResponse`, `StepCall`, and the `pass_response`, `return_response`, `raise_response`, `break_response`, and `continue_response` factories are removed; construct `StepCandidate(outcome=Return(value))` and the other outcomes from `nighthawk.runtime`.
 - Breaking: the top-level namespace keeps the ordinary application path.
@@ -53,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve provider-specific model names containing additional colons in configuration and scoped model selection.
 - The Claude Code backend guide names the `--append-system-prompt-file` flag the CLI backend actually passes.
 
 ## [0.18.0]

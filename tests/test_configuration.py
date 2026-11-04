@@ -95,18 +95,28 @@ def test_run_configuration_model_default_applies():
     assert configuration.decision_model is None
 
 
-def test_run_configuration_model_requires_provider_model_format():
+@pytest.mark.parametrize("model", ["", "openai-responses", ":gpt-6-luna", "openai-responses:"])
+@pytest.mark.parametrize("field_name", ["execution_model", "decision_model"])
+def test_model_identifier_requires_provider_and_model(model: str, field_name: str) -> None:
     with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(execution_model="openai-responses")
+        nh.StepExecutorConfiguration.model_validate({field_name: model})
+    with pytest.raises(ValueError, match="provider:model"):
+        if field_name == "execution_model":
+            nh.runtime.ModelSelection(execution_model=model)
+        else:
+            nh.runtime.ModelSelection(decision_model=model)
 
-    with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(execution_model=":gpt-6-luna")
 
-    with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(execution_model="openai-responses:")
-
-    with pytest.raises(ValueError, match="provider:model"):
-        nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna:extra")
+@pytest.mark.parametrize("field_name", ["execution_model", "decision_model"])
+def test_provider_specific_model_name_is_preserved(field_name: str) -> None:
+    model = "provider:family:version"
+    configuration = nh.StepExecutorConfiguration.model_validate({field_name: model})
+    assert getattr(configuration, field_name) == model
+    assert nh.StepExecutorConfiguration.model_validate_json(configuration.model_dump_json()) == configuration
+    selection = (
+        nh.runtime.ModelSelection(execution_model=model) if field_name == "execution_model" else nh.runtime.ModelSelection(decision_model=model)
+    )
+    assert selection.apply(nh.StepExecutorConfiguration()) == configuration
 
 
 @pytest.mark.parametrize("field_name", ["execution_model_settings", "decision_model_settings"])

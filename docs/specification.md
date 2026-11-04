@@ -118,6 +118,8 @@ Authorization does not change supported source forms.
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
     - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 
+Model identifiers split at the first `:`; both the provider and model name must be nonempty, and additional colons belong to the provider-specific model name.
+
 Runtime Models are borrowed resources. Configuration validation, shallow derivation, managed Agent construction, and scope replacement preserve the exact supplied Model. Two instances with the same name can have different authentication. Nighthawk does not clone, reconstruct, mutate, enter, or close supplied clients. The host owns client lifetime and any SDK restrictions on threads or event loops.
 
 For `execute`, a managed executor uses one common prompt, tools, dynamic output contract, capability, settings, and oversight path for either string or borrowed model selection.

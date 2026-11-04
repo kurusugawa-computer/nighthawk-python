@@ -52,7 +52,7 @@ $globals
 
 
 def _validate_model_identifier(model: str) -> str:
-    parts = model.split(":")
+    parts = model.split(":", 1)
     if len(parts) != 2 or not parts[0] or not parts[1]:
         raise ValueError(f"Invalid model identifier {model!r}; expected 'provider:model'")
     return model

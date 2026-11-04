@@ -111,6 +111,10 @@ def test_urgent_routing():
 ```
 
 `CallbackExecutor` records every request in `executor.requests`, just like `ScriptedExecutor`.
+Its handler may return a `StepCandidate` directly or return an awaitable that resolves to one, including through an `async def` function.
+Asynchronous execution awaits the handler in the current task; synchronous execution calls it on the caller thread and joins a returned awaitable through the runtime bridge.
+The active run and step context remain available, and completion precedes output validation and writeback.
+Handler exceptions follow the ordinary failed-step contract; cancellation propagates after cleanup and terminal notification.
 
 ## Integration tests
 
