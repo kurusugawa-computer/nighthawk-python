@@ -7,7 +7,12 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepLifecycle
-from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepEnvironment, StepRequest, describe_value, evaluate_expression_async
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.expression import evaluate_expression_async
+from nighthawk.runtime.inspection import describe_value
+from nighthawk.runtime.operation_contract import OperationFinished
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context, build_user_prompt_text, locals_section
 

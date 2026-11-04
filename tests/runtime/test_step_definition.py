@@ -5,7 +5,10 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle
-from nighthawk.runtime import BindingDeclarationError, Pass, Return, StepCandidate, StepDefinition, StepOutcome, StepRequest
+from nighthawk.runtime.bindings import BindingDeclarationError
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass, Return, StepOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import InspectingExecutor
 
 

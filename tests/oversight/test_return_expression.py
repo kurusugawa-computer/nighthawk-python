@@ -11,8 +11,9 @@ from pydantic import AfterValidator
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
 from nighthawk.oversight import AbortStep, Accept, Oversight
-from nighthawk.runtime import OperationRequest
 from nighthawk.runtime.model_outcome import ModelReturn
+from nighthawk.runtime.operation_contract import OperationRequest
+from nighthawk.runtime.step_outcome import Return
 from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
@@ -93,7 +94,7 @@ def test_name_only_policy_does_not_skip_return_validation() -> None:
     assert validations == [1, 1]  # Output and resolved return values are independently validated.
     assert len(events) == 1
     event = events[0]
-    assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.runtime.Return)
+    assert isinstance(event, StepCompleted) and isinstance(event.outcome, Return)
     assert event.assigned_binding_name_to_value == {"value": 2}
     assert event.outcome.value == 2
 
@@ -157,7 +158,7 @@ def test_binding_rewrite_can_diverge_from_an_approved_name_return() -> None:
     ):
         assert workflow() == 4
     event = events[0]
-    assert isinstance(event, StepCompleted) and isinstance(event.outcome, nh.runtime.Return)
+    assert isinstance(event, StepCompleted) and isinstance(event.outcome, Return)
     assert event.outcome.value == 4
     assert event.assigned_binding_name_to_value == {"value": 9}
 

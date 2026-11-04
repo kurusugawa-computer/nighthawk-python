@@ -11,8 +11,9 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from nighthawk.runtime import StepOutcome, execute_step, execute_step_async
 from nighthawk.runtime import scoping as runtime_scoping
+from nighthawk.runtime.embedded import execute_step, execute_step_async
+from nighthawk.runtime.step_outcome import StepOutcome
 
 pytest_plugins = ("tests.support.model_evaluation",)
 

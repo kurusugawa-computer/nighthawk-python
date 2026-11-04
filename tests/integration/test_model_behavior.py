@@ -8,7 +8,9 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepRaised
-from nighthawk.runtime import Break, Continue, Pass, Return, StepDefinition, execute_step_async
+from nighthawk.runtime.embedded import execute_step_async
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Break, Continue, Pass, Return
 from tests.support.model_evaluation import ModelEvaluation
 
 pytestmark = pytest.mark.asyncio

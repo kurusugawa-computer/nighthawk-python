@@ -33,14 +33,14 @@ def _is_class(value: object) -> typing.TypeIs[type]:
 
 
 def type_name(value: object) -> str:
-    return class_name(type(value))
+    return _class_name(type(value))
 
 
-def class_name(value: type) -> str:
+def _class_name(value: type) -> str:
     return type.__dict__["__name__"].__get__(value)
 
 
-def class_namespace(value: type) -> Mapping[str, object]:
+def _class_namespace(value: type) -> Mapping[str, object]:
     return type.__dict__["__dict__"].__get__(value)
 
 
@@ -50,7 +50,7 @@ def class_bases(value: type) -> tuple[type, ...]:
 
 def _class_attribute(value: type, name: str) -> object:
     for base in class_bases(value):
-        namespace = class_namespace(base)
+        namespace = _class_namespace(base)
         if name in namespace:
             return namespace[name]
     return _ABSENT
@@ -62,7 +62,7 @@ def _is_data_descriptor(value: object) -> bool:
     )
 
 
-def static_attribute(value: object, name: str, default: object = _ABSENT) -> object:
+def _static_attribute(value: object, name: str, default: object = _ABSENT) -> object:
     """Read static dictionaries, bypassing even metaclass attribute hooks."""
     class_attribute = _class_attribute(type(value), name)
     if _is_data_descriptor(class_attribute):
@@ -73,7 +73,7 @@ def static_attribute(value: object, name: str, default: object = _ABSENT) -> obj
     return default if class_attribute is _ABSENT else class_attribute
 
 
-def annotation_arguments(annotation: object) -> tuple[object, ...]:
+def _annotation_arguments(annotation: object) -> tuple[object, ...]:
     annotation_type = type(annotation)
     known_annotation_types = (
         types.GenericAlias,
@@ -105,18 +105,18 @@ def annotation_text(annotation: object, *, depth: int = 0) -> str:
     if type(annotation) is typing.TypeAliasType:
         return annotation.__name__
     if _is_class(annotation):
-        return class_name(annotation)
+        return _class_name(annotation)
     if annotation is typing.Any:
         return "Any"
-    arguments = annotation_arguments(annotation)
+    arguments = _annotation_arguments(annotation)
     if arguments:
         origin = typing.get_origin(annotation)
         if origin is types.UnionType or origin is typing.Union:
             return " | ".join(annotation_text(item, depth=depth + 1) for item in arguments)
         if origin is typing.Literal:
-            return f"Literal[{', '.join(safe_literal(item) for item in arguments)}]"
+            return f"Literal[{', '.join(_safe_literal(item) for item in arguments)}]"
         if origin is typing.Annotated:
-            return f"Annotated[{annotation_text(arguments[0], depth=depth + 1)}, {', '.join(safe_literal(item) for item in arguments[1:])}]"
+            return f"Annotated[{annotation_text(arguments[0], depth=depth + 1)}, {', '.join(_safe_literal(item) for item in arguments[1:])}]"
         if origin is Callable and len(arguments) == 2:
             parameters, result = arguments
             if exact_type(parameters, list):
@@ -124,7 +124,7 @@ def annotation_text(annotation: object, *, depth: int = 0) -> str:
             else:
                 parameter_text = "..." if parameters is Ellipsis else annotation_text(parameters, depth=depth + 1)
             return f"Callable[{parameter_text}, {annotation_text(result, depth=depth + 1)}]"
-        origin_text = class_name(origin) if _is_class(origin) else "Callable" if origin is typing.Callable else type_name(annotation)
+        origin_text = _class_name(origin) if _is_class(origin) else "Callable" if origin is typing.Callable else type_name(annotation)
         return f"{origin_text}[{', '.join(annotation_text(item, depth=depth + 1) for item in arguments)}]"
     return f"<opaque {type_name(annotation)} annotation>"
 
@@ -139,10 +139,10 @@ def safe_preview(value: object, *, depth: int = 2, max_items: int = 8, max_strin
     if exact_type(value, str):
         return value if len(value) <= max_string_length else value[:max_string_length] + "<snipped>"
     if exact_type(value, bytes) or exact_type(value, bytearray):
-        return f"<{class_name(value_type)}; {len(value)} bytes>"
+        return f"<{_class_name(value_type)}; {len(value)} bytes>"
     if exact_type(value, list) or exact_type(value, tuple):
         if depth <= 0:
-            return f"<{class_name(value_type)}; {len(value)} items>"
+            return f"<{_class_name(value_type)}; {len(value)} items>"
         result = [safe_preview(item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length) for item in value[:max_items]]
         if len(value) > max_items:
             result.append(f"<snipped {len(value) - max_items} items; use a Python slice>")
@@ -155,14 +155,14 @@ def safe_preview(value: object, *, depth: int = 2, max_items: int = 8, max_strin
             if i >= max_items:
                 key_to_preview["<snipped>"] = "More entries are available through Python iteration"
                 break
-            key_text = key if type(key) is str else safe_literal(key)
+            key_text = key if type(key) is str else _safe_literal(key)
             key_to_preview[key_text] = safe_preview(item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length)
         return key_to_preview
     if any(base is tuple for base in class_bases(value_type)):
-        field_names = static_attribute(value_type, "_fields")
+        field_names = _static_attribute(value_type, "_fields")
         if exact_type(field_names, tuple) and all(exact_type(name, str) for name in field_names):
             if depth <= 0:
-                return f"<{class_name(value_type)}; fields omitted>"
+                return f"<{_class_name(value_type)}; fields omitted>"
             field_name_to_preview = {
                 name: safe_preview(
                     tuple.__getitem__(typing.cast(tuple, value), i), depth=depth - 1, max_items=max_items, max_string_length=max_string_length
@@ -184,7 +184,7 @@ def safe_preview(value: object, *, depth: int = 2, max_items: int = 8, max_strin
     return f"<opaque {type_name(value)}>"
 
 
-def safe_literal(value: object) -> str:
+def _safe_literal(value: object) -> str:
     if exact_type(value, _DisplayText):
         return value.text
     if value is Ellipsis:
@@ -210,7 +210,7 @@ def _signature_text(signature: inspect.Signature) -> str:
             annotation=inspect.Parameter.empty
             if parameter.annotation is inspect.Parameter.empty
             else _DisplayText(annotation_text(parameter.annotation)),
-            default=inspect.Parameter.empty if parameter.default is inspect.Parameter.empty else _DisplayText(safe_literal(parameter.default)),
+            default=inspect.Parameter.empty if parameter.default is inspect.Parameter.empty else _DisplayText(_safe_literal(parameter.default)),
         )
         for parameter in signature.parameters.values()
     ]
@@ -231,7 +231,7 @@ def _is_supported_signature(value: object) -> typing.TypeIs[inspect.Signature]:
 
 
 @dataclass(frozen=True)
-class CallableDescription:
+class _CallableDescription:
     signature: inspect.Signature | None
     documentation: str | None
     asynchronous: bool
@@ -307,9 +307,9 @@ def _function_annotations(value: types.FunctionType) -> tuple[dict[str, object],
     ), "Annotations retain source spelling and were not evaluated; deferred or modified runtime annotation metadata was not read."
 
 
-def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
+def describe_callable(value: object, *, depth: int = 0) -> _CallableDescription:
     if depth > 8:
-        return CallableDescription(None, None, False)
+        return _CallableDescription(None, None, False)
     value_type = type(value)
     signature: inspect.Signature | None = None
     documentation: object = None
@@ -322,7 +322,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
         wrapped = value.__dict__.get("__wrapped__", _ABSENT)
         if declared_signature is _ABSENT and wrapped is not _ABSENT:
             description = describe_callable(wrapped, depth=depth + 1)
-            return CallableDescription(description.signature, description.documentation, asynchronous, description.annotation_note)
+            return _CallableDescription(description.signature, description.documentation, asynchronous, description.annotation_note)
         if _is_supported_signature(declared_signature):
             signature = declared_signature
         elif declared_signature is _ABSENT or declared_signature is None:
@@ -339,7 +339,7 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
             parameters = list(signature.parameters.values())
             if parameters and parameters[0].kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
                 signature = signature.replace(parameters=parameters[1:])
-        return CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)
+        return _CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)
     elif exact_type(value, functools.partial):
         description = describe_callable(value.func, depth=depth + 1)
         if description.signature is not None:
@@ -348,26 +348,26 @@ def describe_callable(value: object, *, depth: int = 0) -> CallableDescription:
                 pass
 
             mirror.__signature__ = description.signature  # type: ignore[attr-defined]
-            arguments = tuple(_DisplayText(safe_literal(item)) for item in value.args)
-            keyword_name_to_value = {name: _DisplayText(safe_literal(item)) for name, item in (value.keywords or {}).items()}
+            arguments = tuple(_DisplayText(_safe_literal(item)) for item in value.args)
+            keyword_name_to_value = {name: _DisplayText(_safe_literal(item)) for name, item in (value.keywords or {}).items()}
             with suppress(TypeError, ValueError):
                 signature = inspect.signature(functools.partial(mirror, *arguments, **keyword_name_to_value), eval_str=False)
-        return CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)
+        return _CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)
     elif exact_type(value, types.BuiltinFunctionType):
         documentation = value.__doc__
         if value.__module__ == "builtins" or any(type(value.__self__) is candidate for candidate in (list, dict, str, set, tuple, bytes)):
             with suppress(TypeError, ValueError):
                 signature = inspect.signature(value, eval_str=False)
     else:
-        declared_signature = static_attribute(value, "__signature__")
+        declared_signature = _static_attribute(value, "__signature__")
         if _is_supported_signature(declared_signature):
             signature = declared_signature
         elif declared_signature is _ABSENT:
-            call = static_attribute(value_type, "__call__")
+            call = _static_attribute(value_type, "__call__")
             if type(call) is types.FunctionType:
                 return describe_callable(types.MethodType(call, value), depth=depth + 1)
-        documentation = static_attribute(value, "__doc__", None)
-    return CallableDescription(
+        documentation = _static_attribute(value, "__doc__", None)
+    return _CallableDescription(
         signature, inspect.cleandoc(documentation)[:2_000] if type(documentation) is str else None, asynchronous, annotation_note
     )
 
@@ -385,28 +385,28 @@ def _instance_namespace(value: object) -> dict[str, object]:
 
 
 @dataclass(frozen=True)
-class PublicMembers:
+class _PublicMembers:
     method_name_to_value: Mapping[str, object]
     field_name_to_value: Mapping[str, object]
     omitted_names: tuple[str, ...]
 
 
-def describe_public_members(value: object) -> PublicMembers:
+def describe_public_members(value: object) -> _PublicMembers:
     from pydantic import BaseModel
 
     name_to_attribute: dict[str, object] = {}
-    model_fields = static_attribute(type(value), "__pydantic_fields__", {})
+    model_fields = _static_attribute(type(value), "__pydantic_fields__", {})
     is_model = any(base is BaseModel for base in class_bases(type(value)))
     for base in class_bases(type(value)):
         if base is BaseModel or base is object:
             break
-        for name, attribute in class_namespace(base).items():
+        for name, attribute in _class_namespace(base).items():
             if type(name) is str and not name.startswith("_"):
                 name_to_attribute.setdefault(name, attribute)
     instance_name_to_value = _instance_namespace(value)
     for name, item in instance_name_to_value.items():
         if type(name) is str and not name.startswith("_"):
-            name_to_attribute[name] = static_attribute(value, name, item)
+            name_to_attribute[name] = _static_attribute(value, name, item)
     method_name_to_value: dict[str, object] = {}
     field_name_to_value: dict[str, object] = {}
     omitted_names: list[str] = []
@@ -423,7 +423,7 @@ def describe_public_members(value: object) -> PublicMembers:
                 field_name_to_value[name] = attribute.__get__(value, type(value))
             except (AttributeError, TypeError):
                 omitted_names.append(name)
-        elif static_attribute(attribute_type, "__get__") is not _ABSENT:
+        elif _static_attribute(attribute_type, "__get__") is not _ABSENT:
             omitted_names.append(name)
         elif callable(attribute):
             method_name_to_value[name] = attribute
@@ -431,7 +431,7 @@ def describe_public_members(value: object) -> PublicMembers:
             if is_model and (not exact_type(model_fields, dict) or name not in model_fields):
                 continue
             field_name_to_value[name] = attribute
-    return PublicMembers(method_name_to_value, field_name_to_value, tuple(omitted_names))
+    return _PublicMembers(method_name_to_value, field_name_to_value, tuple(omitted_names))
 
 
 def discover_type_alias_reference_names(
@@ -469,7 +469,7 @@ def discover_type_alias_reference_names(
             return
         seen.add(annotation_id)
 
-        for arg in annotation_arguments(annotation):
+        for arg in _annotation_arguments(annotation):
             _collect(arg)
 
     def _scan_callable(value: object) -> None:

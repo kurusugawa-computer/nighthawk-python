@@ -16,7 +16,10 @@ from pydantic_ai.models.openai_decisions import OpenAIDecisionsModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepDefinition, execute_step
+from nighthawk.runtime.embedded import execute_step
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate
 from tests.support.executors import InspectingExecutor
 
 

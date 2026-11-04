@@ -18,7 +18,7 @@ def _copy_generated_location(statement: ast.stmt, source: ast.AST) -> ast.stmt:
     return statement
 
 
-class NaturalTransformer(ast.NodeTransformer):
+class _NaturalTransformer(ast.NodeTransformer):
     def __init__(self, *, captured_name_tuple: tuple[str, ...], runtime_names: _RuntimeNames) -> None:
         super().__init__()
         self._runtime_names = runtime_names
@@ -318,6 +318,6 @@ def build_runtime_call_and_assignments(
 def transform_module_ast(module: ast.Module, *, captured_name_tuple: tuple[str, ...] = (), runtime_names: _RuntimeNames | None = None) -> ast.Module:
     if runtime_names is None:
         runtime_names = _RuntimeNames({node.id for node in ast.walk(module) if isinstance(node, ast.Name)} | set(captured_name_tuple))
-    module = NaturalTransformer(captured_name_tuple=captured_name_tuple, runtime_names=runtime_names).visit(module)  # type: ignore[assignment]
+    module = _NaturalTransformer(captured_name_tuple=captured_name_tuple, runtime_names=runtime_names).visit(module)  # type: ignore[assignment]
     ast.fix_missing_locations(module)
     return module

@@ -4,7 +4,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import StatusCode
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 
 

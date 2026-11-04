@@ -8,10 +8,10 @@ from pydantic import TypeAdapter
 
 from nighthawk.composition import UNSET, UnsetType
 from nighthawk.errors import NighthawkError
-from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.model_outcome import ModelOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 @dataclass(frozen=True)

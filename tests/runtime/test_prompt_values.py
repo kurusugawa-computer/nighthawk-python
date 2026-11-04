@@ -5,7 +5,7 @@ from typing import Literal
 
 import nighthawk as nh
 from nighthawk.resilience import fallback
-from nighthawk.runtime import StepEnvironment
+from nighthawk.runtime.environment import StepEnvironment
 from tests.support.prompts import (
     FakeAgent,
     build_step_context,

@@ -17,8 +17,9 @@ from nighthawk.resilience import (
     timeout,
     vote,
 )
-from nighthawk.runtime import Raise, StepCandidate
 from nighthawk.runtime.scoping import get_scope
+from nighthawk.runtime.step_outcome import Raise
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 

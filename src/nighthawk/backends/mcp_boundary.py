@@ -16,12 +16,9 @@ from ..runtime.step_context import (
     get_step_context,
     resolve_tool_result_rendering_policy,
 )
+from ..tools._rendering import render_tool_handler_result_preview_text
 from ..tools._tool_return_content import resolve_tool_return_segments
-from ..tools.contracts import (
-    ToolHandlerResult,
-    ToolOutcome,
-    render_tool_handler_result_preview_text,
-)
+from ..tools.contracts import ToolHandlerResult, ToolOutcome
 from ._text_fallback import (
     format_file_url_with_placeholder,
     format_unresolvable_binary_content_with_placeholder,

@@ -6,7 +6,7 @@ import textwrap
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.prompts import FakeAgent
 
 

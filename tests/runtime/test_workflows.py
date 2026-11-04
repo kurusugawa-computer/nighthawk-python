@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import CallbackExecutor, ScriptedExecutor
 
 

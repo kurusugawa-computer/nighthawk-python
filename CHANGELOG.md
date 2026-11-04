@@ -15,9 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ScriptedExecutor` and `CallbackExecutor` return `StepCandidate` values and record each live `StepRequest` in `requests`; a callback receives the `StepRequest`.
   Callback handlers may return a candidate directly or asynchronously, with completion joined before output validation and writeback.
   `StepCandidate.outcome` defaults to `Pass()`.
-  `StepResponse`, `StepCall`, and the `pass_response`, `return_response`, `raise_response`, `break_response`, and `continue_response` factories are removed; construct `StepCandidate(outcome=Return(value))` and the other outcomes from `nighthawk.runtime`.
-- Breaking: the top-level namespace keeps the ordinary application path.
-  `StepExecutor`, `ConfigurableStepExecutor`, and `ModelSelection` are exported only from `nighthawk.runtime`, and `nighthawk.oversight` no longer re-exports the resolved outcomes.
+  `StepResponse`, `StepCall`, and the `pass_response`, `return_response`, `raise_response`, `break_response`, and `continue_response` factories are removed.
+  Construct `StepCandidate(outcome=Return(value))` with `StepCandidate` from `nighthawk.runtime.step_request` and resolved outcomes from `nighthawk.runtime.step_outcome`.
+- Breaking: import runtime interfaces from their owning modules; `nighthawk.runtime` no longer re-exports symbols.
+  Import executor protocols from `nighthawk.runtime.step_executor` and `ModelSelection` from `nighthawk.configuration`; the [API reference](docs/api.md) lists the owning modules for other runtime interfaces.
+  `AgentStepExecutor` and the execution agent protocols move from `nighthawk.runtime.step_executor` to `nighthawk.runtime.agent`; `nh.AgentStepExecutor` remains the ordinary application entry point.
+  `nighthawk.oversight` no longer re-exports the resolved outcomes.
   `to_jsonable_value` is internal, and `JsonableValue` is replaced by Pydantic's `JsonValue`.
 - Breaking: `nh.get_function_definition(function).transformed_function` is the one accessor for a Natural function's compiled body; `nh.get_transformed_function` is removed.
   `@nh.function` is applied bare; the empty-call `@nh.function()` form is removed.
@@ -47,13 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Breaking: backend `working_directory` defaults to `None` instead of an empty-string sentinel, and positive backend limits use Pydantic field constraints.
 - The Claude Code CLI and SDK backends share `max_budget_usd` and `claude_allowed_tool_names`, request schema construction, and tool-access guidance.
   SDK responses report `provider_name="claude-code-sdk"`, and Codex responses report the selected model name without the `codex:` prefix, or `None` for the CLI default.
-- `nighthawk.runtime` imports its exports eagerly and exports every runtime contract rendered in the API reference, including the execution agent protocols, operation kinds, phases, statuses, and the model step response schema.
+- Separate executor protocols from the agent implementation and tool result contracts from rendering; remove redundant adapter layers, preparation state, and built-in tool registration state.
+- Apply scope minimization, avoidance of premature abstraction, a single source of truth, stable dependencies, and dead-concept elimination through shared workspace rules and code and documentation guidance.
 - The API reference documents only symbols with an external use; tool transport records, backend request internals, rendering policies, and individual model outcome variants are internal.
 - Upgrade Pydantic AI to 2.63 and adapt ordered tool dispatch and coding-agent tool validation feedback to its retried tool returns and retry feedback parts.
   Pydantic AI remains bounded to one minor series because ordered tool dispatch adapts its internal batch handling.
 
 ### Fixed
 
+- Evaluate `retrying(retry_if=...)` once per matching failure, including the final attempt, without evaluating application predicates again for exhaustion events.
+- Render backend tool results for tracing only when content capture is enabled and the span is recording.
 - Preserve provider-specific model names containing additional colons in configuration and scoped model selection.
 - The Claude Code backend guide names the `--append-system-prompt-file` flag the CLI backend actually passes.
 

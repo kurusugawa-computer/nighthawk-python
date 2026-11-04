@@ -6,14 +6,10 @@ import pytest
 import tiktoken
 
 from nighthawk.json_renderer import JsonRendererStyle
-from nighthawk.runtime import StepEnvironment
-from nighthawk.tools import contracts
-from nighthawk.tools.contracts import (
-    build_tool_handler_result_trace_text,
-    build_tool_result_observation,
-    render_tool_handler_result_preview_text,
-    render_tool_result_json_text,
-)
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.tools import _rendering
+from nighthawk.tools._rendering import build_tool_handler_result_trace_text, render_tool_handler_result_preview_text, render_tool_result_json_text
+from nighthawk.tools.contracts import ToolResultObservation
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 _encoding = tiktoken.get_encoding("o200k_base")
@@ -58,8 +54,9 @@ def test_tool_result_success_never_raises_for_unknown_value() -> None:
     assert payload["value"] == "<nonserializable>"
 
 
-def test_build_tool_result_observation_hides_raw_payload_in_trace() -> None:
-    tool_handler_result = build_tool_result_observation(
+def test_tool_result_hides_raw_payload_in_trace() -> None:
+    tool_handler_result = ToolResultObservation(
+        kind="tool_result",
         tool_outcome={"payload": {"large": "payload" * 100}, "error": None},
     )
     preview_text = render_tool_handler_result_preview_text(
@@ -90,14 +87,15 @@ def test_build_tool_result_observation_hides_raw_payload_in_trace() -> None:
         pytest.param(lambda binary: ["caption", binary], 1, id="list"),
     ],
 )
-def test_build_tool_result_observation_multimodal_preview_renders_binary_placeholder(
+def test_tool_result_multimodal_preview_renders_binary_placeholder(
     payload_factory,
     binary_index: int | None,
 ) -> None:  # type: ignore[no-untyped-def]
     from pydantic_ai.messages import BinaryContent
 
     binary = BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png")
-    tool_handler_result = build_tool_result_observation(
+    tool_handler_result = ToolResultObservation(
+        kind="tool_result",
         tool_outcome={"payload": payload_factory(binary), "error": None},
     )
     preview_text = render_tool_handler_result_preview_text(
@@ -138,9 +136,9 @@ def test_tool_result_budget_allocation_is_90_10_and_uses_leftover(monkeypatch: p
             return "{}", 10
         return "{}", 0
 
-    monkeypatch.setattr(contracts, "render_json_text", fake_render_json_text)
+    monkeypatch.setattr(_rendering, "render_json_text", fake_render_json_text)
 
-    _ = contracts.render_tool_result_json_text(
+    _ = _rendering.render_tool_result_json_text(
         value={"big": "payload"},
         error={"kind": "execution", "message": "nope", "guidance": None},
         max_tokens=100,
@@ -153,7 +151,7 @@ def test_tool_result_budget_allocation_is_90_10_and_uses_leftover(monkeypatch: p
 
     calls.clear()
 
-    _ = contracts.render_tool_result_json_text(
+    _ = _rendering.render_tool_result_json_text(
         value={"big": "payload"},
         error=None,
         max_tokens=100,

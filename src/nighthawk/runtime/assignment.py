@@ -44,7 +44,7 @@ def _failure(message: str, *, phase: OperationPhase, evaluation_started: bool) -
     )
 
 
-def admit_assignment(step_context: StepContext, target_path: str) -> tuple[str, ...]:
+def _admit_assignment(step_context: StepContext, target_path: str) -> tuple[str, ...]:
     parsed = parse_identifier_path(target_path)
     if parsed is None:
         raise _failure(
@@ -60,7 +60,7 @@ def admit_assignment(step_context: StepContext, target_path: str) -> tuple[str, 
     return parsed
 
 
-def assign_value(
+def _assign_value(
     step_context: StepContext, target_path: str, parsed: tuple[str, ...], value: object, execution: OperationExecution
 ) -> AssignmentResult:
     name = parsed[0]
@@ -141,13 +141,13 @@ async def assign_expression_async(step_context: StepContext, target_path: str, e
 
     def admit() -> None:
         nonlocal parsed, compiled
-        parsed = admit_assignment(step_context, target_path)
+        parsed = _admit_assignment(step_context, target_path)
         compiled = compile_expression(expression)
 
     async def execute(execution: OperationExecution) -> AssignmentResult:
         assert compiled is not None
         value = await evaluate_compiled_expression(step_context, compiled)
-        return assign_value(step_context, target_path, parsed, value, execution)
+        return _assign_value(step_context, target_path, parsed, value, execution)
 
     return cast(AssignmentResult, await execute_operation_async(step_context, request, admit=admit, execute=execute))
 

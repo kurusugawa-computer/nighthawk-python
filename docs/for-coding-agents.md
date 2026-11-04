@@ -192,7 +192,7 @@ import pytest
 from quotes import quote_batch
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 

@@ -24,13 +24,14 @@ from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
-from nighthawk.runtime import StepEnvironment
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.operation_contract import OperationRequest
 from nighthawk.runtime.step_context import StepContext, ToolResultRenderingPolicy
 from nighthawk.tools.contracts import (
     ToolOutcome,
 )
 from nighthawk.tools.execution import ToolResultWrapperToolset, _normalize_tool_success
-from nighthawk.tools.provided import build_provided_tool_definitions
+from nighthawk.tools.provided import get_provided_tools
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context
 from tests.support.tools import _new_run_context, _new_step_context
@@ -179,7 +180,7 @@ def test_wrapper_call_tool_outcome_propagates_oversight_abort() -> None:
         tool_call_count += 1
         return 1
 
-    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
+    def reject_tool_call(tool_call: OperationRequest) -> nh.oversight.AbortStep:
         assert tool_call.tool_name == "test_denied_tool"
         return nh.oversight.AbortStep("human rejected tool")
 
@@ -197,7 +198,7 @@ def test_wrapper_call_tool_propagates_oversight_abort() -> None:
         _ = run_context
         return 1
 
-    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
+    def reject_tool_call(tool_call: OperationRequest) -> nh.oversight.AbortStep:
         assert tool_call.tool_name == "test_denied_tool"
         return nh.oversight.AbortStep("human rejected tool")
 
@@ -358,7 +359,7 @@ def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None
 
     async def execute() -> None:
         run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
-        toolset = ToolResultWrapperToolset(FunctionToolset([definition.tool for definition in build_provided_tool_definitions()]))
+        toolset = ToolResultWrapperToolset(FunctionToolset(get_provided_tools()))
         tool_name_to_tool = await toolset.get_tools(run_context)
         result: Any = await toolset.call_tool(
             "nh_evaluate",

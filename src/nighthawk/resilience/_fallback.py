@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import enum
 import functools
 import inspect
 import logging
@@ -12,11 +11,7 @@ from typing import Any, overload
 _logger = logging.getLogger("nighthawk.resilience")
 
 
-class _Sentinel(enum.Enum):
-    MISSING = enum.auto()
-
-
-_MISSING = _Sentinel.MISSING
+_MISSING = object()
 
 
 def _get_resolved_return_annotation(function: Callable[..., Any]) -> Any:
@@ -135,8 +130,7 @@ def fallback(
                 try:
                     if inspect.iscoroutinefunction(function):
                         return await function(*args, **kwargs)
-                    else:
-                        return function(*args, **kwargs)
+                    return function(*args, **kwargs)
                 except on as exception:
                     last_exception = exception
                     _logger.info(
@@ -146,7 +140,7 @@ def fallback(
                         exception,
                     )
 
-            if not isinstance(default, _Sentinel):
+            if default is not _MISSING:
                 return default
             assert last_exception is not None
             raise last_exception
@@ -169,7 +163,7 @@ def fallback(
                     exception,
                 )
 
-        if not isinstance(default, _Sentinel):
+        if default is not _MISSING:
             return default
         assert last_exception is not None
         raise last_exception

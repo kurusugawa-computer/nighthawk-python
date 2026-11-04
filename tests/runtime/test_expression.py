@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from nighthawk.runtime import OperationError, evaluate_expression, evaluate_expression_async
+from nighthawk.runtime.expression import evaluate_expression, evaluate_expression_async
+from nighthawk.runtime.operation_contract import OperationError
 from tests.support.contexts import new_context as context_for
 
 

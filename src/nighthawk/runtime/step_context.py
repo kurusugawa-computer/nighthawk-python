@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from types import CellType
 from typing import TYPE_CHECKING, Any
 
@@ -44,7 +44,7 @@ def resolve_tool_result_rendering_policy(policy: ToolResultRenderingPolicy | Non
 
 
 @dataclass
-class OperationState:
+class _OperationState:
     """Runtime-owned serialization and terminal failure state for one step's operations."""
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -69,7 +69,7 @@ class StepContext:
     type_alias_reference_names: frozenset[str] = frozenset()
     model_result: AgentRunResult[Any] | None = None
     tool_result_rendering_policy: ToolResultRenderingPolicy | None = None
-    _operation_state: OperationState = field(default_factory=OperationState, init=False, repr=False)
+    _operation_state: _OperationState = field(default_factory=_OperationState, init=False, repr=False)
 
 
 _step_context_stack_var: ContextVar[tuple[StepContext, ...]] = ContextVar(
@@ -78,15 +78,7 @@ _step_context_stack_var: ContextVar[tuple[StepContext, ...]] = ContextVar(
 )
 
 
-@dataclass(frozen=True)
-class _PythonLookupState:
-    python_cell_scope_stack: tuple[dict[str, CellType], ...] = ()
-
-
-_python_lookup_state_var: ContextVar[_PythonLookupState] = ContextVar(
-    "nighthawk_python_lookup_state",
-    default=_PythonLookupState(),  # noqa: B039
-)
+_python_cell_scope_stack: ContextVar[tuple[dict[str, CellType], ...]] = ContextVar("nighthawk_python_cell_scope_stack", default=())
 
 
 @contextmanager
@@ -101,20 +93,15 @@ def step_context_scope(step_context: StepContext) -> Generator[None]:
 
 @contextmanager
 def python_cell_scope(name_to_cell: dict[str, CellType]) -> Generator[None]:
-    current_lookup_state = _python_lookup_state_var.get()
-    next_lookup_state = replace(
-        current_lookup_state,
-        python_cell_scope_stack=(*current_lookup_state.python_cell_scope_stack, dict(name_to_cell)),
-    )
-    token = _python_lookup_state_var.set(next_lookup_state)
+    token = _python_cell_scope_stack.set((*_python_cell_scope_stack.get(), dict(name_to_cell)))
     try:
         yield
     finally:
-        _python_lookup_state_var.reset(token)
+        _python_cell_scope_stack.reset(token)
 
 
 def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:
-    return _python_lookup_state_var.get().python_cell_scope_stack
+    return _python_cell_scope_stack.get()
 
 
 def get_step_context() -> StepContext:

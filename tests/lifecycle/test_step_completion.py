@@ -13,8 +13,10 @@ from pydantic import AfterValidator
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
 from nighthawk.natural.transform import build_runtime_call_and_assignments
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime.operation_contract import OperationRequest
 from nighthawk.runtime.runner import Runner
+from nighthawk.runtime.step_outcome import Pass, Return
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 
@@ -96,7 +98,7 @@ def test_return_expression_rejection_prevents_evaluation() -> None:
         """
         return 0
 
-    def reject(request: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
+    def reject(request: OperationRequest) -> nh.oversight.AbortStep:
         assert request.expression == "calculate()"
         assert request.expected_type is int
         assert request.kind == "return"
@@ -145,14 +147,14 @@ def test_return_expression_acceptance_evaluates_and_awaits_once() -> None:
         """
         return 0
 
-    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+    def inspect_expression(request: OperationRequest) -> nh.oversight.Accept:
         calls.append("approved")
         return nh.oversight.Accept()
 
     def finished(event: StepFinished) -> None:
         calls.append("finished")
         assert isinstance(event, StepCompleted)
-        assert event.outcome == nh.runtime.Return(4)
+        assert event.outcome == Return(4)
         assert event.assigned_binding_name_to_value == {"value": 9}
 
     with (

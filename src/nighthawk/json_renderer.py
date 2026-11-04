@@ -24,7 +24,7 @@ _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT = 1
 
 
 @dataclasses.dataclass(frozen=True)
-class DiscoveryProjection:
+class _DiscoveryProjection:
     value: object
     text: str
     token_count: int
@@ -35,7 +35,7 @@ class _DiscoverySlot:
     index: int
 
 
-def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoken.Encoding) -> DiscoveryProjection | None:
+def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoken.Encoding) -> _DiscoveryProjection | None:
     """Budget composed discovery atomically while preserving native content leaves.
 
     Ordinary leaves are converted once before trying smaller pages, so budget
@@ -55,18 +55,18 @@ def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoke
         value, prepare_leaf, transform_key=lambda key: key if isinstance(key, str) else _render_compact_json(to_jsonable_value(key))
     )
 
-    def candidate(page_budget: int) -> DiscoveryProjection:
+    def candidate(page_budget: int) -> _DiscoveryProjection:
         replacements = [page.for_budget(page_budget, encoding) for page in pages]
         projected = map_discovery_containers(prepared, lambda item: replacements[item.index] if type(item) is _DiscoverySlot else item)
         text = _render_compact_json(to_jsonable_value(projected))
         replacement_iterator = iter(replacements)
         native_value = map_discovery_containers(value, lambda item: next(replacement_iterator) if type(item) is DiscoveryResult else item)
-        return DiscoveryProjection(native_value, text, count_tokens(text, encoding=encoding))
+        return _DiscoveryProjection(native_value, text, count_tokens(text, encoding=encoding))
 
     full = candidate(max_tokens)
     if full.token_count <= max_tokens:
         return full
-    best: DiscoveryProjection | None = None
+    best: _DiscoveryProjection | None = None
     lower, upper = 1, max_tokens - 1
     while lower <= upper:
         trial = (lower + upper) // 2
@@ -86,7 +86,7 @@ def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoke
         text = _render_compact_json(to_jsonable_value(recovery))
         token_count = count_tokens(text, encoding=encoding)
         if token_count <= max_tokens or not recovery:
-            return DiscoveryProjection(recovery, text, token_count)
+            return _DiscoveryProjection(recovery, text, token_count)
     raise AssertionError("The minimum discovery response must be returned")
 
 

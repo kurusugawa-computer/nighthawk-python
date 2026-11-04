@@ -4,7 +4,13 @@ import pytest
 from pydantic import AfterValidator, ValidationError
 
 from nighthawk.errors import NighthawkError
-from nighthawk.runtime import MISSING_ANNOTATION, BindingDeclarationError, BindingValidationError, infer_binding_types, validate_output_bindings
+from nighthawk.runtime.bindings import (
+    MISSING_ANNOTATION,
+    BindingDeclarationError,
+    BindingValidationError,
+    infer_binding_types,
+    validate_output_bindings,
+)
 
 
 def test_inference_preserves_explicit_annotations_and_both_inputs() -> None:

@@ -7,8 +7,10 @@ import pytest
 from pydantic import Field
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_expression
+from nighthawk.runtime.assignment import assign_expression
 from nighthawk.runtime.operation_contract import OperationError
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 class ReviewOptions(TypedDict):

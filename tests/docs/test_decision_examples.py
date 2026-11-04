@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Return, StepCandidate
+from nighthawk.runtime.step_outcome import Return
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 

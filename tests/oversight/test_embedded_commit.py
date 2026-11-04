@@ -9,8 +9,9 @@ from pydantic import AfterValidator, ValidationError
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
 from nighthawk.oversight import AbortStep, Accept, Oversight, Rewrite
-from nighthawk.runtime import Pass, StepCandidate, StepDefinition
-from nighthawk.runtime.step_outcome import StepOutcome
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass, StepOutcome
+from nighthawk.runtime.step_request import StepCandidate
 from tests.support.executors import InspectingExecutor
 
 

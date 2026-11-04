@@ -26,7 +26,7 @@ from pydantic_ai.usage import RunUsage
 from nighthawk.backends import mcp_boundary as mcp_boundary_module
 from nighthawk.backends.mcp_boundary import call_tool_for_claude_code_sdk, call_tool_for_low_level_mcp_server
 from nighthawk.backends.mcp_server import mcp_server_if_needed
-from nighthawk.runtime import StepEnvironment
+from nighthawk.runtime.environment import StepEnvironment
 from nighthawk.runtime.step_context import ToolResultRenderingPolicy, step_context_scope
 from nighthawk.tools.contracts import (
     ToolHandlerResult,

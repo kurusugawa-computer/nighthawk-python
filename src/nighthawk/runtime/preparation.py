@@ -15,15 +15,7 @@ from .environment import StepEnvironment
 from .scoping import get_scope
 from .step_context import StepContext, get_python_cell_scope_stack
 from .step_definition import BlockKind
-from .step_executor import StepExecutor
 from .step_outcome import OutcomeKind
-
-
-def _split_frontmatter(
-    processed_natural_program: str,
-) -> tuple[str, tuple[str, ...]]:
-    program_without_frontmatter, frontmatter = parse_frontmatter(processed_natural_program)
-    return program_without_frontmatter, validate_frontmatter_deny(frontmatter)
 
 
 def _compute_allowed_outcome_kinds(is_in_loop: bool, denied_outcome_kinds: tuple[str, ...]) -> tuple[OutcomeKind, ...]:
@@ -50,17 +42,17 @@ class PreparedStep:
     step_context: StepContext
     input_binding_name_to_value: dict[str, object]
     output_binding_names: tuple[str, ...]
+    # Executors may replace the context's environment; commit keeps the selected contracts.
     binding_name_to_type: Mapping[str, object]
 
 
 class StepPreparation:
     """Own preparation and the partial facts available for failure reporting."""
 
-    def __init__(self, step_executor: StepExecutor, runtime_name_set: frozenset[str], *, block_kind: BlockKind) -> None:
+    def __init__(self, runtime_name_set: frozenset[str], *, block_kind: BlockKind) -> None:
         if block_kind not in ("execute", "decide"):
             raise ValueError("block_kind must be execute or decide")
         self.block_kind: BlockKind = block_kind
-        self.step_executor = step_executor
         self.runtime_name_set = runtime_name_set
         self.processed_natural_program: str | None = None
         self.allowed_outcome_kinds: tuple[OutcomeKind, ...] | None = None
@@ -171,7 +163,8 @@ class StepPreparation:
             raise NighthawkError("decide requires exactly one output binding")
         normalize_binding_names(input_binding_names)
         normalize_binding_names(output_binding_names)
-        processed_without_frontmatter, denied_outcome_kinds = _split_frontmatter(natural_program)
+        processed_without_frontmatter, frontmatter = parse_frontmatter(natural_program)
+        denied_outcome_kinds = validate_frontmatter_deny(frontmatter)
         processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
         self.processed_natural_program = processed_without_frontmatter
         if block_kind == "decide":

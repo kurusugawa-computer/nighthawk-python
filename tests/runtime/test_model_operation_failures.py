@@ -13,7 +13,7 @@ from pydantic_ai.models.function import FunctionModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import OperationFinished
+from nighthawk.runtime.operation_contract import OperationFinished
 
 
 @nh.function

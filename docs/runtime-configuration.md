@@ -105,7 +105,7 @@ Use ordinary Python operations or explicitly import the standard-library `inspec
 For bounded metadata with member pagination, Nighthawk also provides `describe_value` as an ordinary optional function:
 
 ```py
-from nighthawk.runtime import describe_value
+from nighthawk.runtime.inspection import describe_value
 
 
 @nh.function
@@ -143,7 +143,10 @@ The example uses a deterministic executor and needs no model credentials.
 <!-- runnable-example:shared_values_sync -->
 ```py
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step
+from nighthawk.runtime.embedded import execute_step
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import CallbackExecutor
 
 
@@ -197,7 +200,10 @@ Scopes restore their references on normal exit, exceptions, and cancellation, an
 import asyncio
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepDefinition, StepEnvironment, StepRequest, execute_step_async
+from nighthawk.runtime.embedded import execute_step_async
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 @nh.function
@@ -371,7 +377,8 @@ Each callback may return its decision directly or asynchronously.
 
 ```py
 import nighthawk as nh
-from nighthawk.runtime import OperationRequest, Return
+from nighthawk.runtime.operation_contract import OperationRequest
+from nighthawk.runtime.step_outcome import Return
 
 
 def inspect_operation(operation: OperationRequest) -> nh.oversight.OperationDecision:

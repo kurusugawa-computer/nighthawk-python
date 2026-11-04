@@ -21,10 +21,9 @@ from pydantic_ai.usage import RunUsage
 import nighthawk as nh
 from nighthawk.backends.tool_bridge import build_tool_name_to_handler
 from nighthawk.errors import NighthawkError
-from nighthawk.tools.contracts import (
-    ToolHandlerResult,
-    render_tool_handler_result_preview_text,
-)
+from nighthawk.runtime.operation_contract import OperationRequest
+from nighthawk.tools._rendering import render_tool_handler_result_preview_text
+from nighthawk.tools.contracts import ToolHandlerResult
 from nighthawk.tools.declarations import get_visible_tools
 from tests.support.executors import StubExecutor
 from tests.support.tools import _new_step_context
@@ -147,7 +146,7 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
     def test_once_tool() -> int:  # type: ignore[no-untyped-def]
         return 3
 
-    def accept_tool_call(_tool_call: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+    def accept_tool_call(_tool_call: OperationRequest) -> nh.oversight.Accept:
         nonlocal inspection_count
         inspection_count += 1
         return nh.oversight.Accept()
@@ -234,7 +233,7 @@ def test_backend_handler_raises_nighthawk_error_for_invalid_tool_oversight_decis
     def test_invalid_tool_decision() -> int:  # type: ignore[no-untyped-def]
         return 5
 
-    def invalid_tool_decision(_tool_call: nh.runtime.OperationRequest) -> nh.oversight.Accept | nh.oversight.AbortStep:
+    def invalid_tool_decision(_tool_call: OperationRequest) -> nh.oversight.Accept | nh.oversight.AbortStep:
         return cast(Any, "bad")
 
     step_context = _new_step_context()
@@ -289,7 +288,7 @@ def test_backend_handler_preserves_oversight_abort_and_records_tool_span_event(
         tool_call_count += 1
         return 7
 
-    def reject_tool_call(tool_call: nh.runtime.OperationRequest) -> nh.oversight.AbortStep:
+    def reject_tool_call(tool_call: OperationRequest) -> nh.oversight.AbortStep:
         assert tool_call.argument_name_to_value == {}
         return nh.oversight.AbortStep("needs oversight")
 

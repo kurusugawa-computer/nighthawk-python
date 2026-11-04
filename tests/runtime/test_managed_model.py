@@ -20,6 +20,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
+from nighthawk.runtime.operation_contract import OperationRequest
 
 
 @pytest.mark.asyncio
@@ -183,7 +184,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         """
         return 0
 
-    def inspect_tool(call: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+    def inspect_tool(call: OperationRequest) -> nh.oversight.Accept:
         tool_calls.append(call.tool_name or call.kind)
         return nh.oversight.Accept()
 

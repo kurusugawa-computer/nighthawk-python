@@ -14,8 +14,8 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 import nighthawk as nh
 from nighthawk.backends.codex import CodexModel, CodexModelSettings, _parse_codex_jsonl_lines
-from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.step_context import StepContext
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.tools.declarations import get_visible_tools
 from tests.support.codex import _write_executable_codex_stub
 from tests.support.contexts import new_step_context

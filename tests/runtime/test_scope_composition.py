@@ -7,6 +7,8 @@ from pydantic_ai.tools import Tool
 
 import nighthawk as nh
 from nighthawk.runtime.scoping import get_scope
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 from tests.support.values import IdentityOnly
 
@@ -128,7 +130,7 @@ def test_task_references_are_available_through_the_active_environment() -> None:
     python_globals = dict(globals())
 
     class Executor:
-        def run_step(self, *, request: nh.runtime.StepRequest) -> nh.runtime.StepCandidate:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
             environment = request.step_context.environment
             assert environment.resolve("len") is len
             assert environment.resolve("len", source="task") is injected
@@ -136,7 +138,7 @@ def test_task_references_are_available_through_the_active_environment() -> None:
             seen.append(environment.task_name_to_value["len"])
             with pytest.raises(TypeError):
                 environment.task_name_to_value["len"] = None  # type: ignore[index]
-            return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
+            return StepCandidate(outcome=Pass())
 
     @nh.function
     def workflow() -> None:

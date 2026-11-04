@@ -8,7 +8,9 @@ import pytest
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.runtime import Break, Continue, Pass, Raise, Return, StepCandidate, StepDefinition, StepOutcome, StepRequest
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Break, Continue, Pass, Raise, Return, StepOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import CallbackExecutor, ScriptedExecutor
 
 

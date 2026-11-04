@@ -14,8 +14,8 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 import nighthawk as nh
 from nighthawk.resilience import timeout
-from nighthawk.runtime import StepCandidate
 from nighthawk.runtime import scoping as runtime_scoping
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 

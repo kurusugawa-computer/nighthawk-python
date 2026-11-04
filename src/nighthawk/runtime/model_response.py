@@ -10,21 +10,21 @@ from .step_context import StepContext
 
 
 @dataclass
-class ModelResponseExecution:
+class _ModelResponseExecution:
     step_context: StepContext
     rejection: OperationRejection | None = None
 
 
-_model_response_execution: ContextVar[ModelResponseExecution | None] = ContextVar("nighthawk_model_response_execution", default=None)
+_model_response_execution: ContextVar[_ModelResponseExecution | None] = ContextVar("nighthawk_model_response_execution", default=None)
 
 
 @contextmanager
-def model_response_scope(step_context: StepContext, *, reuse: bool = False) -> Generator[ModelResponseExecution]:
+def model_response_scope(step_context: StepContext, *, reuse: bool = False) -> Generator[_ModelResponseExecution]:
     current = _model_response_execution.get()
     if reuse and current is not None and current.step_context is step_context:
         yield current
         return
-    execution = ModelResponseExecution(step_context)
+    execution = _ModelResponseExecution(step_context)
     token = _model_response_execution.set(execution)
     try:
         yield execution

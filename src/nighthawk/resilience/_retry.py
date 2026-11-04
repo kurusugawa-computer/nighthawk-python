@@ -62,31 +62,6 @@ def _default_on_retry(retry_state: RetryCallState) -> None:
     )
 
 
-def _is_retryable_exception(
-    exception: BaseException,
-    *,
-    on: ExceptionTypeOrTuple,
-    retry_if: RetryIfFunction | None,
-) -> bool:
-    if not isinstance(exception, on):
-        return False
-    if retry_if is None:
-        return True
-    return retry_if(exception)
-
-
-def _build_retry_predicate(
-    *,
-    on: ExceptionTypeOrTuple,
-    retry_if: RetryIfFunction | None,
-) -> Callable[[BaseException], bool]:
-    return lambda exception: _is_retryable_exception(
-        exception,
-        on=on,
-        retry_if=retry_if,
-    )
-
-
 def _build_on_retry_callback(
     *,
     on_retry: Callable[[RetryCallState], None] | None,
@@ -101,107 +76,32 @@ def _build_on_retry_callback(
     return callback
 
 
-def _build_after_callback(
-    *,
-    attempts: int,
-    on: ExceptionTypeOrTuple,
-    retry_if: RetryIfFunction | None,
-) -> Callable[[RetryCallState], None]:
+def _build_after_callback(*, attempts: int) -> Callable[[RetryCallState], None]:
     def callback(retry_state: RetryCallState) -> None:
-        exception = retry_state.outcome.exception() if retry_state.outcome else None
-        if exception is None:
-            return
-        if retry_state.attempt_number < attempts:
-            return
-        if not _is_retryable_exception(exception, on=on, retry_if=retry_if):
-            return
-        _emit_retry_exhausted_event(retry_state)
+        # Tenacity invokes after only after deciding to retry; do not replay an application predicate.
+        if retry_state.outcome is not None and retry_state.outcome.failed and retry_state.attempt_number >= attempts:
+            _emit_retry_exhausted_event(retry_state)
 
     return callback
 
 
-def _build_retrying(
+def _build_retrying[T: Retrying | AsyncRetrying](
+    retrying_type: type[T],
     *,
     attempts: int,
     on: ExceptionTypeOrTuple,
     wait: wait_base,
     on_retry: Callable[[RetryCallState], None] | None,
     retry_if: RetryIfFunction | None,
-) -> Retrying:
-    return Retrying(
+) -> T:
+    return retrying_type(
         stop=stop_after_attempt(attempts),
-        retry=retry_if_exception(_build_retry_predicate(on=on, retry_if=retry_if)),
+        retry=retry_if_exception(lambda exception: isinstance(exception, on) and (retry_if is None or retry_if(exception))),
         wait=wait,
         reraise=True,
         before_sleep=_build_on_retry_callback(on_retry=on_retry),
-        after=_build_after_callback(
-            attempts=attempts,
-            on=on,
-            retry_if=retry_if,
-        ),
+        after=_build_after_callback(attempts=attempts),
     )
-
-
-def _build_async_retrying(
-    *,
-    attempts: int,
-    on: ExceptionTypeOrTuple,
-    wait: wait_base,
-    on_retry: Callable[[RetryCallState], None] | None,
-    retry_if: RetryIfFunction | None,
-) -> AsyncRetrying:
-    return AsyncRetrying(
-        stop=stop_after_attempt(attempts),
-        retry=retry_if_exception(_build_retry_predicate(on=on, retry_if=retry_if)),
-        wait=wait,
-        reraise=True,
-        before_sleep=_build_on_retry_callback(on_retry=on_retry),
-        after=_build_after_callback(
-            attempts=attempts,
-            on=on,
-            retry_if=retry_if,
-        ),
-    )
-
-
-def _wrap_with_retry[**P, R](
-    function: Callable[P, R],
-    *,
-    attempts: int,
-    on: ExceptionTypeOrTuple,
-    wait: wait_base,
-    on_retry: Callable[[RetryCallState], None] | None,
-    retry_if: RetryIfFunction | None,
-) -> Callable[P, R]:
-    if inspect.iscoroutinefunction(function):
-
-        @wraps(function)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            async for attempt in _build_async_retrying(
-                attempts=attempts,
-                on=on,
-                wait=wait,
-                on_retry=on_retry,
-                retry_if=retry_if,
-            ):
-                with attempt:
-                    return await function(*args, **kwargs)
-
-        return cast(Callable[P, R], async_wrapper)
-
-    @wraps(function)
-    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-        for attempt in _build_retrying(
-            attempts=attempts,
-            on=on,
-            wait=wait,
-            on_retry=on_retry,
-            retry_if=retry_if,
-        ):
-            with attempt:
-                return function(*args, **kwargs)
-
-    return cast(Callable[P, R], sync_wrapper)
 
 
 class _RetryingHandle:
@@ -221,18 +121,28 @@ class _RetryingHandle:
         self._retry_if = retry_if
 
     def __call__[**P, R](self, function: Callable[P, R]) -> Callable[P, R]:
-        return _wrap_with_retry(
-            function,
-            attempts=self._attempts,
-            on=self._on,
-            wait=self._wait,
-            on_retry=self._on_retry,
-            retry_if=self._retry_if,
-        )
+        if inspect.iscoroutinefunction(function):
+
+            @wraps(function)
+            async def asynchronous(*arguments: Any, **keyword_name_to_value: Any) -> Any:
+                async for attempt in self:
+                    with attempt:
+                        return await function(*arguments, **keyword_name_to_value)
+
+            return cast(Callable[P, R], asynchronous)
+
+        @wraps(function)
+        def synchronous(*arguments: Any, **keyword_name_to_value: Any) -> Any:
+            for attempt in self:
+                with attempt:
+                    return function(*arguments, **keyword_name_to_value)
+
+        return cast(Callable[P, R], synchronous)
 
     def __iter__(self) -> Iterator[Any]:
         return iter(
             _build_retrying(
+                Retrying,
                 attempts=self._attempts,
                 on=self._on,
                 wait=self._wait,
@@ -242,7 +152,8 @@ class _RetryingHandle:
         )
 
     def __aiter__(self) -> AsyncIterator[Any]:
-        return _build_async_retrying(
+        return _build_retrying(
+            AsyncRetrying,
             attempts=self._attempts,
             on=self._on,
             wait=self._wait,
@@ -268,7 +179,7 @@ def retrying(
         on: Exception type(s) eligible for retry.
         wait: Tenacity wait strategy between attempts.
         on_retry: Callback invoked when a retry is decided, replacing the default INFO log.
-        retry_if: Optional predicate evaluated after ``on`` matching.
+        retry_if: Optional predicate evaluated once per matching exception.
 
     Returns:
         A handle usable as a decorator factory or tenacity-style iterator.

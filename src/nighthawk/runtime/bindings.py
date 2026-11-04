@@ -10,11 +10,11 @@ from typing_extensions import TypeForm
 from ..errors import NighthawkError
 
 
-class MissingAnnotation:
+class _MissingAnnotation:
     """Distinguish an absent annotation from explicit object, Any, or None."""
 
 
-MISSING_ANNOTATION = MissingAnnotation()
+MISSING_ANNOTATION = _MissingAnnotation()
 
 
 class BindingError(NighthawkError):

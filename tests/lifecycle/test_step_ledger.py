@@ -15,7 +15,10 @@ from pydantic import AfterValidator, BaseModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, scoping
+from nighthawk.runtime import scoping
+from nighthawk.runtime.operation_contract import OperationRequest
+from nighthawk.runtime.step_outcome import Break, Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 
@@ -71,7 +74,7 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
             if scenario == "executor":
                 raise ValueError("executor failed")
             if scenario == "outcome":
-                return StepCandidate(outcome=nh.runtime.Break())
+                return StepCandidate(outcome=Break())
             if scenario == "undeclared":
                 return StepCandidate(outcome=Pass(), binding_name_to_value={"unknown": 5})
             return StubExecutor().run_step(request=request)
@@ -85,7 +88,7 @@ def test_host_exception_references_single_ledger_event(scenario: str, expected_s
             raise ValueError("inspection failed")
         return nh.oversight.Accept()
 
-    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+    def inspect_expression(request: OperationRequest) -> nh.oversight.Accept:
         if scenario == "return_inspector":
             raise ValueError("return inspection failed")
         return nh.oversight.Accept()

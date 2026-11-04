@@ -7,7 +7,8 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate
+from nighthawk.configuration import ModelSelection
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 
@@ -26,7 +27,7 @@ def guide_examples(tmp_path: Path) -> list[Path]:
 def test_working_template(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"label": "bug"})])
 
-    def select_executor(self: nh.AgentStepExecutor, selection: nh.runtime.ModelSelection) -> ScriptedExecutor:
+    def select_executor(self: nh.AgentStepExecutor, selection: ModelSelection) -> ScriptedExecutor:
         assert selection.apply(self.configuration).execution_model is not None
         return executor
 

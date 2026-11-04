@@ -11,17 +11,11 @@ from pydantic_ai.toolsets.function import FunctionToolset
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle, StepRaised
 from nighthawk.oversight import AbortStep, Accept, Oversight, StepAbortedError
-from nighthawk.runtime import (
-    OperationError,
-    OperationFinished,
-    OperationRequest,
-    Pass,
-    StepCandidate,
-    StepRequest,
-    assign_expression_async,
-    evaluate_expression_async,
-)
-from nighthawk.runtime.operation_contract import OperationDeliveryError
+from nighthawk.runtime.assignment import assign_expression_async
+from nighthawk.runtime.expression import evaluate_expression_async
+from nighthawk.runtime.operation_contract import OperationDeliveryError, OperationError, OperationFinished, OperationRequest
+from nighthawk.runtime.step_outcome import Pass, Return
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.tools.execution import ToolResultWrapperToolset
 from tests.support.contexts import new_context
 from tests.support.executors import StubExecutor
@@ -236,7 +230,7 @@ def test_return_expression_and_async_commit_inspection_do_not_replay_effects() -
     async def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         commits.append(commit)
         await asyncio.sleep(0)
-        return nh.oversight.Rewrite(outcome=nh.runtime.Return(9))
+        return nh.oversight.Rewrite(outcome=Return(9))
 
     with (
         nh.run(StubExecutor()),
@@ -324,7 +318,7 @@ def test_executor_cannot_catch_rejection_and_finalize_a_candidate() -> None:
 
 def test_request_freezes_arguments_mapping_but_preserves_values() -> None:
     values = [1]
-    tool_call = nh.runtime.OperationRequest(
+    tool_call = OperationRequest(
         execution_reference=nh.ExecutionReference("run", "scope", "step"),
         operation_id="operation",
         kind="native_tool",

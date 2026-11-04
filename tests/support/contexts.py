@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 import nighthawk as nh
-from nighthawk.runtime import StepEnvironment
+from nighthawk.runtime.environment import StepEnvironment
 
 
 def new_step_context(

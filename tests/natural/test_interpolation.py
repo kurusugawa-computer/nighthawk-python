@@ -4,7 +4,7 @@ from pydantic_ai.models.function import FunctionModel
 
 import nighthawk as nh
 from nighthawk.natural.blocks import find_natural_blocks
-from nighthawk.runtime import StepCandidate
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 

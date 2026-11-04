@@ -5,10 +5,12 @@ from typing import Any
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, evaluate_expression
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
+from nighthawk.runtime.expression import evaluate_expression
 from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.model_outcome import ModelReturn
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 
 _module_value = 99

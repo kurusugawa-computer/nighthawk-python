@@ -109,13 +109,13 @@ def append_text_projected_tool_result_preview_prompt(*, system_prompt_text: str)
 
 
 @dataclass(frozen=True)
-class PreparedRequestParts:
+class _PreparedRequestParts:
     system_prompt_text: str
     request_prompt_part_list: RequestPromptPartList
 
 
 @dataclass(frozen=True)
-class PreparedTextProjectedRequest:
+class _PreparedTextProjectedRequest:
     system_prompt_text: str
     user_prompt_text: str
     projected_request: TextProjectedRequest
@@ -182,7 +182,7 @@ class BackendModelBase(Model):
         *,
         messages: list[ModelMessage],
         model_request_parameters: ModelRequestParameters,
-    ) -> PreparedRequestParts:
+    ) -> _PreparedRequestParts:
         if model_request_parameters.native_tools:
             raise UserError(f"{self.backend_label} does not support native tools")
 
@@ -198,7 +198,7 @@ class BackendModelBase(Model):
             system_prompt_text = "\n\n".join([system_prompt_text, instructions]) if system_prompt_text else instructions
 
         request_prompt_part_list = _collect_request_prompt_part_list(model_request, backend_label=self.backend_label)
-        return PreparedRequestParts(
+        return _PreparedRequestParts(
             system_prompt_text=system_prompt_text,
             request_prompt_part_list=request_prompt_part_list,
         )
@@ -210,7 +210,7 @@ class BackendModelBase(Model):
         model_request_parameters: ModelRequestParameters,
         staging_root_directory: Path,
         empty_prompt_exception_factory: Callable[[str], Exception],
-    ) -> PreparedTextProjectedRequest:
+    ) -> _PreparedTextProjectedRequest:
         from .text_projection import project_request_prompt_part_list_to_text
 
         prepared_request_parts = self._prepare_common_request_parts(
@@ -228,7 +228,7 @@ class BackendModelBase(Model):
             projected_request.cleanup()
             raise empty_prompt_exception_factory(f"{self.backend_label} requires a non-empty user prompt")
 
-        return PreparedTextProjectedRequest(
+        return _PreparedTextProjectedRequest(
             system_prompt_text=system_prompt_text,
             user_prompt_text=user_prompt_text,
             projected_request=projected_request,

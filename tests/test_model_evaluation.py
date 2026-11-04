@@ -33,7 +33,7 @@ def evaluation_project(tmp_path: Path) -> Path:
 import pytest
 import nighthawk as nh
 from pydantic_ai.usage import RunUsage
-from nighthawk.runtime import StepCandidate
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import CallbackExecutor
 
 @pytest.fixture(autouse=True)
@@ -46,7 +46,8 @@ def local_executor(monkeypatch):
 """)
     (tmp_path / "test_trials.py").write_text("""
 import pytest
-from nighthawk.runtime import StepDefinition, execute_step_async
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.embedded import execute_step_async
 
 @pytest.fixture
 def broken_setup():

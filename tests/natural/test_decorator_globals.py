@@ -9,7 +9,7 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 _MODULE_SOURCE = '''
 import nighthawk as nh

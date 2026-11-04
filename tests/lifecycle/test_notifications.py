@@ -11,8 +11,11 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepStarted
-from nighthawk.runtime import OperationFinished, Pass, StepCandidate, StepRequest, evaluate_expression
+from nighthawk.runtime.expression import evaluate_expression, evaluate_expression_async
 from nighthawk.runtime.notifications import await_notification
+from nighthawk.runtime.operation_contract import OperationFinished
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 
 
@@ -334,7 +337,7 @@ def _exercise_repeated_async_cancellation(boundary: str, self_cancel: bool) -> N
         class Executor:
             async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
                 if boundary == "operation":
-                    await nh.runtime.evaluate_expression_async(request.step_context, "1")
+                    await evaluate_expression_async(request.step_context, "1")
                 return StepCandidate(outcome=Pass(), binding_name_to_value={})
 
         @nh.function

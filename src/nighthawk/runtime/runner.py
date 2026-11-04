@@ -23,7 +23,7 @@ from ..oversight import (
     record_oversight_decision,
 )
 from .async_bridge import run_coroutine_synchronously
-from .bindings import BindingValidationError, require_declared_binding_names, validate_output_bindings
+from .bindings import BindingValidationError, validate_output_bindings
 from .execution_reference import ExecutionReference
 from .interruption import chain_cleanup_errors
 from .notifications import await_notification
@@ -46,9 +46,8 @@ from .step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, Ste
 from .step_request import StepCandidate, StepRequest, _snapshot_output_bindings
 
 
-class StepEnvelope(TypedDict):
+class _StepEnvelope(TypedDict):
     outcome: StepOutcome
-    input_bindings: dict[str, object]
     bindings: dict[str, object]
 
 
@@ -92,7 +91,7 @@ def _build_source_location(*, caller_frame: FrameType) -> str:
 class Runner:
     def __init__(self, step_executor: StepExecutor, *, block_kind: BlockKind = "execute", runtime_name_set: frozenset[str] = frozenset()) -> None:
         self.step_executor = step_executor
-        self.preparation_state = StepPreparation(step_executor, runtime_name_set, block_kind=block_kind)
+        self.preparation_state = StepPreparation(runtime_name_set, block_kind=block_kind)
         self.failure_stage: FailureStage = "preparation"
         self.failure_description: str | None = None
         self.preparation: PreparedStep | None = None
@@ -317,8 +316,6 @@ class Runner:
         step_outcome: StepOutcome,
         bindings: Mapping[str, object] | UnsetType,
     ) -> dict[str, object]:
-        if not isinstance(bindings, UnsetType):
-            require_declared_binding_names(bindings, preparation.output_binding_names)
         if step_outcome.kind == "raise":
             if not isinstance(bindings, UnsetType) and len(bindings):
                 raise NighthawkError("StepCandidate Raise cannot include output bindings")
@@ -407,7 +404,7 @@ class Runner:
         preparation: PreparedStep,
         candidate: StepCandidate,
         return_annotation: object,
-    ) -> StepEnvelope:
+    ) -> _StepEnvelope:
         step_context = preparation.step_context
         if step_context._operation_state.failure is not None:
             raise step_context._operation_state.failure
@@ -449,11 +446,10 @@ class Runner:
         self.attempted_outcome = outcome
         self.validated_binding_name_to_value = validated_bindings
         if isinstance(outcome, Raise):
-            self._validate_raise(outcome)
             self.failure_stage = "raise_construction"
             self.raise_exception = outcome.error_type(outcome.message)
         self.failure_stage = "binding_assignment"
-        return StepEnvelope(outcome=outcome, input_bindings=dict(preparation.input_binding_name_to_value), bindings=validated_bindings)
+        return _StepEnvelope(outcome=outcome, bindings=validated_bindings)
 
     def _prepare(
         self,
@@ -482,12 +478,11 @@ class Runner:
     async def _execute_async(
         self,
         preparation: PreparedStep,
-        output_binding_names: list[str],
         return_annotation: object,
         *,
         allow_awaitable_return: bool,
-    ) -> StepEnvelope:
-        request = self._build_request(preparation, output_binding_names, return_annotation, allow_awaitable_return)
+    ) -> _StepEnvelope:
+        request = self._build_request(preparation, return_annotation, allow_awaitable_return)
         executor = self.step_executor
         if isinstance(executor, AsyncStepExecutor):
             candidate = await executor.run_step_async(request=request)
@@ -505,7 +500,6 @@ class Runner:
     @staticmethod
     def _build_request(
         preparation: PreparedStep,
-        output_binding_names: list[str],
         return_annotation: object,
         allow_awaitable_return: bool,
     ) -> StepRequest:
@@ -514,7 +508,7 @@ class Runner:
             input_binding_name_to_value=preparation.input_binding_name_to_value,
             processed_natural_program=preparation.processed_program,
             step_context=preparation.step_context,
-            output_binding_names=tuple(output_binding_names),
+            output_binding_names=preparation.output_binding_names,
             return_annotation=return_annotation,
             allowed_outcome_kinds=preparation.allowed_outcome_kinds,
             allow_awaitable_return=allow_awaitable_return,
@@ -531,7 +525,7 @@ class Runner:
         *,
         caller_frame: FrameType | None = None,
         name_to_value: Mapping[str, object] | None = None,
-    ) -> StepEnvelope:
+    ) -> _StepEnvelope:
         if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
@@ -545,7 +539,7 @@ class Runner:
         self.failure_stage = "executor"
         # Keep synchronous executors on the caller thread, even inside a running event loop.
         if isinstance(self.step_executor, SyncStepExecutor):
-            request = self._build_request(preparation, output_binding_names, return_annotation, False)
+            request = self._build_request(preparation, return_annotation, False)
             candidate = self.step_executor.run_step(request=request)
             return run_coroutine_synchronously(
                 lambda: self._finalize_step(preparation=preparation, candidate=candidate, return_annotation=return_annotation)
@@ -553,7 +547,6 @@ class Runner:
         return run_coroutine_synchronously(
             lambda: self._execute_async(
                 preparation,
-                output_binding_names,
                 return_annotation,
                 allow_awaitable_return=False,
             )
@@ -570,7 +563,7 @@ class Runner:
         *,
         caller_frame: FrameType | None = None,
         name_to_value: Mapping[str, object] | None = None,
-    ) -> StepEnvelope:
+    ) -> _StepEnvelope:
         if caller_frame is None and name_to_value is None:
             caller_frame = typing.cast(FrameType, inspect.currentframe()).f_back
             assert caller_frame is not None
@@ -582,4 +575,4 @@ class Runner:
             return_annotation, caller_frame=caller_frame, environment=preparation.step_context.environment
         )
         self.failure_stage = "executor"
-        return await self._execute_async(preparation, output_binding_names, return_annotation, allow_awaitable_return=True)
+        return await self._execute_async(preparation, return_annotation, allow_awaitable_return=True)

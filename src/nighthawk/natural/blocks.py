@@ -16,7 +16,7 @@ _BINDING_PATTERN = re.compile(r"(?<!\\)<(:?)([A-Za-z_][A-Za-z0-9_]*)>")
 
 
 @dataclass(frozen=True)
-class NaturalBlock:
+class _NaturalBlock:
     kind: Literal["docstring", "inline"]
     text: str
     input_bindings: tuple[str, ...]
@@ -110,13 +110,13 @@ def parse_joined_block(joined_string: ast.JoinedStr) -> tuple[BlockKind, str, tu
     return parse_block(scan_text, has_interpolated_instruction=bool(interpolation_offsets))
 
 
-def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
+def find_natural_blocks(func_source: str) -> tuple[_NaturalBlock, ...]:
     try:
         module = ast.parse(func_source)
     except SyntaxError as e:
         raise NaturalParseError(str(e)) from e
 
-    blocks: list[NaturalBlock] = []
+    blocks: list[_NaturalBlock] = []
 
     func_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
     for node in module.body:
@@ -130,7 +130,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
     if docstring_text and is_natural_sentinel(docstring_text):
         block_kind, program, input_bindings, output_bindings = parse_block(docstring_text)
         blocks.append(
-            NaturalBlock(
+            _NaturalBlock(
                 kind="docstring",
                 block_kind=block_kind,
                 text=program,
@@ -157,7 +157,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
             if is_natural_sentinel(text):
                 block_kind, program, input_bindings, output_bindings = parse_block(text)
                 blocks.append(
-                    NaturalBlock(
+                    _NaturalBlock(
                         kind="inline",
                         block_kind=block_kind,
                         text=program,
@@ -170,7 +170,7 @@ def find_natural_blocks(func_source: str) -> tuple[NaturalBlock, ...]:
         if isinstance(value, ast.JoinedStr) and _joined_string_is_natural_sentinel(value):
             block_kind, program, input_bindings, output_bindings = parse_joined_block(value)
             blocks.append(
-                NaturalBlock(
+                _NaturalBlock(
                     kind="inline",
                     block_kind=block_kind,
                     text=program,

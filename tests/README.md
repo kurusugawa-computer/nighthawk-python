@@ -46,7 +46,7 @@ Assignment failure, cancellation, and terminal delivery belong in `lifecycle/`, 
 Test pure binding rules once in their owner and keep entry-point tests focused on their integration.
 Configuration value validation belongs in `test_configuration.py`, executor construction in `runtime/test_step_executor.py`, and function interception in `test_function_call.py`.
 Decision syntax belongs in `natural/test_blocks.py`, while scripted decision recording belongs in `test_testing.py`; using a decision block does not change the owner of a contract.
-Tool-result rendering and response budgets belong in `tools/test_contracts.py`; nested discovery content belongs in `tools/test_discovery_content.py`.
+Tool-result rendering and response budgets belong in `tools/test_rendering.py`; nested discovery content belongs in `tools/test_discovery_content.py`.
 Provider toolset execution belongs in `tools/test_execution.py`, and pure JSON projection belongs in `test_json_renderer.py`.
 Backend process termination and reaping belong in `backends/test_process_management.py`; callback transport belongs in `backends/test_tool_transport.py`.
 Use `nighthawk.testing` for resolved Python values and exception classes.

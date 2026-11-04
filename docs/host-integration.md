@@ -36,7 +36,8 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import nighthawk as nh
-from nighthawk.runtime import ModelSelection, StepCandidate, StepRequest
+from nighthawk.configuration import ModelSelection
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 class AllowedModels:
@@ -137,7 +138,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 
@@ -332,7 +333,7 @@ from contextlib import suppress
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle
-from nighthawk.runtime import StepCandidate
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 

@@ -46,7 +46,7 @@ class _PromptRenderContext:
     explicit_dotted_reference_path_set: frozenset[str]
 
 
-class ExtractedReferenceData(NamedTuple):
+class _ExtractedReferenceData(NamedTuple):
     references: tuple[str, ...]
     reference_paths: tuple[str, ...]
     program_text: str
@@ -489,7 +489,7 @@ def _render_locals_section(
     )
 
 
-def extract_reference_data_and_program(text: str) -> ExtractedReferenceData:
+def extract_reference_data_and_program(text: str) -> _ExtractedReferenceData:
     reference_path_pattern = r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
 
     unescaped_token_pattern = re.compile(r"(?<!\\)<(" + reference_path_pattern + r")>")
@@ -506,7 +506,7 @@ def extract_reference_data_and_program(text: str) -> ExtractedReferenceData:
         return f"<{match.group(1)}>"
 
     unescaped_text = escaped_token_pattern.sub(unescape, text)
-    return ExtractedReferenceData(tuple(references), tuple(reference_paths), unescaped_text)
+    return _ExtractedReferenceData(tuple(references), tuple(reference_paths), unescaped_text)
 
 
 def extract_references_and_program(text: str) -> tuple[tuple[str, ...], str]:

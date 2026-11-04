@@ -1,7 +1,9 @@
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepDefinition, execute_step_async
+from nighthawk.runtime.embedded import execute_step_async
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass
 from tests.support.model_evaluation import ModelEvaluation
 
 

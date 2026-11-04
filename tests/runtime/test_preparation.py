@@ -10,8 +10,9 @@ from pydantic import Field
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import StepCandidate, StepDefinition, StepRequest
+from nighthawk.runtime.step_definition import StepDefinition
 from nighthawk.runtime.step_outcome import StepOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
 

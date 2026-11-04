@@ -11,7 +11,7 @@ The `nighthawk.testing` module provides `ScriptedExecutor`, which returns script
 
 ```py
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 
@@ -51,7 +51,7 @@ Omission or `nh.UNSET` selects initialized declared outputs, `{}` selects no wri
 **Testing error handling.** Script a `Raise` to verify that your code handles failures:
 
 ```py
-from nighthawk.runtime import Raise
+from nighthawk.runtime.step_outcome import Raise
 
 
 def test_fallback_on_error():
@@ -92,7 +92,7 @@ def test_helper_is_available():
 **Callback executor.** When the scripted candidate depends on the request, use `CallbackExecutor` with an ordinary function:
 
 ```py
-from nighthawk.runtime import StepRequest
+from nighthawk.runtime.step_request import StepRequest
 from nighthawk.testing import CallbackExecutor
 
 

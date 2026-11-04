@@ -40,7 +40,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import nighthawk as nh
 from nighthawk.oversight import Accept, OperationDecision, Oversight, RejectOperation
-from nighthawk.runtime import OperationRequest
+from nighthawk.runtime.operation_contract import OperationRequest
 
 
 effects: list[str] = []
@@ -135,7 +135,10 @@ This example extends the definitions above.
 The executor owns its choice of the next operation and does not inspect or modify private failure state.
 
 ```py
-from nighthawk.runtime import OperationRejectedError, Return, StepCandidate, StepRequest, evaluate_expression, evaluate_expression_async
+from nighthawk.runtime.expression import evaluate_expression, evaluate_expression_async
+from nighthawk.runtime.operation_contract import OperationRejectedError
+from nighthawk.runtime.step_outcome import Return
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 class CorrectingExecutor:

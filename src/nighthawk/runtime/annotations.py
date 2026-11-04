@@ -37,14 +37,12 @@ def module_annotations(python_globals: dict[str, object], *, resolve_deferred: b
     return {}
 
 
-def resolve_annotation(
-    annotation: object,
+def _resolve_annotation(
+    annotation: SourceAnnotation,
     *,
     python_globals: dict[str, object],
     python_locals: dict[str, object],
 ) -> object:
-    if not isinstance(annotation, SourceAnnotation):
-        return annotation
     if len(annotation.expressions) != 1:
         raise TypeError(f"Ambiguous annotation declarations: {annotation.expressions!r}")
     holder = SimpleNamespace(__annotations__={"value": annotation.expressions[0]})
@@ -65,7 +63,7 @@ def resolve_contract(annotation: object, *, python_globals: dict[str, object], p
     if annotation is MISSING_ANNOTATION:
         return object
     if isinstance(annotation, SourceAnnotation):
-        resolved = resolve_annotation(annotation, python_globals=python_globals, python_locals=python_locals)
+        resolved = _resolve_annotation(annotation, python_globals=python_globals, python_locals=python_locals)
     else:
         holder = SimpleNamespace(__annotations__={"value": annotation})
         resolved = get_type_hints(holder, globalns=python_globals, localns=python_locals, include_extras=True)["value"]

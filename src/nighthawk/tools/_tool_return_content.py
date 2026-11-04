@@ -16,7 +16,7 @@ from ..runtime.discovery import contains_discovery_result
 from ..runtime.step_context import ToolResultRenderingPolicy
 
 
-class ToolReturnSegments(NamedTuple):
+class _ToolReturnSegments(NamedTuple):
     response_text: str
     ordered_user_content: tuple[UserContent, ...]
 
@@ -30,7 +30,7 @@ def resolve_tool_return_segments(
     tool_name: str,
     payload: object,
     rendering_policy: ToolResultRenderingPolicy,
-) -> ToolReturnSegments:
+) -> _ToolReturnSegments:
     if contains_discovery_result(payload):
         import tiktoken
 
@@ -44,7 +44,7 @@ def resolve_tool_return_segments(
     # Revisit if a future Pydantic AI release preserves adjacency natively.
     ordered_user_content_tuple = try_project_ordered_user_content_sequence(payload)
     if ordered_user_content_tuple is not None:
-        return ToolReturnSegments(response_text="", ordered_user_content=ordered_user_content_tuple)
+        return _ToolReturnSegments(response_text="", ordered_user_content=ordered_user_content_tuple)
     tool_return_part = ToolReturnPart(tool_name=tool_name, content=payload)
     response_text, user_content_list = tool_return_part.model_response_str_and_user_content()
-    return ToolReturnSegments(response_text=response_text, ordered_user_content=tuple(user_content_list))
+    return _ToolReturnSegments(response_text=response_text, ordered_user_content=tuple(user_content_list))

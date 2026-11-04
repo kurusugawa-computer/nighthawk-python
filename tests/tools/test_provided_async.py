@@ -8,7 +8,7 @@ from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.runtime.step_context import StepContext
-from nighthawk.tools.provided import build_provided_tool_definitions
+from nighthawk.tools.provided import get_provided_tools
 from tests.support.contexts import new_step_context
 
 
@@ -32,10 +32,9 @@ def _new_run_context(step_context: StepContext) -> RunContext[StepContext]:
 
 
 def _get_tool_function(name: str):  # type: ignore[no-untyped-def]
-    definitions = build_provided_tool_definitions()
-    for definition in definitions:
-        if definition.name == name:
-            return definition.tool.function
+    for tool in get_provided_tools():
+        if tool.name == name:
+            return tool.function
     raise ValueError(f"Tool {name!r} not found")
 
 

@@ -9,11 +9,16 @@ paths:
 
 This file owns documentation responsibilities and editorial constraints.
 `CONTRIBUTING.md` owns development setup, change and review procedures, verification commands, and experiment authorization.
-Keep one canonical owner for each subject.
 Other pages may summarize it for their audience and link to the owner; they must not create independent guarantees.
 `api.md` owns the exhaustive public symbol inventory and rendered signatures/docstrings.
 `specification.md` owns behavior, contracts, and boundaries.
 Task-oriented pages teach selected APIs rather than duplicating either reference.
+
+Apply the workspace practices across `inline section < document < directory subtree < workspace-global` scope.
+Keep an explanation beside its use until independent readers need a separate document, glossary term, or principle.
+Body text owns facts; headings, navigation, metadata, and summaries identify or derive from that text rather than establishing additional claims.
+Stable principles may guide concrete contracts and examples; they must remain understandable without depending on a particular example, experiment, or implementation.
+Remove unneeded documents, terms, and rules together with their references; preserve evidence that still supports a current decision.
 
 | Page | Audience and responsibility |
 | --- | --- |

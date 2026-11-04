@@ -7,7 +7,8 @@ from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError
-from nighthawk.runtime import Break, Continue, Pass, Return, StepCandidate, StepRequest
+from nighthawk.runtime.step_outcome import Break, Continue, Pass, Return
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor
 
 GLOBAL_NUMBER = 7

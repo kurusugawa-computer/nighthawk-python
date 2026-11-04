@@ -12,11 +12,12 @@ from pydantic import AfterValidator, BaseModel
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.model_outcome import ModelRaise
 from nighthawk.runtime.scoping import get_scope
+from nighthawk.runtime.step_outcome import Pass, Raise, Return
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 
 
@@ -126,7 +127,7 @@ def test_invalid_step_rewrite_flows_through_finalize_validation() -> None:
     def rewrite_step(review: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = review
         return nh.oversight.Rewrite(
-            outcome=nh.runtime.Return(value="not an int"),
+            outcome=Return(value="not an int"),
             binding_name_to_value={"result": "not an int"},
         )
 
@@ -191,7 +192,7 @@ def test_step_commit_receives_validated_bindings_and_return_value() -> None:
     assert len(observed_commits) == 1
     step_commit = observed_commits[0]
     assert step_commit.binding_name_to_value["result"] == 41
-    assert isinstance(step_commit.outcome, nh.runtime.Return)
+    assert isinstance(step_commit.outcome, Return)
     assert step_commit.outcome.value == 42
 
 
@@ -214,7 +215,7 @@ def test_step_commit_pass_has_no_return_value() -> None:
 
         assert natural_value_function() == 3
 
-    assert observed_return_values == [nh.runtime.Pass()]
+    assert observed_return_values == [Pass()]
 
 
 def test_invalid_executor_output_fails_before_oversight_is_consulted() -> None:
@@ -244,9 +245,9 @@ def test_invalid_executor_output_fails_before_oversight_is_consulted() -> None:
 
 def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
-        assert isinstance(step_commit.outcome, nh.runtime.Return)
+        assert isinstance(step_commit.outcome, Return)
         assert step_commit.outcome.value == 5
-        return nh.oversight.Rewrite(outcome=nh.runtime.Return("7"))
+        return nh.oversight.Rewrite(outcome=Return("7"))
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
@@ -264,7 +265,7 @@ def test_rewrite_return_value_is_validated_against_return_annotation() -> None:
 def test_rewrite_return_value_type_mismatch_raises_execution_error() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = step_commit
-        return nh.oversight.Rewrite(outcome=nh.runtime.Return("not an int"))
+        return nh.oversight.Rewrite(outcome=Return("not an int"))
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
@@ -303,7 +304,7 @@ def test_rewrite_bindings_with_invalid_value_raises_execution_error() -> None:
 def test_rewrite_to_disallowed_outcome_kind_raises_execution_error() -> None:
     def rewrite_step(step_commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         _ = step_commit
-        return nh.oversight.Rewrite(outcome=nh.runtime.Return(value=5))
+        return nh.oversight.Rewrite(outcome=Return(value=5))
 
     with nh.run(StubExecutor()), nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=rewrite_step)):
 
@@ -347,7 +348,7 @@ def test_explicit_none_return_and_resolved_kind_change() -> None:
 
     with (
         nh.run(StubExecutor()),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Return(None)))),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=Return(None)))),
     ):
         assert optional() is None
         with pytest.raises(nh.ExecutionError, match="Return value validation failed"):
@@ -356,7 +357,7 @@ def test_explicit_none_return_and_resolved_kind_change() -> None:
             passing()
     with (
         nh.run(StubExecutor()),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Return(7)))),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=Return(7)))),
     ):
         assert passing() == 7
 
@@ -385,7 +386,7 @@ def test_accept_does_not_repeat_validators_and_replacement_does() -> None:
     calls.clear()
     with (
         nh.run(StubExecutor()),
-        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Return(8)))),
+        nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=Return(8)))),
     ):
         assert workflow() == 9
     assert calls == [4, 8]
@@ -435,8 +436,8 @@ def test_raise_to_pass_does_not_resurrect_unvalidated_writes() -> None:
 
     def inspect(commit: nh.oversight.StepCommit) -> nh.oversight.Rewrite:
         assert commit.binding_name_to_value == {}
-        assert isinstance(commit.outcome, nh.runtime.Raise)
-        return nh.oversight.Rewrite(outcome=nh.runtime.Pass())
+        assert isinstance(commit.outcome, Raise)
+        return nh.oversight.Rewrite(outcome=Pass())
 
     @nh.function
     def workflow() -> int:
@@ -482,12 +483,12 @@ def test_raise_rewrite_validates_replacement_without_constructing_original_excep
             workflow()
         assert constructed == ["original"]
         constructed.clear()
-        with nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Pass()))):
+        with nh.scope(oversight=nh.oversight.Oversight(inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=Pass()))):
             assert workflow() == 7
         with (
             nh.scope(
                 oversight=nh.oversight.Oversight(
-                    inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=nh.runtime.Raise("replacement", int))  # type: ignore[arg-type]
+                    inspect_step_commit=lambda commit: nh.oversight.Rewrite(outcome=Raise("replacement", int))  # type: ignore[arg-type]
                 )
             ),
             pytest.raises(nh.ExecutionError, match="resolved exception class"),
@@ -548,4 +549,4 @@ def test_undeclared_rewrite_and_raise_with_writes_are_rejected() -> None:
     ):
         workflow()
     with pytest.raises(ValueError, match="Raise cannot include output bindings"):
-        nh.oversight.Rewrite(outcome=nh.runtime.Raise("failed"), binding_name_to_value={"unknown": 1})
+        nh.oversight.Rewrite(outcome=Raise("failed"), binding_name_to_value={"unknown": 1})

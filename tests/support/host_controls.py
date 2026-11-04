@@ -14,7 +14,8 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.configuration import ModelSelection
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 class RequestRefusedError(RuntimeError):
@@ -114,7 +115,7 @@ class PreservingExecutor:
         self.model_name_to_model = model_name_to_model
         self.observer = observer
 
-    def resolve_model_selection(self, selection: nh.runtime.ModelSelection) -> PreservingExecutor:
+    def resolve_model_selection(self, selection: ModelSelection) -> PreservingExecutor:
         configuration = selection.apply(self.executor.configuration)
         model = configuration.execution_model
         if isinstance(model, str):

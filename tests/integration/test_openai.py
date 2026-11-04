@@ -4,8 +4,10 @@ from pydantic_ai.capabilities import Instrumentation
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, StepDefinition, execute_step, execute_step_async
+from nighthawk.runtime.embedded import execute_step, execute_step_async
 from nighthawk.runtime.step_context import StepContext
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass
 from tests.integration.skip_helpers import requires_openai_integration
 
 

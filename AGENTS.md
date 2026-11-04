@@ -9,6 +9,17 @@
   - Each item must be answerable on its own and must include its Id.
 - When the user requests "radical" changes, prioritize extensive, global, disruptive, and thorough edits over minimal fixes.
 
+## Implementation and documentation practices
+
+Apply these practices when creating, reviewing, or revising code and documentation.
+Use Nighthawk's philosophy to resolve tradeoffs; assess the burden on callers and maintainers, not just the size of a change.
+
+- **Minimize scope.** Keep a definition at the narrowest scope that serves its actual consumers; widen it only for a demonstrated need.
+- **Avoid premature abstraction.** Start with concrete implementations and explanations. Extract a shared abstraction only when existing consumers need the same contract; resemblance alone is insufficient.
+- **Keep one source of truth.** Give each fact or rule one authoritative owner. Derive other representations from it, and keep responsibilities distinct across layers.
+- **Depend toward stability.** Stable contracts must not depend on their changing implementations, adapters, or application policy.
+- **Remove dead concepts.** Remove unused definitions and indirection, or inline them into their sole consumer when a separate concept adds no useful boundary. Check public contracts, dynamic use, and evidence provenance before treating a definition as unused.
+
 ## Naming and terminology
 
 ### Allowed abbreviations (Glossary)

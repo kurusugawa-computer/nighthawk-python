@@ -5,7 +5,8 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepStarted
-from nighthawk.runtime import StepDefinition, StepOutcome
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import StepOutcome
 from nighthawk.testing import ScriptedExecutor
 
 

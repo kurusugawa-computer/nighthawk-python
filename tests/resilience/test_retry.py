@@ -12,8 +12,9 @@ from tenacity import RetryCallState, wait_none
 
 import nighthawk as nh
 from nighthawk.resilience import retrying
-from nighthawk.runtime import Raise, StepCandidate
 from nighthawk.runtime import scoping as runtime_scoping
+from nighthawk.runtime.step_outcome import Raise
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 from tests.support.errors import execution_error
 
@@ -223,6 +224,35 @@ class TestRetryingIteratorAsync:
 
         asyncio.run(run())
         assert len(counter) == 3
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_retry_predicate_is_evaluated_once_per_failure(asynchronous: bool) -> None:
+    failure = ValueError("unavailable")
+    observed: list[BaseException] = []
+
+    def should_retry(exception: BaseException) -> bool:
+        observed.append(exception)
+        return True
+
+    policy = retrying(attempts=2, on=ValueError, wait=wait_none(), retry_if=should_retry)
+
+    @policy
+    def fail() -> None:
+        raise failure
+
+    @policy
+    async def fail_async() -> None:
+        raise failure
+
+    with pytest.raises(ValueError) as caught:
+        if asynchronous:
+            asyncio.run(fail_async())
+        else:
+            fail()
+
+    assert caught.value is failure
+    assert observed == [failure, failure]
 
 
 class TestRetryingWithNaturalFunction:

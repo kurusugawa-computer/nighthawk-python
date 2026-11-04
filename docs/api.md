@@ -190,15 +190,19 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
 
 ## Runtime executor boundary
 
-::: nighthawk.runtime.step_executor
+::: nighthawk.runtime.agent
     options:
       members:
         - AgentStepExecutor
-        - StepExecutor
-        - ConfigurableStepExecutor
         - StepExecutionAgent
         - SyncExecutionAgent
         - AsyncExecutionAgent
+
+::: nighthawk.runtime.step_executor
+    options:
+      members:
+        - StepExecutor
+        - ConfigurableStepExecutor
         - SyncStepExecutor
         - AsyncStepExecutor
 

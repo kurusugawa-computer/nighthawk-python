@@ -8,7 +8,9 @@ from types import ModuleType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, describe_value
+from nighthawk.runtime.inspection import describe_value
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 pytestmark = pytest.mark.skipif(sys.version_info < (3, 14), reason="CPython deferred annotations require Python 3.14")
 

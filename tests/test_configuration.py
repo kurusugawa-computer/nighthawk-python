@@ -9,6 +9,7 @@ from pydantic_ai.models.function import FunctionModel
 from pydantic_core import PydanticSerializationError
 
 import nighthawk as nh
+from nighthawk.configuration import ModelSelection
 
 
 class SensitiveModel(FunctionModel):
@@ -102,9 +103,9 @@ def test_model_identifier_requires_provider_and_model(model: str, field_name: st
         nh.StepExecutorConfiguration.model_validate({field_name: model})
     with pytest.raises(ValueError, match="provider:model"):
         if field_name == "execution_model":
-            nh.runtime.ModelSelection(execution_model=model)
+            ModelSelection(execution_model=model)
         else:
-            nh.runtime.ModelSelection(decision_model=model)
+            ModelSelection(decision_model=model)
 
 
 @pytest.mark.parametrize("field_name", ["execution_model", "decision_model"])
@@ -113,9 +114,7 @@ def test_provider_specific_model_name_is_preserved(field_name: str) -> None:
     configuration = nh.StepExecutorConfiguration.model_validate({field_name: model})
     assert getattr(configuration, field_name) == model
     assert nh.StepExecutorConfiguration.model_validate_json(configuration.model_dump_json()) == configuration
-    selection = (
-        nh.runtime.ModelSelection(execution_model=model) if field_name == "execution_model" else nh.runtime.ModelSelection(decision_model=model)
-    )
+    selection = ModelSelection(execution_model=model) if field_name == "execution_model" else ModelSelection(decision_model=model)
     assert selection.apply(nh.StepExecutorConfiguration()) == configuration
 
 

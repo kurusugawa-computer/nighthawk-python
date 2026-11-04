@@ -8,17 +8,12 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import (
-    OperationError,
-    Pass,
-    Return,
-    StepCandidate,
-    StepDefinition,
-    StepEnvironment,
-    StepOutcome,
-    StepRequest,
-    evaluate_expression_async,
-)
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.expression import evaluate_expression_async
+from nighthawk.runtime.operation_contract import OperationError
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass, Return, StepOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.prompts import build_user_prompt_text
 
 _module_value = object()

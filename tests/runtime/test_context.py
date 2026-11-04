@@ -9,7 +9,8 @@ from pydantic_ai.messages import BinaryContent, CachePoint, UserContent
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import ContextRequest, DefaultContextBuilder, assign_expression_async
+from nighthawk.runtime.assignment import assign_expression_async
+from nighthawk.runtime.context import ContextRequest, DefaultContextBuilder
 
 
 @nh.function

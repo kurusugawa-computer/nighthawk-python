@@ -14,7 +14,7 @@ def test_installed_distribution_preserves_function_types(package_python: Path, t
         "from typing import assert_type\n"
         "import nighthawk as nh\n"
         "from nighthawk.resilience import budget, circuit_breaker, timeout\n"
-        "from nighthawk.runtime import StepDefinition\n"
+        "from nighthawk.runtime.step_definition import StepDefinition\n"
         "\n"
         "@nh.function\n"
         "def label(text: str) -> str:\n"

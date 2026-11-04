@@ -4,15 +4,17 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.errors import ExecutionError, NighthawkError
-from nighthawk.runtime import StepCandidate, StepRequest
 from nighthawk.runtime.async_bridge import run_coroutine_synchronously
 from nighthawk.runtime.model_candidate import resolve_model_candidate
 from nighthawk.runtime.model_outcome import ModelPass, ModelRaise, ModelReturn
+from nighthawk.runtime.operation_contract import OperationRequest
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import ModelResponseExecutor, StubExecutor
 
 
 @pytest.mark.parametrize("error_type", ["MissingException", "invalid_exception"])
-@pytest.mark.parametrize("decision", [nh.oversight.Accept(), nh.oversight.Rewrite(outcome=nh.runtime.Pass())])
+@pytest.mark.parametrize("decision", [nh.oversight.Accept(), nh.oversight.Rewrite(outcome=Pass())])
 def test_invalid_raise_type_fails_before_inspection(error_type: str, decision: nh.oversight.StepCommitDecision) -> None:
     inspected: list[nh.oversight.StepCommit] = []
     invalid_exception = int  # noqa: F841
@@ -147,7 +149,7 @@ def test_undeclared_proposals_are_rejected_even_for_raise(raising: bool) -> None
 def test_denied_return_never_calls_inspector_or_evaluator() -> None:
     calls: list[str] = []
 
-    def inspect_expression(request: nh.runtime.OperationRequest) -> nh.oversight.Accept:
+    def inspect_expression(request: OperationRequest) -> nh.oversight.Accept:
         calls.append("inspected")
         return nh.oversight.Accept()
 

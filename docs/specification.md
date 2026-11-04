@@ -545,7 +545,7 @@ Builder exceptions and invalid content fail the step before model execution and 
 
 #### 8.2.5. Value inspection and name discovery
 
-`nighthawk.runtime.describe_value(value, cursor=None, max_items=8)` describes a known live value.
+`nighthawk.runtime.inspection.describe_value(value, cursor=None, max_items=8)` describes a known live value.
 It is an optional ordinary Python function, available to a step only through an explicit import, argument, local binding, embedded input, or scoped task reference.
 The runtime does not inject a value-description function into locals or globals, or unconditionally advertise one in the default prompt.
 Explicitly supplied callables use the ordinary signature and documentation renderer, under the name selected by the program or host.
@@ -1225,8 +1225,9 @@ Nighthawk defines two step executor protocols. Both are `@runtime_checkable`.
     - `run_step_async(*, request: StepRequest) -> StepCandidate`
 
 The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the union accepted by `nighthawk.run()`.
-Executor protocols, requests, candidates, resolved outcomes, and runtime operations are available from `nighthawk.runtime`.
-Its public exports participate in ordinary Python `dir()` and attribute inspection without requiring an active run.
+Import executor protocols from `nighthawk.runtime.step_executor`, requests and candidates from `nighthawk.runtime.step_request`, and resolved outcomes from `nighthawk.runtime.step_outcome`.
+Runtime operations are available from their owning modules, listed in the [API reference](api.md).
+Public interfaces participate in ordinary Python `dir()` and attribute inspection without requiring an active run.
 
 `StepRequest` holds `block_kind`, `input_binding_name_to_value`, `processed_natural_program`, `step_context`, ordered `output_binding_names`, `return_annotation`, `allowed_outcome_kinds`, and `allow_awaitable_return`.
 Its context owns the execution identity and environment; `execution_reference` and `binding_name_to_type` read them, and no second namespace is assembled for the executor.
@@ -1262,7 +1263,8 @@ Instance attributes:
 Any object implementing `SyncStepExecutor` or `AsyncStepExecutor` can serve as a backend. The protocol surface for `AsyncStepExecutor`:
 
 ```py
-from nighthawk.runtime import AsyncStepExecutor, StepCandidate, StepRequest
+from nighthawk.runtime.step_executor import AsyncStepExecutor
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 class MyExecutor(AsyncStepExecutor):
@@ -1377,7 +1379,7 @@ The contracts above own these semantics; this table collects review cases for im
 
 ## Explicit embedded steps
 
-`nighthawk.runtime.StepDefinition` holds a trusted Natural program, read and ordered write declarations, output and return annotations, loop context, and source location.
+`nighthawk.runtime.step_definition.StepDefinition` holds a trusted Natural program, read and ordered write declarations, output and return annotations, loop context, and source location.
 Definitions are immutable and copy their declaration sequences and annotation mapping, retaining annotation object identity.
 Declarations must be ordered sequences of unique ASCII Python identifiers, excluding keywords; read and write declarations may overlap.
 Malformed declarations or annotations for undeclared outputs raise `BindingDeclarationError` at construction, outside any execution lifecycle.

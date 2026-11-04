@@ -13,12 +13,13 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets.function import FunctionToolset
 from pydantic_ai.usage import RunUsage
 
-from nighthawk.runtime import StepEnvironment, describe_value
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.inspection import describe_value
 from nighthawk.runtime.step_context import ToolResultRenderingPolicy
+from nighthawk.tools._rendering import render_tool_result_json_text
 from nighthawk.tools._tool_return_content import resolve_tool_return_segments
-from nighthawk.tools.contracts import render_tool_result_json_text
 from nighthawk.tools.execution import ToolResultWrapperToolset, _normalize_tool_success
-from nighthawk.tools.provided import build_provided_tool_definitions
+from nighthawk.tools.provided import get_provided_tools
 from tests.support.prompts import build_step_context
 
 
@@ -143,7 +144,7 @@ def test_provider_and_content_boundary_preserve_nested_discovery_and_native_medi
 
     async def execute() -> None:
         run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
-        toolset = ToolResultWrapperToolset(FunctionToolset([definition.tool for definition in build_provided_tool_definitions()]))
+        toolset = ToolResultWrapperToolset(FunctionToolset(get_provided_tools()))
         tool_name_to_tool = await toolset.get_tools(run_context)
         result: Any = await toolset.call_tool(
             "nh_evaluate",

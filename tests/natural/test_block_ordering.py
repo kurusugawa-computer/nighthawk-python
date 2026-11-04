@@ -5,8 +5,9 @@ from dataclasses import dataclass
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
 from nighthawk.runtime.model_outcome import ModelPass
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 NATURAL_BLOCK_ORDERING_GLOBAL_NUMBER = 7
 
@@ -85,7 +86,7 @@ def test_input_binding_globals_are_injected_into_step_locals_for_agent_tool_eval
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):
-            from nighthawk.runtime import assign_expression
+            from nighthawk.runtime.assignment import assign_expression
             from nighthawk.runtime.model_outcome import ModelStepResponse
 
             assert deps is not None

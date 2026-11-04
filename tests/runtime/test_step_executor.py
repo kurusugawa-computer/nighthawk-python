@@ -6,8 +6,10 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
+from nighthawk.runtime.embedded import execute_step_async
 from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 from nighthawk.runtime.scoping import get_scope
+from nighthawk.runtime.step_definition import StepDefinition
 
 
 @pytest.mark.asyncio
@@ -39,8 +41,8 @@ async def test_executor_exposes_exception_binding_aliases(error_type: type[Excep
     with nh.run(execution_model=FunctionModel(respond)), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
         with pytest.raises(error_type if selection is not None else Exception, match="^invalid input$") as caught:
             if embedded:
-                await nh.runtime.execute_step_async(
-                    nh.runtime.StepDefinition(
+                await execute_step_async(
+                    StepDefinition(
                         "---\ndeny: [pass, return]\n---\nRaise <selected_error> with message 'invalid input'.",
                         input_binding_names=("selected_error",),
                     ),
@@ -65,7 +67,7 @@ def test_borrowed_agent_preserves_identity_without_constructing_a_managed_agent(
     def unexpected(configuration):
         pytest.fail("Borrowing an agent must not construct a managed agent")
 
-    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", unexpected)
+    monkeypatch.setattr("nighthawk.runtime.agent._create_execution_agent", unexpected)
     agent = FakeAgent()
     configuration = nh.StepExecutorConfiguration(execution_model="test:borrowed")
     step_executor = nh.AgentStepExecutor.from_agent(agent=agent, configuration=configuration)
@@ -90,7 +92,7 @@ def test_agent_executor_commits_write_binding_after_dotted_assignment() -> None:
 
     class FakeAgent:
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime import assign_expression
+            from nighthawk.runtime.assignment import assign_expression
 
             assert deps is not None
             _ = user_prompt
@@ -213,7 +215,7 @@ def test_natural_function_rejects_external_agent_model_switch() -> None:
             self.seen_model_identifiers: list[str] = []
 
         def run_sync(self, user_prompt: str, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-            from nighthawk.runtime import assign_expression
+            from nighthawk.runtime.assignment import assign_expression
             from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
 
             assert deps is not None
@@ -332,7 +334,7 @@ def test_executor_rejects_invalid_configuration_before_creating_agent(invalid: o
     def unexpected(configuration):
         pytest.fail("Invalid configuration constructed an agent")
 
-    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", unexpected)
+    monkeypatch.setattr("nighthawk.runtime.agent._create_execution_agent", unexpected)
     with pytest.raises(TypeError, match="configuration"):
         nh.AgentStepExecutor(configuration=invalid)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="configuration"):

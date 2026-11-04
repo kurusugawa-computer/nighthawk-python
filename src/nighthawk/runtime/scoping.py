@@ -216,8 +216,8 @@ def run(
     Raises:
         TypeError: If the executor does not implement either execution protocol or the usage meter is invalid.
     """
+    from .agent import AgentStepExecutor
     from .context import DefaultContextBuilder
-    from .step_executor import AgentStepExecutor
 
     if not isinstance(run_id, (str, UnsetType)):
         raise TypeError("run_id must be a nonempty string or UNSET")

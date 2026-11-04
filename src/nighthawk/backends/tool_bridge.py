@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import tiktoken
 from pydantic import ValidationError
 from pydantic_ai import RunContext
+from pydantic_ai._instrumentation import InstrumentationNames
 
-# NOTE: pydantic_ai private API -- no public alternative for custom backends
-# that need to bridge RunContext across non-Pydantic-AI transports. Monitor
-# pydantic_ai releases and keep private access centralized in this module.
-from pydantic_ai._run_context import set_current_run_context
+# Pydantic AI exposes its active transport context only through this private module.
+from pydantic_ai._run_context import get_current_run_context, set_current_run_context
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 from pydantic_ai.messages import RetryInfo, ToolCallPart, ToolReturnPart
 from pydantic_ai.models import ModelRequestParameters
@@ -26,19 +26,73 @@ from ..runtime.step_context import (
     ToolResultRenderingPolicy,
     resolve_tool_result_rendering_policy,
 )
-from ..runtime.tool_calls import generate_tool_call_id, run_tool_instrumented
 from ..tools._admission import with_tool_admission
-from ..tools.contracts import (
-    RetryPromptObservation,
-    ToolHandlerResult,
-    ToolOutcome,
-    build_tool_handler_result_trace_text,
-    build_tool_result_observation,
-)
+from ..tools._rendering import build_tool_handler_result_trace_text
+from ..tools.contracts import RetryPromptObservation, ToolHandlerResult, ToolOutcome, ToolResultObservation
 from ..tools.execution import ToolResultWrapperToolset, _build_standard_tool_return_value, _normalize_tool_success
+from ..ulid import generate_ulid
 from .tool_transport import wrap_transported_tool
 
 type ToolHandler = Callable[[dict[str, Any]], Awaitable[ToolHandlerResult]]
+
+
+def _build_tool_span_attributes(
+    *,
+    tool_name: str,
+    tool_call_id: str,
+    argument_name_to_value: dict[str, Any],
+    instrumentation_names: InstrumentationNames,
+    include_content: bool,
+) -> dict[str, Any]:
+    attribute_name_to_value: dict[str, Any] = {
+        "gen_ai.tool.name": tool_name,
+        "logfire.msg": f"running tool: {tool_name}",
+    }
+
+    attribute_name_to_value["gen_ai.tool.call.id"] = tool_call_id
+
+    if include_content:
+        attribute_name_to_value[instrumentation_names.tool_arguments_attr] = json.dumps(argument_name_to_value, default=str)
+        attribute_name_to_value["logfire.json_schema"] = json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    instrumentation_names.tool_arguments_attr: {"type": "object"},
+                    instrumentation_names.tool_result_attr: {"type": "object"},
+                    "gen_ai.tool.name": {},
+                    "gen_ai.tool.call.id": {},
+                },
+            }
+        )
+
+    return attribute_name_to_value
+
+
+async def _run_tool_instrumented(
+    *,
+    tool_name: str,
+    argument_name_to_value: dict[str, Any],
+    call: Callable[[], Awaitable[ToolHandlerResult]],
+    build_trace_text: Callable[[ToolHandlerResult], str],
+    run_context: RunContext[Any],
+    tool_call_id: str,
+) -> ToolHandlerResult:
+    instrumentation_names = InstrumentationNames.for_version(run_context.instrumentation_version)
+    include_content = run_context.trace_include_content
+
+    attribute_name_to_value = _build_tool_span_attributes(
+        tool_name=tool_name,
+        tool_call_id=tool_call_id,
+        argument_name_to_value=argument_name_to_value,
+        instrumentation_names=instrumentation_names,
+        include_content=include_content,
+    )
+
+    with run_context.tracer.start_as_current_span(instrumentation_names.get_tool_span_name(tool_name), attributes=attribute_name_to_value) as span:
+        result = await call()
+        if include_content and span.is_recording():
+            span.set_attribute(instrumentation_names.tool_result_attr, build_trace_text(result))
+        return result
 
 
 class _ObservedToolset(ToolResultWrapperToolset):
@@ -60,43 +114,8 @@ class _ObservedToolset(ToolResultWrapperToolset):
         return self.return_value
 
 
-def _build_retry_prompt_observation(*, retry_text: str) -> RetryPromptObservation:
-    return {
-        "kind": "retry_prompt",
-        "retry_text": retry_text,
-    }
-
-
-def build_tool_handler_result_trace_payload_text(
-    *,
-    tool_handler_result: ToolHandlerResult,
-    rendering_policy: ToolResultRenderingPolicy,
-    encoding: tiktoken.Encoding,
-) -> str:
-    return build_tool_handler_result_trace_text(
-        tool_handler_result=tool_handler_result,
-        max_tokens=rendering_policy.tool_result_max_tokens,
-        encoding=encoding,
-        style=rendering_policy.json_renderer_style,
-    )
-
-
-def _get_current_pydantic_ai_run_context() -> object | None:
-    from pydantic_ai._run_context import get_current_run_context
-
-    return get_current_run_context()
-
-
-def get_current_step_run_context_optional() -> RunContext[StepContext] | None:
-    run_context = _get_current_pydantic_ai_run_context()
-    deps = getattr(run_context, "deps", None)
-    if run_context is None or not isinstance(deps, StepContext):
-        return None
-    return cast(RunContext[StepContext], run_context)
-
-
 def get_current_step_run_context_required(*, boundary_name: str) -> RunContext[StepContext]:
-    run_context = _get_current_pydantic_ai_run_context()
+    run_context = get_current_run_context()
     if run_context is None:
         raise NighthawkError(f"{boundary_name} requires an active RunContext")
     deps = getattr(run_context, "deps", None)
@@ -106,13 +125,13 @@ def get_current_step_run_context_required(*, boundary_name: str) -> RunContext[S
 
 
 def resolve_current_tool_result_rendering_policy() -> ToolResultRenderingPolicy:
-    run_context = get_current_step_run_context_optional()
-    if run_context is None:
+    run_context = get_current_run_context()
+    if run_context is None or not isinstance(run_context.deps, StepContext):
         return DEFAULT_TOOL_RESULT_RENDERING_POLICY
     return resolve_tool_result_rendering_policy(run_context.deps.tool_result_rendering_policy)
 
 
-def resolve_allowed_tool_names(
+def _resolve_allowed_tool_names(
     *,
     model_request_parameters: ModelRequestParameters,
     configured_allowed_tool_names: tuple[str, ...] | None,
@@ -157,7 +176,7 @@ async def execute_tool_call(
             if run_context.deps._operation_state.failure is not None:
                 raise run_context.deps._operation_state.failure from run_context.deps._operation_state.failure.__cause__
             if observed_toolset.outcome is not None and (observed_toolset.outcome["error"] or {}).get("status") == "rejected":
-                return build_tool_result_observation(tool_outcome=observed_toolset.outcome)
+                return ToolResultObservation(kind="tool_result", tool_outcome=observed_toolset.outcome)
             # MCP and SDK transports mark retry prompts as errors, so the text omits Pydantic AI's error wrapper.
             retry_text = ToolReturnPart(
                 tool_name=tool_name,
@@ -166,13 +185,13 @@ async def execute_tool_call(
                 outcome="retried",
                 retry=RetryInfo(cause="validation_error"),
             ).model_response_str(wrap_if_error=False)
-            return _build_retry_prompt_observation(retry_text=retry_text)
+            return RetryPromptObservation(kind="retry_prompt", retry_text=retry_text)
         except ModelRetry as exception:
             if run_context.deps._operation_state.failure is not None:
                 raise run_context.deps._operation_state.failure from run_context.deps._operation_state.failure.__cause__
             if observed_toolset.outcome is not None and (observed_toolset.outcome["error"] or {}).get("status") == "rejected":
-                return build_tool_result_observation(tool_outcome=observed_toolset.outcome)
-            return _build_retry_prompt_observation(retry_text=exception.message)
+                return ToolResultObservation(kind="tool_result", tool_outcome=observed_toolset.outcome)
+            return RetryPromptObservation(kind="retry_prompt", retry_text=exception.message)
 
         if run_context.deps._operation_state.failure is not None:
             raise run_context.deps._operation_state.failure
@@ -188,7 +207,7 @@ async def execute_tool_call(
         else:
             tool_outcome = _normalize_tool_success(value)
 
-    return build_tool_result_observation(tool_outcome=tool_outcome)
+    return ToolResultObservation(kind="tool_result", tool_outcome=tool_outcome)
 
 
 async def build_tool_name_to_handler(
@@ -216,7 +235,7 @@ async def build_tool_name_to_handler(
             tool_name: str = tool_name,
             tool: Any = tool,
         ) -> ToolHandlerResult:
-            tool_call_id = generate_tool_call_id()
+            tool_call_id = generate_ulid()
             from dataclasses import replace
 
             tool_run_context = replace(
@@ -238,18 +257,17 @@ async def build_tool_name_to_handler(
                     tool_call_id=tool_call_id,
                 )
 
-            def build_trace_text(tool_handler_result: ToolHandlerResult) -> str | None:
-                if not tool_run_context.trace_include_content:
-                    return None
-                return build_tool_handler_result_trace_payload_text(
+            def build_trace_text(tool_handler_result: ToolHandlerResult) -> str:
+                return build_tool_handler_result_trace_text(
                     tool_handler_result=tool_handler_result,
-                    rendering_policy=rendering_policy,
+                    max_tokens=rendering_policy.tool_result_max_tokens,
                     encoding=encoding,
+                    style=rendering_policy.json_renderer_style,
                 )
 
-            return await run_tool_instrumented(
+            return await _run_tool_instrumented(
                 tool_name=tool_name,
-                arguments=arguments,
+                argument_name_to_value=arguments,
                 call=call,
                 build_trace_text=build_trace_text,
                 run_context=tool_run_context,
@@ -273,7 +291,7 @@ async def prepare_allowed_tools(
     )
     available_tool_names = tuple(tool_name_to_handler.keys())
 
-    allowed_tool_names = resolve_allowed_tool_names(
+    allowed_tool_names = _resolve_allowed_tool_names(
         model_request_parameters=model_request_parameters,
         configured_allowed_tool_names=configured_allowed_tool_names,
         available_tool_names=available_tool_names,

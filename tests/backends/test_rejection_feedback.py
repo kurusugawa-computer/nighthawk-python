@@ -23,7 +23,7 @@ from nighthawk.backends.tool_bridge import build_tool_name_to_handler
 from nighthawk.backends.tool_transport import ToolTransport
 from nighthawk.lifecycle import StepLifecycle
 from nighthawk.oversight import Accept, Oversight, RejectOperation
-from nighthawk.runtime import OperationFinished, OperationRequest
+from nighthawk.runtime.operation_contract import OperationFinished, OperationRequest
 from nighthawk.runtime.step_context import ToolResultRenderingPolicy
 from tests.support.contexts import new_context
 from tests.support.executors import StubExecutor

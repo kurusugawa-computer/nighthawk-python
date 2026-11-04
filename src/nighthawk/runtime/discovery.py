@@ -98,25 +98,25 @@ class DiscoveryResult(dict[str, object]):
 
 
 @dataclass(frozen=True)
-class NamePage:
+class _NamePage:
     names: tuple[str, ...]
     next_cursor: str | None
     error: str | None = None
 
 
-def page_names(names: tuple[str, ...], *, source: str, cursor: str | None, max_items: int) -> NamePage:
+def page_names(names: tuple[str, ...], *, source: str, cursor: str | None, max_items: int) -> _NamePage:
     if type(max_items) is not int or not 1 <= max_items <= 100:
-        return NamePage((), None, "max_items must be an integer from 1 to 100")
+        return _NamePage((), None, "max_items must be an integer from 1 to 100")
     fingerprint = hashlib.sha256((source + "\0" + "\0".join(names)).encode()).hexdigest()[:24]
     offset = 0
     if cursor is not None:
         if type(cursor) is not str:
-            return NamePage((), None, "The cursor must be a string")
+            return _NamePage((), None, "The cursor must be a string")
         cursor_fingerprint, separator, offset_text = cursor.partition(":")
         if not separator or cursor_fingerprint != fingerprint or not offset_text.isascii() or not offset_text.isdecimal() or len(offset_text) > 12:
-            return NamePage((), None, "The cursor is invalid or the listing changed")
+            return _NamePage((), None, "The cursor is invalid or the listing changed")
         offset = int(offset_text)
         if offset <= 0 or offset >= len(names):
-            return NamePage((), None, "The cursor is outside this listing")
+            return _NamePage((), None, "The cursor is outside this listing")
     end = min(offset + max_items, len(names))
-    return NamePage(names[offset:end], f"{fingerprint}:{end}" if end < len(names) else None)
+    return _NamePage(names[offset:end], f"{fingerprint}:{end}" if end < len(names) else None)

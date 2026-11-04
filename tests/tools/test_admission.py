@@ -17,7 +17,7 @@ from pydantic_ai.usage import RunUsage
 import nighthawk as nh
 from nighthawk.backends.tool_bridge import execute_tool_call
 from nighthawk.lifecycle import StepFailed, StepFinished, StepLifecycle
-from nighthawk.runtime import OperationFinished
+from nighthawk.runtime.operation_contract import OperationFinished
 from nighthawk.tools.execution import ToolResultWrapperToolset
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context

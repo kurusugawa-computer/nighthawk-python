@@ -19,7 +19,7 @@ from ..json_renderer import project_discovery_value, to_jsonable_value
 from ..runtime._user_content import is_top_level_sequence_payload
 from ..runtime.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
 from ..runtime.model_response import record_response_rejection
-from ..runtime.operation_contract import OperationError, OperationRejectedError, OperationRejection
+from ..runtime.operation_contract import OperationError, OperationRejectedError
 from ..runtime.operations import OperationExecution, execute_operation_async, new_operation_request
 from ..runtime.step_context import StepContext
 from .contracts import ErrorKind, ToolError, ToolOutcome
@@ -88,10 +88,6 @@ def _build_standard_tool_return_value(*, tool_outcome: ToolOutcome) -> object:
     }
 
 
-def rejection_tool_outcome(rejection: OperationRejection) -> ToolOutcome:
-    return {"payload": None, "error": rejection.model_feedback()}
-
-
 async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]], step_context: StepContext) -> ToolOutcome:
     """Exceptions from Pydantic AI toolset plumbing are handled in ``tool_bridge.execute_tool_call``."""
 
@@ -101,7 +97,7 @@ async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]], st
         if step_context._operation_state.failure is not None:
             raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
         record_response_rejection(step_context, exception.rejection)
-        return rejection_tool_outcome(exception.rejection)
+        return {"payload": None, "error": exception.rejection.model_feedback()}
     except (ModelRetry, CallDeferred, ApprovalRequired):
         raise
     except OperationError as exception:
@@ -141,14 +137,9 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
 
             return await execute_operation_async(run_context.deps, request, admit=lambda: None, execute=execute)
 
-        tool_result = await _run_tool_and_normalize(tool_call, run_context.deps)
-        return tool_result
+        return await _run_tool_and_normalize(tool_call, run_context.deps)
 
-    # DEPENDENCY: Pydantic AI's WrapperToolset calls self.call_tool() rather
-    # than self.call_tool_outcome().  Keep the upstream parameter name ``ctx``
-    # on this compatibility shim, and use ``run_context`` on Nighthawk-owned
-    # methods. Re-evaluate after pydantic-ai drops WrapperToolset or exposes a
-    # ToolOutcome-aware hook.
+    # Pydantic AI calls this method with its keyword parameter ctx.
     async def call_tool(
         self,
         name: str,
@@ -156,11 +147,6 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
         ctx: RunContext[StepContext],
         tool: ToolsetTool[StepContext],
     ) -> object:
-        """Pydantic AI compatibility shim -- the authoritative API is ``call_tool_outcome``.
-
-        Called by Pydantic AI's tool manager (``self.toolset.call_tool(...)``).
-        Must not be removed while Nighthawk uses Pydantic AI's ``WrapperToolset``.
-        """
         tool_outcome = await self.call_tool_outcome(name, tool_args, ctx, tool)
         if contains_discovery_result(tool_outcome["payload"]):
             import tiktoken

@@ -5,7 +5,10 @@ import inspect
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepDefinition, describe_value, execute_step_async
+from nighthawk.runtime.embedded import execute_step_async
+from nighthawk.runtime.inspection import describe_value
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass
 from tests.support.model_evaluation import ModelEvaluation
 
 pytestmark = pytest.mark.asyncio

@@ -10,7 +10,11 @@ from pydantic import AfterValidator, TypeAdapter, ValidationError
 import nighthawk as nh
 from nighthawk.lifecycle import StepFinished, StepLifecycle, StepRaised
 from nighthawk.oversight import Accept, Oversight, Rewrite
-from nighthawk.runtime import OperationFinished, Pass, Raise, Return, StepCandidate, StepEnvironment, StepRequest
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.expression import evaluate_expression
+from nighthawk.runtime.operation_contract import OperationFinished
+from nighthawk.runtime.step_outcome import Pass, Raise, Return
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 @dataclass
@@ -231,7 +235,7 @@ def test_finalization_reads_current_python_output_associations(nonlocal_output: 
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            nh.runtime.evaluate_expression(request.step_context, "change_value()" if nonlocal_output else "_change_global_output()")
+            evaluate_expression(request.step_context, "change_value()" if nonlocal_output else "_change_global_output()")
             assert request.snapshot_output_bindings() == {"value" if nonlocal_output else "_global_output": 7}
             return StepCandidate(outcome=Pass())
 
@@ -267,7 +271,7 @@ def test_deleted_python_output_is_not_resurrected_at_finalization() -> None:
 
     class Executor:
         def run_step(self, *, request: StepRequest) -> StepCandidate:
-            nh.runtime.evaluate_expression(request.step_context, "delete_value()")
+            evaluate_expression(request.step_context, "delete_value()")
             assert request.snapshot_output_bindings() == {}
             return StepCandidate(outcome=Pass())
 

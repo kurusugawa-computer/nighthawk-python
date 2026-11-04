@@ -6,8 +6,9 @@ import pytest
 from pydantic import ValidationError
 
 import nighthawk as nh
+from nighthawk.configuration import ModelSelection
 from nighthawk.errors import ExecutionError
-from nighthawk.runtime import StepCandidate, StepRequest
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import CallbackExecutor
 
 
@@ -40,7 +41,7 @@ def test_readme_example(
 
     executor = CallbackExecutor(respond)
 
-    def select_executor(self: nh.AgentStepExecutor, selection: nh.runtime.ModelSelection) -> CallbackExecutor:
+    def select_executor(self: nh.AgentStepExecutor, selection: ModelSelection) -> CallbackExecutor:
         assert selection.apply(self.configuration).execution_model is not None
         return executor
 

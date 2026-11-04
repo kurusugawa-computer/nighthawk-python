@@ -12,7 +12,8 @@ from pydantic_ai.models.function import FunctionModel
 import nighthawk as nh
 from nighthawk.lifecycle import StepLifecycle
 from nighthawk.oversight import AbortStep, Accept, Oversight, StepAbortedError
-from nighthawk.runtime import OperationFinished, OperationRequest, StepRequest
+from nighthawk.runtime.operation_contract import OperationFinished, OperationRequest
+from nighthawk.runtime.step_request import StepRequest
 from tests.support.contexts import new_context
 
 

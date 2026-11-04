@@ -18,12 +18,12 @@ from ..runtime.step_context import (
     ToolResultRenderingPolicy,
     resolve_tool_result_rendering_policy,
 )
-from ..tools.contracts import ToolHandlerResult, ToolOutcome, build_tool_result_observation
+from ..tools.contracts import ToolHandlerResult, ToolOutcome, ToolResultObservation
 from .mcp_boundary import call_tool_for_low_level_mcp_server, tool_handler_result_to_low_level_mcp_result
 from .tool_bridge import get_current_step_run_context_required
 
 
-class McpServer:
+class _McpServer:
     def __init__(
         self,
         *,
@@ -94,7 +94,7 @@ class McpServer:
                     "payload": None,
                     "error": {"kind": "resolution", "message": f"Unknown tool: {name}", "guidance": "Choose a visible tool name and retry."},
                 }
-                tool_handler_result: ToolHandlerResult = build_tool_result_observation(tool_outcome=tool_outcome)
+                tool_handler_result: ToolHandlerResult = ToolResultObservation(kind="tool_result", tool_outcome=tool_outcome)
                 return tool_handler_result_to_low_level_mcp_result(
                     tool_name=name,
                     tool_handler_result=tool_handler_result,
@@ -200,7 +200,7 @@ async def mcp_server_if_needed(
     parent_run_context = get_current_step_run_context_required(boundary_name="Codex MCP tool server")
     tool_result_rendering_policy = resolve_tool_result_rendering_policy(parent_run_context.deps.tool_result_rendering_policy)
 
-    server = McpServer(
+    server = _McpServer(
         tool_name_to_tool_definition=tool_name_to_tool_definition,
         tool_name_to_handler=tool_name_to_handler,
         tool_result_rendering_policy=tool_result_rendering_policy,

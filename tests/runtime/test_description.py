@@ -8,8 +8,8 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel, field_serializer
 
-from nighthawk.runtime import describe_value
 from nighthawk.runtime.description import describe_callable, describe_public_members, discover_type_alias_reference_names
+from nighthawk.runtime.inspection import describe_value
 from tests.support.prompts import build_step_context, build_user_prompt_text
 
 

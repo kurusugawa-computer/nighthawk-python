@@ -7,7 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 import nighthawk as nh
-from nighthawk.runtime import Raise, StepCandidate, StepRequest
+from nighthawk.runtime.step_outcome import Raise
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import CallbackExecutor
 
 

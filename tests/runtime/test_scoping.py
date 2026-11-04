@@ -4,7 +4,9 @@ import pytest
 
 import nighthawk as nh
 from nighthawk.errors import NighthawkError
-from nighthawk.runtime.step_executor import AgentStepExecutor
+from nighthawk.runtime.agent import AgentStepExecutor
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.executors import StubExecutor
 
 
@@ -26,12 +28,12 @@ def test_invalid_executor_leaves_parent_context_intact(entry: str, invalid: obje
 @pytest.mark.parametrize("asynchronous", [False, True])
 def test_run_and_scope_accept_each_executor_protocol(asynchronous: bool) -> None:
     class Synchronous:
-        def run_step(self, *, request: nh.runtime.StepRequest) -> nh.runtime.StepCandidate:
-            return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            return StepCandidate(outcome=Pass())
 
     class Asynchronous:
-        async def run_step_async(self, *, request: nh.runtime.StepRequest) -> nh.runtime.StepCandidate:
-            return nh.runtime.StepCandidate(outcome=nh.runtime.Pass())
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            return StepCandidate(outcome=Pass())
 
     executor = Asynchronous() if asynchronous else Synchronous()
     with nh.run(executor):

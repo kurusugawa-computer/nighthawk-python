@@ -87,7 +87,8 @@ Neither an empty selection nor a later rejection undoes earlier calls or in-plac
 For an explicit combination of current outputs and replacements, use ordinary Python:
 
 ```py
-from nighthawk.runtime import Pass, StepCandidate, StepRequest
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 def select_result(request: StepRequest, result: object) -> StepCandidate:

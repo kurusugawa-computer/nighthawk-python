@@ -3,7 +3,8 @@ from collections.abc import AsyncIterator
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Break, Continue, StepCandidate
+from nighthawk.runtime.step_outcome import Break, Continue
+from nighthawk.runtime.step_request import StepCandidate
 from nighthawk.testing import ScriptedExecutor
 
 

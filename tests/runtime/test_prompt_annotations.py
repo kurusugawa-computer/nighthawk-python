@@ -6,7 +6,9 @@ import pytest
 from pydantic_ai.messages import BinaryContent
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepEnvironment, StepRequest
+from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from tests.support.prompts import build_step_context, build_user_prompt_content, build_user_prompt_text, locals_section, prompt_content_to_text
 
 

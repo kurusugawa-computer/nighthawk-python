@@ -7,8 +7,11 @@ from types import CellType
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime import Pass, StepCandidate, StepRequest, assign_expression_async, evaluate_expression_async
+from nighthawk.runtime.assignment import assign_expression_async
 from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.runtime.expression import evaluate_expression_async
+from nighthawk.runtime.step_outcome import Pass
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 
 
 def test_precedence_and_explicit_source_selection() -> None:

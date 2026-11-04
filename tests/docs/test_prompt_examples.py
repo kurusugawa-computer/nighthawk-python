@@ -7,7 +7,7 @@ import pytest
 import nighthawk as nh
 from nighthawk.configuration import StepExecutorConfiguration
 from nighthawk.natural.blocks import extract_bindings
-from nighthawk.runtime import MISSING_ANNOTATION, infer_binding_types
+from nighthawk.runtime.bindings import MISSING_ANNOTATION, infer_binding_types
 from nighthawk.runtime.prompt import build_user_prompt
 from tests.support.contexts import new_step_context
 from tests.support.prompts import prompt_content_to_text

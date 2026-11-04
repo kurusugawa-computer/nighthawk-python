@@ -9,8 +9,11 @@ from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime import Pass, Return, StepCandidate, StepDefinition, StepRequest, evaluate_expression, execute_step
-from nighthawk.runtime.step_outcome import StepOutcome
+from nighthawk.runtime.embedded import execute_step
+from nighthawk.runtime.expression import evaluate_expression
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Break, Continue, Pass, Return, StepOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import InspectingExecutor, ModelResponseExecutor
 
@@ -232,7 +235,7 @@ async def test_preparation_freezes_associations_but_keeps_objects_live(execute: 
     assert shared == [1]
 
 
-@pytest.mark.parametrize("outcome", [nh.runtime.Break(), nh.runtime.Continue(), Return("12")])
+@pytest.mark.parametrize("outcome", [Break(), Continue(), Return("12")])
 @pytest.mark.asyncio
 async def test_control_results_are_returned_after_saving(execute: Callable[..., Awaitable[StepOutcome]], outcome: StepOutcome) -> None:
     saved_name_to_value: dict[str, object] = {}

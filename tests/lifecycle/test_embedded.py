@@ -10,8 +10,10 @@ from pydantic import AfterValidator
 import nighthawk as nh
 from nighthawk.lifecycle import StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised
 from nighthawk.oversight import Accept, Oversight
-from nighthawk.runtime import Pass, Raise, StepCandidate, StepDefinition, StepRequest, execute_step_async
-from nighthawk.runtime.step_outcome import StepOutcome
+from nighthawk.runtime.embedded import execute_step_async
+from nighthawk.runtime.step_definition import StepDefinition
+from nighthawk.runtime.step_outcome import Pass, Raise, StepOutcome
+from nighthawk.runtime.step_request import StepCandidate, StepRequest
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import InspectingExecutor
 

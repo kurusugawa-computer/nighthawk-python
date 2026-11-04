@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 import nighthawk as nh
+from nighthawk.configuration import ModelSelection
 from nighthawk.runtime.scoping import get_scope
 from nighthawk.testing import ScriptedExecutor
 from tests.support.executors import StubExecutor
@@ -15,7 +16,7 @@ from tests.support.host_controls import PreservingExecutor, RecordingHandler, Re
 
 def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
     constructions: list[object] = []
-    monkeypatch.setattr("nighthawk.runtime.step_executor._create_execution_agent", lambda configuration: constructions.append(configuration))
+    monkeypatch.setattr("nighthawk.runtime.agent._create_execution_agent", lambda configuration: constructions.append(configuration))
 
     @nh.function
     def function() -> None:
@@ -29,7 +30,7 @@ def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytes
         function()
     assert not constructions
     with pytest.raises(ValueError, match="exclusively"):
-        nh.runtime.ModelSelection(execution_model="test:A", configuration=nh.StepExecutorConfiguration())
+        ModelSelection(execution_model="test:A", configuration=nh.StepExecutorConfiguration())
     with (
         nh.run(StubExecutor()),
         pytest.raises(ValueError, match="exclusively"),
@@ -37,8 +38,8 @@ def test_selection_is_inert_and_validates_exclusive_arguments(monkeypatch: pytes
     ):
         pass
     with pytest.raises(ValueError):
-        nh.runtime.ModelSelection()
-    assert nh.runtime.ModelSelection(execution_model=None).apply(nh.StepExecutorConfiguration()).execution_model is None
+        ModelSelection()
+    assert ModelSelection(execution_model=None).apply(nh.StepExecutorConfiguration()).execution_model is None
 
 
 @pytest.mark.parametrize("outcome", ["success", "failure", "cancel"])
@@ -107,7 +108,7 @@ def test_unsupported_resolvers_and_subclasses_fail_without_unwrapping() -> None:
         pass
 
     class Invalid(StubExecutor):
-        def resolve_model_selection(self, selection: nh.runtime.ModelSelection) -> Any:
+        def resolve_model_selection(self, selection: ModelSelection) -> Any:
             return object()
 
     with nh.run(Invalid()), pytest.raises(nh.NighthawkError, match="return a StepExecutor"), nh.scope(execution_model="test:B"):
@@ -285,7 +286,7 @@ def test_invalid_scope_input_does_not_call_model_resolver() -> None:
 
 @pytest.mark.parametrize("argument_name, value", [("run_id", None), ("run_id", ""), ("usage_meter", None)])
 def test_invalid_run_input_does_not_call_model_resolver(argument_name: str, value: object) -> None:
-    resolutions: list[nh.runtime.ModelSelection] = []
+    resolutions: list[ModelSelection] = []
 
     class Executor:
         def run_step(self, *, request):

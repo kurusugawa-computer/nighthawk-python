@@ -7,7 +7,8 @@ import pytest
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 import nighthawk as nh
-from nighthawk.runtime import OperationError, assign_expression
+from nighthawk.runtime.assignment import assign_expression
+from nighthawk.runtime.operation_contract import OperationError
 from tests.support.contexts import new_context as context_for
 from tests.support.contexts import new_step_context
 
@@ -191,7 +192,8 @@ def test_validation_failure_does_not_close_nested_application_awaitable() -> Non
 
     import pytest
 
-    from nighthawk.runtime import OperationError, assign_expression_async
+    from nighthawk.runtime.assignment import assign_expression_async
+    from nighthawk.runtime.operation_contract import OperationError
 
     async def inner() -> int:
         return 5
@@ -208,3 +210,88 @@ def test_validation_failure_does_not_close_nested_application_awaitable() -> Non
         assert inspect.getcoroutinestate(retained) == inspect.CORO_CREATED
     finally:
         retained.close()
+
+
+def test_assign_rejects_rebind_of_read_binding() -> None:
+    step_context = new_step_context(
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_read_guard", "test_read_guard"),
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"data": {"key": "old"}},
+        output_binding_names=set(),
+        read_binding_names=frozenset({"data"}),
+        task_name_to_value={},
+    )
+
+    with pytest.raises(OperationError):
+        assign_expression(step_context, "data", "{'key': 'new'}")
+
+    assert step_context.environment.resolve("data") == {"key": "old"}
+
+
+def test_assign_allows_rebind_when_both_read_and_write_binding() -> None:
+    step_context = new_step_context(
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_read_write", "test_read_write"),
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"data": {"key": "old"}},
+        output_binding_names={"data"},
+        read_binding_names=frozenset(),
+        task_name_to_value={},
+    )
+
+    result = assign_expression(step_context, "data", "{'key': 'new'}")
+
+    assert result.value == {"key": "new"}
+    assert step_context.environment.resolve("data") == {"key": "new"}
+
+
+def test_assign_allows_multiple_rebinds_of_new_local() -> None:
+    step_context = new_step_context(
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_new_local", "test_new_local"),
+        step_globals={"__builtins__": __builtins__},
+        step_locals={},
+        output_binding_names=set(),
+        read_binding_names=frozenset(),
+        task_name_to_value={},
+    )
+
+    assign_expression(step_context, "temp", "1")
+    assert step_context.environment.resolve("temp") == 1
+
+    assign_expression(step_context, "temp", "2")
+    assert step_context.environment.resolve("temp") == 2
+
+
+def test_assign_dotted_path_updates_write_binding_root() -> None:
+    class Model(BaseModel, validate_assignment=True):
+        value: int = 0
+
+    step_context = new_step_context(
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_write_root_dirty", "test_write_root_dirty"),
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"model": Model()},
+        output_binding_names={"model"},
+        read_binding_names=frozenset(),
+        task_name_to_value={},
+    )
+
+    assign_expression(step_context, "model.value", "2")
+
+    assert step_context.environment.resolve("model") == Model(value=2)
+
+
+def test_assign_dotted_path_updates_read_binding_root() -> None:
+    class Model(BaseModel, validate_assignment=True):
+        value: int = 0
+
+    step_context = new_step_context(
+        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_read_root_not_dirty", "test_read_root_not_dirty"),
+        step_globals={"__builtins__": __builtins__},
+        step_locals={"model": Model()},
+        output_binding_names=set(),
+        read_binding_names=frozenset({"model"}),
+        task_name_to_value={},
+    )
+
+    assign_expression(step_context, "model.value", "2")
+
+    assert step_context.environment.resolve("model") == Model(value=2)
