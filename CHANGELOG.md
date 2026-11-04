@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0]
+
 ### Changed
 
 - Breaking: `nh.get_scope()` returns the active frozen `nh.Scope`, whose fields mirror the `nh.scope()` parameters plus the current `execution_reference`; `nh.run()` and `nh.scope()` yield that record.
@@ -493,7 +495,8 @@ Invalid initial results fail before oversight; use resilience retries to recover
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.15.0...v0.16.0
