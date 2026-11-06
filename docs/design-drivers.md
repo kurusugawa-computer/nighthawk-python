@@ -188,7 +188,7 @@ Each application retains its own evaluators, operational rules, and environment;
 
 ## Hosts selecting bindings at invocation time
 
-**Status:** Supported by the [explicit embedded-step contract](specification.md#explicit-embedded-steps), with deterministic coverage in `tests/runtime/test_embedded.py` and executable [integration examples](embedded-execution.md).
+**Status:** Supported by the [explicit embedded-step contract](specification.md#explicit-embedded-steps), with deterministic coverage in `tests/core/test_embedded.py` and executable [integration examples](embedded-execution.md).
 This status covers runtime behavior; comparative authoring and reuse benefits remain unevaluated here.
 
 A host can select different trusted Natural programs, read/write names, and Python output contracts at each invocation.
@@ -206,7 +206,7 @@ Compare the effort and complexity of constructing and changing this integration 
 
 ## Explicit sharing across nested Natural calls
 
-**Status:** The name-resolution contract is covered by deterministic tests in `tests/runtime/test_explicit_sharing.py`, with executable synchronous and asynchronous [sharing examples](runtime-configuration.md#selecting-shared-values-with-python).
+**Status:** The name-resolution contract is covered by deterministic tests in `tests/core/test_explicit_sharing.py`, with executable synchronous and asynchronous [sharing examples](runtime-configuration.md#selecting-shared-values-with-python).
 The originating evidence is one embedded conversation host's v0.15.0 reproduction; independent application evidence and model-quality improvements remain unevaluated.
 
 The host calls reusable Natural functions from a step containing conversation input and temporary working values.
@@ -240,7 +240,7 @@ The small model sample does not establish broad reliability, lower authoring eff
 
 ## Correcting refused operations within a Natural step
 
-**Status:** Execution contracts have deterministic coverage in `tests/runtime/test_operation_recovery.py` and `tests/backends/test_rejection_feedback.py`, with executable [model and custom-executor examples](operation-feedback.md).
+**Status:** Execution contracts have deterministic coverage in `tests/core/test_operation_recovery.py` and `tests/adapters/pydantic_ai/models/test_rejection_feedback.py`, with executable [model and custom-executor examples](operation-feedback.md).
 No independent application case or comparative model-quality evaluation is recorded.
 
 A host may refuse a proposed operation while still permitting a different way to complete the task.

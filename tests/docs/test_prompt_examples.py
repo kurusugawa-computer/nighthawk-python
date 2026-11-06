@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-import nighthawk as nh
-from nighthawk.configuration import StepExecutorConfiguration
-from nighthawk.natural.blocks import extract_bindings
-from nighthawk.runtime.bindings import MISSING_ANNOTATION, infer_binding_types
-from nighthawk.runtime.prompt import build_user_prompt
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.prompt import build_user_prompt
+from nighthawk.core.bindings import MISSING_ANNOTATION, infer_binding_types
+from nighthawk.core.execution_reference import ExecutionReference
+from nighthawk.core.natural.blocks import extract_bindings
 from tests.support.contexts import new_step_context
 from tests.support.prompts import prompt_content_to_text
 
@@ -51,7 +51,7 @@ def _build_prompt(
     binding_name_to_type: dict[str, object] = {name: MISSING_ANNOTATION for name in output_names}
     binding_name_to_type = infer_binding_types(binding_name_to_type, python_locals)
     step_context = new_step_context(
-        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test", "test"),
+        execution_reference=ExecutionReference("test-run", "test-scope", "test", "test"),
         step_globals=python_globals if python_globals is not None else {"__builtins__": builtins},
         step_locals=python_locals,
         output_binding_names=set(output_names),

@@ -77,9 +77,9 @@ Composition is selected by each supplied value:
 - `nh.Extend(sequence)` appends prompt fragments, tools, or capabilities.
 - `nh.Merge(mapping)` merges task references, rejecting a same-name value unless it is the identical Python object.
 
-`oversight` and `lifecycle` accept `None`, which clears their hooks. The two model fields accept `None` to clear their selections. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Invalid argument shapes fail before model resolution; resolution errors leave the parent context intact.
+`oversight` and `lifecycle` accept `None`, which clears their hooks. The two model fields accept `None` to clear their selections. Other scope fields reject it. `usage_meter` replaces the enclosing meter without forwarding totals. Invalid arguments and resolution errors leave the parent context intact.
 
-The context manager yields the resulting `nh.Scope`, the same record `nh.get_scope()` returns inside its body.
+The context manager yields the resulting `nighthawk.core.scoping.Scope`, the same record `nighthawk.core.scoping.get_scope()` returns inside its body.
 
 ## Scoped task references
 
@@ -105,7 +105,7 @@ Use ordinary Python operations or explicitly import the standard-library `inspec
 For bounded metadata with member pagination, Nighthawk also provides `describe_value` as an ordinary optional function:
 
 ```py
-from nighthawk.runtime.inspection import describe_value
+from nighthawk.core.inspection import describe_value
 
 
 @nh.function
@@ -128,7 +128,7 @@ Binding names and declared output contracts remain the responsibility of [enviro
 
 Natural calls do not implicitly copy parent arguments, locals, closure values, or step temporaries into the child.
 Use parameters for essential inputs and `task_references` for references intentionally shared throughout a scope.
-A Python helper can select names from `nh.get_step_context().environment` and return an ordinary dictionary.
+A Python helper can select names from `nighthawk.core.step_context.get_step_context().environment` and return an ordinary dictionary.
 The helper runs where it is called; Core does not rerun it during later step preparation.
 
 Omitting `task_references` keeps the enclosing references; supplying a dictionary replaces them, `{}` clears them, and `nh.Merge(...)` adds references with identity-based conflict checking.
@@ -143,11 +143,11 @@ The example uses a deterministic executor and needs no model credentials.
 <!-- runnable-example:shared_values_sync -->
 ```py
 import nighthawk as nh
-from nighthawk.runtime.embedded import execute_step
-from nighthawk.runtime.environment import StepEnvironment
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
-from nighthawk.testing import CallbackExecutor
+from nighthawk.core.embedded import execute_step
+from nighthawk.core.environment import StepEnvironment
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_request import StepCandidate, StepRequest
+from nighthawk.core.testing import CallbackExecutor
 
 
 @nh.function
@@ -200,10 +200,10 @@ Scopes restore their references on normal exit, exceptions, and cancellation, an
 import asyncio
 
 import nighthawk as nh
-from nighthawk.runtime.embedded import execute_step_async
-from nighthawk.runtime.environment import StepEnvironment
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.core.embedded import execute_step_async
+from nighthawk.core.environment import StepEnvironment
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 @nh.function
@@ -266,11 +266,12 @@ A call handler may open such a scope around `proceed()` or `await proceed()` wit
 `tools` declares native tools for a scope: callables exposed through the model's native tool-calling interface. Nighthawk has no global tool registry; a tool is visible exactly where a `nh.scope(tools=[...])` makes it visible.
 
 ```py
+from nighthawk.core.step_context import StepContext
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
 
-def read_step_execution_id(run_context: RunContext[nh.StepContext]) -> str:
+def read_step_execution_id(run_context: RunContext[StepContext]) -> str:
     """Return the current step Id."""
     return run_context.deps.execution_reference.step_execution_id or ""
 
@@ -325,22 +326,25 @@ System suffixes expand `$tool_result_max_tokens`; use `$$` for a literal dollar 
 
 ## Reading the active scope
 
-`nh.get_scope()` returns the active `nh.Scope`, a frozen record whose fields mirror the `nh.scope()` parameters, such as `step_executor`, `lifecycle`, `task_references`, `tools`, and `capabilities`.
+`nighthawk.core.scoping.get_scope()` returns the active Core `Scope`: executor, execution identity, usage meter, lifecycle, oversight, and task references.
+`nighthawk.adapters.pydantic_ai.scoping.get_model_scope()` returns model presentation, including tools, capabilities, context construction, and prompt suffixes.
 It requires an active run and raises `NighthawkError` outside it.
 Its prompt suffix fields hold scope fragments without configuration-level baselines, and `tools` excludes built-in tools.
-`nh.get_step_context()` additionally requires an active step.
+`nighthawk.core.step_context.get_step_context()` additionally requires an active step.
 
 ```py
+from nighthawk.core.scoping import get_scope
+
 with nh.run(step_executor) as run_scope:
     with nh.scope(task_references={"search_repository": search_repository}) as child_scope:
-        assert nh.get_scope() is child_scope
+        assert get_scope() is child_scope
         assert child_scope.task_references["search_repository"] is search_repository
-    assert nh.get_scope() is run_scope
+    assert get_scope() is run_scope
 ```
 
 ## Record completed executions
 
-Install `nh.lifecycle.StepLifecycle` to record Natural block endings, including preparation, validation, and return-await failures.
+Install `nighthawk.core.lifecycle.StepLifecycle` to record Natural block endings, including preparation, validation, and return-await failures.
 Successful block notification follows generated assignments; the containing Python function may still run more code or fail in its `finally` block.
 Use a [function-call handler](host-integration.md#whole-function-admission) to observe that eventual function outcome.
 The lifecycle callback can raise a host exception referring to its stored record.
@@ -349,18 +353,19 @@ All hooks support direct or asynchronous completion.
 
 ```python
 import nighthawk as nh
+from nighthawk.core import lifecycle
 
-execution_id_to_event: dict[str, nh.lifecycle.StepFinished] = {}
+execution_id_to_event: dict[str, lifecycle.StepFinished] = {}
 
 
-def record_finished(event: nh.lifecycle.StepFinished) -> None:
+def record_finished(event: lifecycle.StepFinished) -> None:
     execution_id = event.execution_reference.step_execution_id
     assert execution_id is not None
     execution_id_to_event[execution_id] = event
 
 
 # Inside an active nh.run(executor):
-with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=record_finished)):
+with nh.scope(lifecycle=lifecycle.StepLifecycle(on_step_finished=record_finished)):
     result = my_natural_function()
 ```
 
@@ -376,30 +381,30 @@ Use `nh.scope(oversight=...)` to inspect operations before execution and validat
 Each callback may return its decision directly or asynchronously.
 
 ```py
-import nighthawk as nh
-from nighthawk.runtime.operation_contract import OperationRequest
-from nighthawk.runtime.step_outcome import Return
+from nighthawk.core import oversight
+from nighthawk.core.operation_contract import OperationRequest
+from nighthawk.core.step_outcome import Return
 
 
-def inspect_operation(operation: OperationRequest) -> nh.oversight.OperationDecision:
+def inspect_operation(operation: OperationRequest) -> oversight.OperationDecision:
     if operation.kind == "native_tool" and operation.tool_name == "delete_file":
-        return nh.oversight.RejectOperation("Deletion is unavailable.", "Choose an operation that preserves the file.")
-    return nh.oversight.Accept()
+        return oversight.RejectOperation("Deletion is unavailable.", "Choose an operation that preserves the file.")
+    return oversight.Accept()
 
 
-def inspect_step_commit(commit: nh.oversight.StepCommit) -> nh.oversight.StepCommitDecision:
+def inspect_step_commit(commit: oversight.StepCommit) -> oversight.StepCommitDecision:
     if isinstance(commit.outcome, Return) and commit.outcome.value is None:
-        return nh.oversight.AbortStep("A result is required.")
-    return nh.oversight.Accept()
+        return oversight.AbortStep("A result is required.")
+    return oversight.Accept()
 
 
-oversight = nh.oversight.Oversight(
+file_oversight = oversight.Oversight(
     inspect_operation=inspect_operation,
     inspect_step_commit=inspect_step_commit,
 )
 ```
 
-Install the configuration with `nh.scope(oversight=oversight)` inside an active run.
+Install the configuration with `nh.scope(oversight=file_oversight)` inside an active run.
 Operation inspection precedes execution and cannot undo earlier side effects.
 `RejectOperation` returns deliberate feedback without executing that operation, allowing another choice within the same step.
 `AbortStep` terminates the current step; catching its exception cannot make that step succeed.
@@ -425,13 +430,16 @@ A host can receive credentials in memory and construct a Pydantic AI Model befor
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+
 model = OpenAIResponsesModel("gpt-6-luna", provider=OpenAIProvider(api_key=credentials.api_key))
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     execution_model=model,
     execution_model_settings={"openai_store": False},
     tokenizer_encoding="o200k_base",
 )
-executor = nh.AgentStepExecutor(configuration=configuration)
+executor = AgentStepExecutor(configuration=configuration)
 with nh.run(executor):
     result = workflow()
 ```
@@ -448,12 +456,15 @@ See the [configuration contract](specification.md#52-configuration) for ownershi
 Use `nh.scope(step_executor=...)` to switch executors within a single run. This is the standard pattern for mixing a cheap classifier with a deep autonomous step:
 
 ```py
-fast_executor = nh.AgentStepExecutor(
-    configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+
+fast_executor = AgentStepExecutor(
+    configuration=StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
 )
 
-deep_executor = nh.AgentStepExecutor(
-    configuration=nh.StepExecutorConfiguration(execution_model="codex:gpt-6.1-sol"),
+deep_executor = AgentStepExecutor(
+    configuration=StepExecutorConfiguration(execution_model="codex:gpt-6.1-sol"),
 )
 
 with nh.run(fast_executor):
@@ -468,7 +479,7 @@ See [Executors](executors.md#decision-tree) for when to choose a coding agent ba
 
 Use `nh.scope(context_builder=builder)` when the application needs to choose or summarize the context presented to the model.
 Implement `build(request: ContextRequest)` and return a sequence of Pydantic AI `UserContent` items.
-Import `ContextRequest` and `DefaultContextBuilder` from `nighthawk.runtime`; the default builder can be called from your implementation when retaining part of its presentation.
+Import `ContextRequest` and `DefaultContextBuilder` from `nighthawk.adapters.pydantic_ai.context`; the default builder can be called from your implementation when retaining part of its presentation.
 
 The request exposes the live environment, Natural program, output contracts, and presentation budgets.
 Presentation changes do not change runtime value access.
@@ -479,9 +490,11 @@ See [context construction](specification.md#824-replaceable-context-construction
 The LOCALS and GLOBALS sections are bounded by token and item limits configured via `StepContextLimits`. When a limit is reached, remaining entries are omitted and a `<snipped>` marker is appended. The underlying data remains in Python memory and is accessible through binding functions at runtime -- truncation affects prompt coherence, not data availability.
 
 ```py
-configuration = nh.StepExecutorConfiguration(
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
+
+configuration = StepExecutorConfiguration(
     execution_model="openai-responses:gpt-6-luna",
-    context_limits=nh.StepContextLimits(
+    context_limits=StepContextLimits(
         locals_max_tokens=4096,
         locals_max_items=50,
     ),
@@ -499,7 +512,9 @@ See [Specification Section 8.2](specification.md#82-prompt-context) for the full
 Each `nh.run()` generates an `ExecutionReference` with a unique `run_id` (trace root) and `scope_id`. Nested `nh.scope()` calls generate new `scope_id` values while keeping the same `run_id`.
 
 ```py
-execution_reference = nh.get_scope().execution_reference
+from nighthawk.core.scoping import get_scope
+
+execution_reference = get_scope().execution_reference
 execution_reference.run_id  # trace root -- stable across nested scopes
 execution_reference.scope_id  # current scope -- changes with each nh.scope()
 execution_reference.step_execution_id  # Unique per block execution; None outside a step
@@ -510,7 +525,7 @@ execution_reference.source_location  # Source module and line; None outside a st
 Use `run_id` to correlate distributed agent processes in logs and traces. Use `scope_id` to identify the current logical execution context. See [Specification Section 10](specification.md#10-runtime-scoping) for the full specification and [Verification: observability](verification.md#observability) for tracing integration.
 
 An intercepted function has its own `FunctionCall.call_id` and `parent_call_id`, independent of block and run identities.
-`nh.get_function_call()` returns the current intercepted call or `None`, including outside a run; function admission can precede run creation.
+`nighthawk.core.calls.get_function_call()` returns the current intercepted call or `None`, including outside a run; function admission can precede run creation.
 
 ## Usage metering
 
@@ -521,14 +536,16 @@ Custom executors own their metering integration.
 Pass `nh.run(step_executor, usage_meter=meter)` to supply your own meter, and `nh.scope(usage_meter=meter)` to meter a nested section in isolation: steps inside the scope record into the scoped meter only, and totals are not forwarded to the enclosing meter.
 
 ```py
+from nighthawk.core.scoping import get_scope
+
 with nh.run(step_executor):
-    meter = nh.get_scope().usage_meter
-    meter.total_tokens  # cumulative tokens
-    meter.snapshot()  # independent RunUsage copy of current totals
+    meter = get_scope().usage_meter
+    meter.total_token_count  # cumulative tokens
+    meter.snapshot()  # immutable ExecutionUsage snapshot of current totals
 ```
 
-`nh.get_scope()` requires an active `nh.run()` context.
-Use it for aggregate decisions between calls; [Patterns: Budget](patterns.md#budget) describes the function-level budget transformer.
+`nighthawk.core.scoping.get_scope()` requires an active `nh.run()` context.
+Use it for aggregate decisions between calls; [resource accounting and admission](patterns.md#resource-accounting-and-admission) separates observation from host control.
 For admission between requests within an unfinished block, use [request usage and admission](host-integration.md#request-usage-and-admission).
 
 ## Model selection

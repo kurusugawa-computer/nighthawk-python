@@ -8,17 +8,19 @@ The `claude-code-sdk`, `claude-code-cli`, and `codex` backends delegate Natural 
 
 Claude Code (SDK):
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="claude-code-sdk:default")
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+
+configuration = StepExecutorConfiguration(execution_model="claude-code-sdk:default")
 ```
 
 Claude Code (CLI):
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="claude-code-cli:default")
+configuration = StepExecutorConfiguration(execution_model="claude-code-cli:default")
 ```
 
 Codex:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="codex:gpt-6-luna")
+configuration = StepExecutorConfiguration(execution_model="codex:gpt-6-luna")
 ```
 
 The segment after `:` selects the model. Use `default` to let the backend choose its default model, or specify a model alias recognized by the backend CLI (e.g., `claude-code-sdk:sonnet`, `codex:gpt-6-luna`). Available aliases depend on the backend CLI version.
@@ -72,9 +74,9 @@ The [operation feedback support matrix](operation-feedback.md#ordering-and-backe
 Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the backend via MCP. When `None` (default), all tools visible in the current scope are exposed.
 
 ```py
-from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings
 
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     execution_model="claude-code-sdk:default",
     execution_model_settings=ClaudeCodeSdkModelSettings(
         allowed_tool_names=("nh_evaluate", "nh_assign"),
@@ -124,9 +126,9 @@ The `claude` CLI must be installed separately (it is a system tool, not a Python
 ### Settings
 
 ```py
-from nighthawk.backends.claude_code_cli import ClaudeCodeCliModelSettings
+from nighthawk.adapters.pydantic_ai.models.claude_code_cli import ClaudeCodeCliModelSettings
 
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     execution_model="claude-code-cli:sonnet",
     execution_model_settings=ClaudeCodeCliModelSettings(
         permission_mode="bypassPermissions",
@@ -170,9 +172,9 @@ pip install nighthawk-python[claude-code-sdk]
 ### Settings
 
 ```py
-from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings
 
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     execution_model="claude-code-sdk:sonnet",
     execution_model_settings=ClaudeCodeSdkModelSettings(
         permission_mode="bypassPermissions",
@@ -219,9 +221,9 @@ The `codex` CLI must be installed separately (it is a system tool, not a Python 
 ### Settings
 
 ```py
-from nighthawk.backends.codex import CodexModelSettings
+from nighthawk.adapters.pydantic_ai.models.codex import CodexModelSettings
 
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     execution_model="codex:gpt-6-luna",
     execution_model_settings=CodexModelSettings(
         working_directory="/abs/path/to/project",

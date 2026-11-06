@@ -5,51 +5,49 @@ Choose a test owner by the behavior that would break, including when a test call
 
 | Path | Owner and scope |
 | --- | --- |
-| `test_composition.py`, `test_configuration.py`, `test_function_call.py`, `test_json_renderer.py`, `test_testing.py` | Corresponding top-level library modules. |
-| `natural/` | Source extraction, transformation, lexical bindings, decorators, and Python introspection. |
-| `runtime/` | Run and scope configuration, context and prompt construction, discovery, executor requests, validation, operations, usage, tracing, and composed Python workflows. |
-| `oversight/` | Host inspection, rejection, and validated rewrites of step commits and return expressions. |
-| `lifecycle/` | Started, operation, and terminal notifications; assignment completion, interruption, and host ledger delivery. |
-| `tools/` | Tool declarations, admission and ordering, evaluation and assignment, and provider-facing result normalization. |
-| `backends/` | Backend settings and protocols, text and MCP projection, callback transport, and process cleanup using local stubs. |
-| `resilience/` | Retry, fallback, voting, timeout, circuit breaker, budget, and their composition. |
+| `core/` | Natural transformation, binding and operation contracts, run/scoped execution, lifecycle, oversight, and deterministic executor support. |
+| `adapters/` | Pydantic AI model execution, prompts, provider transports, tools, and concrete filesystem/HTTP/storage behavior. |
+| `harness/` | Authority, source admission, generated execution, resource accounting, exact evidence, and termination. |
+| `parts/` | Composable judgments, domain capabilities, bounded evidence and value selection, learning, and voting. |
+| `session/` | Cells, persistent bindings, operator controls, history, publication, and conversation integration. |
+| `test_public_api.py` | Current declared exports and dependency direction. |
 | `docs/` | Published examples executed or compared against actual runtime output, navigation, anchors, and API inventories. |
-| `distribution/` | Installed wheel contracts, including exported types and decorator signatures through `py.typed`. |
+| `distribution/` | Installed wheel contracts for Core, Harness, Parts, adapters, and Session, including exported types and decorator signatures through `py.typed`. |
 | `test_model_evaluation.py` | Model-evaluation selection, trial isolation, failure/interruption accounting, and evidence recording through actual pytest subprocesses. |
 | `integration/` | Opt-in tests using real providers or coding agent executables, including repeated model-behavior and Python-composition evaluations. |
+| `examples/` | Verified reference applications, including terminal process and presentation behavior. |
 | `support/` | Shared executors, contexts, prompt helpers, tool fixtures, and backend stubs; never collected as tests. |
 
 Model behavior and Natural composition use the `model_evaluation` fixture and explicit `--evaluation-model` selection.
 The fixture records repeated trials through `tests/support/model_evaluation.py`; see [contributor commands](../CONTRIBUTING.md#model-evaluations-with-pytest).
 Provider-specific transport and feature smoke tests retain their documented environment gates.
 
-Within `runtime/`, use these owners:
+Execution and adapter tests use these behavior owners:
 
-- `test_bindings.py`: independent declaration, inference, and value validation contracts.
-- `test_step_definition.py`: immutable reusable declarations and per-invocation contract selection.
-- `test_preparation.py`: namespace and annotation acquisition before executor admission, including failure diagnostics.
-- `test_embedded.py`: explicit host entry points, environment selection, Python composition, and writer adaptation.
-- `test_runner.py`: executing and finalizing resolved steps, output selection, and Python control results.
-- `test_environment.py`: name resolution, precedence, and live or inherited value views, including application names resembling generated helpers.
-- `test_prompt_values.py`: value presentation in prompt context, including those application names.
-- `test_step_executor.py`: agent adaptation, scoped tool delivery, prompt content, and completed usage forwarding.
-- `test_scoping.py`: run and scope identities, executor installation, usage-meter inheritance, and restoration.
-- `test_decisions.py`: OpenAI Decisions through a local SDK transport, typed contracts, full evidence, scoped models, failures, and per-step details.
-- `test_model_selection.py`: model/configuration resolution, executor policy, and restoration across function and scope boundaries.
-- `test_model_candidate.py`: resolving model-facing return and exception expressions, including admission before evaluation.
-- `test_discovery.py`: live references, name and member discovery, and environment presentation.
-- `test_description.py`: best-effort metadata discovery without evaluating application annotations.
-- `test_expression.py`: expression evaluation and awaitable handling, independent of tool projection.
+- `core/test_bindings.py`: independent declaration, inference, and value validation contracts.
+- `core/test_step_definition.py`: immutable reusable declarations and per-invocation contract selection.
+- `core/test_preparation.py`: namespace and annotation acquisition before executor admission, including failure diagnostics.
+- `core/test_embedded.py`: explicit host entry points, environment selection, Python composition, and writer adaptation.
+- `core/test_runner.py`: executing and finalizing resolved steps, output selection, and Python control results.
+- `core/test_environment.py`: name resolution, precedence, and live or inherited value views, including application names resembling generated helpers.
+- `adapters/pydantic_ai/test_prompt_values.py`: value presentation in prompt context, including those application names.
+- `adapters/pydantic_ai/test_step_executor.py`: agent adaptation, scoped tool delivery, prompt content, and completed usage forwarding.
+- `core/test_scoping.py`: run and scope identities, executor installation, usage-meter inheritance, and restoration.
+- `adapters/pydantic_ai/test_decisions.py`: OpenAI Decisions through a local SDK transport, typed contracts, full evidence, scoped models, failures, and per-step details.
+- `adapters/pydantic_ai/test_model_selection.py`: model/configuration resolution, executor policy, and restoration across function and scope boundaries.
+- `adapters/pydantic_ai/test_model_candidate.py`: resolving model-facing return and exception expressions, including admission before evaluation.
+- `core/test_discovery.py`: live references, name and member discovery, and environment presentation.
+- `core/test_description.py`: best-effort metadata discovery without evaluating application annotations.
+- `core/test_expression.py`: expression evaluation and awaitable handling, independent of tool projection.
 
-Commit inspection belongs in `oversight/`, including embedded output replacement and rejection.
-Assignment failure, cancellation, and terminal delivery belong in `lifecycle/`, including host writers.
+Commit inspection belongs in `core/oversight/`, including embedded output replacement and rejection.
+Assignment failure, cancellation, and terminal delivery belong in `core/lifecycle/`, including host writers.
 Test pure binding rules once in their owner and keep entry-point tests focused on their integration.
-Configuration value validation belongs in `test_configuration.py`, executor construction in `runtime/test_step_executor.py`, and function interception in `test_function_call.py`.
-Decision syntax belongs in `natural/test_blocks.py`, while scripted decision recording belongs in `test_testing.py`; using a decision block does not change the owner of a contract.
-Tool-result rendering and response budgets belong in `tools/test_rendering.py`; nested discovery content belongs in `tools/test_discovery_content.py`.
-Provider toolset execution belongs in `tools/test_execution.py`, and pure JSON projection belongs in `test_json_renderer.py`.
-Backend process termination and reaping belong in `backends/test_process_management.py`; callback transport belongs in `backends/test_tool_transport.py`.
-Use `nighthawk.testing` for resolved Python values and exception classes.
+Core configuration value validation belongs in `core/test_configuration.py`, adapter configuration in `adapters/pydantic_ai/test_configuration.py`, and executor construction in `adapters/pydantic_ai/test_step_executor.py`.
+Function interception belongs in `core/test_calls.py`; decision syntax belongs in `core/natural/test_blocks.py`, and scripted decision recording belongs in `core/test_testing.py`.
+Tool execution, discovery content, rendering, and response budgets belong in `adapters/pydantic_ai/tools/`; pure JSON projection belongs in `adapters/pydantic_ai/test_rendering_values.py`.
+Backend process termination, reaping, and callback transport belong in `adapters/pydantic_ai/models/`.
+Use `nighthawk.core.testing` for resolved Python values and exception classes.
 `ScriptedExecutor` fails on an unexpected invocation after its responses are exhausted; supply an explicit `default_response` only when repeated responses are intended.
 Use `ModelResponseExecutor` from `support/executors.py` when a test must exercise model-facing expression resolution, including operation inspection or notification ordering.
 `StubExecutor` is reserved for tests that consume an envelope embedded in Natural text.
@@ -58,7 +56,7 @@ Asynchronous API tests await directly; the shared `execute` fixture adapts only 
 Keep a helper beside its sole consumer; move it to `support/` when several test modules need it.
 Do not import another `test_*.py` module for helpers.
 Use `conftest.py` for fixtures that pytest injects, and let pytest own collection and execution.
-User-facing example code lives in docs and is executed by extraction tests in `tests/docs/`.
+Guide snippets are executed by `tests/docs/`; reference applications by `tests/examples/`, with Harness-hosted provider acceptance in `tests/integration/harness/`.
 `docs/test_links.py` builds the site and verifies internal links and anchors in rendered HTML, using MkDocs' actual Markdown and API rendering.
 Runtime test fixtures live in `tests/support/`; they must not import the published examples.
 The shared `package_python` fixture selects the current interpreter or verifies the fresh environment selected by `NIGHTHAWK_DISTRIBUTION_PYTHON`.

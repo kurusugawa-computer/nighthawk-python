@@ -165,7 +165,9 @@ except InputError as error:
 
 ### Error types
 
-Runtime, policy, and delivery failures use `NighthawkError` subclasses; ordinary application/helper exceptions and explicit Natural raises retain their own types.
+Nighthawk's public error contracts share `NighthawkError`; ordinary application/helper exceptions and explicit Natural raises retain their own types.
+Catch the concrete error for recovery: belonging to this hierarchy alone does not tell you whether the step can continue or earlier effects can be retried safely.
+See [Error handling](specification.md#13-error-handling) for operation, execution, Harness, and Session boundaries.
 Expected domain failures that the model should act on can instead be returned as ordinary helper results.
 Recoverable operation failures, including invalid values supplied to an assignment, return structured errors to the model rather than ending the block immediately.
 Invalid outcomes and output values rejected during finalization raise `ExecutionError`, carrying the failure stage and original exception.
@@ -174,6 +176,9 @@ Handle only the failure stage for which the application has a recovery policy:
 
 <!-- error-example:output_validation -->
 ```py
+from nighthawk.core.errors import ExecutionError
+
+
 @nh.function
 def extract_count(text: str) -> int:
     count: int = 0
@@ -185,7 +190,7 @@ def extract_count(text: str) -> int:
 
 try:
     extract_count("several items")
-except nh.ExecutionError as error:
+except ExecutionError as error:
     if error.step_failed.failure_stage != "binding_validation":
         raise
     print("Output validation failed; review the input before retrying.")
@@ -195,7 +200,6 @@ except nh.ExecutionError as error:
 The original validation exception remains available as `error.step_failed.original_exception` and `error.__cause__`.
 Earlier helper calls and mutations may already have taken effect, so a retry requires an explicit recovery decision.
 Independent `validate_output_bindings()` calls instead raise `BindingValidationError`; see [Embedded execution](embedded-execution.md#reusing-binding-processing).
-For the exception hierarchy, see [Specification Section 13](specification.md#13-error-handling).
 
 ## Async Natural functions
 
@@ -444,209 +448,119 @@ result_b = branch_multiply(carry_b)  # independent path
 
 ## Resilience patterns
 
-Natural blocks are non-deterministic by nature. Production deployments need strategies to handle transient failures, unstable outputs, and provider outages. The `nighthawk.resilience` module provides composable **function transformers** -- each takes a callable and returns a new callable with the same signature.
-
-```py
-from nighthawk.resilience import retrying, fallback, vote, timeout, budget, circuit_breaker
-```
-
-Import directly from `nighthawk.resilience`.
-After `import nighthawk as nh`, the module namespace is also available as `nh.resilience`.
+Recovery is application-owned Python control flow.
+Choose retry, fallback, cancellation, and caching boundaries according to effects already performed and the task's acceptance criteria.
+A failed Natural step may have changed shared objects or performed external actions.
+A lifecycle delivery failure requires reconciling storage separately; replaying the task does not repair its notification.
 
 ### Retrying
 
-Wrap a function to retry on failure. Uses [tenacity](https://tenacity.readthedocs.io/) internally. Defaults to retrying on `ExecutionError` with exponential backoff and jitter.
+Use Tenacity directly when a repeatable operation benefits from bounded retries.
+Install it in the application with `uv add tenacity` and select the exceptions and stopping rule explicitly.
+For a classification function whose failures are safe to replay:
 
-Decorator form -- create a resilient version of the function:
 ```py
-from nighthawk.resilience import retrying
+from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-resilient_classify = retrying(attempts=3)(classify)
-result = resilient_classify(text)
-```
+from nighthawk.core.errors import ExecutionError
 
-Iterator form -- retry a code block (tenacity pattern):
-```py
-from nighthawk.resilience import retrying
-
-for attempt in retrying(attempts=3):
+for attempt in Retrying(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=1, max=8),
+    retry=retry_if_exception_type(ExecutionError),
+    reraise=True,
+):
     with attempt:
-        result = classify(text)
+        label = classify(text)
 ```
 
-`retrying` separates retry control into four roles:
-
-- `on`: type-level retry eligibility.
-- `retry_if`: content-level retry eligibility after `on` matches.
-- `wait`: retry interval strategy.
-- `on_retry`: side-effect hook when a retry is decided.
-
-```py
-from tenacity import wait_fixed
-
-resilient = retrying(
-    attempts=5,
-    on=(ExecutionError, TimeoutError),
-    retry_if=lambda exception: "transient" in str(exception).lower(),
-    wait=wait_fixed(2),
-    on_retry=lambda retry_state: logger.info("retrying", extra={"attempt": retry_state.attempt_number}),
-)(classify)
-```
-
-Use only what you need. For simple judgments, `retrying(attempts=3)(classify)` is enough.
-Choose retry boundaries around known effects: a failed block may already have mutated shared state or performed external operations.
-A lifecycle-delivery failure never justifies replaying an execution; hosts retry storage separately and reconcile uncertain domain effects.
+For async calls use `AsyncRetrying` and `async for`.
+Do not retry terminal host refusals by widening authority or replacing the active executor.
 
 ### Fallback
 
-Try multiple functions in order. The first success wins.
+Express alternatives with ordinary calls and exception handling.
+The caller owns whether another attempt is acceptable after any earlier effects and spending.
 
 ```py
-from nighthawk.resilience import fallback
+from nighthawk.core.errors import ExecutionError
 
-safe_classify = fallback(classify_gpt4, classify_mini, default="unknown")
-result = safe_classify(text)
+
+def classify_with_fallback(text: str) -> str:
+    try:
+        return classify_primary(text)
+    except ExecutionError:
+        return classify_secondary(text)
 ```
 
-The `on` parameter controls which exceptions trigger fallback (default: `Exception`). All functions must have compatible signatures.
+### Vote
 
-### Vote (majority voting)
-
-Call a function multiple times and aggregate results. Useful for classification and judgment tasks where LLM outputs are inconsistent.
+`nighthawk.parts.voting` supplies a judgment Part for repeated sampling and result aggregation.
+It works with ordinary callables, independently of Natural, Harness, and Session.
 
 ```py
-from nighthawk.resilience import vote
+from nighthawk.parts.voting import vote
 
 voting_classify = vote(count=3)(classify)
 label = voting_classify(text)
 ```
 
-Async functions run concurrently via `asyncio.gather`. Sync functions run sequentially. Partial failures are tolerated: only successful results go to the `decide` function (default: `plurality` -- most common result). If fewer than `min_success` calls succeed (default: `ceil(count/2)`), the last exception is raised.
-Only raised `Exception` instances count as failed votes; exception objects returned as values are successful results.
-Cancellation and other `BaseException` subclasses propagate even if enough other calls succeed.
-Async voting joins every call before returning or propagating an exception, including cancellation cleanup.
+Only successful results reach `decide`, whose default is `plurality`.
+See the [API reference](api.md#nighthawk.parts.voting) for concurrency, failure, and cancellation semantics.
 
-### Timeout
+### Timeout and termination
 
-Set a timeout threshold for a function call; cleanup can extend the total waiting time.
+Use Python's cooperative cancellation for asynchronous work:
 
 ```py
-from nighthawk.resilience import timeout
+import asyncio
 
-timed_classify = timeout(seconds=30)(classify)
-result = timed_classify(text)
+async with asyncio.timeout(30):
+    label = await classify_async(text)
 ```
 
-For async functions, `asyncio.timeout` requests cooperative cancellation.
-Natural notification cleanup is still joined, so cancellation-resistant cleanup can delay the timeout's propagation indefinitely.
-For sync functions, the wrapper runs the function in a `ThreadPoolExecutor`; timeout does not stop the worker, and executor shutdown waits for it before `TimeoutError` reaches the caller.
-The synchronous wrapper copies the caller's context variables, so Natural functions inherit the active `nh.run()` and host scopes.
-Worker context variable rebindings do not flow back to the caller; referenced objects remain shared, and hosts must support their use from the worker thread.
-An upstream `TimeoutError` is preserved without recording a wrapper deadline event unless the wrapper's own deadline expired.
-To bound a block of asynchronous code rather than a function, use the standard `asyncio.timeout`.
+Cancellation requests do not prove that external work has ceased, and owned cleanup can extend the wait.
+Synchronous Python calls need a host-owned process or another termination mechanism when cessation is required.
+Harness exposes termination reports and unresolved cleanup through `nighthawk.harness.termination` and `RunHandle`.
+See [host runtime obligations](agent/runtime.md) for the guarantees applications must supply.
 
-### Budget
+### Resource accounting and admission
 
-Check token or monetary thresholds around wrapped function calls using the active run's `UsageMeter`.
-Outside `nh.run()`, the transformer performs no budget checks.
+`nighthawk.core.usage.UsageMeter` accumulates immutable `ExecutionUsage` observations; it does not authorize requests or enforce spending.
+Adapters translate provider usage into request, input-token, output-token, and total-token counts.
+Provider-specific details remain in the adapter's `executor_result` on lifecycle records.
+
+Harness allocation controls admission and records consumption:
 
 ```py
-from nighthawk.resilience import budget
+from nighthawk.harness.resources import bounded_resource_allocation
 
-safe_classify = budget(tokens=50_000, tokens_per_call=5_000)(classify)
-result = safe_classify(text)
+
+def allocation_for_run(identity):
+    return bounded_resource_allocation(
+        identity=f"allocation-{identity.run_id}",
+        maximum_executor_step_count=20,
+        maximum_total_token_count=50_000,
+    )
 ```
 
-`tokens` checks recorded cumulative usage before invocation and after normal return; `tokens_per_call` checks the meter delta after normal return.
-Checks use the meter active at invocation; usage recorded into a separate meter in a nested scope is excluded.
-An optional `estimate_usage` receives the same arguments as the wrapped call and returns a `RunUsage` estimate.
-It applies the same limits to the estimated call and predicted cumulative usage before invocation, without reserving usage or guaranteeing the final cost.
-The meter records returned agent-run aggregates, so failed runs can consume unrecorded usage, and concurrent calls sharing a meter can contribute to the same measured delta.
-These checks do not stop requests within an unfinished block or guarantee a strict spending cap.
-For that earlier admission boundary, use [host request observations](host-integration.md#request-usage-and-admission), keeping their accumulator separate from the meter.
+Pass this factory to `Runner(resource_allocation_factory=...)`.
+A token bound checks already observed usage before the next mediated request; an individual request can cross the remaining threshold.
+Unknown, interrupted, and provider-billed usage can differ from observed usage.
+Applications own monetary conversion, reservations, and any strict provider-side limits.
+See [request usage and admission](host-integration.md#request-usage-and-admission) for custom integrations.
 
-When a checked threshold is exceeded, `BudgetExceededError` is raised.
-Combine with `fallback` only when another execution is acceptable after any earlier effects and spending:
+### Service recovery and caching
 
-```py
-from nighthawk.resilience import budget, fallback, BudgetExceededError
+Applications can use a circuit-breaker library around the service they own.
+Its failure classification, shared state, probe concurrency, and cleanup behavior belong to that service boundary.
 
-composed = fallback(
-    budget(tokens=50_000)(classify_gpt4),
-    classify_mini,
-    on=(BudgetExceededError,),
-)
-```
-
-For monetary budgets, supply a `cost_function` that converts `RunUsage` to a float.
-Per-call cost receives the complete usage delta, including requests, tool calls, audio usage, provider counters, details, and available cost, using Pydantic AI's usage arithmetic.
-Cumulative cost receives the total usage, or the current usage plus the estimate during admission; the function need not be additive.
-
-```py
-from pydantic_ai.usage import RunUsage
-
-
-def dollar_cost(usage: RunUsage) -> float:
-    return usage.input_tokens * 3e-6 + usage.output_tokens * 15e-6
-
-
-budgeted = budget(cost=1.00, cost_function=dollar_cost)(classify)
-```
-
-### Circuit breaker
-
-Prevent repeated calls to a failing service. After `failure_threshold` consecutive failures, the circuit opens and rejects calls immediately with `CircuitOpenError`. After `reset_timeout` seconds, one probe call is allowed.
-
-```py
-from nighthawk.resilience import circuit_breaker, CircuitState
-
-protected_api = circuit_breaker(failure_threshold=5, reset_timeout=60)(call_api)
-protected_api.state  # CircuitState.CLOSED
-protected_api.reset()  # manual reset
-```
-
-This is a **stateful** transformer (like `functools.lru_cache`). Each `circuit_breaker(...)` call creates independent state.
-Reusing one decorator shares its state across the functions it wraps; decorating a method shares that method's circuit across instances.
-Asynchronous functions remain recognizable as coroutine functions, including through bound methods and other resilience transformers.
-
-While the recovery probe runs, additional calls raise `CircuitOpenError` with `probe_in_progress=True`.
-Success closes the circuit; a failure matching `on` starts a new cooldown.
-An exception excluded by `on` releases the probe for another attempt without restarting the cooldown; the default `on=Exception` excludes cancellation.
-Calls already admitted before opening or a manual reset keep running and return or raise normally, but their late results cannot alter the new circuit state.
-
-### Composition
-
-All transformers produce callables with the original signature, so they compose by nesting. Read inside-out:
-
-```py
-robust_classify = fallback(
-    retrying(attempts=2)(  # 3. Retry the voted call
-        vote(count=3)(classify_gpt4)  # 2. Vote 3x with GPT-4
-    ),  # 1. Try GPT-4 first
-    retrying(attempts=2)(classify_mini),  # 4. Fall back to mini
-    default="unknown",  # 5. Last resort
-)
-
-result = robust_classify(text)
-```
-
-Recommended composition order (innermost to outermost):
-
-| Order | Transformer | Why |
-|---|---|---|
-| 1 | `timeout` | Request cancellation or detect elapsed time; still wait for owned cleanup |
-| 2 | `budget` | Check observed token or monetary thresholds around calls |
-| 3 | `vote` | Aggregate multiple attempts |
-| 4 | `retrying` | Retry the aggregated operation |
-| 5 | `circuit_breaker` | Protect against persistent failure |
-| 6 | `fallback` | Switch to alternative on exhaustion |
-
-### Caching LLM results
-
-`nighthawk.resilience` does not provide a cache primitive. Natural functions are ordinary callables, so standard Python caching works directly:
+Ordinary Python caching can retain accepted results of pure functions:
 
 ```py
 from functools import lru_cache
+
+import nighthawk as nh
 
 
 @lru_cache(maxsize=256)
@@ -659,7 +573,7 @@ def classify(text: str) -> str:
     return label
 ```
 
-For TTL-based caching, use [cachetools](https://cachetools.readthedocs.io/). Place cache **outside** vote and retrying -- caching the voted/retried result avoids redundant LLM calls on repeated inputs.
+The application decides cache keys, expiry, invalidation, and whether model or policy changes require recomputation.
 
 ## Common mistakes
 
@@ -673,5 +587,5 @@ For TTL-based caching, use [cachetools](https://cachetools.readthedocs.io/). Pla
 | Rely on inference for structured outputs | Initial-value inference captures only the outer runtime type | Annotate `<:name>` bindings when element types or constraints matter |
 | Duplicate module-level constants as function parameters | Moves stable values from GLOBALS to LOCALS, wastes tokens | Reference via `<name>` read binding ([Keep locals minimal](natural-blocks.md#keep-locals-minimal)) |
 | Replace a contextual judgment with rules inferred from a few examples | The rules may fail on inputs or contexts the examples did not cover | Evaluate the proposed rules against representative cases; use Python where explicit rules suffice and retain Natural where interpretation is needed ([Responsibility split](natural-blocks.md#responsibility-split)) |
-| Add resilience logic inside a Natural block | LLM cannot reliably retry itself or manage timeouts | Wrap the Natural function call from Python using `nighthawk.resilience` ([Resilience patterns](#resilience-patterns)) |
+| Add resilience logic inside a Natural block | LLM cannot reliably retry itself or manage timeouts | Compose recovery around the Natural function with ordinary Python and selected libraries ([Resilience patterns](#resilience-patterns)) |
 <!-- /common-mistakes-table -->

@@ -6,12 +6,20 @@ from dataclasses import dataclass
 
 from pydantic import TypeAdapter
 
-from nighthawk.composition import UNSET, UnsetType
+from nighthawk.adapters.pydantic_ai.model_candidate import resolve_model_candidate
+from nighthawk.adapters.pydantic_ai.model_outcome import ModelOutcome
+from nighthawk.core.async_bridge import run_coroutine_synchronously
+from nighthawk.core.configuration import UNSET, UnsetType
+from nighthawk.core.step_request import StepCandidate, StepRequest
 from nighthawk.errors import NighthawkError
-from nighthawk.runtime.async_bridge import run_coroutine_synchronously
-from nighthawk.runtime.model_candidate import resolve_model_candidate
-from nighthawk.runtime.model_outcome import ModelOutcome
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+
+
+async def resolve_proposal(request: StepRequest, outcome: ModelOutcome, binding_name_to_value: Mapping[str, object]) -> StepCandidate:
+    """Stand in for model assignments before the final response, then select exactly the proposed outputs."""
+    for name, value in binding_name_to_value.items():
+        request.step_context.environment.assign(name, value)
+    candidate = await resolve_model_candidate(request, outcome)
+    return StepCandidate(outcome=candidate.outcome, binding_name_to_value=binding_name_to_value)
 
 
 @dataclass(frozen=True)
@@ -59,11 +67,11 @@ class StubExecutor:
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
         outcome, bindings = self._parse_response(request)
-        return run_coroutine_synchronously(lambda: resolve_model_candidate(request, outcome, bindings))
+        return run_coroutine_synchronously(lambda: resolve_proposal(request, outcome, bindings))
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
         outcome, bindings = self._parse_response(request)
-        return await resolve_model_candidate(request, outcome, bindings)
+        return await resolve_proposal(request, outcome, bindings)
 
 
 @dataclass
@@ -86,4 +94,6 @@ class ModelResponseExecutor:
         return run_coroutine_synchronously(lambda: self.run_step_async(request=request))
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-        return await resolve_model_candidate(request, self.outcome, self.binding_name_to_value)
+        if isinstance(self.binding_name_to_value, UnsetType):
+            return await resolve_model_candidate(request, self.outcome)
+        return await resolve_proposal(request, self.outcome, self.binding_name_to_value)

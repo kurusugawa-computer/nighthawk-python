@@ -12,9 +12,9 @@ from pydantic import Field
 from pydantic_ai.messages import UserContent
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle, StepStarted
-from nighthawk.runtime.context import ContextRequest, DefaultContextBuilder
-from nighthawk.runtime.step_outcome import Return
+from nighthawk.adapters.pydantic_ai.context import ContextRequest, DefaultContextBuilder
+from nighthawk.core.lifecycle import StepCompleted, StepFinished, StepLifecycle, StepStarted
+from nighthawk.core.step_outcome import Return
 from tests.support.model_evaluation import ModelEvaluation
 
 

@@ -36,17 +36,20 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import nighthawk as nh
-from nighthawk.configuration import ModelSelection
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.core.scoping import get_scope
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration, selected_configuration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.model_selection import ModelSelection
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 class AllowedModels:
-    def __init__(self, executor: nh.AgentStepExecutor, model_name_to_model: dict[str, FunctionModel]) -> None:
+    def __init__(self, executor: AgentStepExecutor, model_name_to_model: dict[str, FunctionModel]) -> None:
         self.executor = executor
         self.model_name_to_model = model_name_to_model
 
     def resolve_model_selection(self, selection: ModelSelection) -> AllowedModels:
-        configuration = selection.apply(self.executor.configuration)
+        configuration = selected_configuration(selection, self.executor.configuration)
         model = configuration.execution_model
         if isinstance(model, str):
             if model not in self.model_name_to_model:
@@ -54,7 +57,7 @@ class AllowedModels:
             configuration = configuration.model_copy(update={"execution_model": self.model_name_to_model[model]})
         elif not any(model is allowed for allowed in self.model_name_to_model.values()):
             raise PermissionError("Borrowed model is not allowed")
-        executor = nh.AgentStepExecutor(configuration=configuration)
+        executor = AgentStepExecutor(configuration=configuration)
         return AllowedModels(executor, self.model_name_to_model)
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
@@ -92,20 +95,20 @@ async def child() -> None:
 
 model_name_to_model = {"allowed:A": simulated_model("A"), "allowed:B": simulated_model("B")}
 executor = AllowedModels(
-    nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=model_name_to_model["allowed:A"])),
+    AgentStepExecutor(configuration=StepExecutorConfiguration(execution_model=model_name_to_model["allowed:A"])),
     model_name_to_model,
 )
 with nh.run(executor):
     work()
     asyncio.run(child())
-    assert nh.get_scope().step_executor is executor
+    assert get_scope().step_executor is executor
     work()
     try:
         with nh.scope(execution_model="unapproved:model"):
             raise AssertionError("Unapproved model should have been refused")
     except PermissionError:
         pass
-    assert nh.get_scope().step_executor is executor
+    assert get_scope().step_executor is executor
 
 assert requested_models == ["A", "B", "A"]
 print("models=A,B,A; unapproved_model_refused=True")
@@ -114,7 +117,7 @@ print("models=A,B,A; unapproved_model_refused=True")
 
 ## Whole-function admission
 
-A host installs `nh.function_call_scope(handler)` independently of an executor run.
+A host installs `nighthawk.core.calls.function_call_scope(handler)` independently of an executor run.
 Omission or `nh.UNSET` inherits the enclosing handler, `None` disables interception, and a handler replaces it.
 Handlers must provide callable `invoke` and `invoke_async` methods; invalid inputs fail before installing the scope.
 Its `invoke(call, proceed)` method calls `proceed()` synchronously; `invoke_async(call, proceed)` awaits `proceed()`.
@@ -138,8 +141,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 import nighthawk as nh
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core.calls import FunctionCall
+from nighthawk.core.calls import function_call_scope
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 class Admission:
@@ -151,13 +156,13 @@ class Admission:
         if not self.allowed:
             raise PermissionError("Host refused invocation")
 
-    def invoke(self, call: nh.FunctionCall, proceed: Callable[[], object]) -> object:
+    def invoke(self, call: FunctionCall, proceed: Callable[[], object]) -> object:
         self.check()
         result = proceed()
         self.completed_calls.append(call.call_id)
         return result
 
-    async def invoke_async(self, call: nh.FunctionCall, proceed: Callable[[], Awaitable[object]]) -> object:
+    async def invoke_async(self, call: FunctionCall, proceed: Callable[[], Awaitable[object]]) -> object:
         self.check()
         result = await proceed()
         self.completed_calls.append(call.call_id)
@@ -192,7 +197,7 @@ async def summarize_async(text: str) -> str:
 
 
 admission = Admission()
-with nh.function_call_scope(admission):
+with function_call_scope(admission):
     try:
         refused_work()  # Refusal needs no run and precedes model resolution.
     except PermissionError:
@@ -248,13 +253,18 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
+from nighthawk.core.scoping import get_scope
+from nighthawk.core.step_context import StepContext
+from nighthawk.core.errors import ExecutionError
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 
 
 class RequestBudgetExceededError(RuntimeError):
     pass
 
 
-class RequestBudget(AbstractCapability[nh.StepContext]):
+class RequestBudget(AbstractCapability[StepContext]):
     def __init__(self, threshold: int) -> None:
         super().__init__()
         self.threshold = threshold
@@ -263,7 +273,7 @@ class RequestBudget(AbstractCapability[nh.StepContext]):
 
     # Keep the dependency's keyword-compatible parameter name.
     async def wrap_model_request(
-        self, ctx: RunContext[nh.StepContext], *, request_context: ModelRequestContext, handler: WrapModelRequestHandler
+        self, ctx: RunContext[StepContext], *, request_context: ModelRequestContext, handler: WrapModelRequestHandler
     ) -> ModelResponse:
         with self.lock:
             if self.observed_tokens >= self.threshold:
@@ -295,18 +305,18 @@ def investigate() -> None:
 
 
 budget = RequestBudget(threshold=100)
-executor = nh.AgentStepExecutor(
-    configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(simulated_response)),
+executor = AgentStepExecutor(
+    configuration=StepExecutorConfiguration(execution_model=FunctionModel(simulated_response)),
 )
 with nh.run(executor), nh.scope(capabilities=[budget]):
     try:
         investigate()
-    except nh.ExecutionError as exception:
+    except ExecutionError as exception:
         assert isinstance(exception.__cause__, RequestBudgetExceededError)
     else:
         raise AssertionError("Third request should have been refused")
     # The unfinished agent run never returned an aggregate to this meter.
-    assert nh.get_scope().usage_meter.total_tokens == 0
+    assert get_scope().usage_meter.total_token_count == 0
 
 assert request_count == 2
 assert budget.observed_tokens == 120
@@ -332,9 +342,9 @@ import asyncio
 from contextlib import suppress
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepFinished, StepLifecycle
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core.lifecycle import StepFinished, StepLifecycle
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 @nh.function

@@ -1,0 +1,216 @@
+"""Prepare namespaces and contracts before admitting a Natural step to an executor."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import FrameType
+
+from nighthawk.core.annotations import SourceAnnotation, module_annotations, resolve_contract
+from nighthawk.core.bindings import MISSING_ANNOTATION, infer_binding_types
+from nighthawk.core.description import discover_type_alias_reference_names
+from nighthawk.core.environment import StepEnvironment
+from nighthawk.core.natural.blocks import extract_bindings, parse_frontmatter, validate_frontmatter_deny
+from nighthawk.core.scoping import get_scope
+from nighthawk.core.step_context import StepContext, get_python_cell_scope_stack
+from nighthawk.core.step_definition import BlockKind
+from nighthawk.core.step_outcome import OutcomeKind
+from nighthawk.errors import NighthawkError
+
+
+def _compute_allowed_outcome_kinds(is_in_loop: bool, denied_outcome_kinds: tuple[str, ...]) -> tuple[OutcomeKind, ...]:
+    base_allowed_kinds: list[OutcomeKind] = ["pass", "return", "raise"]
+    if is_in_loop:
+        base_allowed_kinds.extend(["break", "continue"])
+    return tuple(kind for kind in base_allowed_kinds if kind not in denied_outcome_kinds)
+
+
+def _build_step_globals(
+    python_globals: dict[str, object],
+) -> dict[str, object]:
+    step_globals: dict[str, object] = dict(python_globals)
+    if "__builtins__" not in step_globals:
+        step_globals["__builtins__"] = __builtins__
+    return step_globals
+
+
+@dataclass(frozen=True)
+class PreparedStep:
+    block_kind: BlockKind
+    processed_program: str
+    allowed_outcome_kinds: tuple[OutcomeKind, ...]
+    step_context: StepContext
+    input_binding_name_to_value: dict[str, object]
+    output_binding_names: tuple[str, ...]
+    # Executors may replace the context's environment; commit keeps the selected contracts.
+    binding_name_to_type: Mapping[str, object]
+
+
+class StepPreparation:
+    """Own preparation and the partial facts available for failure reporting."""
+
+    def __init__(self, runtime_name_set: frozenset[str], *, block_kind: BlockKind) -> None:
+        self.block_kind: BlockKind = block_kind
+        self.runtime_name_set = runtime_name_set
+        self.processed_natural_program: str | None = None
+        self.allowed_outcome_kinds: tuple[OutcomeKind, ...] | None = None
+        self.input_binding_name_to_value: dict[str, object] | None = None
+
+    @staticmethod
+    def resolve_step_annotation(annotation: object, *, caller_frame: FrameType | None, environment: StepEnvironment) -> object:
+        if caller_frame is not None:
+            return resolve_contract(annotation, python_globals=caller_frame.f_globals, python_locals=dict(caller_frame.f_locals))
+        namespace = environment._expression_namespace()
+        return resolve_contract(annotation, python_globals=namespace, python_locals=namespace)
+
+    def _prepare_python_environment(
+        self,
+        caller_frame: FrameType,
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        scoped_task_name_to_value: Mapping[str, object],
+    ) -> tuple[StepEnvironment, dict[str, object]]:
+        python_locals = caller_frame.f_locals
+        python_globals = caller_frame.f_globals
+        step_locals = {name: value for name, value in python_locals.items() if name not in self.runtime_name_set}
+        cell_scope_stack = get_python_cell_scope_stack()
+        python_name_to_cell = cell_scope_stack[-1] if cell_scope_stack else {}
+
+        local_name_set = set(caller_frame.f_code.co_varnames) | set(caller_frame.f_code.co_cellvars)
+        cell_name_set = set(caller_frame.f_code.co_freevars)
+        module_name_to_annotation = module_annotations(
+            python_globals, resolve_deferred=any(name not in local_name_set | cell_name_set for name in output_binding_names)
+        )
+        binding_name_to_annotation = dict(module_name_to_annotation)
+        binding_name_to_annotation.update(
+            {name: annotation for name, annotation in binding_name_to_type.items() if annotation is not MISSING_ANNOTATION}
+        )
+        binding_name_to_type = {name: binding_name_to_type.get(name, MISSING_ANNOTATION) for name in output_binding_names}
+        for name in output_binding_names:
+            annotation = binding_name_to_type.get(name, MISSING_ANNOTATION)
+            if name not in local_name_set | cell_name_set:
+                if name in module_name_to_annotation:
+                    annotation = module_name_to_annotation[name]
+                    if isinstance(annotation, str):
+                        annotation = SourceAnnotation((annotation,))
+                if name in python_globals:
+                    step_locals[name] = python_globals[name]
+            if annotation is not MISSING_ANNOTATION:
+                annotation = resolve_contract(annotation, python_globals=caller_frame.f_globals, python_locals=dict(caller_frame.f_locals))
+            binding_name_to_type[name] = annotation
+
+        binding_name_to_type = infer_binding_types(binding_name_to_type, step_locals)
+        environment = StepEnvironment(
+            python_name_to_value=python_locals,
+            python_globals=python_globals,
+            local_name_set=frozenset(local_name_set),
+            python_name_to_cell=python_name_to_cell,
+            task_name_to_value=scoped_task_name_to_value,
+            output_name_set=frozenset(output_binding_names),
+            binding_name_to_annotation=binding_name_to_annotation,
+            binding_name_to_type=binding_name_to_type,
+            runtime_name_set=self.runtime_name_set,
+        )
+        return environment, step_locals
+
+    def _prepare_explicit_environment(
+        self,
+        name_to_value: Mapping[str, object],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        scoped_task_name_to_value: Mapping[str, object],
+    ) -> tuple[StepEnvironment, dict[str, object]]:
+        step_locals = dict(name_to_value)
+        binding_name_to_annotation = {name: annotation for name, annotation in binding_name_to_type.items() if annotation is not MISSING_ANNOTATION}
+        environment = StepEnvironment(
+            python_name_to_value=step_locals,
+            python_globals={},
+            task_name_to_value=scoped_task_name_to_value,
+            output_name_set=frozenset(output_binding_names),
+        )
+        selected_name_to_type = {
+            name: self.resolve_step_annotation(binding_name_to_type[name], caller_frame=None, environment=environment)
+            if name in binding_name_to_type and binding_name_to_type[name] is not MISSING_ANNOTATION
+            else MISSING_ANNOTATION
+            for name in output_binding_names
+        }
+        selected_name_to_type = infer_binding_types(selected_name_to_type, step_locals)
+        environment = StepEnvironment(
+            python_name_to_value=step_locals,
+            python_globals={},
+            task_name_to_value=scoped_task_name_to_value,
+            output_name_set=frozenset(output_binding_names),
+            binding_name_to_annotation=binding_name_to_annotation,
+            binding_name_to_type=selected_name_to_type,
+        )
+        return environment, step_locals
+
+    def prepare(
+        self,
+        natural_program: str,
+        input_binding_names: list[str],
+        output_binding_names: list[str],
+        binding_name_to_type: dict[str, object],
+        is_in_loop: bool,
+        *,
+        caller_frame: FrameType | None,
+        name_to_value: Mapping[str, object] | None,
+    ) -> PreparedStep:
+        block_kind = self.block_kind
+        processed_without_frontmatter, frontmatter = parse_frontmatter(natural_program)
+        denied_outcome_kinds = validate_frontmatter_deny(frontmatter)
+        processed_without_frontmatter = processed_without_frontmatter.lstrip("\n")
+        self.processed_natural_program = processed_without_frontmatter
+        if block_kind == "decide":
+            if denied_outcome_kinds:
+                raise NighthawkError("decide does not accept control-flow frontmatter")
+            if not processed_without_frontmatter.strip():
+                raise NighthawkError("decide requires a judgment instruction")
+            if extract_bindings(processed_without_frontmatter)[1]:
+                raise NighthawkError("decide instructions cannot declare output bindings")
+        allowed_outcome_kinds: tuple[OutcomeKind, ...] = (
+            ("pass",) if block_kind == "decide" else _compute_allowed_outcome_kinds(is_in_loop, denied_outcome_kinds)
+        )
+        self.allowed_outcome_kinds = allowed_outcome_kinds
+        scoped_task_name_to_value = get_scope().task_references
+        if name_to_value is None:
+            assert caller_frame is not None
+            environment, step_locals = self._prepare_python_environment(
+                caller_frame, output_binding_names, binding_name_to_type, scoped_task_name_to_value
+            )
+            step_globals = _build_step_globals(caller_frame.f_globals)
+            self.input_binding_name_to_value = {name: environment.resolve(name) for name in input_binding_names}
+        else:
+            environment, step_locals = self._prepare_explicit_environment(
+                name_to_value, output_binding_names, binding_name_to_type, scoped_task_name_to_value
+            )
+            step_globals = _build_step_globals({})
+            for name in input_binding_names:
+                if name not in step_locals:
+                    raise NameError(f"Read binding {name!r} is absent from the explicit namespace", name=name)
+            self.input_binding_name_to_value = {name: step_locals[name] for name in input_binding_names}
+        read_binding_names = frozenset(input_binding_names) - frozenset(output_binding_names)
+        type_alias_reference_names = discover_type_alias_reference_names(
+            step_locals=step_locals,
+            step_globals=step_globals,
+            input_binding_names=input_binding_names,
+        )
+
+        step_context = StepContext(
+            execution_reference=get_scope().execution_reference,
+            environment=environment,
+            step_locals=step_locals,
+            read_binding_names=read_binding_names,
+            type_alias_reference_names=type_alias_reference_names,
+        )
+
+        input_binding_name_to_value = self.input_binding_name_to_value
+        return PreparedStep(
+            block_kind=block_kind,
+            processed_program=processed_without_frontmatter,
+            allowed_outcome_kinds=allowed_outcome_kinds,
+            step_context=step_context,
+            input_binding_name_to_value=input_binding_name_to_value,
+            output_binding_names=tuple(output_binding_names),
+            binding_name_to_type=environment.binding_name_to_type,
+        )

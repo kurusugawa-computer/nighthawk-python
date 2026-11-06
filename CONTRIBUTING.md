@@ -56,7 +56,9 @@ Nighthawk-based development checks are an application of the library; adopting a
 
 ### Documentation changes
 
+[.claude/rules/docs.md](.claude/rules/docs.md) owns documentation responsibilities.
 Verify documentation changes with `uv run pytest -q tests/docs/` and `uv run mkdocs build --strict`.
+When changing reference applications, run their behavior checks in `tests/examples/` and relevant opt-in provider tests.
 
 ### Programs used in development
 
@@ -81,6 +83,9 @@ Run OpenAI integration tests with your `.env` loaded:
 ```bash
 NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run --env-file .env pytest -q tests/integration/
 ```
+
+Provider acceptance for Harness-hosted runs, including Parts, Sessions, and reference applications, lives in `tests/integration/harness/` and uses the same OpenAI gate.
+These cases cover generated-source execution, retained functions, host mediation, and the optional terminal in temporary test environments.
 
 Add `NIGHTHAWK_OPENAI_MULTIMODAL_INTEGRATION_TESTS=1` to include the image cases.
 Coding agent tests use their respective flags: `NIGHTHAWK_CODEX_INTEGRATION_TESTS=1`, `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS=1`, or `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS=1`.
@@ -166,7 +171,6 @@ Tests that replace lifecycle handlers forward terminal records to `model_evaluat
 Assertions inspect live Python values directly; serialization is only for evidence.
 Opaque values become type markers and unsupported cyclic data records a serialization diagnostic.
 
-Run directories under `evals/outputs/` are local and ignored.
 [.claude/rules/evals.md](.claude/rules/evals.md) owns evaluation cases, experiments, and when to record or delete decisions under `evals/evidence/`.
 
 ### Environment variables
@@ -181,7 +185,7 @@ Follow [.claude/rules/python.md](.claude/rules/python.md) for comments and inter
 
 Start with a concise summary of the operation, using imperative mood for functions.
 Describe the contract and any non-obvious consequences; do not repeat annotations or narrate the implementation.
-Keep examples in `docs/`, where they can be executed and checked against the runtime.
+Keep API usage snippets in `docs/`, where extraction tests can execute them; link runnable reference applications under `examples/`.
 
 | Section | Content |
 | --- | --- |

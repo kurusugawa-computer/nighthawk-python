@@ -5,9 +5,9 @@
 Nighthawk delegates Natural block execution to an LLM. The model is selected through the `execution_model` field of `StepExecutorConfiguration` using the `provider:model` format:
 
 ```py
-import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
 
-configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
+configuration = StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
 ```
 
 The configuration also accepts a borrowed Pydantic AI `Model` instance; the host retains its client lifetime.
@@ -28,27 +28,27 @@ Examples:
 
 OpenAI:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
+configuration = StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
 ```
 
 Anthropic (direct API):
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="anthropic:claude-sonnet-4-6")
+configuration = StepExecutorConfiguration(execution_model="anthropic:claude-sonnet-4-6")
 ```
 
 AWS Bedrock:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="bedrock:us.anthropic.claude-sonnet-4-6-v1:0")
+configuration = StepExecutorConfiguration(execution_model="bedrock:us.anthropic.claude-sonnet-4-6-v1:0")
 ```
 
 Google Vertex AI:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="google-vertex:gemini-3-pro-preview")
+configuration = StepExecutorConfiguration(execution_model="google-vertex:gemini-3-pro-preview")
 ```
 
 Groq:
 ```py
-configuration = nh.StepExecutorConfiguration(execution_model="groq:llama-4-scout-17b-16e-instruct")
+configuration = StepExecutorConfiguration(execution_model="groq:llama-4-scout-17b-16e-instruct")
 ```
 
 
@@ -90,7 +90,7 @@ Nighthawk transparently forwards all provider-specific configuration (temperatur
 Pydantic AI providers accept standard Pydantic AI model settings via the `execution_model_settings` field:
 
 ```py
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     execution_model="openai-responses:gpt-6-luna",
     execution_model_settings={"openai_reasoning_effort": "low"},
 )

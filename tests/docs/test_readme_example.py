@@ -6,10 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 import nighthawk as nh
-from nighthawk.configuration import ModelSelection
-from nighthawk.errors import ExecutionError
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
-from nighthawk.testing import CallbackExecutor
+from nighthawk.adapters.pydantic_ai.configuration import selected_configuration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.errors import ExecutionError
+from nighthawk.core.model_selection import ModelSelection
+from nighthawk.core.step_request import StepCandidate, StepRequest
+from nighthawk.core.testing import CallbackExecutor
 
 
 @pytest.mark.parametrize("invalid_output", [False, True], ids=["validated-average", "invalid-output"])
@@ -41,11 +43,11 @@ def test_readme_example(
 
     executor = CallbackExecutor(respond)
 
-    def select_executor(self: nh.AgentStepExecutor, selection: ModelSelection) -> CallbackExecutor:
-        assert selection.apply(self.configuration).execution_model is not None
+    def select_executor(self: AgentStepExecutor, selection: ModelSelection) -> CallbackExecutor:
+        assert selected_configuration(selection, self.configuration).execution_model is not None
         return executor
 
-    monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", select_executor)
+    monkeypatch.setattr(AgentStepExecutor, "resolve_model_selection", select_executor)
     if invalid_output:
         with pytest.raises(ExecutionError) as failure:
             runpy.run_path(str(example_path))

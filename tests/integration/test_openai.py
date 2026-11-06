@@ -3,11 +3,15 @@ from pydantic_ai import RunContext
 from pydantic_ai.capabilities import Instrumentation
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime.embedded import execute_step, execute_step_async
-from nighthawk.runtime.step_context import StepContext
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_outcome import Pass
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.calls import function_call_scope
+from nighthawk.core.embedded import execute_step, execute_step_async
+from nighthawk.core.lifecycle import StepCompleted, StepFinished, StepLifecycle
+from nighthawk.core.scoping import get_scope
+from nighthawk.core.step_context import StepContext
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_outcome import Pass
 from tests.integration.skip_helpers import requires_openai_integration
 
 
@@ -27,8 +31,8 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
         assert saved_name_to_value == {"result": 17}
         events.append(event)
 
-    executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(
+    executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
         )
     )
@@ -64,8 +68,8 @@ async def test_explicit_namespace_and_host_writeback(asynchronous: bool) -> None
 async def test_async_function_call():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(
+    step_executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
@@ -90,8 +94,8 @@ async def test_async_function_call():
 def test_multiple_blocks_one_call_scope():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(
+    step_executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
@@ -118,8 +122,8 @@ def test_multiple_blocks_one_call_scope():
 def test_provided_tools_smoke():
     openai_responses_model_settings_class = requires_openai_integration()
 
-    step_executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(
+    step_executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="low"),
         ),
@@ -148,7 +152,7 @@ async def test_embedded_selection_and_request_observation():
     requires_openai_integration()
     observer = RequestObserver(threshold=100_000)
     handler = RecordingHandler()
-    configuration = nh.StepExecutorConfiguration(
+    configuration = StepExecutorConfiguration(
         execution_model="openai-responses:gpt-6-luna", execution_model_settings={"openai_reasoning_effort": "low"}
     )
 
@@ -163,10 +167,10 @@ async def test_embedded_selection_and_request_observation():
             """
             return 0
 
-    executor = nh.AgentStepExecutor(configuration=configuration)
-    with nh.function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer]):
+    executor = AgentStepExecutor(configuration=configuration)
+    with function_call_scope(handler), nh.run(executor), nh.scope(capabilities=[observer]):
         assert await child() == 17
-        assert nh.get_scope().step_executor is executor
+        assert get_scope().step_executor is executor
     assert len(handler.calls) == 1
     assert observer.records
     assert all(record.call_id == handler.calls[0].call_id for record in observer.records)

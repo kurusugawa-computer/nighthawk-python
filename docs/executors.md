@@ -32,10 +32,11 @@ See [Philosophy](philosophy.md) for the purpose and composition principles, and 
 ## StepExecutorConfiguration basics
 
 ```py
-import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 
-configuration = nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
-step_executor = nh.AgentStepExecutor(configuration=configuration)
+configuration = StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna")
+step_executor = AgentStepExecutor(configuration=configuration)
 ```
 
 The `execution_model` and `decision_model` fields accept a `provider:model` identifier or a borrowed Pydantic AI `Model` instance whose client lifetime remains with the host.
@@ -54,17 +55,17 @@ For most cases, wrap a Pydantic AI `Agent` using `AgentStepExecutor`:
 ```py
 from pydantic_ai import Agent
 
-import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 
 agent = Agent(model="openai-responses:gpt-6-luna")
-executor = nh.AgentStepExecutor.from_agent(agent=agent)
+executor = AgentStepExecutor.from_agent(agent=agent)
 ```
 
 Use the constructor when Nighthawk should manage execution model selection, or `from_agent` when an existing agent owns that selection and its resource lifetime.
 The optional `execution_model` string on a borrowed agent's configuration describes it for tokenizer inference; it does not select the agent's model.
 Both paths use `decision_model` independently for `decide`, including borrowed decision Models and scoped replacements.
 
-For full control, implement `AsyncStepExecutor` directly. See [Specification Section 14.3](specification.md#143-custom-backends) for semantics and [API reference](api.md#runtime-executor-boundary) for the protocol.
+For full control, implement `AsyncStepExecutor` directly. See [Specification Section 14.3](specification.md#143-custom-backends) for semantics and [API reference](api.md#core-execution) for the protocol.
 
 ## Output selection
 
@@ -87,8 +88,8 @@ Neither an empty selection nor a later rejection undoes earlier calls or in-plac
 For an explicit combination of current outputs and replacements, use ordinary Python:
 
 ```py
-from nighthawk.runtime.step_outcome import Pass
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.core.step_outcome import Pass
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 def select_result(request: StepRequest, result: object) -> StepCandidate:

@@ -6,6 +6,7 @@
   "venv": ".venv",
   "include": [
     "src/nighthawk",
-    "tests"
+    "tests",
+    "examples"
   ]
 }

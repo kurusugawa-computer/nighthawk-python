@@ -192,8 +192,9 @@ import pytest
 from quotes import quote_batch
 
 import nighthawk as nh
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core.errors import ExecutionError
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 def test_quote_batch_processes_each_message_and_uses_host_price():
@@ -218,16 +219,16 @@ def test_quote_batch_stops_when_quantity_is_unclear():
 
 def test_quote_batch_rejects_invalid_model_output():
     executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"order": {"quantity": 0}})])
-    with nh.run(executor), pytest.raises(nh.ExecutionError):
+    with nh.run(executor), pytest.raises(ExecutionError):
         quote_batch(["One, please."], unit_price_cents=250)
 ```
 
 `ScriptedExecutor` returns ordinary `StepCandidate` values in order and records each `StepRequest`.
 Use `CallbackExecutor` with a function from `StepRequest` to `StepCandidate` when scripted results need to depend on inputs.
 Add checks for the relevant application effects, branches, and failure paths as the design grows.
-To test control outcomes, import `Return` and `Raise` from `nighthawk.runtime`:
+To test control outcomes, import `Return` and `Raise` from `nighthawk.core.step_outcome`:
 `StepCandidate(outcome=Return("bug"))` returns a literal Python value, and `StepCandidate(outcome=Raise("failed", ValueError))` requests an application exception using its resolved class.
-For a block that denies those outcomes, assert `nh.ExecutionError` and verify that dependent work did not run.
+For a block that denies those outcomes, assert `nighthawk.core.errors.ExecutionError` and verify that dependent work did not run.
 Also test `StepCandidate()` without assignments when retaining an initial value could conceal a missing result.
 
 The scripted quantity of 12 does not demonstrate that the prompt understands "a dozen".
@@ -245,8 +246,8 @@ Keep the following principles in mind, and read the linked contract before imple
 | When you need to... | Principle to preserve | Read before implementing |
 | --- | --- | --- |
 | Change models or inject capabilities for part of a workflow | `nh.scope(...)` composes settings within a run and restores the parent on exit. `execution_model=...` and `decision_model=...` select models independently; replacing the full configuration has broader effects. | [Runtime configuration](https://kurusugawa-computer.github.io/nighthawk-python/runtime-configuration/) |
-| Retry, fall back, vote, or cache | Compose policy around ordinary Python calls. Catch `nh.ExecutionError` for runtime failures and application exception types for direct application failures. Reconcile existing effects before repeating work; retrying record storage must not replay execution. | [Resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) |
-| Run concurrent judgments or enforce timeouts | Natural functions can be `async def`; Python owns concurrency and shared-state coordination. Cancellation is cooperative, and cleanup can extend waiting. A synchronous timeout does not stop its worker. | [Async Natural functions](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#async-natural-functions) and [timeouts](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#timeout) |
+| Retry, fall back, vote, or cache | Compose policy around ordinary Python calls. Catch `nighthawk.core.errors.ExecutionError` for runtime failures and application exception types for direct application failures. Reconcile existing effects before repeating work; retrying record storage must not replay execution. | [Resilience patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#resilience-patterns) |
+| Run concurrent judgments or enforce timeouts | Natural functions can be `async def`; Python owns concurrency and shared-state coordination. Cancellation is cooperative, and cleanup can extend waiting. A synchronous timeout does not stop its worker. | [Async Natural functions](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#async-natural-functions) and [timeouts](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#timeout-and-termination) |
 | Refuse a function before its Python effects or record its completion | Host admission, block completion, and request observations are different boundaries. A completed block does not establish that its containing function succeeded. | [Host integration](https://kurusugawa-computer.github.io/nighthawk-python/host-integration/) |
 | Track usage or admit work under a budget | Recorded usage can omit failed or hidden requests. Function-level budget checks are not a strict spending cap; concurrent or admitted work can overrun a threshold. | [Request usage and admission](https://kurusugawa-computer.github.io/nighthawk-python/host-integration/#request-usage-and-admission) |
 | Give a block filesystem access, commands, or skills | Keep the task and output contract explicit. The host and backend own permissions, isolation, and external effects. | [Coding agent backends](https://kurusugawa-computer.github.io/nighthawk-python/coding-agent-backends/) |

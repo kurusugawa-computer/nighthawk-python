@@ -14,8 +14,14 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage
 
 import nighthawk as nh
-from nighthawk.configuration import ModelSelection
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.adapters.pydantic_ai.configuration import selected_configuration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.adapters.pydantic_ai.scoping import get_model_scope
+from nighthawk.core.calls import FunctionCall, get_function_call
+from nighthawk.core.model_selection import ModelSelection
+from nighthawk.core.scoping import get_scope
+from nighthawk.core.step_context import StepContext
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 class RequestRefusedError(RuntimeError):
@@ -34,7 +40,7 @@ class RequestObservation:
     status: Literal["running", "succeeded", "failed", "interrupted", "refused"] = "running"
 
 
-class RequestObserver(AbstractCapability[nh.StepContext]):
+class RequestObserver(AbstractCapability[StepContext]):
     """Pydantic AI collapses absent usage to zeros, so an all-zero total counts as unknown."""
 
     def __init__(self, threshold: int = 100, host_unit: str = "test") -> None:
@@ -47,15 +53,15 @@ class RequestObserver(AbstractCapability[nh.StepContext]):
 
     # Retain the dependency's keyword-compatible parameter name on this override.
     async def wrap_model_request(
-        self, ctx: RunContext[nh.StepContext], *, request_context: ModelRequestContext, handler: WrapModelRequestHandler
+        self, ctx: RunContext[StepContext], *, request_context: ModelRequestContext, handler: WrapModelRequestHandler
     ) -> ModelResponse:
-        call = nh.get_function_call()
+        call = get_function_call()
         with self.lock:
             record = RequestObservation(
                 len(self.records) + 1,
                 self.host_unit,
                 call.call_id if call else None,
-                nh.get_scope().execution_reference.step_execution_id,
+                get_scope().execution_reference.step_execution_id,
                 request_context.model.model_name,
             )
             self.records.append(record)
@@ -78,17 +84,17 @@ class RequestObserver(AbstractCapability[nh.StepContext]):
 
 class RecordingHandler:
     def __init__(self) -> None:
-        self.calls: list[nh.FunctionCall] = []
+        self.calls: list[FunctionCall] = []
         self.outcomes: list[str] = []
         self.refuse = False
 
-    def accept(self, call: nh.FunctionCall) -> None:
+    def accept(self, call: FunctionCall) -> None:
         self.calls.append(call)
         if self.refuse:
             self.outcomes.append("refused")
             raise PermissionError("Host refused invocation")
 
-    def invoke(self, call: nh.FunctionCall, proceed: Callable[[], object]) -> object:
+    def invoke(self, call: FunctionCall, proceed: Callable[[], object]) -> object:
         self.accept(call)
         try:
             result = proceed()
@@ -98,7 +104,7 @@ class RecordingHandler:
         self.outcomes.append("returned")
         return result
 
-    async def invoke_async(self, call: nh.FunctionCall, proceed: Callable[[], Awaitable[object]]) -> object:
+    async def invoke_async(self, call: FunctionCall, proceed: Callable[[], Awaitable[object]]) -> object:
         self.accept(call)
         try:
             result = await proceed()
@@ -110,13 +116,13 @@ class RecordingHandler:
 
 
 class PreservingExecutor:
-    def __init__(self, executor: nh.AgentStepExecutor, model_name_to_model: dict[str, FunctionModel], observer: RequestObserver) -> None:
+    def __init__(self, executor: AgentStepExecutor, model_name_to_model: dict[str, FunctionModel], observer: RequestObserver) -> None:
         self.executor = executor
         self.model_name_to_model = model_name_to_model
         self.observer = observer
 
     def resolve_model_selection(self, selection: ModelSelection) -> PreservingExecutor:
-        configuration = selection.apply(self.executor.configuration)
+        configuration = selected_configuration(selection, self.executor.configuration)
         model = configuration.execution_model
         if isinstance(model, str):
             if model not in self.model_name_to_model:
@@ -124,14 +130,14 @@ class PreservingExecutor:
             configuration = configuration.model_copy(update={"execution_model": self.model_name_to_model[model]})
         elif not any(model is allowed for allowed in self.model_name_to_model.values()):
             raise PermissionError("Borrowed model is not allowed")
-        return PreservingExecutor(nh.AgentStepExecutor(configuration=configuration), self.model_name_to_model, self.observer)
+        return PreservingExecutor(AgentStepExecutor(configuration=configuration), self.model_name_to_model, self.observer)
 
     def run_step(self, *, request: StepRequest) -> StepCandidate:
-        assert self.observer in nh.get_scope().capabilities
+        assert self.observer in get_model_scope().capabilities
         return self.executor.run_step(request=request)
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-        assert self.observer in nh.get_scope().capabilities
+        assert self.observer in get_model_scope().capabilities
         return await self.executor.run_step_async(request=request)
 
 

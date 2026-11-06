@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Ship host-owned Harness mechanisms and reusable Agent Parts alongside Core for generated Python/Natural composition, capability grants, resource accounting, causal evidence, and mediated effects.
+  See the [Agent guide](docs/agent/index.md) for composition and host responsibilities.
+- Add optional persistent Sessions and [reference applications](examples/README.md) for procedure reuse, concurrent work, evaluation, durable audit storage, and a checkout-local interactive terminal.
+- Provide `FileSystemWriter` and `HttpxWebFetchClient` adapters; install `nighthawk-python[http]` for HTTP fetching.
+
+### Changed
+
+- Breaking: reorganize the distribution into `nighthawk.core`, `harness`, `parts`, `session`, and `adapters`, with no compatibility aliases for old paths.
+  The root facade exports only `function`, `run`, `scope`, `UNSET`, `Extend`, `Merge`, and `NighthawkError`; import other symbols from their owning modules.
+  See the [architecture guide](docs/architecture.md) for ownership and entry points.
+- Breaking: separate Core executor contracts from Pydantic AI.
+  Lifecycle records carry an opaque `executor_result` instead of `model_result`, and `UsageMeter` records neutral `ExecutionUsage` values with `total_token_count`.
+  Model configuration, `selected_configuration` (replacing `ModelSelection.apply`), prompts, prompt suffixes, context building, tools, and capabilities belong to `nighthawk.adapters.pydantic_ai`; the adapter projects operation rejection feedback.
+- Breaking: `OperationError` inherits `NighthawkError`; the operation boundary, not the exception type, decides whether a diagnostic is recoverable.
+  Core errors live in `nighthawk.core.errors` and tool declaration errors in `nighthawk.adapters.pydantic_ai.errors`.
+
+### Removed
+
+- Breaking: remove the `nighthawk.resilience` retry, fallback, timeout, budget, and circuit-breaker wrappers and the direct Tenacity dependency.
+  Use ordinary Python composition and host policy; voting moves to `nighthawk.parts.voting`.
+
 ## [0.19.0]
 
 ### Changed

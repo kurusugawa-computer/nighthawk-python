@@ -1,6 +1,6 @@
 # Embedded execution
 
-Use `nighthawk.runtime.embedded.execute_step` or `execute_step_async` when a Python host selects trusted Natural text, binding names, and output types at invocation time.
+Use `nighthawk.core.embedded.execute_step` or `execute_step_async` when a Python host selects trusted Natural text, binding names, and output types at invocation time.
 For a fixed operation, prefer an ordinary `@nh.function` with meaningful parameters and a return annotation.
 The embedded entry points serve hosts whose dynamic declarations must participate in Core validation and whose binding writes must complete inside the same step lifecycle.
 
@@ -9,7 +9,7 @@ The definition is immutable and reusable across invocations; it contains no exec
 Each invocation resolves annotations and infers missing contracts in its own environment.
 
 Both entry points use the active `nh.run()` and `nh.scope()` configuration, the ordinary executor, commit inspection, and terminal notifications.
-They do not invoke `FunctionCallHandler`; `nh.function_call_scope(...)` alone does not admit or refuse embedded execution.
+They do not invoke `FunctionCallHandler`; `nighthawk.core.calls.function_call_scope(...)` alone does not admit or refuse embedded execution.
 They return a resolved `Pass`, `Return`, `Break`, or `Continue` after writeback and terminal delivery.
 The host interprets that control result; a final `Raise` instead propagates its constructed exception after terminal delivery.
 Setting `is_in_loop=True` permits `Break` and `Continue`; deny frontmatter can further restrict the permitted results.
@@ -91,9 +91,9 @@ This example uses the same executor with synchronous and asynchronous entry poin
 import asyncio
 
 import nighthawk as nh
-from nighthawk.runtime.embedded import execute_step, execute_step_async
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.core.embedded import execute_step, execute_step_async
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 class Executor:
@@ -154,12 +154,12 @@ The host explicitly saves into its mapping, and terminal delivery observes the s
 <!-- runnable-example:embedded_sync -->
 ```py
 import nighthawk as nh
-from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime.embedded import execute_step
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_outcome import Pass
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core.lifecycle import StepCompleted, StepFinished, StepLifecycle
+from nighthawk.core.embedded import execute_step
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_outcome import Pass
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 name_to_value = {
     "observations": ["The trial passed."],
@@ -204,12 +204,12 @@ import asyncio
 from pydantic import BaseModel
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepCompleted, StepFinished, StepLifecycle
-from nighthawk.runtime.embedded import execute_step_async
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_outcome import Pass
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core.lifecycle import StepCompleted, StepFinished, StepLifecycle
+from nighthawk.core.embedded import execute_step_async
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_outcome import Pass
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 class Selection(BaseModel):
@@ -274,7 +274,7 @@ Validation calls retain no failure state between invocations.
 Neither helper deep-copies objects or reverses validator effects.
 
 ```py
-from nighthawk.runtime.bindings import MISSING_ANNOTATION, infer_binding_types, validate_output_bindings
+from nighthawk.core.bindings import MISSING_ANNOTATION, infer_binding_types, validate_output_bindings
 
 binding_name_to_type = infer_binding_types({"count": MISSING_ANNOTATION}, {"count": 0})
 candidate_name_to_value = {"count": "12"}

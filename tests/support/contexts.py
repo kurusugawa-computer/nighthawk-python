@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-import nighthawk as nh
-from nighthawk.runtime.environment import StepEnvironment
+from nighthawk.core.environment import StepEnvironment
+from nighthawk.core.execution_reference import ExecutionReference
+from nighthawk.core.step_context import StepContext
 
 
 def new_step_context(
     *,
-    execution_reference: nh.ExecutionReference | None = None,
+    execution_reference: ExecutionReference | None = None,
     step_globals: dict[str, object] | None = None,
     step_locals: dict[str, object] | None = None,
     output_binding_names: Iterable[str] = (),
@@ -16,11 +17,11 @@ def new_step_context(
     task_name_to_value: Mapping[str, object] | None = None,
     binding_name_to_type: Mapping[str, object] | None = None,
     type_alias_reference_names: frozenset[str] = frozenset(),
-) -> nh.StepContext:
+) -> StepContext:
     step_globals = {} if step_globals is None else step_globals
     step_locals = {} if step_locals is None else step_locals
-    return nh.StepContext(
-        execution_reference=execution_reference or nh.ExecutionReference("run", "scope", "step", "test"),
+    return StepContext(
+        execution_reference=execution_reference or ExecutionReference("run", "scope", "step", "test"),
         environment=StepEnvironment(
             python_name_to_value=step_locals,
             python_globals=step_globals,
@@ -34,5 +35,5 @@ def new_step_context(
     )
 
 
-def new_context(**name_to_value: object) -> nh.StepContext:
+def new_context(**name_to_value: object) -> StepContext:
     return new_step_context(step_locals=name_to_value)

@@ -3,22 +3,24 @@ from pathlib import Path
 from pydantic_ai.capabilities import Instrumentation
 
 import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from tests.integration.skip_helpers import requires_claude_code_sdk_integration
 
 
 def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
     requires_claude_code_sdk_integration()
 
-    from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+    from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings
 
-    run_configuration = nh.StepExecutorConfiguration(
+    run_configuration = StepExecutorConfiguration(
         execution_model="claude-code-sdk:sonnet",
         execution_model_settings=ClaudeCodeSdkModelSettings(
             working_directory=str(tmp_path.resolve()),
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor(
+    step_executor = AgentStepExecutor(
         configuration=run_configuration,
     )
 
@@ -39,14 +41,14 @@ def test_claude_code_natural_step_uses_tool(tmp_path: Path) -> None:
 def test_claude_skill() -> None:
     requires_claude_code_sdk_integration()
 
-    from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+    from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     try:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
-        configuration = nh.StepExecutorConfiguration(
+        configuration = StepExecutorConfiguration(
             execution_model="claude-code-sdk:sonnet",
             execution_model_settings=ClaudeCodeSdkModelSettings(
                 permission_mode="bypassPermissions",
@@ -56,7 +58,7 @@ def test_claude_skill() -> None:
             ).model_dump(),
         )
 
-        step_executor = nh.AgentStepExecutor(
+        step_executor = AgentStepExecutor(
             configuration=configuration,
         )
         with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
@@ -85,11 +87,11 @@ def test_claude_skill() -> None:
 def test_claude_skill_calc() -> None:
     requires_claude_code_sdk_integration()
 
-    from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+    from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
-    configuration = nh.StepExecutorConfiguration(
+    configuration = StepExecutorConfiguration(
         execution_model="claude-code-sdk:haiku",
         execution_model_settings=ClaudeCodeSdkModelSettings(
             permission_mode="bypassPermissions",
@@ -99,7 +101,7 @@ def test_claude_skill_calc() -> None:
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor(
+    step_executor = AgentStepExecutor(
         configuration=configuration,
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
@@ -126,9 +128,9 @@ def test_claude_skill_calc() -> None:
 def test_claude_mcp_callback() -> None:
     requires_claude_code_sdk_integration()
 
-    from nighthawk.backends.claude_code_sdk import ClaudeCodeSdkModelSettings
+    from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings
 
-    configuration = nh.StepExecutorConfiguration(
+    configuration = StepExecutorConfiguration(
         execution_model="claude-code-sdk:haiku",
         execution_model_settings=ClaudeCodeSdkModelSettings(
             permission_mode="bypassPermissions",
@@ -137,7 +139,7 @@ def test_claude_mcp_callback() -> None:
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor(
+    step_executor = AgentStepExecutor(
         configuration=configuration,
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):

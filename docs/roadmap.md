@@ -69,23 +69,7 @@ Start with existing boundaries and small examples; apply the [Core evidence crit
 
 Develop host/backend integration guidance for process isolation and permissions.
 
-## Resilience and observability
-
-### Resilience observability coverage
-
-Align trace fields for attempts, decisions, and state transitions across [resilience primitives](patterns.md#resilience-patterns).
-Keep telemetry optional and avoid redundant events.
-
-### Resilience defaults via scope
-
-Explore reusable host-selected policy defaults that compose with per-function overrides.
-Preserve explicit retry boundaries and require recovery decisions after partial effects.
-
 ## Runtime
-
-### Host-owned persistence
-
-Provide examples of host-managed execution records and application snapshots, with explicit deduplication and recovery decisions.
 
 ### Execution context propagation
 

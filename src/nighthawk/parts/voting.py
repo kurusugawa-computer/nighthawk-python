@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+import asyncio
+import inspect
+import logging
+import math
+from collections import Counter
+from collections.abc import Callable
+from functools import wraps
+from typing import Any, cast
+
+_logger = logging.getLogger("nighthawk")
+
+
+def plurality(results: list[Any]) -> Any:
+    """Return the most common result (plurality vote).
+
+    For hashable results, uses :class:`collections.Counter`.
+    For unhashable results, falls back to equality comparison.
+    Ties select the result encountered first.
+
+    Args:
+        results: Non-empty list of results to vote on.
+
+    Returns:
+        The most common result.
+
+    Raises:
+        ValueError: If *results* is empty.
+    """
+    if not results:
+        raise ValueError("plurality() requires at least one result")
+
+    try:
+        counter: Counter[Any] = Counter(results)
+        return counter.most_common(1)[0][0]
+    except TypeError:
+        best_result = results[0]
+        best_count = 0
+        for candidate in results:
+            count = sum(1 for other in results if other == candidate)
+            if count > best_count:
+                best_count = count
+                best_result = candidate
+        return best_result
+
+
+def vote(
+    *,
+    count: int = 3,
+    decide: Callable[[list[Any]], Any] = plurality,
+    min_success: int | None = None,
+):
+    """Create a voting transformer.
+
+    Calls the wrapped function *count* times and aggregates successful results using the *decide* function.
+
+    For async functions, all calls execute concurrently via :func:`asyncio.gather`. For sync functions, calls execute sequentially.
+    Raised :class:`Exception` instances count as failed votes; returned exception objects are ordinary values.
+    Cancellation and other :class:`BaseException` subclasses propagate, even when enough votes succeeded.
+    Async calls are joined before propagating a failure or cancellation.
+
+    Args:
+        count: Number of times to call the function.
+        decide: Aggregation function. Receives ``list[T]``, returns ``T``.
+            Defaults to :func:`plurality` (most common result).
+        min_success: Minimum number of successful calls required.
+            Defaults to ``ceil(count / 2)``. If fewer calls succeed,
+            raises the last exception.
+
+    Returns:
+        decorator (Callable): A decorator that wraps a function with voting logic.
+    """
+    if count < 1:
+        raise ValueError("vote count must be at least 1")
+
+    effective_min_success = min_success if min_success is not None else math.ceil(count / 2)
+    if effective_min_success < 1:
+        raise ValueError("vote min_success must be at least 1")
+    if effective_min_success > count:
+        raise ValueError("vote min_success must be less than or equal to count")
+
+    def decorator[**P, R](function: Callable[P, R]) -> Callable[P, R]:
+        if inspect.iscoroutinefunction(function):
+
+            @wraps(function)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                tasks = [asyncio.create_task(_call_async(function, args, kwargs)) for _ in range(count)]
+                gathered = await asyncio.gather(*tasks)
+
+                results: list[Any] = []
+                last_exception: Exception | None = None
+                for result, exception in gathered:
+                    if exception is None:
+                        results.append(result)
+                    elif isinstance(exception, Exception):
+                        last_exception = exception
+                        _logger.info("Vote: call to %s failed: %s", function.__name__, exception)
+                    else:
+                        raise exception
+
+                if len(results) < effective_min_success:
+                    assert last_exception is not None
+                    raise last_exception
+
+                return decide(results)
+
+            return cast(Callable[P, R], async_wrapper)
+
+        @wraps(function)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            results: list[Any] = []
+            last_exception: Exception | None = None
+
+            for _ in range(count):
+                try:
+                    results.append(function(*args, **kwargs))
+                except Exception as exception:
+                    last_exception = exception
+                    _logger.info("Vote: call to %s failed: %s", function.__name__, exception)
+
+            if len(results) < effective_min_success:
+                assert last_exception is not None
+                raise last_exception
+
+            return decide(results)
+
+        return cast(Callable[P, R], sync_wrapper)
+
+    return decorator
+
+
+async def _call_async(
+    function: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> tuple[Any, BaseException | None]:
+    try:
+        return await function(*args, **kwargs), None
+    except BaseException as exception:
+        return None, exception

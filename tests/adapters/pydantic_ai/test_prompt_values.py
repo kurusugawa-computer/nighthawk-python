@@ -1,0 +1,697 @@
+import builtins
+import functools
+import textwrap
+from typing import Literal
+
+import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.environment import StepEnvironment
+from tests.support.prompts import (
+    FakeAgent,
+    build_step_context,
+    build_user_prompt_text,
+    globals_section,
+    locals_section,
+    prompt_content_to_text,
+)
+
+
+class _CallableValue:
+    def __call__(self, item):  # type: ignore[no-untyped-def]
+        return item
+
+
+class _BoundMethodCarrier:
+    def transform(self, item):  # type: ignore[no-untyped-def]
+        return item
+
+
+class _SignatureUnavailableCallable:
+    @property
+    def __signature__(self):  # type: ignore[no-untyped-def]
+        raise ValueError("signature unavailable")
+
+    def __call__(self, *items):  # type: ignore[no-untyped-def]
+        return items
+
+
+class _PublicObjectSurface:
+    field_value = 12
+    _internal = "skip"
+
+    def append(self, action: str) -> None:
+        _ = action
+
+    def remove(self, action_id: str) -> None:
+        _ = action_id
+
+    @property
+    def computed(self) -> str:
+        raise AssertionError("property must not be evaluated")
+
+
+class _WithSlots:
+    __slots__ = ("slot_name", "_private_slot")
+
+    def __init__(self) -> None:
+        self.slot_name = "slot"
+        self._private_slot = "secret"
+
+
+class _MethodCollisionA:
+    def open(self, action_id: str) -> None:
+        _ = action_id
+
+
+class _MethodCollisionB:
+    def open(self, action_id: str) -> None:
+        _ = action_id
+
+
+class _AsyncSurface:
+    async def wait(self, operation: str) -> str:
+        """Wait for the requested operation."""
+        return operation
+
+
+G = 1
+
+
+def _global_helper(required, optional=10, *, keyword="x"):  # type: ignore[no-untyped-def]
+    _ = keyword
+    return required + optional
+
+
+def _global_typed_helper(
+    number: int,
+    names: list[str],
+    *,
+    enabled: bool = True,
+) -> dict[str, int]:
+    _ = names
+    _ = enabled
+    return {"number": number}
+
+
+def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
+    _ = tmp_path
+    agent = FakeAgent()
+    with nh.run(AgentStepExecutor.from_agent(agent=agent)):
+        a = 1.0
+
+        @nh.function
+        def f() -> None:
+            nonlocal a
+            x = 10
+            """execute
+            Say hi.
+            """
+
+            y = "hello"
+            """execute
+            <a><G>
+            """
+
+            _ = x
+            _ = y
+
+        f()
+
+        _ = a
+
+    first_prompt = prompt_content_to_text(agent.seen_prompts[0])
+    assert first_prompt[first_prompt.index("<<<NH:PROGRAM>>>") :] == textwrap.dedent(
+        """\
+        <<<NH:PROGRAM>>>
+        Say hi.
+
+        <<<NH:END_PROGRAM>>>
+
+        <<<NH:LOCALS>>>
+        a: float = 1.0
+        x: int = 10
+        <<<NH:END_LOCALS>>>
+
+        <<<NH:GLOBALS>>>
+
+        <<<NH:END_GLOBALS>>>
+        """
+    )
+    second_prompt = prompt_content_to_text(agent.seen_prompts[1])
+    assert second_prompt[second_prompt.index("<<<NH:PROGRAM>>>") :] == textwrap.dedent(
+        """\
+        <<<NH:PROGRAM>>>
+        <a><G>
+
+        <<<NH:END_PROGRAM>>>
+
+        <<<NH:LOCALS>>>
+        a: float = 1.0
+        x: int = 10
+        y: str = "hello"
+        <<<NH:END_LOCALS>>>
+
+        <<<NH:GLOBALS>>>
+        G: int = 1
+        <<<NH:END_GLOBALS>>>
+        """
+    )
+
+
+def test_locals_section_renders_plain_python_function_signature() -> None:
+    def local_function(required, optional=10, *, keyword="x"):  # type: ignore[no-untyped-def]
+        _ = keyword
+        return required + optional
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"local_function": local_function},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "local_function: Callable  # (required, optional=10, *, keyword='x')" in locals_text
+    assert "<function>" not in locals_text
+
+
+def test_locals_section_renders_lambda_builtin_and_bound_method_values() -> None:
+    lambda_value = lambda number: number  # noqa: E731
+    bound_method = _BoundMethodCarrier().transform
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={
+            "lambda_value": lambda_value,
+            "builtin_length": len,
+            "bound_method": bound_method,
+        },
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "lambda_value: Callable  # (number)" in locals_text
+    assert "builtin_length: Callable  # (obj, /); " in locals_text
+    assert "bound_method: Callable  # (item)" in locals_text
+    assert "<function>" not in locals_text
+    assert "builtin_function_or_method" not in locals_text
+    assert "method = " not in locals_text
+
+
+def test_locals_section_renders_callable_instance_and_partial_function() -> None:
+    callable_instance = _CallableValue()
+    partially_applied_helper = functools.partial(_global_helper, 1)
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={
+            "callable_instance": callable_instance,
+            "partially_applied_helper": partially_applied_helper,
+        },
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "callable_instance: Callable  # (item)" in locals_text
+    assert "partially_applied_helper: Callable  # (optional=10, *, keyword='x')" in locals_text
+    assert "partial = " not in locals_text
+    assert "<function>" not in locals_text
+    assert "(*args, **kwargs)" not in locals_text
+
+
+def test_globals_section_renders_referenced_global_function_signature() -> None:
+    step_context = build_step_context(
+        python_globals={
+            "__builtins__": builtins,
+            "global_helper": _global_helper,
+        },
+        python_locals={},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Use <global_helper> in this block.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "global_helper: Callable  # (required, optional=10, *, keyword='x')" in globals_text
+    assert "<function>" not in globals_text
+
+
+def test_locals_section_renders_typed_function_argument_and_return_annotations() -> None:
+    def local_typed_function(
+        number: int,
+        names: list[str],
+        *,
+        enabled: bool = True,
+    ) -> dict[str, int]:
+        _ = names
+        _ = enabled
+        return {"number": number}
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"local_typed_function": local_typed_function},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "local_typed_function: Callable  # (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in locals_text
+    assert "<function>" not in locals_text
+
+
+def test_globals_section_renders_referenced_typed_function_argument_and_return_annotations() -> None:
+    step_context = build_step_context(
+        python_globals={
+            "__builtins__": builtins,
+            "global_typed_helper": _global_typed_helper,
+        },
+        python_locals={},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Use <global_typed_helper> in this block.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "global_typed_helper: Callable  # (number: int, names: list[str], *, enabled: bool = True) -> dict[str, int]" in globals_text
+    assert "<function>" not in globals_text
+
+
+def test_signature_unavailable_callable_renders_non_invocable_marker() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"opaque_callable": _SignatureUnavailableCallable()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "opaque_callable: Callable  # signature unavailable" in locals_text
+    assert "(*args, **kwargs)" not in locals_text
+
+
+def test_object_surface_renders_public_methods_and_fields_without_properties() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"collector": _PublicObjectSurface()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect collector.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "collector: _PublicObjectSurface  # instance" in locals_text
+    assert "collector.append: Callable  # (action: str) -> None" in locals_text
+    assert "collector.remove: Callable  # (action_id: str) -> None" in locals_text
+    assert "collector.field_value: int = 12" in locals_text
+    assert "collector._internal" not in locals_text
+    assert "collector.computed" not in locals_text
+
+
+def test_object_surface_renders_public_slots() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"collector": _WithSlots()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect collector.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert 'collector.slot_name: str = "slot"' in locals_text
+    assert "collector._private_slot" not in locals_text
+
+
+def test_object_methods_preserve_qualified_references() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"a": _MethodCollisionA(), "b": _MethodCollisionB()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect objects.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "a.open: Callable  # (action_id: str) -> None" in locals_text
+    assert "b.open: Callable  # (action_id: str) -> None" in locals_text
+
+
+def test_object_async_method_renders_async_marker() -> None:
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"worker": _AsyncSurface()},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect worker.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "worker.wait: Callable  # async (operation: str) -> str; Wait for the requested operation." in locals_text
+
+
+def test_callables_preserve_distinct_references() -> None:
+    def open_customer(customer_id):  # type: ignore[no-untyped-def]
+        return customer_id
+
+    def open_order(customer_id):  # type: ignore[no-untyped-def]
+        return customer_id
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={
+            "open_customer": open_customer,
+            "open_order": open_order,
+        },
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "open_customer: Callable  # (customer_id)" in locals_text
+    assert "open_order: Callable  # (customer_id)" in locals_text
+
+
+def test_object_surface_limits_methods_and_fields() -> None:
+    class Surface:
+        f1 = 1
+        f2 = 2
+        f3 = 3
+
+        def a(self) -> None:
+            return None
+
+        def b(self) -> None:
+            return None
+
+        def c(self) -> None:
+            return None
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"surface": Surface()},
+    )
+
+    configuration = StepExecutorConfiguration(
+        context_limits=StepContextLimits(
+            locals_max_tokens=8_000,
+            locals_max_items=80,
+            globals_max_tokens=4_000,
+            globals_max_items=40,
+            value_max_tokens=200,
+            object_max_methods=2,
+            object_max_fields=2,
+            object_field_value_max_tokens=120,
+            tool_result_max_tokens=1_200,
+        )
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect surface.",
+        step_context=step_context,
+        configuration=configuration,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "# surface: 1 public methods omitted" in locals_text
+    assert "# surface: 1 public fields omitted" in locals_text
+
+
+def test_locals_section_renders_pep695_type_alias_in_function_signature() -> None:
+    type T = Literal["A", "B", "C"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def f(t: T) -> None:
+        _ = t
+
+    def g(literal_value: Literal["A", "B", "C"]) -> None:
+        _ = literal_value
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"T": T, "f": f, "g": g},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Inspect locals.",
+        step_context=step_context,
+    )
+
+    locals_text = locals_section(prompt)
+    assert "T: TypeAliasType  # T; alias expansion omitted (requires evaluation)" in locals_text
+    assert "f: Callable  # (t: T) -> None" in locals_text
+    assert "g: Callable  # (literal_value: Literal['A', 'B', 'C']) -> None" in locals_text
+    assert "<function>" not in locals_text
+
+
+def test_globals_section_includes_type_alias_from_local_callable_return_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check": check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check the text.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
+
+    locals_text = locals_section(prompt)
+    assert "check: Callable  # (text: str) -> Labels" in locals_text
+
+
+def test_globals_section_includes_type_alias_from_local_callable_parameter_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def process(labels: Labels) -> str:
+        _ = labels
+        return ""
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"process": process},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Process.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
+
+
+def test_globals_section_includes_type_alias_from_generic_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def batch_check(texts: list[str]) -> list[Labels]:
+        _ = texts
+        return []
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"batch_check": batch_check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Batch check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
+
+
+def test_globals_section_includes_type_alias_from_nested_generic_annotation() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def deep_check(data: list[dict[str, Labels]]) -> None:
+        _ = data
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"deep_check": deep_check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Deep check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
+
+
+def test_globals_section_includes_type_alias_from_global_callable_signature() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def classify(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels, "classify": classify},
+        python_locals={},
+        input_binding_names=["classify"],
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Classify the email by <classify> function.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in globals_text
+    assert "classify: Callable  # (text: str) -> Labels" in globals_text
+
+
+def test_globals_section_excludes_builtin_types_from_callable_signature() -> None:
+    def plain(text: str, count: int) -> list[str]:
+        _ = text, count
+        return []
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"plain": plain},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Run plain.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert globals_text.strip() == ""
+
+
+def test_type_alias_in_locals_is_not_duplicated_in_globals_section() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check": check, "Labels": Labels},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels" not in globals_text
+
+    locals_text = locals_section(prompt)
+    assert "Labels: TypeAliasType  # Labels; alias expansion omitted (requires evaluation)" in locals_text
+
+
+def test_globals_section_deduplicates_type_alias_from_multiple_callables() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check_a(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    def check_b(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check_a": check_a, "check_b": check_b},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check both.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert globals_text.count("Labels:") == 1
+
+
+def test_type_alias_in_globals_unreferenced_by_signature_is_not_discovered() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> str:
+        _ = text
+        return ""
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins, "Labels": Labels},
+        python_locals={"check": check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels" not in globals_text
+
+
+def test_type_alias_not_in_globals_is_not_discovered() -> None:
+    type Labels = Literal["good", "bad"]  # pyright: ignore[reportGeneralTypeIssues]
+
+    def check(text: str) -> Labels:  # pyright: ignore[reportReturnType]
+        _ = text
+
+    step_context = build_step_context(
+        python_globals={"__builtins__": builtins},
+        python_locals={"check": check},
+    )
+
+    prompt = build_user_prompt_text(
+        processed_natural_program="Check.",
+        step_context=step_context,
+    )
+
+    globals_text = globals_section(prompt)
+    assert "Labels" not in globals_text
+
+
+def test_explicit_application_prefixes_are_presented_in_initial_context() -> None:
+    context = build_step_context(python_globals={"__nh_global": 9}, python_locals={"__nh_local": 7})
+    context.environment = StepEnvironment(
+        python_name_to_value=context.step_locals, python_globals={"__nh_global": 9}, task_name_to_value={"__nighthawk_task": 5}
+    )
+    prompt = build_user_prompt_text(processed_natural_program="Read <__nh_local>, <__nh_global>, and <__nighthawk_task>.", step_context=context)
+    for name, value in (("__nh_local", 7), ("__nh_global", 9), ("__nighthawk_task", 5)):
+        assert f"{name}: int = {value}" in prompt

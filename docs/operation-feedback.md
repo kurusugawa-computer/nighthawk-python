@@ -19,7 +19,7 @@ Operation oversight is the connection point for deciding whether an inspected op
 
 `OperationRejectedError.rejection` and the operation record share the same `OperationRejection`.
 Its `request` identifies the operation and step; `reason` and `guidance` are deliberately model-visible.
-`model_feedback()` returns them in the tool error shape, with the reason as `message`, plus identities and execution-start information, without exposing live tool arguments or diagnostic exceptions.
+The Pydantic AI adapter projects them into its tool error shape, with the reason as `message`, plus identities and execution-start information, without exposing live tool arguments or diagnostic exceptions.
 Reasons are nonempty strings; guidance is an optional string.
 
 An inspector must return a decision normally.
@@ -39,8 +39,10 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, Tool
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import nighthawk as nh
-from nighthawk.oversight import Accept, OperationDecision, Oversight, RejectOperation
-from nighthawk.runtime.operation_contract import OperationRequest
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.oversight import Accept, OperationDecision, Oversight, RejectOperation
+from nighthawk.core.operation_contract import OperationRequest
 
 
 effects: list[str] = []
@@ -78,7 +80,7 @@ async def calculate_async() -> int:
     return 0
 
 
-def make_executor() -> nh.AgentStepExecutor:
+def make_executor() -> AgentStepExecutor:
     requests = 0
 
     async def respond(messages: list[ModelMessage], information: AgentInfo) -> ModelResponse:
@@ -92,7 +94,7 @@ def make_executor() -> nh.AgentStepExecutor:
             parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "return", "return_expression": "1 + 1"}}, "finish")]
         )
 
-    return nh.AgentStepExecutor(configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(respond)))
+    return AgentStepExecutor(configuration=StepExecutorConfiguration(execution_model=FunctionModel(respond)))
 
 
 def run_sync_example() -> int:
@@ -135,10 +137,10 @@ This example extends the definitions above.
 The executor owns its choice of the next operation and does not inspect or modify private failure state.
 
 ```py
-from nighthawk.runtime.expression import evaluate_expression, evaluate_expression_async
-from nighthawk.runtime.operation_contract import OperationRejectedError
-from nighthawk.runtime.step_outcome import Return
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.core.expression import evaluate_expression, evaluate_expression_async
+from nighthawk.core.operation_contract import OperationRejectedError
+from nighthawk.core.step_outcome import Return
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 class CorrectingExecutor:

@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime.step_outcome import Return
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core import lifecycle
+from nighthawk.core.errors import ExecutionError
+from nighthawk.core.step_outcome import Return
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 @pytest.fixture
@@ -34,20 +36,20 @@ async def test_documented_generation_is_followed_by_a_decision(summary_assessmen
             StepCandidate(binding_name_to_value={"support_probability": 0.9}),
         ]
     )
-    events: list[nh.lifecycle.StepFinished] = []
-    with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
+    events: list[lifecycle.StepFinished] = []
+    with nh.run(executor), nh.scope(lifecycle=lifecycle.StepLifecycle(on_step_finished=events.append)):
         assert await summary_assessment(document) == (summary, 0.9)
 
     assert [call.block_kind for call in executor.requests] == ["execute", "decide"]
     assert executor.requests[1].input_binding_name_to_value == {"document": document, "summary": summary}
-    assert len(events) == 2 and all(isinstance(event, nh.lifecycle.StepCompleted) for event in events)
+    assert len(events) == 2 and all(isinstance(event, lifecycle.StepCompleted) for event in events)
     assert [event.block_kind for event in events] == ["execute", "decide"]
 
 
 @pytest.mark.asyncio
 async def test_documented_generation_cannot_return_an_unassessed_result(summary_assessment) -> None:
     executor = ScriptedExecutor([StepCandidate(outcome=Return(("Unchecked summary", 0.99)))])
-    with nh.run(executor), pytest.raises(nh.ExecutionError, match="not allowed") as caught:
+    with nh.run(executor), pytest.raises(ExecutionError, match="not allowed") as caught:
         await summary_assessment("The Willow team completed 12 tickets.")
     assert len(executor.requests) == 1
     failure = caught.value.step_failed

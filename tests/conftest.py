@@ -11,11 +11,11 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from nighthawk.runtime import scoping as runtime_scoping
-from nighthawk.runtime.embedded import execute_step, execute_step_async
-from nighthawk.runtime.step_outcome import StepOutcome
+from nighthawk.core import scoping
+from nighthawk.core.embedded import execute_step, execute_step_async
+from nighthawk.core.step_outcome import StepOutcome
 
-pytest_plugins = ("tests.support.model_evaluation",)
+pytest_plugins = ("tests.support.model_evaluation", "tests.support.harness")
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,12 +26,12 @@ def step_span_exporter() -> Generator[InMemorySpanExporter]:
     tracer_provider = TracerProvider()
     tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
-    previous_tracer_provider = runtime_scoping._tracer
-    runtime_scoping._tracer = tracer_provider.get_tracer("nighthawk", importlib.metadata.version("nighthawk-python"))
+    previous_tracer_provider = scoping._tracer
+    scoping._tracer = tracer_provider.get_tracer("nighthawk", importlib.metadata.version("nighthawk-python"))
     try:
         yield span_exporter
     finally:
-        runtime_scoping._tracer = previous_tracer_provider
+        scoping._tracer = previous_tracer_provider
 
 
 @pytest.fixture(params=[False, True], ids=["synchronous", "asynchronous"])

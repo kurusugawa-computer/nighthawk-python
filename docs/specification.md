@@ -98,7 +98,7 @@ Authorization does not change supported source forms.
     - Note: The decorator requires the function source to be available for inspection.
     - `inspect.unwrap(function)` follows the original function; signatures and original source remain conventional.
     - Instrumentation preserves original defaults without evaluating them again, live closure cells, and defining module globals. Generated helper names avoid application bindings, including names appearing inside Natural text.
-    - `nh.get_function_definition(function)` supplies the original function, public wrapper, and compiled body sharing the original module globals, without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions). Execute through the decorated function to establish runtime context.
+    - `nighthawk.core.natural.definition.get_function_definition(function)` supplies the original function, public wrapper, and compiled body sharing the original module globals, without following unrelated outer wrappers; see [whole-function interception and exact definitions](#whole-function-interception-and-exact-definitions). Execute through the decorated function to establish runtime context.
 
 ### 5.2. Configuration
 
@@ -153,10 +153,10 @@ Scopes restore the exact parent executor on exit or error, and the host retains 
 
 ### 5.4. Runtime accessors
 
-- `nighthawk.get_step_context() -> StepContext`
+- `nighthawk.core.step_context.get_step_context() -> StepContext`
     - Get the `StepContext` for the currently executing Natural block. Raises if no step is active.
 
-- `nighthawk.get_scope() -> Scope`
+- `nighthawk.core.scoping.get_scope() -> Scope`
     - Get the active run and scope configuration. Raises if no run is active. See [Section 10](#10-runtime-scoping).
 
 ## 6. Natural block detection
@@ -228,12 +228,12 @@ Normal runtime validation and commit oversight run before Python assignment; suc
 Python owns subsequent branching, retries, and actions.
 Scoped Pydantic AI capabilities can observe the request, but decision requests cannot expose action tools or select an execution model.
 
-Terminal lifecycle records include `block_kind` and, when a managed model run returned, its native `AgentRunResult` in `model_result`.
+Terminal lifecycle records include `block_kind` and, when a managed model run returned, its native `AgentRunResult` in `executor_result`.
 Use `record.execution_reference.step_execution_id` to correlate each invocation, including repeated decisions in one function.
-`record.model_result.response.provider_details` preserves confidence, probabilities, and unrounded scores without replacing typed Python results.
-`record.model_result.usage` exposes that run's usage; the common meter includes completed execution and decision model runs.
+`record.executor_result.response.provider_details` preserves confidence, probabilities, and unrounded scores without replacing typed Python results.
+`record.executor_result.usage` exposes that run's usage; the common meter includes completed execution and decision model runs.
 Model evidence remains available if later commit inspection or writeback fails.
-When the model run itself fails before returning, `model_result` is absent; Core does not invent provider details or usage.
+When the model run itself fails before returning, `executor_result` is absent; Core does not invent provider details or usage.
 
 ## 7. Natural DSL: bindings
 
@@ -545,7 +545,7 @@ Builder exceptions and invalid content fail the step before model execution and 
 
 #### 8.2.5. Value inspection and name discovery
 
-`nighthawk.runtime.inspection.describe_value(value, cursor=None, max_items=8)` describes a known live value.
+`nighthawk.core.inspection.describe_value(value, cursor=None, max_items=8)` describes a known live value.
 It is an optional ordinary Python function, available to a step only through an explicit import, argument, local binding, embedded input, or scoped task reference.
 The runtime does not inject a value-description function into locals or globals, or unconditionally advertise one in the default prompt.
 Explicitly supplied callables use the ordinary signature and documentation renderer, under the name selected by the program or host.
@@ -601,7 +601,7 @@ Declaration API:
 - A repeated identical plain callable or exact explicit `Tool` object is idempotent, preserving the first normalized tool and its order. That normalized object can itself be supplied again. Different wrappers, or a plain callable versus a distinct explicit wrapper, conflict even if their function is identical.
 - Names colliding with built-ins or distinct declarations raise `ToolNameConflictError`, which is both `ToolDeclarationError` and `NameConflictError`. Invalid entries or names raise `ToolDeclarationError`. Declaration checks never call user-defined equality. Tool names and task-reference names are separate namespaces.
 - Built-in tool names cannot be declared in any mode.
-- `nighthawk.get_scope().tools` holds the scoped tools (excluding built-in tools) for the current scope.
+- `nighthawk.core.scoping.get_scope().tools` holds the scoped tools (excluding built-in tools) for the current scope.
 
 Example:
 
@@ -893,16 +893,16 @@ API:
     - `Extend(sequence)` appends system/user prompt suffix fragments, tools, or capabilities. Strings and bytes are invalid collection shapes. Repeated capability and fragment entries are preserved.
     - `Merge(mapping)` merges task references. Repeating the identical value is idempotent; a different value for the same name raises `NameConflictError` even if it compares equal. Wrappers capture collection structure without copying entries.
     - `oversight` and `lifecycle` accept `None`, clearing their hooks. Other fields reject it, as well as operation wrappers in unsupported positions.
-    - Validate every argument shape before delegated model resolution, and resolve every field before installing context; failures leave the parent identity and settings intact. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
+    - Validate execution controls and resolve the selected executor before exposing the scope body; then select adapter presentation. Failures restore the parent identity and settings. Require a run, create a fresh scope Id, and restore the parent after normal or exceptional exit.
     - Preserve the active step Id and source location inside a nested scope, so a child step remains correlated with the execution that called it.
     - `context_builder` replaces prompt construction; omission or `UNSET` inherits. See Section 8.2.4.
     - Explicit executor replacements use the same protocol validation as `run()`; invalid executors raise `TypeError` before context installation.
     - Executor replacement precedes model selection. Selection delegates to the active `ConfigurableStepExecutor`; direct `AgentStepExecutor` resolution respects managed/external ownership.
     - A replacement meter receives child usage without forwarding to the parent. Capabilities reach every Pydantic AI Agent request.
-    - Yield the resolved executor. Nested runs reset scope defaults and restore their parent.
-- `nighthawk.get_scope() -> Scope`
+    - Yield the active Core `Scope`. Nested runs reset scope defaults and restore their parent.
+- `nighthawk.core.scoping.get_scope() -> Scope`
     - Returns the active frozen `Scope`; `run()` and `scope()` yield the same record for their body.
-    - Fields mirror the `scope()` parameters they hold: `step_executor`, `usage_meter`, `oversight`, `lifecycle`, `context_builder`, `system_prompt_suffix_fragments`, `user_prompt_suffix_fragments`, `task_references`, `tools`, and `capabilities`, plus the current `execution_reference`.
+    - Core fields are `step_executor`, `usage_meter`, `oversight`, `lifecycle`, `task_references`, and the current `execution_reference`. Model presentation belongs to `nighthawk.adapters.pydantic_ai.scoping.ModelScope`, available through `get_model_scope()`.
     - Model selections are resolved into `step_executor` rather than stored separately.
     - Inside a step, `execution_reference` carries that step's identity.
     - Prompt suffix fields exclude configuration-level baselines; `tools` excludes built-in tools; `task_references` is a shallow read-only mapping.
@@ -913,7 +913,7 @@ Ordinary values select the complete value, including empty collections; `None` r
 Configuration value objects resolve their own defaults rather than storing unresolved `UNSET` fields.
 These rules apply to the argument itself: `{"name": None}` supplies a value and never deletes the key.
 
-`get_scope()` requires an active run and raises `NighthawkError` outside it. The meter is non-optional; oversight and lifecycle may be `None` inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Budget checks outside a run observe no meter and impose no limit.
+`get_scope()` requires an active run and raises `NighthawkError` outside it. The meter is non-optional; oversight and lifecycle may be `None` inside a run. `get_step_context()` requires an active step, so a run alone is insufficient. Usage observation does not authorize or limit execution.
 
 ### 10.1. Observability contract (OpenTelemetry span/event)
 
@@ -968,7 +968,7 @@ For example, an initialized `Annotated[str, AfterValidator(str.strip)]` output c
 Selected output contracts are fixed at step entry.
 A custom executor cannot change finalization contracts by replacing context metadata.
 
-`StepCommit.outcome` uses the frozen Pydantic models exported from `nighthawk.runtime`: `Pass()`, `Return(value)`, `Break()`, `Continue()`, and `Raise(message, error_type=Exception)`.
+`StepCommit.outcome` uses the frozen Pydantic models defined in `nighthawk.core.step_outcome`: `Pass()`, `Return(value)`, `Break()`, `Continue()`, and `Raise(message, error_type=Exception)`.
 `Return(None)` is distinct from `Pass()`.
 `Raise.error_type` is a resolved exception class, validated before inspection.
 An initial Raise selects no writes and discards pending working values without validating them.
@@ -1004,7 +1004,7 @@ Admission runs before inspection; inspection runs before any operation body or a
 `Accept` permits execution.
 `RejectOperation(reason, guidance=None)` prevents that operation's body and produces an `OperationRejection` with the request and deliberately model-visible feedback.
 Direct operation APIs raise `OperationRejectedError`, whose `rejection` exposes that same record; a custom executor may catch it and choose another operation in the same step.
-`OperationRejection.model_feedback()` exposes the tool error shape: `kind="oversight"`, `status="rejected"`, operation and step identities, the reason as `message`, `guidance`, `phase="inspection"`, and `evaluation_started=False`, without serializing live arguments or diagnostic exceptions. Tool denials, output retries, and ordered-batch returns use this one payload.
+The Pydantic AI tool adapter projects `OperationRejection` into its tool error shape: `kind="oversight"`, `status="rejected"`, operation and step identities, the reason as `message`, `guidance`, `phase="inspection"`, and `evaluation_started=False`, without serializing live arguments or diagnostic exceptions. Tool denials, output retries, and ordered-batch returns use this one payload.
 Reasons must be nonempty strings; guidance is an optional string.
 `AbortStep(reason)` prevents execution and ends the current step with `StepAbortedError`.
 It does not cancel an enclosing run or prohibit a calling Python helper from deliberately handling the child's failure.
@@ -1081,19 +1081,19 @@ See [operation feedback](operation-feedback.md) for executable examples and the 
 
 ### 10.4. Terminal delivery and host ledgers
 
-`nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=callback))` installs a callback accepting `StepFinished` and returning `None` or an awaitable completion.
+`nh.scope(lifecycle=nighthawk.core.lifecycle.StepLifecycle(on_step_finished=callback))` installs a callback accepting `StepFinished` and returning `None` or an awaitable completion.
 `on_step_started` runs before preparation, and `on_operation_finished` delivers operation facts.
 All three callbacks support direct and asynchronous completion. Omission or `UNSET` inherits; `None` clears. A new run resets lifecycle. Each execution captures the configuration on entry, before preparation. If that configuration has a handler, core attempts notification once while Python can unwind normally; a cleared or absent handler receives no notification. Definition-time parsing, decorator compilation, and failure to enter a required run are outside this boundary. Identity, step context when established, and the step span remain active during delivery and restore afterward, including when delivery fails.
 
-`nh.get_scope().lifecycle` is the currently scoped configuration object, or `None`. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. Reading it observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; application exceptions recorded by the operation pipeline propagate unchanged.
+`nighthawk.core.scoping.get_scope().lifecycle` is the currently scoped configuration object, or `None`. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. Reading it observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; application exceptions recorded by the operation pipeline propagate unchanged.
 
 Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
 
 `StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`.
-All carry `execution_reference`, `block_kind`, `model_result`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, and `assigned_binding_name_to_value`.
+All carry `execution_reference`, `block_kind`, `executor_result`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, and `assigned_binding_name_to_value`.
 The declared `block_kind` is known on entry, including failures or interruptions in started delivery, f-string rendering, and embedded argument validation before preparation.
 Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values.
-`model_result` is absent until a managed model run returns its native result.
+`executor_result` is absent until a managed model run returns its native result.
 Runtime references require both step identity fields.
 Mapping and tuple structure is snapshotted; contained Python objects retain their exact types and identity.
 Hosts must serialize or copy deliberately for durable records.
@@ -1129,7 +1129,7 @@ Cancellation, SystemExit, KeyboardInterrupt, and GeneratorExit are not translate
 
 The guarantee is one in-process delivery attempt, not a transaction across Python and storage. A callback that appends and then raises cannot be distinguished automatically from an uncertain append failure. Hosts deduplicate and retry storage by `step_execution_id`, never by replaying a Natural execution. Hard process termination and unavailable storage cannot guarantee durable delivery. OpenTelemetry is optional diagnostics, not the authoritative ledger. Terminal tracing follows the typed classification: await failures receive `nighthawk.step.failed` and exception/error status; interruptions receive `nighthawk.step.interrupted`; delivery failures may add `nighthawk.step.delivery_failed` without a second execution terminal event.
 
-Host integrations can separate responsibilities: the executor boundary admits and accounts for execution, `inspect_step_commit` approves or rewrites the resolved candidate before assignment, and StepLifecycle records the terminal result and translates failures. Preparation can fail before executor admission; terminal consumers must accept records without a matching admission event. The shared `execution_reference.step_execution_id` correlates executor StepContext, inspectors, and terminal records without storing a live StepContext or pending-commit ContextVar. Terminal records make type-erasing validation workarounds unnecessary for catching binding, expression, and return-validation failures, but do not remove the host's other validation requirements. No external host code or host-specific serialization schema is provided by core. The deterministic ledger fixture in `tests/lifecycle/test_step_ledger.py` demonstrates recording even when Python inside the Natural function catches the translated host exception.
+Host integrations can separate responsibilities: the executor boundary admits and accounts for execution, `inspect_step_commit` approves or rewrites the resolved candidate before assignment, and StepLifecycle records the terminal result and translates failures. Preparation can fail before executor admission; terminal consumers must accept records without a matching admission event. The shared `execution_reference.step_execution_id` correlates executor StepContext, inspectors, and terminal records without storing a live StepContext or pending-commit ContextVar. Terminal records make type-erasing validation workarounds unnecessary for catching binding, expression, and return-validation failures, but do not remove the host's other validation requirements. No external host code or host-specific serialization schema is provided by core. The deterministic ledger fixture in `tests/core/lifecycle/test_step_ledger.py` demonstrates recording even when Python inside the Natural function catches the translated host exception.
 
 #### 10.4.1. Delivery failure cases
 
@@ -1190,28 +1190,31 @@ For practical examples and design tips, see [Patterns](patterns.md#cross-block-c
 
 ## 13. Error handling
 
-Nighthawk execution, policy, and delivery failures derive from `NighthawkError`.
-Recoverable operation diagnostics use `OperationError`, which is deliberately not a `NighthawkError`, so custom executors can handle them at the operation boundary.
+`NighthawkError` is the common base for Nighthawk's public error contracts across Core, Harness, adapters, and Session.
+It identifies library-defined failures, not their severity, retry safety, or whether a step can continue.
+Catch a concrete error when implementing recovery; use the common base when a caller needs to report library failures together.
 Invalid arguments can raise ordinary `TypeError`, `ValueError`, or Pydantic validation errors.
+Application and provider exceptions can propagate with their original types, and cancellation and process-control exceptions retain Python's `BaseException` semantics.
 
-Exception hierarchy:
+| Boundary | Error contract |
+| --- | --- |
+| Natural declarations | `NaturalParseError` reports malformed blocks or frontmatter; `NameConflictError` reports distinct declarations claiming one name. |
+| Adapter tool declarations | `ToolDeclarationError` reports invalid tools; `ToolNameConflictError` also inherits `NameConflictError` because a collision belongs to both contracts. |
+| Independent bindings | `BindingDeclarationError` and `BindingValidationError` inherit `BindingError`; these helpers create no step lifecycle records. |
+| Natural step execution | `ExecutionError` retains `step_failed` and chains the original exception. Operation failures and explicit abort decisions propagate according to terminal delivery rules. |
+| Runtime operations | `OperationError` carries admission, lookup, or value-validation diagnostics; `OperationRejectedError` carries a normally returned inspection refusal. Both inherit `NighthawkError` and permit another operation when the operation boundary records them as recoverable. |
+| Step abortion and notification | `StepAbortedError` ends the inspected step; `OperationDeliveryError` retains the operation fact and notification failure. Neither becomes recoverable feedback. |
+| Function interception | `FunctionCallError` reports a violated invocation contract, including a handler returning without completing its continuation. |
+| Harness | Concrete errors retain the relevant rejection reason, execution identity, or ledger event. A `NaturalExecutionError` describes a host-governed Natural failure; it is distinct from Core's `ExecutionError` and its `StepFailed` record. |
+| Session | `SessionError` groups busy, closed, lookup, and wait-context failures under `NighthawkError`. `SessionLookupError` also inherits Python's `LookupError`. |
 
-- `NighthawkError`: Base class for Nighthawk execution, policy, and delivery failures.
-    - Raised when: runtime preconditions fail (e.g. no active run context, missing step executor).
-- `NaturalParseError(NighthawkError)`: Natural block parsing or frontmatter parsing failed.
-    - Raised when: the sentinel is missing, bindings are invalid, frontmatter YAML is malformed, or AST extraction fails.
-- `ExecutionError(NighthawkError)`: a failed Natural block; `step_failed` always holds its `StepFailed` record and `__cause__` holds the original exception, such as a `NighthawkError` describing a violated step contract.
-    - Raised when: the LLM returns invalid JSON, an outcome kind is disallowed, or boundary value validation fails outside the operation pipeline.
-    - A DSL Raise defaults to ordinary `Exception`; application operation failures retain their own exception types.
-- `OperationError(Exception)`: Recoverable runtime admission, name-resolution, or value-validation failure, with `kind`, `phase`, `evaluation_started`, and `guidance`. A failed `nh_assign` value validation raises it with `kind="invalid_input"`; the tool wrapper returns it to the model as a structured error. It is not a `NighthawkError` subclass, and an application tool raising it is not converted into feedback.
-- `ToolDeclarationError(NighthawkError)`: Invalid tool declaration.
-- `NameConflictError(NighthawkError)`: Distinct declarations claim the same name.
-- `ToolNameConflictError(ToolDeclarationError, NameConflictError)`: Tool name collision, including reserved built-in names.
-    - Raised when: a tool name is invalid, collides with a built-in tool, or is declared twice within the visible scope.
-- `CircuitOpenError(NighthawkError)`: The resilience circuit breaker refuses a call while open; the protected function does not run.
-- `BudgetExceededError(NighthawkError)`: A resilience usage check refuses or reports work beyond its configured limits; earlier effects remain.
+Recovery follows the failure's origin and recorded execution state.
+A runtime-generated `OperationError` can become model feedback; an application helper or native tool raising that same type fails its operation.
+Catching such a terminal failure in an executor does not allow subsequent operations or successful step finalization.
+A DSL Raise defaults to ordinary `Exception`; explicitly selected domain exceptions retain their types, including subclasses of `NighthawkError`.
+Neither the common base nor a specific error authorizes replaying earlier effects.
 
-Exceptions propagated to the host can be caught with standard `try`/`except`. Recoverable tool failures are instead returned to the model as structured observations, as specified in [Section 8.3](#83-tools-available-to-the-llm). Internal step failures follow the `ExecutionError` and terminal-delivery rules in [Section 10.4](#104-terminal-delivery-and-host-ledgers).
+See [operation recovery](#103-operation-inspection) and [terminal delivery](#104-terminal-delivery-and-host-ledgers) for execution semantics, and the [API reference](api.md) for exception fields and signatures.
 
 ## 14. Step executor
 
@@ -1225,7 +1228,7 @@ Nighthawk defines two step executor protocols. Both are `@runtime_checkable`.
     - `run_step_async(*, request: StepRequest) -> StepCandidate`
 
 The type alias `StepExecutor = SyncStepExecutor | AsyncStepExecutor` is the union accepted by `nighthawk.run()`.
-Import executor protocols from `nighthawk.runtime.step_executor`, requests and candidates from `nighthawk.runtime.step_request`, and resolved outcomes from `nighthawk.runtime.step_outcome`.
+Import executor protocols from `nighthawk.core.step_executor`, requests and candidates from `nighthawk.core.step_request`, and resolved outcomes from `nighthawk.core.step_outcome`.
 Runtime operations are available from their owning modules, listed in the [API reference](api.md).
 Public interfaces participate in ordinary Python `dir()` and attribute inspection without requiring an active run.
 
@@ -1263,8 +1266,8 @@ Instance attributes:
 Any object implementing `SyncStepExecutor` or `AsyncStepExecutor` can serve as a backend. The protocol surface for `AsyncStepExecutor`:
 
 ```py
-from nighthawk.runtime.step_executor import AsyncStepExecutor
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
+from nighthawk.core.step_executor import AsyncStepExecutor
+from nighthawk.core.step_request import StepCandidate, StepRequest
 
 
 class MyExecutor(AsyncStepExecutor):
@@ -1281,7 +1284,7 @@ class MyExecutor(AsyncStepExecutor):
 
 For most custom backends, wrapping a Pydantic AI `Agent` via `AgentStepExecutor.from_agent` (see [Executors](executors.md#custom-backends)) is simpler than implementing the protocol directly. Direct implementation is appropriate when the backend does not use a Pydantic AI agent at all.
 
-See the [API reference](api.md#runtime-executor-boundary) for the protocol definitions.
+See the [API reference](api.md#core-execution) for the protocol definitions.
 
 ### 14.4. Nested execution acceptance example
 
@@ -1322,7 +1325,7 @@ The expected successful result is four `ordinary` entries, `fifth`, two `ordinar
 Deterministic executor tests establish the environment mechanics; model evaluations measure whether an LLM follows the ten-call instruction.
 The runtime must not claim that type validation of `list[str]` proves the count or contents.
 
-Custom executors materialize working names using `assign_expression_async` and call children with explicit arguments using `evaluate_expression_async`, both exported from `nighthawk.runtime`.
+Custom executors materialize working names using `nighthawk.core.assignment.assign_expression_async` and call children with explicit arguments using `nighthawk.core.expression.evaluate_expression_async`.
 Their synchronous counterparts are `assign_expression` and `evaluate_expression`.
 These entry points include admission, inspection, ordering, workspace updates, and lifecycle delivery; do not mutate environment views or build a second operation policy.
 Directly constructing a `StepCandidate` proposes final values but creates no intermediate operation or shared temporary state.
@@ -1379,7 +1382,7 @@ The contracts above own these semantics; this table collects review cases for im
 
 ## Explicit embedded steps
 
-`nighthawk.runtime.step_definition.StepDefinition` holds a trusted Natural program, read and ordered write declarations, output and return annotations, loop context, and source location.
+`nighthawk.core.step_definition.StepDefinition` holds a trusted Natural program, read and ordered write declarations, output and return annotations, loop context, and source location.
 Definitions are immutable and copy their declaration sequences and annotation mapping, retaining annotation object identity.
 Declarations must be ordered sequences of unique ASCII Python identifiers, excluding keywords; read and write declarations may overlap.
 Malformed declarations or annotations for undeclared outputs raise `BindingDeclarationError` at construction, outside any execution lifecycle.
@@ -1418,7 +1421,7 @@ The normal terminal-delivery contract, including single delivery attempt, interr
 After successful terminal delivery, the entry point returns Pass/Return/Break/Continue for host dispatch; a final Raise propagates its prepared exception.
 The optional `source_location` supplies a program label, defaulting to `<embedded>:0`, without selecting a Python frame.
 
-`infer_binding_types` and `validate_output_bindings`, exported from `nighthawk.runtime`, are the same binding-processing functions used by ordinary blocks.
+`infer_binding_types` and `validate_output_bindings` in `nighthawk.core.bindings` are the same binding-processing functions used by ordinary blocks.
 Both return new mappings and leave their input mappings unchanged.
 The public `MISSING_ANNOTATION` marker distinguishes an existing unannotated declaration from explicit Python types.
 Inference processes only supplied declarations and uses runtime container types without inferring type arguments.
@@ -1445,7 +1448,7 @@ Core supplies optional call interception, exact transformation correspondence, c
 
 ### Whole-function interception and exact definitions
 
-`nh.function_call_scope(handler)` installs a synchronous/asynchronous `FunctionCallHandler` independently of `nh.run()`.
+`nighthawk.core.calls.function_call_scope(handler)` installs a synchronous/asynchronous `FunctionCallHandler` independently of `nh.run()`.
 Omission or `UNSET` inherits, `None` clears interception, and an explicit handler replaces it.
 Validate both callable handler methods before installing context; invalid values leave the parent handler intact.
 `None` explicitly clears it until scope exit.
@@ -1456,7 +1459,7 @@ Argument expressions and unrelated outer decorators execute outside this boundar
 Arguments retain object identity, and inspection never evaluates deferred annotations.
 
 `FunctionCall` exposes `call_id`, `parent_call_id`, `definition`, `arguments`, the immutable shallow `keyword_name_to_value` mapping.
-`nh.get_function_call()` returns the current invocation or `None`.
+`nighthawk.core.calls.get_function_call()` returns the current invocation or `None`.
 Every intercepted nested call gets its own identity; Core does not assign host execution units or implicitly start another run.
 Handler ordering is entry, body and owned processing, then handler return or failure. The body inherits its caller's active scope.
 
@@ -1468,7 +1471,7 @@ A synchronous function returning a coroutine returns that exact object without i
 Intercepted generator and async-generator functions raise `FunctionCallError` before body execution because iterator creation is not completion of their lifetime.
 Detached application tasks, unjoined threads, external service work, hard process termination, and malicious internal mutation are outside this guarantee.
 
-`nh.get_function_definition(value)` returns a frozen `FunctionDefinition` only for a registered public wrapper or its standard bound-method, staticmethod, or classmethod descriptor.
+`nighthawk.core.natural.definition.get_function_definition(value)` returns a frozen `FunctionDefinition` only for a registered public wrapper or its standard bound-method, staticmethod, or classmethod descriptor.
 Its `original_function`, `function`, and `transformed_function` fields are the actual objects.
 Copied attributes, raw source/body functions, and unrelated outer wrappers are not exact registration evidence.
 The registry uses weak ownership; a snapshot held by the application intentionally retains its functions.

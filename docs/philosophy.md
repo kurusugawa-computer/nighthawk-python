@@ -114,6 +114,8 @@ Require clear guarantees and little burden for applications that do not use the 
 Evaluate total burden across authors, hosts, adapters, and maintainers, including complexity displaced into applications.
 Apply the [evidence criteria](design-drivers.md#from-findings-to-design-decisions) for additions, corrections, and simplifications.
 
+Harness mechanisms and Agent Parts are not Core execution requirements; the [Agent principles](agent/principles.md) apply these criteria to their execution authority, evidence, and retained capabilities.
+
 ## Accepted tradeoffs
 
 - **Python dependence.** Composition and integration depend on Python's language and ecosystem.

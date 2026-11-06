@@ -7,12 +7,12 @@ A mock verifies the surrounding Python behavior, not the quality of the prompt.
 
 ## Mock tests
 
-The `nighthawk.testing` module provides `ScriptedExecutor`, which returns scripted candidates and records every Natural block request. Use it to test the Python logic that surrounds Natural blocks.
+The `nighthawk.core.testing` module provides `ScriptedExecutor`, which returns scripted candidates and records every Natural block request. Use it to test the Python logic that surrounds Natural blocks.
 
 ```py
 import nighthawk as nh
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 @nh.function
@@ -34,7 +34,7 @@ def test_classify_returns_scripted_label():
 
 `ScriptedExecutor` does not call an LLM.
 Each scripted response is an ordinary `StepCandidate`, the same value a [custom executor](specification.md#143-custom-backends) returns.
-Its `outcome` defaults to `Pass()`; use `Return(value)`, `Raise(message, error_type)`, `Break()`, or `Continue()` from `nighthawk.runtime` for other control results.
+Its `outcome` defaults to `Pass()`; use `Return(value)`, `Raise(message, error_type)`, `Break()`, or `Continue()` from `nighthawk.core.step_outcome` for other control results.
 
 | Candidate | Outcome |
 |---|---|
@@ -51,7 +51,7 @@ Omission or `nh.UNSET` selects initialized declared outputs, `{}` selects no wri
 **Testing error handling.** Script a `Raise` to verify that your code handles failures:
 
 ```py
-from nighthawk.runtime.step_outcome import Raise
+from nighthawk.core.step_outcome import Raise
 
 
 def test_fallback_on_error():
@@ -92,8 +92,8 @@ def test_helper_is_available():
 **Callback executor.** When the scripted candidate depends on the request, use `CallbackExecutor` with an ordinary function:
 
 ```py
-from nighthawk.runtime.step_request import StepRequest
-from nighthawk.testing import CallbackExecutor
+from nighthawk.core.step_request import StepRequest
+from nighthawk.core.testing import CallbackExecutor
 
 
 def handler(request: StepRequest) -> StepCandidate:
@@ -125,10 +125,14 @@ import pytest
 import nighthawk as nh
 
 
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+
+
 @pytest.mark.integration
 def test_classify_with_real_llm():
-    step_executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
+    step_executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(execution_model="openai-responses:gpt-6-luna"),
     )
     with nh.run(step_executor):
         result = classify("Great product, highly recommend!")
@@ -161,6 +165,9 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 import nighthawk as nh
 
 
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+
 captured_prompt_parts: list[str] = []
 
 
@@ -185,8 +192,8 @@ def inspect_label(text: str) -> None:
     """
 
 
-executor = nh.AgentStepExecutor(
-    configuration=nh.StepExecutorConfiguration(execution_model=FunctionModel(observe_request)),
+executor = AgentStepExecutor(
+    configuration=StepExecutorConfiguration(execution_model=FunctionModel(observe_request)),
 )
 with nh.run(executor):
     inspect_label("sample label")

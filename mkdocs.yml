@@ -78,7 +78,15 @@ nav:
       - Admission and completion: host-integration.md
       - Operation feedback: operation-feedback.md
       - Embedded execution: embedded-execution.md
+  - Harness and Agent Parts:
+      - Agent Parts and Harness: agent/index.md
+      - Composing Agent Parts: agent/composition.md
+      - Embedding Sessions: agent/sessions.md
+      - Principles: agent/principles.md
+      - Execution roles: agent/architecture.md
+      - Host runtime obligations: agent/runtime.md
   - Reference:
+      - Architecture: architecture.md
       - Specification: specification.md
       - API Reference: api.md
       - For coding agents: for-coding-agents.md

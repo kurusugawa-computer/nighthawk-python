@@ -68,8 +68,13 @@ Prefer another approach when:
 - **[Coding agent backends](coding-agent-backends.md)** -- Claude Code and Codex backend configuration, skills, and MCP tool exposure.
 - **[Runtime configuration](runtime-configuration.md)** -- Configure scopes, select models, and embed Nighthawk in a host application.
 
+## Harness and Agent Parts
+
+- **[Agent Parts and Harness](agent/index.md)** -- Governed generated execution, reusable parts, Sessions, and reference applications.
+
 ## Reference
 
+- **[Architecture](architecture.md)** -- Package ownership and dependency direction.
 - **[Specification](specification.md)** -- Runtime contracts and boundaries.
 - **[API Reference](api.md)** -- Auto-generated API documentation from source docstrings.
 - **[For coding agents](for-coding-agents.md)** -- Condensed, decision-oriented development reference for coding agents (LLMs) building Python projects with Nighthawk.

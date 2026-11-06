@@ -7,10 +7,11 @@ from typing import Literal
 import pytest
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepRaised
-from nighthawk.runtime.embedded import execute_step_async
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_outcome import Break, Continue, Pass, Return
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits
+from nighthawk.core.embedded import execute_step_async
+from nighthawk.core.lifecycle import StepRaised
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_outcome import Break, Continue, Pass, Return
 from tests.support.model_evaluation import ModelEvaluation
 
 pytestmark = pytest.mark.asyncio
@@ -241,7 +242,7 @@ async def test_truncated_input_preserves_full_value_and_identity(model_evaluatio
     records = [{"position": i, "description": f"Record {i} with a long description"} for i in range(200)]
     committed_name_to_value: dict[str, object] = {}
     model_evaluation.name_to_observation.update(bindings=committed_name_to_value)
-    configuration = model_evaluation.configuration.model_copy(update={"context_limits": nh.StepContextLimits(value_max_tokens=30)})
+    configuration = model_evaluation.configuration.model_copy(update={"context_limits": StepContextLimits(value_max_tokens=30)})
     with nh.scope(step_executor_configuration=configuration):
         outcome = await execute_step_async(
             StepDefinition(
@@ -433,7 +434,7 @@ async def test_output_contract_guides_semantic_choice(model_evaluation: ModelEva
 async def test_omitted_output_contract_guides_semantic_choice(model_evaluation: ModelEvaluation) -> None:
     name_to_value: dict[str, object] = {}
     model_evaluation.name_to_observation.update(bindings=name_to_value)
-    configuration = model_evaluation.configuration.model_copy(update={"context_limits": nh.StepContextLimits(locals_max_items=1)})
+    configuration = model_evaluation.configuration.model_copy(update={"context_limits": StepContextLimits(locals_max_items=1)})
     with nh.scope(step_executor_configuration=configuration):
         outcome = await execute_step_async(
             StepDefinition(

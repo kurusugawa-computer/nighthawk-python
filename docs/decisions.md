@@ -26,6 +26,9 @@ from pydantic import Field
 import nighthawk as nh
 
 
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+
+
 @nh.function
 async def summarize_and_assess(document: str) -> tuple[str, float]:
     claims: list[str] = []
@@ -117,7 +120,7 @@ Omission or `nh.UNSET` inherits; `None` clears a model selection.
 No model is selected by default, and only executing an unconfigured block kind requires it.
 
 ```python
-configuration = nh.StepExecutorConfiguration(
+configuration = StepExecutorConfiguration(
     decision_model="openai-decisions:gpt-6-luna",
     decision_model_settings={"decision_boolean_threshold": 0.8},
 )
@@ -139,24 +142,26 @@ Normal function results and assigned variables remain ordinary typed values.
 A lifecycle record exposes the native Pydantic AI `AgentRunResult` for each completed model run:
 
 ```python
-records: list[nh.lifecycle.StepFinished] = []
+from nighthawk.core import lifecycle
+
+records: list[lifecycle.StepFinished] = []
 
 with nh.run(decision_model="openai-decisions:gpt-6-luna"):
-    with nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=records.append)):
+    with nh.scope(lifecycle=lifecycle.StepLifecycle(on_step_finished=records.append)):
         assessment = assess(document, summary)
 
 for record in records:
-    if record.block_kind == "decide" and record.model_result is not None:
+    if record.block_kind == "decide" and record.executor_result is not None:
         print(record.execution_reference.step_execution_id)
-        print(record.model_result.response.provider_details)
-        print(record.model_result.usage)
+        print(record.executor_result.response.provider_details)
+        print(record.executor_result.usage)
 ```
 
 `provider_details` retains the upstream confidence, probability distributions, and unrounded scores where available.
 Their interpretation depends on the output type; confidence is not a general probability that a judgment is correct.
 Each loop iteration and nested decision has its own `step_execution_id`.
 The native result remains on terminal records if later commit inspection or writeback fails.
-A model failure before an `AgentRunResult` exists leaves `model_result=None`.
+A model failure before an `AgentRunResult` exists leaves `executor_result=None`.
 The usage meter aggregates completed model runs and does not invent usage for failed calls.
 The terminal `block_kind` identifies the declared block even when interpolation, initial notification, or preparation fails before any model call.
 
@@ -171,7 +176,7 @@ The trusted program is the judgment body without a header.
 `execute_step` and `execute_step_async` retain their normal validation, writer, oversight, and lifecycle behavior.
 Custom executors receive `StepRequest.block_kind` and `input_binding_name_to_value`; a decision candidate must explicitly contain its answer and use `Pass`.
 
-Deterministic tests in `tests/runtime/test_decisions.py` exercise the real OpenAI SDK and Pydantic AI adapter against a local HTTP transport.
+Deterministic tests in `tests/adapters/pydantic_ai/test_decisions.py` exercise the real OpenAI SDK and Pydantic AI adapter against a local HTTP transport.
 They cover typed questions, full evidence, multiple execution assignments, settings, missing/refused/invalid answers, and detailed results after writeback failure.
 The opt-in live test is `NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run pytest -q tests/integration/test_openai_decisions.py` and requires credentials and Decisions API access.
 These tests establish runtime contracts; they do not measure judgment quality or establish access to the live beta API.

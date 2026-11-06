@@ -13,6 +13,8 @@ Other pages may summarize it for their audience and link to the owner; they must
 `api.md` owns the exhaustive public symbol inventory and rendered signatures/docstrings.
 `specification.md` owns behavior, contracts, and boundaries.
 Task-oriented pages teach selected APIs rather than duplicating either reference.
+`examples/` owns runnable reference application sources and application-specific READMEs; library usage guides belong in `docs/`.
+Link to application sources without duplicating their implementation or maintaining a second guide in a README.
 
 Apply the workspace practices across `inline section < document < directory subtree < workspace-global` scope.
 Keep an explanation beside its use until independent readers need a separate document, glossary term, or principle.
@@ -38,6 +40,12 @@ Remove unneeded documents, terms, and rules together with their references; pres
 | `for-coding-agents.md` | Agent authors: condensed operational guidance derived from the task-oriented pages and specification. |
 | `philosophy.md` | People and AI agents designing Nighthawk and programs built with it: explain what Nighthawk aims to make possible, why its foundational design choices serve that purpose, and how to evaluate tradeoffs and proposed changes. |
 | `design-drivers.md` | Designers: application needs, inclusion policy, evaluation evidence, and implications for Core. |
+| `architecture.md` | Library users and contributors: package ownership, dependency direction, evidence ownership, and Python composition. |
+| `agent/composition.md` | Application authors: compose Parts through callable reference applications, with retention, evaluation, and audit examples. |
+| `agent/sessions.md` | Embedding authors: Session lifecycle, typed bindings, history, model selection, and source reuse. |
+| `agent/index.md` | Application authors: Agent Parts, Harness composition, optional Sessions, and reference application navigation. |
+| `agent/principles.md` | Designers: apply the shared philosophy to Agent and Harness responsibility boundaries and approval. |
+| `agent/architecture.md`, `agent/runtime.md` | Hosts: Agent architectural commitments and external runtime obligations; source owns executable contracts. |
 | `roadmap.md` | Contributors: exploratory directions; remove completed items. |
 
 Route provider credentials to the corresponding provider/backend page, with only first-run setup in Quickstart.
@@ -95,7 +103,7 @@ Do not assert exact prose or retain tests solely to remember removed names and p
 | `tests/docs/test_links.py` | Strict site build, navigation targets, and rendered internal links and anchors, including absolute documentation URLs. |
 | `tests/docs/test_prompt_examples.py` | Marked prompt examples in Natural blocks and the carry example in Patterns. |
 | `tests/docs/test_coding_agent_examples.py` | Runnable coding-agent guidance. |
-| `tests/docs/test_runtime_examples.py` | Marked runtime, host, embedded, and verification examples, also against an installed wheel. |
+| `tests/docs/test_runtime_examples.py` | Marked runtime, host, embedded, Session, and verification examples, also against an installed wheel. |
 
 Keep `prompt-example` anchors with their examples: `basic-binding`, `fstring-injection`, `local-function-signature`, and `global-function-reference` in Natural blocks; `carry-pattern` in Patterns.
 When an example changes, update its behavior checks as well.

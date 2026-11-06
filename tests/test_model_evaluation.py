@@ -31,23 +31,24 @@ def evaluation_project(tmp_path: Path) -> Path:
     (tmp_path / "pyproject.toml").write_text('[tool.pytest.ini_options]\nasyncio_mode = "auto"\n')
     (tmp_path / "conftest.py").write_text("""
 import pytest
-import nighthawk as nh
-from pydantic_ai.usage import RunUsage
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import CallbackExecutor
+from nighthawk.core.scoping import get_scope
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.usage import ExecutionUsage
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import CallbackExecutor
 
 @pytest.fixture(autouse=True)
 def local_executor(monkeypatch):
     def respond(request):
-        nh.get_scope().usage_meter.record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
+        get_scope().usage_meter.record(ExecutionUsage(input_token_count=11, output_token_count=7, request_count=2))
         request.input_binding_name_to_value["items"].append(9)
         return StepCandidate(binding_name_to_value={"result": None})
-    monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", lambda self, selection: CallbackExecutor(respond))
+    monkeypatch.setattr(AgentStepExecutor, "resolve_model_selection", lambda self, selection: CallbackExecutor(respond))
 """)
     (tmp_path / "test_trials.py").write_text("""
 import pytest
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.embedded import execute_step_async
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.embedded import execute_step_async
 
 @pytest.fixture
 def broken_setup():
@@ -167,11 +168,11 @@ def test_early_stop_retains_unattempted_trials(evaluation_project: Path) -> None
 def test_interruption_keeps_usage_and_is_never_success(evaluation_project: Path, interruption: str) -> None:
     (evaluation_project / "test_trials.py").write_text(f"""
 import asyncio
-import nighthawk as nh
-from pydantic_ai.usage import RunUsage
+from nighthawk.core.scoping import get_scope
+from nighthawk.core.usage import ExecutionUsage
 
 async def test_interrupt(model_evaluation):
-    nh.get_scope().usage_meter.record(RunUsage(input_tokens=11, output_tokens=7, requests=2))
+    get_scope().usage_meter.record(ExecutionUsage(input_token_count=11, output_token_count=7, request_count=2))
     model_evaluation.name_to_observation["retained_effect"] = True
     raise {interruption}()
 

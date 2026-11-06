@@ -4,19 +4,19 @@ from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
 
-import nighthawk as nh
-from nighthawk.runtime.step_context import StepContext
-from nighthawk.tools.contracts import (
+from nighthawk.adapters.pydantic_ai.tools.contracts import (
     ToolError,
     ToolHandlerResult,
     ToolOutcome,
 )
+from nighthawk.core.execution_reference import ExecutionReference
+from nighthawk.core.step_context import StepContext
 from tests.support.contexts import new_step_context
 
 
 def _new_step_context() -> StepContext:
     return new_step_context(
-        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test_tool_boundary", "test_tool_boundary"),
+        execution_reference=ExecutionReference("test-run", "test-scope", "test_tool_boundary", "test_tool_boundary"),
         step_globals={"__builtins__": __builtins__},
         step_locals={},
         output_binding_names=set(),

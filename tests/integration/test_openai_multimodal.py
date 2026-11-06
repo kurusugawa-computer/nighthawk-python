@@ -8,7 +8,9 @@ from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.messages import BinaryContent
 
 import nighthawk as nh
-from nighthawk.runtime.step_context import StepContext
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.step_context import StepContext
 from tests.integration.skip_helpers import requires_openai_integration
 
 
@@ -74,8 +76,8 @@ def classify_pixel_colors(
 def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content():
     openai_responses_model_settings_class = _requires_openai_multimodal_integration()
 
-    step_executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(
+    step_executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),
@@ -114,8 +116,8 @@ def test_provider_backed_executor_accepts_native_multimodal_user_prompt_content(
 def test_provider_backed_executor_accepts_native_multimodal_tool_result_content():
     openai_responses_model_settings_class = _requires_openai_multimodal_integration()
 
-    step_executor = nh.AgentStepExecutor(
-        configuration=nh.StepExecutorConfiguration(
+    step_executor = AgentStepExecutor(
+        configuration=StepExecutorConfiguration(
             execution_model="openai-responses:gpt-6-luna",
             execution_model_settings=openai_responses_model_settings_class(openai_reasoning_effort="high"),
         ),

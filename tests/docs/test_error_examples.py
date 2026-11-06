@@ -7,9 +7,11 @@ import pytest
 from pydantic import ValidationError
 
 import nighthawk as nh
-from nighthawk.runtime.step_outcome import Raise
-from nighthawk.runtime.step_request import StepCandidate, StepRequest
-from nighthawk.testing import CallbackExecutor
+from nighthawk.core import lifecycle
+from nighthawk.core.errors import ExecutionError
+from nighthawk.core.step_outcome import Raise
+from nighthawk.core.step_request import StepCandidate, StepRequest
+from nighthawk.core.testing import CallbackExecutor
 
 
 @pytest.fixture
@@ -26,7 +28,7 @@ def example_name_to_path(tmp_path: Path) -> dict[str, Path]:
 
 @pytest.mark.parametrize("example_name", ["default_raise", "custom_raise", "output_validation"])
 def test_documented_error_handler(example_name: str, example_name_to_path: dict[str, Path], capsys: pytest.CaptureFixture[str]) -> None:
-    events: list[nh.lifecycle.StepFinished] = []
+    events: list[lifecycle.StepFinished] = []
 
     def respond(request: StepRequest) -> StepCandidate:
         if example_name == "output_validation":
@@ -37,18 +39,18 @@ def test_documented_error_handler(example_name: str, example_name_to_path: dict[
         return StepCandidate(outcome=Raise("invalid input", error_type))
 
     executor = CallbackExecutor(respond)
-    with nh.run(executor), nh.scope(lifecycle=nh.lifecycle.StepLifecycle(on_step_finished=events.append)):
+    with nh.run(executor), nh.scope(lifecycle=lifecycle.StepLifecycle(on_step_finished=events.append)):
         namespace = runpy.run_path(str(example_name_to_path[example_name]), init_globals={"nh": nh})
 
     assert len(executor.requests) == len(events) == 1
     event = events[0]
     if example_name == "output_validation":
-        assert isinstance(event, nh.lifecycle.StepFailed)
+        assert isinstance(event, lifecycle.StepFailed)
         assert event.failure_stage == "binding_validation"
         assert isinstance(event.original_exception, ValidationError)
         assert capsys.readouterr().out == "Output validation failed; review the input before retrying.\n"
     else:
-        assert isinstance(event, nh.lifecycle.StepRaised)
+        assert isinstance(event, lifecycle.StepRaised)
         assert type(event.exception) is (namespace["InputError"] if example_name == "custom_raise" else Exception)
         prefix = "Input error" if example_name == "custom_raise" else "Validation failed"
         assert capsys.readouterr().out == f"{prefix}: invalid input\n"
@@ -60,7 +62,7 @@ def test_output_validation_handler_propagates_other_failure_stages(example_name_
     def respond(request: StepRequest) -> StepCandidate:
         raise original
 
-    with nh.run(CallbackExecutor(respond)), pytest.raises(nh.ExecutionError) as caught:
+    with nh.run(CallbackExecutor(respond)), pytest.raises(ExecutionError) as caught:
         runpy.run_path(str(example_name_to_path["output_validation"]), init_globals={"nh": nh})
     assert caught.value.__cause__ is original
     assert caught.value.step_failed.failure_stage == "executor"

@@ -4,13 +4,14 @@ from collections.abc import Iterable
 
 from pydantic_ai.messages import BinaryContent, CachePoint, FileUrl, ImageUrl, TextContent, UploadedFile, UserContent
 
-import nighthawk as nh
-from nighthawk.runtime.description import discover_type_alias_reference_names
-from nighthawk.runtime.prompt import build_user_prompt
-from nighthawk.runtime.step_context import StepContext
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.prompt import build_user_prompt
+from nighthawk.core.description import discover_type_alias_reference_names
+from nighthawk.core.execution_reference import ExecutionReference
+from nighthawk.core.step_context import StepContext
 from tests.support.contexts import new_step_context
 
-_DEFAULT_EXECUTOR_CONFIGURATION = nh.StepExecutorConfiguration()
+_DEFAULT_EXECUTOR_CONFIGURATION = StepExecutorConfiguration()
 
 
 class FakeRunResult:
@@ -23,7 +24,7 @@ class FakeAgent:
         self.seen_prompts: list[str | tuple[UserContent, ...]] = []
 
     def run_sync(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        from nighthawk.runtime.model_outcome import ModelPass, ModelStepResponse
+        from nighthawk.adapters.pydantic_ai.model_outcome import ModelPass, ModelStepResponse
 
         self.seen_prompts.append(user_prompt)
         assert deps is not None
@@ -43,7 +44,7 @@ def build_step_context(
         input_binding_names=input_binding_names,
     )
     return new_step_context(
-        execution_reference=nh.ExecutionReference("test-run", "test-scope", "test", "test"),
+        execution_reference=ExecutionReference("test-run", "test-scope", "test", "test"),
         step_globals=python_globals,
         step_locals=python_locals,
         output_binding_names=set(),
@@ -57,7 +58,7 @@ def build_user_prompt_text(
     *,
     processed_natural_program: str,
     step_context: StepContext,
-    configuration: nh.StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
+    configuration: StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
 ) -> str:
     return prompt_content_to_text(
         build_user_prompt(
@@ -104,7 +105,7 @@ def build_user_prompt_content(
     *,
     processed_natural_program: str,
     step_context: StepContext,
-    configuration: nh.StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
+    configuration: StepExecutorConfiguration = _DEFAULT_EXECUTOR_CONFIGURATION,
 ) -> tuple[UserContent, ...]:
     return build_user_prompt(
         processed_natural_program=processed_natural_program,

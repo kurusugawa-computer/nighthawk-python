@@ -6,10 +6,11 @@ from types import ModuleType
 
 import pytest
 
-import nighthawk as nh
-from nighthawk.configuration import ModelSelection
-from nighthawk.runtime.step_request import StepCandidate
-from nighthawk.testing import ScriptedExecutor
+from nighthawk.adapters.pydantic_ai.configuration import selected_configuration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.core.model_selection import ModelSelection
+from nighthawk.core.step_request import StepCandidate
+from nighthawk.core.testing import ScriptedExecutor
 
 
 @pytest.fixture
@@ -27,11 +28,11 @@ def guide_examples(tmp_path: Path) -> list[Path]:
 def test_working_template(guide_examples: list[Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     executor = ScriptedExecutor([StepCandidate(binding_name_to_value={"label": "bug"})])
 
-    def select_executor(self: nh.AgentStepExecutor, selection: ModelSelection) -> ScriptedExecutor:
-        assert selection.apply(self.configuration).execution_model is not None
+    def select_executor(self: AgentStepExecutor, selection: ModelSelection) -> ScriptedExecutor:
+        assert selected_configuration(selection, self.configuration).execution_model is not None
         return executor
 
-    monkeypatch.setattr(nh.AgentStepExecutor, "resolve_model_selection", select_executor)
+    monkeypatch.setattr(AgentStepExecutor, "resolve_model_selection", select_executor)
     runpy.run_path(str(guide_examples[0]), run_name="__main__")
     assert capsys.readouterr().out == "bug\n"
     assert len(executor.requests) == 1

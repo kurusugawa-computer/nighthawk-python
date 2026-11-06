@@ -1,0 +1,178 @@
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+import pytest
+
+import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
+from nighthawk.core.environment import StepEnvironment
+from nighthawk.core.expression import evaluate_expression_async
+from nighthawk.core.inspection import describe_value
+from nighthawk.core.lifecycle import StepLifecycle
+from nighthawk.core.operation_contract import OperationFinished
+from nighthawk.core.step_outcome import Pass
+from nighthawk.core.step_request import StepCandidate, StepRequest
+from tests.support.executors import StubExecutor
+from tests.support.prompts import build_step_context, build_user_prompt_text, locals_section
+
+
+def test_runtime_access_preserves_application_names_and_reserves_its_own_root() -> None:
+    environment = StepEnvironment(
+        python_name_to_value={"inspect": "application", "__nighthawk_runtime_0": "existing"},
+        python_globals={},
+        local_name_set=frozenset({"__nighthawk_runtime_1"}),
+        task_name_to_value={"__nighthawk_runtime_2": "task"},
+    )
+    assert environment.runtime_reference == "__nighthawk_runtime_3"
+    namespace = environment._expression_namespace()
+    assert eval("inspect", namespace, namespace) == "application"
+    result = eval(f"{environment.runtime_reference}.environment.describe('inspect')", namespace, namespace)
+    assert result["origin"] == "python"
+    with pytest.raises(ValueError):
+        environment.assign(environment.runtime_reference, 0)
+    assert environment.runtime_reference not in environment.snapshot_working_state()
+
+
+@pytest.mark.parametrize("name", ["inspect", "describe_value"])
+def test_unbound_local_keeps_python_meaning_with_explicit_task_references(name: str) -> None:
+    environment = StepEnvironment(python_name_to_value={}, python_globals={}, local_name_set=frozenset({name}), task_name_to_value={name: "shared"})
+    namespace = environment._expression_namespace()
+    with pytest.raises(UnboundLocalError):
+        eval(name, namespace, namespace)
+    assert eval(environment.reference(name, source="task"), namespace, namespace) == "shared"
+
+
+@pytest.mark.parametrize("source", ["local", "global", "task"])
+def test_explicit_value_description_uses_ordinary_binding_and_rendering(source: str) -> None:
+    name_to_value: dict[str, object] = {"metadata": describe_value}
+    context = build_step_context(
+        python_locals=name_to_value if source == "local" else {},
+        python_globals=name_to_value if source == "global" else {},
+    )
+    context.environment = StepEnvironment(
+        python_name_to_value=context.step_locals,
+        python_globals=name_to_value if source == "global" else {},
+        task_name_to_value=name_to_value if source == "task" else {},
+    )
+    prompt = build_user_prompt_text(processed_natural_program="Use <metadata> to describe a value.", step_context=context)
+    assert "metadata: Callable  # (value: object, *, cursor: str | None = None, max_items: int = 8) -> dict[str, object]" in prompt
+    assert "Return bounded metadata (type, members, preview) for a Python value." in prompt
+    assert ("metadata: Callable" in locals_section(prompt)) is (source == "local")
+    assert context.environment.resolve("metadata") is describe_value
+    namespace = context.environment._expression_namespace()
+    assert eval("metadata(7)", namespace, namespace)["preview"] == 7
+    with pytest.raises(NameError):
+        eval("describe_value", namespace, namespace)
+
+
+def test_opaque_names_are_discoverable_and_source_references_resolve_live_bindings() -> None:
+    original = object()
+    replacement = object()
+    python_globals = {"opaque": original}
+    environment = StepEnvironment(python_name_to_value={}, python_globals=python_globals, task_name_to_value={"opaque": "task"})
+    listing = environment.discover(source="task")
+    metadata = listing["names"][0]  # type: ignore[index]
+    assert metadata["origin"] == "task"
+    namespace = environment._expression_namespace()
+    assert eval(metadata["reference"], namespace, namespace) == "task"
+    reference = environment.describe("opaque")["reference"]
+    assert eval(reference, namespace, namespace) is original  # type: ignore[arg-type]
+    python_globals["opaque"] = replacement
+    assert eval(reference, namespace, namespace) is replacement  # type: ignore[arg-type]
+
+
+def test_environment_name_pages_progress_and_recover_when_membership_changes() -> None:
+    environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"name_{i}": object() for i in range(5)})
+    first: Any = environment.discover(source="task", max_items=2)
+    second: Any = environment.discover(source="task", max_items=2, cursor=first["next_cursor"])
+    third: Any = environment.discover(source="task", max_items=2, cursor=second["next_cursor"])
+    assert [item["name"] for page in (first, second, third) for item in page["names"]] == [f"name_{i}" for i in range(5)]
+    assert third["next_cursor"] is None
+    namespace = environment._expression_namespace()
+    assert eval(first["continuation"], namespace, namespace) == second
+    invalid = environment.discover(source="python", cursor=first["next_cursor"])
+    assert "without a cursor" in str(invalid["recovery"])
+    environment.assign("a", 1)
+    environment.assign("b", 2)
+    page: Any = environment.discover(source="step", max_items=1)
+    environment.assign("c", 3)
+    assert "listing changed" in str(environment.discover(source="step", cursor=page["next_cursor"])["error"])
+
+
+def test_default_context_prioritizes_explicit_names_and_includes_task_values() -> None:
+    context = build_step_context(python_globals={}, python_locals={"a": 1, "z": 7})
+    configuration = StepExecutorConfiguration(context_limits=StepContextLimits(locals_max_items=1))
+    prompt = build_user_prompt_text(processed_natural_program="Use <z>.", step_context=context, configuration=configuration)
+    assert "z: int = 7" in locals_section(prompt)
+    assert "Omitted: a" in prompt
+    assert ".environment.discover()" in prompt
+    assert ".environment.describe('name')" in locals_section(prompt)
+    context.environment = StepEnvironment(python_name_to_value=context.step_locals, python_globals={}, task_name_to_value={"shared": 5})
+    prompt = build_user_prompt_text(processed_natural_program="Review state.", step_context=context)
+    assert "shared: int = 5" in prompt
+    assert ".environment.discover()" not in prompt
+    assert ".environment.describe(" not in prompt
+
+
+def test_explicit_value_description_and_discovery_are_one_evaluation_operation() -> None:
+    context = build_step_context(python_globals={}, python_locals={"value": [1, 2], "metadata": describe_value})
+    finished: list[OperationFinished] = []
+    reference = context.environment.runtime_reference
+    expression = f"(metadata(value), {reference}.environment.describe('value'))"
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished.append)):
+        result = asyncio.run(evaluate_expression_async(context, expression))
+        assert result[0]["preview"] == [1, 2]  # type: ignore[index]
+        assert len(finished) == 1
+        assert finished[0].request.expression == expression
+        describe_value([1, 2])
+        assert len(finished) == 1
+
+
+def test_read_only_source_annotations_are_available_without_resolving_them() -> None:
+    effects: list[str] = []
+    descriptions: list[dict[str, object]] = []
+
+    def annotation_effect() -> type:
+        effects.append("annotation")
+        return int
+
+    @nh.function
+    def workflow() -> None:
+        findings: list[annotation_effect()] = []  # type: ignore[valid-type]  # noqa: F841 - referenced by Natural.
+        """execute
+        Describe <findings>.
+        """
+
+    class Executor:
+        def run_step(self, *, request: StepRequest) -> StepCandidate:
+            descriptions.append(request.step_context.environment.describe("findings"))
+            assert request.binding_name_to_type == {}
+            return StepCandidate(outcome=Pass())
+
+    with nh.run(Executor()):
+        workflow()
+    assert descriptions[0]["annotation"] == "list[annotation_effect()]"
+    assert descriptions[0]["output_contract"] is None
+    assert effects == []
+
+
+def test_member_discovery_progresses_and_invalidated_cursor_has_recovery() -> None:
+    class Surface:
+        pass
+
+    value = Surface()
+    for name in ("a", "b", "c", "d", "e"):
+        setattr(value, name, name)
+    first = describe_value(value, max_items=2)
+    assert [item["name"] for item in first["members"]] == ["a", "b"]  # type: ignore[union-attr]
+    second = describe_value(value, max_items=2, cursor=first["next_cursor"])  # type: ignore[arg-type]
+    assert [item["name"] for item in second["members"]] == ["c", "d"]  # type: ignore[union-attr]
+    third = describe_value(value, max_items=2, cursor=second["next_cursor"])  # type: ignore[arg-type]
+    assert [item["name"] for item in third["members"]] == ["e"]  # type: ignore[union-attr]
+    assert third["next_cursor"] is None
+    value.f = "new"  # type: ignore[attr-defined]
+    invalid = describe_value(value, max_items=2, cursor=first["next_cursor"])  # type: ignore[arg-type]
+    assert "listing changed" in str(invalid["error"])
+    assert "without a cursor" in str(invalid["recovery"])

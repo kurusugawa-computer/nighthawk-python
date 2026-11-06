@@ -5,10 +5,11 @@ import inspect
 import pytest
 
 import nighthawk as nh
-from nighthawk.runtime.embedded import execute_step_async
-from nighthawk.runtime.inspection import describe_value
-from nighthawk.runtime.step_definition import StepDefinition
-from nighthawk.runtime.step_outcome import Pass
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits
+from nighthawk.core.embedded import execute_step_async
+from nighthawk.core.inspection import describe_value
+from nighthawk.core.step_definition import StepDefinition
+from nighthawk.core.step_outcome import Pass
 from tests.support.model_evaluation import ModelEvaluation
 
 pytestmark = pytest.mark.asyncio
@@ -46,9 +47,7 @@ async def test_omitted_member_details_with_explicit_helpers(model_evaluation: Mo
         name_to_value["describe_value"] = describe_value
     committed_name_to_value: dict[str, object] = {}
     model_evaluation.name_to_observation.update(bindings=committed_name_to_value, property_reads=property_reads)
-    configuration = model_evaluation.configuration.model_copy(
-        update={"context_limits": nh.StepContextLimits(object_max_fields=0, object_max_methods=0)}
-    )
+    configuration = model_evaluation.configuration.model_copy(update={"context_limits": StepContextLimits(object_max_fields=0, object_max_methods=0)})
     with nh.scope(step_executor_configuration=configuration):
         outcome = await execute_step_async(
             StepDefinition(

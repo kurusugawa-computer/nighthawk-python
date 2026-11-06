@@ -16,6 +16,7 @@ _EXAMPLE_NAME_TO_OUTPUT = {
     "model_selection": "models=A,B,A; unapproved_model_refused=True",
     "request_budget": "observed_tokens=120; next_request_refused=True; aggregate_tokens=0",
     "notification_cleanup": "returned_after_notification_cleanup=True",
+    "session_embedding": "answer=42; repeated_wait_preserves_outcome=True",
 }
 
 
@@ -23,7 +24,7 @@ _EXAMPLE_NAME_TO_OUTPUT = {
 def example_name_to_path(tmp_path: Path) -> dict[str, Path]:
     document = "\n".join(
         (_REPOSITORY_ROOT / "docs" / name).read_text()
-        for name in ("runtime-configuration.md", "host-integration.md", "embedded-execution.md", "verification.md")
+        for name in ("runtime-configuration.md", "host-integration.md", "embedded-execution.md", "verification.md", "agent/sessions.md")
     )
     examples = re.findall(
         r"<!-- runnable-example:([a-z_]+) -->\s*```py\n(.*?)```\s*<!-- /runnable-example:\1 -->",

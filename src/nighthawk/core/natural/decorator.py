@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import ast
+import inspect
+import re
+import sys
+import textwrap
+from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from functools import wraps
+from types import CellType, FunctionType
+from typing import Any, cast
+
+from nighthawk.core.annotations import SourceAnnotation
+from nighthawk.core.bindings import MISSING_ANNOTATION
+from nighthawk.core.calls import _invoke, _invoke_async
+from nighthawk.core.natural._names import _RuntimeNames
+from nighthawk.core.natural.blocks import extract_program
+from nighthawk.core.natural.definition import FunctionDefinition, _register_definition
+from nighthawk.core.natural.transform import transform_module_ast
+from nighthawk.core.runner import Runner
+from nighthawk.core.scoping import get_scope
+from nighthawk.core.step_context import python_cell_scope
+from nighthawk.core.step_definition import BlockKind
+from nighthawk.errors import NighthawkError
+
+type NaturalFunctionCallable = Callable[..., Any]
+
+
+class _RunnerProxy:
+    def __init__(self) -> None:
+        self.runtime_name_set: frozenset[str] = frozenset()
+
+    def execution(self, *, block_kind: BlockKind) -> AbstractContextManager[Runner]:
+        caller_frame = sys._getframe(1)
+        runner = Runner(get_scope().step_executor, block_kind=block_kind, runtime_name_set=self.runtime_name_set)
+        return runner.execution(caller_frame=caller_frame)
+
+    def execution_async(self, *, block_kind: BlockKind) -> AbstractAsyncContextManager[Runner]:
+        caller_frame = sys._getframe(1)
+        runner = Runner(get_scope().step_executor, block_kind=block_kind, runtime_name_set=self.runtime_name_set)
+        return runner.execution_async(caller_frame=caller_frame)
+
+
+def _function_name_to_cell(function: FunctionType) -> dict[str, CellType]:
+    return dict(zip(function.__code__.co_freevars, function.__closure__ or (), strict=True))
+
+
+def _build_transformed_factory_module(
+    *,
+    transformed_function_def: ast.FunctionDef | ast.AsyncFunctionDef,
+    name_to_value: dict[str, object],
+    runtime_names: _RuntimeNames,
+) -> ast.Module:
+    # Defaults already ran when Python created the original function.
+    # Compile placeholders and restore their original live values on the new body.
+    transformed_function_def.args.defaults = [ast.Constant(None) for _ in transformed_function_def.args.defaults]
+    transformed_function_def.args.kw_defaults = [
+        None if default is None else ast.Constant(None) for default in transformed_function_def.args.kw_defaults
+    ]
+
+    captured_value_name = runtime_names.allocate("__nh_captured_values__")
+    factory_name = runtime_names.allocate("__nh_factory__")
+    # Binding the original name here would capture global self-references and
+    # bypass the public wrapper on recursive calls.
+    transformed_function_def.name = runtime_names.allocate("__nh_body__")
+
+    factory_body: list[ast.stmt] = []
+    for name in sorted(name_to_value.keys()):
+        factory_body.append(
+            ast.Assign(
+                targets=[ast.Name(id=name, ctx=ast.Store())],
+                value=ast.Subscript(
+                    value=ast.Name(id=captured_value_name, ctx=ast.Load()),
+                    slice=ast.Constant(name),
+                    ctx=ast.Load(),
+                ),
+            )
+        )
+
+    factory_body.append(transformed_function_def)
+    factory_body.append(ast.Return(value=ast.Name(id=transformed_function_def.name, ctx=ast.Load())))
+
+    factory_function_def = ast.FunctionDef(
+        name=factory_name,
+        args=ast.arguments(
+            posonlyargs=[],
+            args=[ast.arg(arg=captured_value_name)],
+            kwonlyargs=[],
+            kw_defaults=[],
+            defaults=[],
+        ),
+        body=factory_body,
+        decorator_list=[],
+        returns=None,
+        type_comment=None,
+    )
+
+    factory_module = ast.Module(body=[factory_function_def], type_ignores=[])
+    ast.fix_missing_locations(factory_module)
+    return factory_module
+
+
+def function[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    """Instrument execute and decide blocks while preserving the Python signature.
+
+    Models and execution controls are selected by the active run and scope.
+    """
+    return cast(Callable[P, R], _instrument(func))
+
+
+def _instrument(func: NaturalFunctionCallable) -> NaturalFunctionCallable:
+    if isinstance(func, staticmethod):
+        return cast(NaturalFunctionCallable, staticmethod(_instrument(func.__func__)))
+    if isinstance(func, classmethod):
+        return cast(NaturalFunctionCallable, classmethod(_instrument(func.__func__)))
+
+    if sys.implementation.name != "cpython" or sys.version_info < (3, 13):
+        raise NighthawkError("Natural source instrumentation requires CPython 3.13 or later")
+    try:
+        lines, starting_line_number = inspect.getsourcelines(func)
+    except (OSError, TypeError) as exception:
+        raise NighthawkError("Natural functions require available Python def or async def source") from exception
+    source = textwrap.dedent("".join(lines))
+
+    filename = inspect.getsourcefile(func) or "<nighthawk>"
+    original_module = ast.parse(source, filename=filename)
+    function_definition = next(
+        (node for node in original_module.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func.__name__),
+        None,
+    )
+    if function_definition is None:
+        raise NighthawkError("Natural functions require available Python def or async def source")
+    function_definition.decorator_list = []
+    ast.increment_lineno(original_module, starting_line_number - 1)
+
+    capture_name_set = set(func.__code__.co_freevars) | set(func.__code__.co_cellvars)
+
+    name_to_value: dict[str, object] = {}
+    original_name_to_cell = dict(zip(func.__code__.co_freevars, func.__closure__ or (), strict=True))
+    for name, cell in original_name_to_cell.items():
+        try:
+            name_to_value[name] = cell.cell_contents
+        except ValueError:
+            name_to_value[name] = None
+
+    captured_name_tuple = tuple(sorted(capture_name_set))
+
+    # Include Natural text as well as compiled lexical names.
+    # An explicit read in a string must not collide with a helper introduced by instrumentation.
+    occupied_names = (
+        set(re.findall(r"\b[A-Za-z_]\w*\b", source))
+        | set(func.__code__.co_varnames)
+        | capture_name_set
+        | func.__globals__.keys()
+        | func.__builtins__.keys()
+    )
+    runtime_names = _RuntimeNames(occupied_names)
+    transform_module_ast(original_module, captured_name_tuple=captured_name_tuple, runtime_names=runtime_names)
+
+    # Runtime helpers referenced by the transformed body travel through the factory closure, not through
+    # module globals. The transformed function therefore shares ``func.__globals__`` with the original
+    # function: names defined in the module after decoration stay visible, and the module namespace is
+    # never polluted with helper names.
+    runner_proxy = _RunnerProxy()
+    helper_name_to_value: dict[str, object] = {
+        runtime_names.allocate("__nighthawk_runner__"): runner_proxy,
+        runtime_names.allocate("__nh_extract_program__"): extract_program,
+        runtime_names.allocate("__nh_python_cell_scope__"): python_cell_scope,
+        runtime_names.allocate("__nh_source_annotation__"): SourceAnnotation,
+        runtime_names.allocate("__nh_missing_annotation__"): MISSING_ANNOTATION,
+        runtime_names.allocate("__nh_function_name_to_cell__"): _function_name_to_cell,
+    }
+    factory_name_to_value: dict[str, object] = {**name_to_value, **helper_name_to_value}
+
+    factory_module = _build_transformed_factory_module(
+        transformed_function_def=function_definition,
+        name_to_value=factory_name_to_value,
+        runtime_names=runtime_names,
+    )
+    code = compile(factory_module, filename, "exec")
+
+    module_namespace: dict[str, object] = {}
+    exec(code, func.__globals__, module_namespace)
+
+    factory = cast(Callable[[dict[str, object]], FunctionType], module_namespace[runtime_names.allocate("__nh_factory__")])
+    transformed = factory(factory_name_to_value)
+    # Preserve original Python cells, including nonlocal writes and late rebinding.
+    transformed = FunctionType(
+        transformed.__code__.replace(co_name=func.__code__.co_name, co_qualname=func.__code__.co_qualname),
+        func.__globals__,
+        func.__name__,
+        func.__defaults__,
+        tuple(
+            original_name_to_cell.get(name, cell) for name, cell in zip(transformed.__code__.co_freevars, transformed.__closure__ or (), strict=True)
+        )
+        or None,
+    )
+    transformed.__kwdefaults__ = func.__kwdefaults__
+    transformed.__doc__ = func.__doc__
+    if sys.version_info >= (3, 14) and func.__annotate__ is not None:
+        transformed.__annotate__ = func.__annotate__
+    else:
+        transformed.__annotations__ = func.__annotations__
+
+    transformed_freevar_name_set = set(transformed.__code__.co_freevars)
+    runner_proxy.runtime_name_set = runtime_names.allocated_names & (
+        transformed_freevar_name_set | set(transformed.__code__.co_varnames) | set(transformed.__code__.co_cellvars)
+    )
+
+    if inspect.iscoroutinefunction(func):
+        transformed_async = cast(Callable[..., Awaitable[Any]], transformed)
+
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await _invoke_async(definition, transformed_async, args, kwargs)
+
+        definition = FunctionDefinition(func, async_wrapper, transformed)
+        _register_definition(definition)
+        return cast(NaturalFunctionCallable, async_wrapper)  # type: ignore[return-value]
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return _invoke(definition, args, kwargs)
+
+    definition = FunctionDefinition(func, wrapper, transformed)
+    _register_definition(definition)
+    return cast(NaturalFunctionCallable, wrapper)  # type: ignore[return-value]

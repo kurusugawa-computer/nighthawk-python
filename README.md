@@ -81,6 +81,8 @@ The [host integration guide](https://kurusugawa-computer.github.io/nighthawk-pyt
 - [Typed decisions](https://kurusugawa-computer.github.io/nighthawk-python/decisions/) -- Integrate typed judgments with `decide` and scoped decision models.
 - [Natural blocks](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/) -- Design prompts, bindings, and Python helpers.
 - [Patterns](https://kurusugawa-computer.github.io/nighthawk-python/patterns/) and [Verification](https://kurusugawa-computer.github.io/nighthawk-python/verification/) -- Compose, test, and debug workflows.
+- [Agent Parts and Harness](https://kurusugawa-computer.github.io/nighthawk-python/agent/) -- Governed generated execution, reusable parts, Sessions, and reference applications.
+- [Architecture](https://kurusugawa-computer.github.io/nighthawk-python/architecture/) -- Package ownership and dependency direction.
 - [Specification](https://kurusugawa-computer.github.io/nighthawk-python/specification/) and [API reference](https://kurusugawa-computer.github.io/nighthawk-python/api/) -- Runtime contracts and public interfaces.
 - [For coding agents](https://kurusugawa-computer.github.io/nighthawk-python/for-coding-agents/) -- A compact operational guide.
 - [Philosophy](https://kurusugawa-computer.github.io/nighthawk-python/philosophy/) and [Design drivers](https://kurusugawa-computer.github.io/nighthawk-python/design-drivers/) -- Principles, application needs, and Core responsibility.

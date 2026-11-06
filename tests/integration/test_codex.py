@@ -3,20 +3,22 @@ from pathlib import Path
 from pydantic_ai.capabilities import Instrumentation
 
 import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from tests.integration.skip_helpers import requires_codex_integration
 
 
 def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
     requires_codex_integration()
 
-    run_configuration = nh.StepExecutorConfiguration(
+    run_configuration = StepExecutorConfiguration(
         execution_model="codex:gpt-6-luna",
         execution_model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
     )
 
-    step_executor = nh.AgentStepExecutor(
+    step_executor = AgentStepExecutor(
         configuration=run_configuration,
     )
 
@@ -37,14 +39,14 @@ def test_codex_natural_step_uses_tool(tmp_path: Path) -> None:
 def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
     requires_codex_integration()
 
-    run_configuration = nh.StepExecutorConfiguration(
+    run_configuration = StepExecutorConfiguration(
         execution_model="codex:gpt-6-luna",
         execution_model_settings={
             "working_directory": str(tmp_path.resolve()),
         },
     )
 
-    step_executor = nh.AgentStepExecutor(
+    step_executor = AgentStepExecutor(
         configuration=run_configuration,
     )
 
@@ -68,21 +70,21 @@ def test_codex_natural_step_uses_custom_nh_tool(tmp_path: Path) -> None:
 def test_codex_skill() -> None:
     requires_codex_integration()
 
-    from nighthawk.backends.codex import CodexModelSettings
+    from nighthawk.adapters.pydantic_ai.models.codex import CodexModelSettings
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
     try:
         (working_directory / "test.txt").unlink(missing_ok=True)
 
-        configuration = nh.StepExecutorConfiguration(
+        configuration = StepExecutorConfiguration(
             execution_model="codex:gpt-6-luna",
             execution_model_settings=CodexModelSettings(
                 working_directory=str(working_directory.resolve()),
             ).model_dump(),
         )
 
-        step_executor = nh.AgentStepExecutor(
+        step_executor = AgentStepExecutor(
             configuration=configuration,
         )
         with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):
@@ -111,18 +113,18 @@ def test_codex_skill() -> None:
 def test_codex_skill_calc() -> None:
     requires_codex_integration()
 
-    from nighthawk.backends.codex import CodexModelSettings
+    from nighthawk.adapters.pydantic_ai.models.codex import CodexModelSettings
 
     working_directory = Path(__file__).absolute().parent / "agent_working_directory"
 
-    configuration = nh.StepExecutorConfiguration(
+    configuration = StepExecutorConfiguration(
         execution_model="codex:gpt-6-luna",
         execution_model_settings=CodexModelSettings(
             working_directory=str(working_directory.resolve()),
         ).model_dump(),
     )
 
-    step_executor = nh.AgentStepExecutor(
+    step_executor = AgentStepExecutor(
         configuration=configuration,
     )
     with nh.run(step_executor), nh.scope(capabilities=[Instrumentation()]):

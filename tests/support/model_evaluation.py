@@ -16,10 +16,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic_ai import AgentRunResult
 from pydantic_core import to_jsonable_python
 
 import nighthawk as nh
-from nighthawk.lifecycle import StepFinished, StepLifecycle
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.core.lifecycle import StepFinished, StepLifecycle
+from nighthawk.core.usage import UsageMeter
 
 
 def _json_value(value: object) -> Any:
@@ -34,10 +37,10 @@ def _json_value(value: object) -> Any:
 
 @dataclass
 class ModelEvaluation:
-    configuration: nh.StepExecutorConfiguration
+    configuration: StepExecutorConfiguration
     name_to_observation: dict[str, object] = field(default_factory=dict)
     steps: list[StepFinished] = field(default_factory=list)
-    usage: nh.UsageMeter = field(default_factory=nh.UsageMeter)
+    usage: UsageMeter = field(default_factory=UsageMeter)
 
 
 @dataclass
@@ -55,7 +58,7 @@ class _Trial:
             usage = evaluation.usage.snapshot()
             self.record.update(
                 observations=_json_value(evaluation.name_to_observation),
-                usage={"requests": usage.requests, "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+                usage={"requests": usage.request_count, "input_tokens": usage.input_token_count, "output_tokens": usage.output_token_count},
                 steps=[
                     {
                         "kind": step.kind,
@@ -64,7 +67,9 @@ class _Trial:
                         "bindings": _json_value(dict(step.assigned_binding_name_to_value)),
                         "outcome": _json_value(getattr(step, "outcome", None)),
                         "failure_stage": getattr(step, "failure_stage", None),
-                        "messages": json.loads(step.model_result.all_messages_json()) if step.model_result is not None else None,
+                        "messages": json.loads(step.executor_result.all_messages_json())
+                        if isinstance(step.executor_result, AgentRunResult)
+                        else None,
                     }
                     for step in evaluation.steps
                 ],
@@ -170,7 +175,7 @@ def model_evaluation(request: pytest.FixtureRequest, evaluation_model: str | Non
     if evaluation_model is None:
         pytest.skip("Select live models with --evaluation-model")
     trial = request.node.stash[_TRIAL]
-    configuration = nh.StepExecutorConfiguration(execution_model=evaluation_model, execution_model_settings=request.config.stash[_SETTINGS])
+    configuration = StepExecutorConfiguration(execution_model=evaluation_model, execution_model_settings=request.config.stash[_SETTINGS])
     evaluation = ModelEvaluation(configuration)
     trial.evaluation = evaluation
     with (
