@@ -114,6 +114,9 @@ Require clear guarantees and little burden for applications that do not use the 
 Evaluate total burden across authors, hosts, adapters, and maintainers, including complexity displaced into applications.
 Apply the [evidence criteria](design-drivers.md#from-findings-to-design-decisions) for additions, corrections, and simplifications.
 
+The same distribution provides reusable Harness mechanisms and Agent Parts through `nighthawk.agent`, without making them Core execution requirements.
+The [Agent principles](agent/principles.md) apply these criteria to execution authority, evidence, and retained capabilities.
+
 ## Accepted tradeoffs
 
 - **Python dependence.** Composition and integration depend on Python's language and ecosystem.

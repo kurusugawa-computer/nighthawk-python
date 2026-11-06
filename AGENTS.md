@@ -42,7 +42,9 @@ Use Nighthawk's philosophy to resolve tradeoffs; assess the burden on callers an
 
 ## Project orientation
 
-A Python 3.13+ library embedding a "Natural" DSL inside Python functions, executed using an LLM. Provider dependencies are installed via extras. No CLI entry point.
+A Python 3.13+ library embedding a "Natural" DSL inside Python functions, executed using an LLM. The same `nighthawk-python` distribution includes reusable Agent Parts and host-owned Harness mechanisms under `src/nighthawk/agent/`.
+Core, Harness, and Agent Parts are distinct responsibilities; applications own goals, policy, environments, persistence, and approval.
+Provider dependencies are installed via extras. No CLI entry point; `examples/repl/` is an optional terminal application.
 
 Natural source, included Markdown, prompt fragments, and declarations are trusted program inputs authorized by the host under the [trust contract](docs/specification.md#3-hard-constraints); do not wire untrusted user input into Natural blocks or template preprocessing.
 For Nighthawk development, follow [Programs used in development](CONTRIBUTING.md#programs-used-in-development): generating or revising program assets during a tool's execution, then executing them, requires an explicitly authorized experiment; running an experiment does not authorize adopting its output.
@@ -52,6 +54,7 @@ ExecPlans: write under `.agents/execplans/` only on request; follow `.agents/PLA
 ### Design references
 
 - Read [Philosophy](docs/philosophy.md) before architectural decisions and whenever a design or value judgment is unclear; check its invariants first.
+- Read [Agent principles](docs/agent/principles.md), [architecture](docs/agent/architecture.md), and [host runtime obligations](docs/agent/runtime.md) for Agent changes. Classify enforcement by the protected effect before adding checks.
 - Read [Design drivers](docs/design-drivers.md) when using application requirements to justify Core changes or deciding which information belongs in this workspace.
 - Use [Specification](docs/specification.md) for supported behavior and [Roadmap](docs/roadmap.md) for exploratory directions; application scenarios do not establish runtime guarantees.
 - Treat Nighthawk-based development tooling as an application; its presence here does not make it a public library feature.

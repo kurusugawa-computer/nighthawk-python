@@ -82,6 +82,9 @@ Run OpenAI integration tests with your `.env` loaded:
 NIGHTHAWK_OPENAI_INTEGRATION_TESTS=1 uv run --env-file .env pytest -q tests/integration/
 ```
 
+Agent provider acceptance lives in `tests/integration/agent/` and uses the same OpenAI gate.
+These cases cover generated-source execution, retained functions, host mediation, and the optional terminal in temporary test environments.
+
 Add `NIGHTHAWK_OPENAI_MULTIMODAL_INTEGRATION_TESTS=1` to include the image cases.
 Coding agent tests use their respective flags: `NIGHTHAWK_CODEX_INTEGRATION_TESTS=1`, `NIGHTHAWK_CLAUDE_SDK_INTEGRATION_TESTS=1`, or `NIGHTHAWK_CLAUDE_CLI_INTEGRATION_TESTS=1`.
 Their executables and authentication must be available in the test environment.

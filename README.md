@@ -90,3 +90,8 @@ The [host integration guide](https://kurusugawa-computer.github.io/nighthawk-pyt
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, development commands, and contribution guidelines.
 
 Inspired by [Nightjar](https://github.com/psg-mit/nightjarpy).
+
+## Agent Parts and Harness
+
+The same distribution includes [`nighthawk.agent`](docs/agent/index.md) for reusable judgments, generated functions, host-owned execution admission and evidence, and optional persistent Sessions.
+Core remains usable independently; importing `nighthawk` does not load Agent or Session modules.

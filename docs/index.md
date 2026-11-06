@@ -89,3 +89,8 @@ Prefer another approach when:
 ## Origins
 
 Nighthawk is a compact reimplementation of the core ideas of [Nightjar](https://github.com/psg-mit/nightjarpy).
+
+## Agent Parts and Harness
+
+The same distribution includes [`nighthawk.agent`](agent/index.md) for reusable judgments, generated functions, host-owned execution admission and evidence, and optional persistent Sessions.
+Core remains usable independently; importing `nighthawk` does not load Agent or Session modules.

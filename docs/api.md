@@ -270,3 +270,346 @@ See [Embedded execution](embedded-execution.md) for executable synchronous and a
     options:
       members:
         - describe_value
+
+## Agent Parts and Harness
+
+::: nighthawk.agent
+    options:
+      members:
+        - PERIMETER_EFFECT_CLASS_TUPLE
+        - AsyncGeneratedCallableReference
+        - AttributionNode
+        - Capability
+        - CapabilityDescriptor
+        - CapabilityInvocationEvent
+        - CapabilityRejectedError
+        - CodeProposal
+        - DefinitionKind
+        - DefinitionMaterializationEvent
+        - DependencyDeclaration
+        - DispatchEvent
+        - DispatchKind
+        - DispatchOutcomeEvent
+        - DispatchOutcomeStatus
+        - DispatchRejectedError
+        - DispatchResult
+        - EffectFootprint
+        - ExecutionIntent
+        - ExecutorUsage
+        - GeneratedCallableReference
+        - GeneratedDefinition
+        - GeneratedExecutionError
+        - Grant
+        - GrantEntryKind
+        - GrantError
+        - LedgerEntry
+        - NaturalExecutionError
+        - NaturalExecutionOutcomeEvent
+        - PerimeterEffectAttemptEvent
+        - PerimeterEffectClass
+        - PerimeterEffectCompletionEvent
+        - PerimeterEffectRejectedError
+        - PerimeterPolicy
+        - ResourceExhaustionEvent
+        - RunContract
+        - RunEndEvent
+        - RunEntryEvent
+        - RunFailedError
+        - RunHandle
+        - RunLedger
+        - RunLedgerEvent
+        - RunRejectedError
+        - RunTerminationError
+        - ScaffoldComposition
+        - SourceProvenanceClass
+        - TerminationCompletion
+        - TerminationCompletionEvent
+        - TerminationError
+        - TerminationRequestEvent
+        - TraceAnomalyEvent
+        - TraceAnomalyKind
+        - current_capabilities
+        - current_executor_step_admission
+        - current_grant
+        - current_run_ledger
+        - dispatch
+        - execute_code_capability
+        - scope
+        - terminate_descendant_capability
+
+::: nighthawk.agent.runtime
+    options:
+      members:
+        - ApprovedFunctionDefinition
+        - AsyncScaffoldComposition
+        - ConfinementConfirmation
+        - ConfinementRequest
+        - ExecutorStepAdmission
+        - ExecutorStepObservation
+        - InMemoryPerimeterAuditStore
+        - PerimeterAuditRecord
+        - PerimeterAuditStore
+        - PerimeterConfinement
+        - ResourceAllocation
+        - ResourceConsumption
+        - ResourceRejection
+        - ResourceRequest
+        - ResourceRequestKind
+        - RunIdentity
+        - Runner
+        - TerminationMechanism
+        - TerminationReport
+        - TerminationRequest
+        - bounded_resource_allocation
+        - unavailable_termination_mechanism
+        - unconfirmed_perimeter_confinement
+
+::: nighthawk.agent.errors
+    options:
+      members:
+        - DispatchRejectionReason
+        - GeneratedExecutionFailureKind
+        - GrantErrorReason
+        - NaturalExecutionFailureKind
+        - PerimeterEffectRejectionReason
+        - RunRejectionReason
+        - RunTerminalKind
+        - TerminationFailureReason
+
+::: nighthawk.agent.values
+    options:
+      members:
+        - BasicDataValue
+        - SequenceWindow
+        - TextSearchMatch
+        - TextSearchPage
+        - TextWindow
+        - read_text_window
+        - search_text
+        - select_sequence_window
+
+::: nighthawk.agent.history
+    options:
+      members:
+        - CausalNode
+        - EvidenceReference
+        - HistoryBounds
+        - HistoryEvidence
+        - HistoryProjection
+        - HistoryQuery
+        - RunAnalysis
+        - analyze_run
+        - project_history
+        - resolve_evidence
+
+::: nighthawk.agent.catalog
+    options:
+      members:
+        - ProcedureCatalog
+        - ProcedureDescriptor
+        - ProcedurePage
+        - ProcedureQuery
+        - ProcedureSelection
+        - build_procedure_discovery
+
+::: nighthawk.agent.procedures
+    options:
+      members:
+        - materialize_procedure
+        - select_procedure
+        - selected_procedure
+
+::: nighthawk.agent.learning
+    options:
+      members:
+        - ImprovementCandidate
+        - LearningResult
+        - Lesson
+        - derive_learning
+        - format_candidate_review
+
+::: nighthawk.agent.generated
+    options:
+      members:
+        - RetainedFunction
+        - RetainedFunctionDefinition
+        - retain_function
+
+::: nighthawk.agent.generation
+    options:
+      members:
+        - FunctionRequest
+        - propose_function
+
+::: nighthawk.agent.conversation
+    options:
+      members:
+        - ContextItem
+        - ContextPage
+        - ContextQuery
+        - ConversationAction
+        - ConversationBindings
+        - ConversationHistoryQuery
+        - ConversationInput
+        - ConversationPage
+        - ConversationRecord
+        - ConversationResult
+        - ConversationStep
+        - DataExport
+        - FunctionDeclaration
+        - FunctionSelection
+        - SourceExport
+        - SourceInvocation
+        - SourceRetention
+        - UserFacingBlock
+        - choose_conversation_step
+        - converse
+        - perform_conversation_action
+
+::: nighthawk.agent.sources
+    options:
+      members:
+        - SourceCandidate
+        - export_data
+        - export_source
+        - invoke_source
+
+::: nighthawk.agent.reference
+    options:
+      members:
+        - MAXIMUM_NOTE_CHARACTER_COUNT
+        - PROPOSAL_CONSTRUCTOR_TUPLE
+        - ReferenceLoopInput
+        - ReferenceLoopResult
+        - build_reference_loop_composition
+        - reference_loop
+        - run_reference_loop
+
+::: nighthawk.agent.session
+    options:
+      members:
+        - BackgroundObservation
+        - BindingMutationResult
+        - CellExecution
+        - CellInput
+        - CellMode
+        - CellOutcome
+        - CellOutput
+        - CellOutputPage
+        - CellStatus
+        - ConversationCompositionBuilder
+        - DeleteLocalRequest
+        - ExecutionObservation
+        - ExitRequest
+        - ExitResult
+        - Exposure
+        - HelpRequest
+        - HistoryFilter
+        - IncludedSourceApproval
+        - InspectLocalRequest
+        - InterruptBackgroundRequest
+        - InterruptExecutionRequest
+        - InterruptionResult
+        - ListBackgroundRequest
+        - ListOperationsRequest
+        - LocalBindingObservation
+        - LocalPage
+        - LocalQuery
+        - ManagedBackgroundWork
+        - OperationDescriptor
+        - OperationParameter
+        - OperatorRequest
+        - OperatorResult
+        - PlainTextObservation
+        - RatifiedFunctionSource
+        - ReadEvidenceRequest
+        - ReadExecutionRequest
+        - ReadHistoryRequest
+        - ReadLocalsRequest
+        - ReadTextRequest
+        - RegisterBackgroundRequest
+        - RenameLocalRequest
+        - SearchHistoryRequest
+        - Session
+        - SessionBackground
+        - SessionBusyError
+        - SessionClosedError
+        - SessionError
+        - SessionExecution
+        - SessionFunction
+        - SessionHistory
+        - SessionLocals
+        - SessionLookupError
+        - SessionManager
+        - SessionOperations
+        - SessionWaitContextError
+        - build_conversation_composition
+        - create_session
+
+::: nighthawk.agent.tools
+    options:
+      members:
+        - CodingActionPolicy
+        - build_artifact_storage
+        - build_coding_actions
+        - build_default_file_writer
+        - build_default_web_fetch_client
+        - build_inspect_workspace
+        - build_research_web
+
+::: nighthawk.agent.tools.artifacts
+    options:
+      members:
+        - ArtifactStore
+        - DirectoryArtifactStore
+        - InMemoryArtifactStore
+        - LoadArtifactRequest
+        - SaveArtifactRequest
+        - StoredArtifactDescriptor
+
+::: nighthawk.agent.tools.coding_actions
+    options:
+      members:
+        - CodingActionRejectionCode
+        - CommandExecutor
+        - CommandOutput
+        - FilePatchOutcome
+        - FileWriter
+        - GeneratedImage
+        - ImageGenerationClient
+        - WebRequestClient
+        - WebResponse
+
+::: nighthawk.agent.tools.inspect_workspace
+    options:
+      members:
+        - DirectoryEntry
+        - FileMatch
+        - FileSlice
+        - GrepBackend
+        - ImageContent
+        - ImageReference
+        - SearchHit
+
+::: nighthawk.agent.tools.requests
+    options:
+      members:
+        - AddFileOperation
+        - CommandRequest
+        - CommandVerb
+        - DeleteFileOperation
+        - FilePatchOperation
+        - FilePatchRequest
+        - HttpHeader
+        - HttpMethod
+        - ImageGenerationRequest
+        - UpdateFileOperation
+        - WebRequest
+
+::: nighthawk.agent.tools.research_web
+    options:
+      members:
+        - WebFetchClient
+        - WebFetchResult
+        - WebSearchClient
+        - WebSearchHit

@@ -38,6 +38,9 @@ Remove unneeded documents, terms, and rules together with their references; pres
 | `for-coding-agents.md` | Agent authors: condensed operational guidance derived from the task-oriented pages and specification. |
 | `philosophy.md` | People and AI agents designing Nighthawk and programs built with it: explain what Nighthawk aims to make possible, why its foundational design choices serve that purpose, and how to evaluate tradeoffs and proposed changes. |
 | `design-drivers.md` | Designers: application needs, inclusion policy, evaluation evidence, and implications for Core. |
+| `agent/index.md` | Application authors: Agent Parts, Harness composition, optional Sessions, and reference application navigation. |
+| `agent/principles.md` | Designers: apply the shared philosophy to Agent and Harness responsibility boundaries and approval. |
+| `agent/architecture.md`, `agent/runtime.md` | Hosts: Agent architectural commitments and external runtime obligations; source owns executable contracts. |
 | `roadmap.md` | Contributors: exploratory directions; remove completed items. |
 
 Route provider credentials to the corresponding provider/backend page, with only first-run setup in Quickstart.

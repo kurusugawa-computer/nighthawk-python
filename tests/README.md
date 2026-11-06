@@ -17,6 +17,8 @@ Choose a test owner by the behavior that would break, including when a test call
 | `distribution/` | Installed wheel contracts, including exported types and decorator signatures through `py.typed`. |
 | `test_model_evaluation.py` | Model-evaluation selection, trial isolation, failure/interruption accounting, and evidence recording through actual pytest subprocesses. |
 | `integration/` | Opt-in tests using real providers or coding agent executables, including repeated model-behavior and Python-composition evaluations. |
+| `nighthawk/agent/` | Harness authority, generated execution, reusable Agent Parts, and Session contracts. |
+| `examples/` | Verified reference applications, including terminal process and presentation behavior. |
 | `support/` | Shared executors, contexts, prompt helpers, tool fixtures, and backend stubs; never collected as tests. |
 
 Model behavior and Natural composition use the `model_evaluation` fixture and explicit `--evaluation-model` selection.
@@ -73,3 +75,5 @@ Bound asynchronous coordination waits and propagate child-task failures, for exa
 Run the deterministic suite with `uv run pytest -q`.
 Backend contract tests may start local HTTP servers and subprocesses, but do not require provider credentials.
 See [CONTRIBUTING.md](../CONTRIBUTING.md#integration-tests) for opt-in provider tests.
+
+Agent distribution acceptance in `distribution/test_agent.py` uses the same `NIGHTHAWK_DISTRIBUTION_PYTHON` environment and verifies Core/Agent packaging, retained functions, and Sessions without terminal dependencies.
