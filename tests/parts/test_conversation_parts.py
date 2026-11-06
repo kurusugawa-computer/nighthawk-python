@@ -108,7 +108,7 @@ async def test_one_replaced_generation_part_is_used_by_batch_conversation_and_se
     async def body(value: ConversationInput) -> ConversationResult:
         return await converse(value, choose_step=choose, generate_function=generate)
 
-    input_value = ConversationInput("Declare increment", write_binding_name_tuple=("increment",))
+    input_value = ConversationInput("Declare increment")
     batch = await runner.run(AsyncScaffoldComposition(RunContract(ConversationInput, ConversationResult), body), input_value)
     retained = batch.binding_name_to_value["increment"]
     assert isinstance(retained, RetainedFunction)

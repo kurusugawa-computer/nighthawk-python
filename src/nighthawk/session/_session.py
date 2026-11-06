@@ -659,8 +659,6 @@ class Session(OperatorControl):
             selection.query_data(ContextQuery()),
             selection.query_functions(ContextQuery()),
             selection.recent_history(),
-            bindings.read_name_tuple,
-            bindings.write_name_tuple,
         )
         handle = _CellRunHandle(execution)
 

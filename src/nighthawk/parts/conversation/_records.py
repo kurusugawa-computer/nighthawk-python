@@ -81,8 +81,6 @@ class ConversationInput:
     namespace_page: ContextPage = ContextPage((), None, None, False)
     function_page: ContextPage = ContextPage((), None, None, False)
     recent_history: ConversationPage = ConversationPage((), 0, None, False)
-    read_binding_name_tuple: tuple[str, ...] = ()
-    write_binding_name_tuple: tuple[str, ...] = ()
     context: object = None
 
 
