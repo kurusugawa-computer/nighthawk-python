@@ -29,9 +29,11 @@ Compare prompt experiments with an unchanged production control and record setti
 Use public configuration and Python composition; avoid private monkeypatches or copied production prompts in regression cases.
 Do not add Core abstractions solely to support an evaluation experiment.
 
-Record decisions under `evals/evidence/` with the source revision or fingerprint, models/settings, versions, case/repeat counts, results, usage, timing, and limitations.
-Historical records under other evidence directories describe the runs that produced them.
-Do not rewrite dated evidence to describe a different runtime.
+Record a decision under `evals/evidence/` when model-evaluation evidence supports a model-facing change or a documented claim.
+Include the source revision or fingerprint, models/settings, versions, case/repeat counts, results, usage, timing, and limitations specific to the run; the record must stand without local artifacts.
+Report live regression checks for changes without model-facing effects in the commit message.
+Records describe the runs that produced them; do not rewrite them to describe a different runtime.
+Delete a record, with links to it, once no decision in effect or documented claim depends on it; Git history retains it.
 Synthetic success does not establish application-level judgment quality, security, or superiority to ordinary Python.
 Retain experiment implementations only for a current investigation; remove completed treatments, runners, and their dedicated tests after recording the decision and source provenance.
 

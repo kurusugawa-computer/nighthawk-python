@@ -26,4 +26,4 @@ htmlcov/
 
 # Rendered documentation and transient evaluation output
 /site/
-evals/**/outputs/
+/evals/outputs/

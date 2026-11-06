@@ -226,7 +226,7 @@ Assess those hypotheses through application evaluations, including independent r
 ## Preserving Python work after Natural generation
 
 **Status:** Experimentally evaluated on synthetic inputs, with one successful corrected run for each of three scenarios on two models.
-The [2026-10-21 composition investigation](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/model_tools/evidence/20261021-python-composition.md) records the initial failure, correction, configuration, results, and limitations.
+The [2026-10-21 composition investigation](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/evidence/2026-10-21-python-composition.md) records the initial failure, correction, configuration, results, and limitations.
 
 A reporting function generates summary lines and then uses Python to assess each line.
 An execution block that permits `return` can bypass that later work.

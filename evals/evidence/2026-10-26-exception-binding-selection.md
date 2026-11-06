@@ -87,7 +87,7 @@ The complete deterministic suite passes with 1,324 passed and 64 skipped; Ruff, 
 
 A separate mock OpenAI transport check verifies that three binary image inputs reach the Responses request as distinct native images with their corresponding binding labels.
 This checks serialization, not visual interpretation.
-The previously observed live image-input failure, where the model imported unavailable `PIL`, remains recorded in the [model migration evidence](2026-10-21-gpt6-model-migration.md#provider-and-codex-integration).
+The previously observed live image-input failure, where the model imported unavailable `PIL`, remains recorded in the [model migration evidence](https://github.com/kurusugawa-computer/nighthawk-python/blob/v0.19.0/evals/evidence/2026-10-21-gpt6-model-migration.md#provider-and-codex-integration).
 No image-processing dependency or relaxed image assertion was introduced.
 
 The exception comparison establishes the observed behavior of these two cases and models; three repetitions do not establish general reliability.

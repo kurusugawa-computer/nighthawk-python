@@ -108,7 +108,6 @@ Traces appear in the otel-tui terminal UI in real time.
 
 Use `gpt-6-luna` for routine OpenAI tests and examples, and `gpt-6.1-sol` for higher-capability comparisons.
 Pin Codex integration tests to an explicit model so local CLI defaults do not change the selected model.
-Historical evaluation records retain the model identifiers used in their original runs.
 
 Model evaluations use ordinary Python fixtures, production execution, and direct pytest assertions.
 `tests/integration/test_model_behavior.py` checks embedded values, Python object identity, requested calls, mutations, exceptions, and control outcomes.
@@ -145,7 +144,7 @@ Pytest's `-x` and `--maxfail` can stop early; remaining trials are recorded as `
 There is no success-seeking retry or result cache.
 Ordinary pytest failure reporting and exit status remain authoritative.
 
-#### Evidence
+#### Run records
 
 Each run writes:
 
@@ -167,9 +166,8 @@ Tests that replace lifecycle handlers forward terminal records to `model_evaluat
 Assertions inspect live Python values directly; serialization is only for evidence.
 Opaque values become type markers and unsupported cyclic data records a serialization diagnostic.
 
-Keep reviewed decisions and limitations in dated Markdown under `evals/evidence/`.
-Keep raw artifacts ignored and preserve the recorded distinction between older experiments and current behavior.
-Follow [.claude/rules/evals.md](.claude/rules/evals.md) when changing evaluation cases or model-facing behavior.
+Run directories under `evals/outputs/` are local and ignored.
+[.claude/rules/evals.md](.claude/rules/evals.md) owns evaluation cases, experiments, and when to record or delete decisions under `evals/evidence/`.
 
 ### Environment variables
 

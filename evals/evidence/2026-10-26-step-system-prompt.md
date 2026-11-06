@@ -92,7 +92,7 @@ All 80 shared trials passed; the 12 separate provider cases had 11 passes and on
 Carry branching passed in that run and in two additional trials, matching the control's 3/3 observed successes.
 
 The provider failure was native image input: the model imported unavailable `PIL` instead of using the supplied images.
-The unchanged control reproduced the same error in one of three image trials; this failure was also recorded in the earlier [model migration evaluation](2026-10-21-gpt6-model-migration.md#provider-and-codex-integration).
+The unchanged control reproduced the same error in one of three image trials; this failure was also recorded in the earlier [model migration evaluation](https://github.com/kurusugawa-computer/nighthawk-python/blob/v0.19.0/evals/evidence/2026-10-21-gpt6-model-migration.md#provider-and-codex-integration).
 Two fixed three-trial batches with the selected version subsequently passed all six image trials.
 These successes do not erase the failed attempt or establish image reliability.
 No image-processing dependency was added and no assertion was weakened.
