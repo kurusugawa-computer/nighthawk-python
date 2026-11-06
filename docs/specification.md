@@ -398,23 +398,17 @@ The default user prompt template renders three delimited sections:
 - `<<<NH:GLOBALS>>>` / `<<<NH:END_GLOBALS>>>`: the globals summary (see 8.2.3).
 
 The template uses `$program`, `$locals`, and `$globals` placeholders, substituted at prompt construction time.
-A bounded runtime-access preamble precedes the template.
-It identifies a collision-free inspection reference for details missing from the snapshots.
-Inspection returns a metadata dictionary rather than the original value.
-When native media is included, the preamble directs perceptual judgments to that attached content.
-Environment discovery and named-description expressions appear beside omitted context entries instead of in the preamble.
-The preamble does not repeat runtime-root protection or output-validation rules; their runtime enforcement is unchanged.
+When native media is included, one line before the template directs perceptual judgments to that attached content.
+Environment discovery and named-description expressions appear beside omitted context entries.
 
 #### 8.2.2. Locals summary
 
 The locals summary presents current Python working locals and step assignments.
 Entries use ordinary Python names and a single type annotation, such as `result: int = 0`, following the preference for [familiar representations](philosophy.md#familiar-representations-over-new-conventions).
 The selected output contract takes precedence over an available declaration annotation; otherwise the current value's type is used.
-Neither `[output: ...]` / `[annotation: ...]` prefixes nor `<:name>` decorations appear in the context sections.
 Natural source declarations and runtime assignment and validation rules remain authoritative.
 Explicit dotted entries do not inherit their root's annotation or output contract.
-Provenance and shadowed alternatives are available through environment discovery and named descriptions.
-The default prompt presents effective bindings without a collision scan or source-selection instructions.
+The default prompt presents only effective bindings; provenance and shadowed alternatives are available through environment discovery and named descriptions.
 These descriptions do not change the live environment or its validation contracts.
 
 Selection:
@@ -1038,6 +1032,7 @@ Only a normally returned `RejectOperation` decision authorizes recoverable overs
 An inspector raising `OperationRejectedError`, `OperationError`, or `ModelRetry` has failed; exception type alone never makes that inspection recoverable.
 Ordinary exceptions from application helpers and native tools propagate to Python.
 Runtime syntax, name-resolution, and value-validation errors provide recoverable operation feedback; Pydantic AI control signals retain their native meaning.
+Other exceptions raised while evaluating a generated expression propagate, including those from its own attribute, subscript, call, and arithmetic operations.
 Classify failures by origin, not exception class: `NameError` or `ValueError` from a helper body remains an application exception.
 An uncaught child Natural exception preserves its child terminal event and also fails its parent operation.
 Return expected domain failures as ordinary helper results when the model should act on them; Python helpers may catch specific domain exceptions to construct those results.

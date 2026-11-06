@@ -82,7 +82,7 @@ async def evaluate_expression_async(step_context: StepContext, expression: str) 
     Names resolve in the context's live environment; the returned Python value retains identity.
     An awaitable result is awaited once, including when an ordinary helper returns it.
     Named assignments require assign_expression_async so working writes remain tracked.
-    Syntax and lookup errors carry recoverable operation diagnostics; application failures propagate.
+    Syntax and runtime name-resolution errors carry recoverable operation diagnostics; other evaluation exceptions propagate.
     Effects from calls and in-place mutations may remain after failure or rejection.
     """
     return await evaluate_expression_operation(step_context, expression)
