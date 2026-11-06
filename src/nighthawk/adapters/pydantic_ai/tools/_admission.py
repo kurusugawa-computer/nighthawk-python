@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import Any
@@ -14,7 +15,8 @@ from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.tool_manager import _ValidationDeferral
 from pydantic_ai.tools import ToolDefinition
 
-from nighthawk.core.operations import OperationExecution, execute_operation_async, new_operation_request
+from nighthawk.adapters.pydantic_ai.tools.contracts import exception_feedback
+from nighthawk.core.operations import OperationExecution, execute_operation_async, failed_operation, new_operation_request
 from nighthawk.core.step_context import StepContext
 
 _recorded_admission_errors: ContextVar[list[BaseException] | None] = ContextVar("nighthawk_recorded_admission_errors", default=None)
@@ -49,7 +51,14 @@ class ToolAdmissionCapability(AbstractCapability[StepContext]):
         except BaseException as exception:
             if any(exception is recorded for recorded in recorded_errors) or ctx.deps._operation_state.failure is exception:
                 raise
-            await self._record_failure(ctx, call=call, tool_def=tool_def, args=args, error=exception)
+            try:
+                await self._record_failure(ctx, call=call, tool_def=tool_def, args=args, error=exception)
+            except Exception as recorded:
+                finished = failed_operation(ctx.deps, exception=recorded)
+                if recorded is not exception or finished is None or isinstance(exception, (ValidationError, ModelRetry, ToolFailed)):
+                    raise
+                # An application validator failure is the model's to handle, like a failed operation body, without a retry budget.
+                raise ToolFailed(json.dumps(exception_feedback(finished), ensure_ascii=False)) from exception
             raise AssertionError("A failed admission must propagate its original exception") from exception
         finally:
             _recorded_admission_errors.reset(token)
@@ -97,13 +106,7 @@ class ToolAdmissionCapability(AbstractCapability[StepContext]):
         async def unreachable(execution: OperationExecution) -> object:
             raise AssertionError("A failed admission cannot execute a tool")
 
-        await execute_operation_async(
-            ctx.deps,
-            request,
-            admit=reject_admission,
-            execute=unreachable,
-            recoverable_admission_error=error if isinstance(error, (ValidationError, ModelRetry, ToolFailed)) else None,
-        )
+        await execute_operation_async(ctx.deps, request, admit=reject_admission, execute=unreachable)
 
 
 def with_tool_admission(capability: AbstractCapability[StepContext] | None) -> AbstractCapability[StepContext]:

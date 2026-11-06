@@ -77,6 +77,13 @@ class OperationError(NighthawkError):
         self.kind: Literal["resolution", "invalid_input"] = "resolution" if phase in ("target_resolution", "evaluation") else "invalid_input"
 
 
+class TerminalOperationError(NighthawkError):
+    """Raised during an operation to end its step instead of reporting the failure to the model.
+
+    Hosts and applications subclass it for decisions the model must not handle, such as a refused perimeter effect.
+    """
+
+
 class OperationDeliveryError(NighthawkError):
     """A delivery failure preserving the already completed operation fact."""
 

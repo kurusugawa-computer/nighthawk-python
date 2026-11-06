@@ -561,17 +561,20 @@ def test_child_abort_stays_terminal_while_python_controls_parent_recovery(catch_
         if catch_in_python:
             asyncio.run(parent())
         else:
-            with pytest.raises(StepAbortedError):
+            with pytest.raises(ExecutionError) as caught:
                 asyncio.run(parent())
+            assert isinstance(caught.value.__cause__, StepAbortedError)
     assert len(terminals) == 2
     assert terminals[0].kind == "failed"
     assert terminals[1].kind == ("completed" if catch_in_python else "failed")
     assert terminals[0].execution_reference.parent_step_execution_id == terminals[1].execution_reference.step_execution_id
     assert [operation.status for operation in operations] == ["aborted", "succeeded" if catch_in_python else "failed"]
     if not catch_in_python:
+        # The child's abort fails only the parent's operation; this parent executor chose not to recover it.
         assert isinstance(terminals[1], lifecycle.StepFailed)
-        assert terminals[1].failure_stage == "operation_execution"
+        assert terminals[1].failure_stage == "executor"
         assert terminals[1].inspection_subject is None
+        assert terminals[1].failed_operation_tuple == (operations[1],)
 
 
 @pytest.mark.parametrize("output_retries", [0, 1])

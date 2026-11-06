@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 from collections import namedtuple
 from contextlib import nullcontext
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import pytest
 from pydantic_ai import Agent, RunContext
 from pydantic_ai._run_context import set_current_run_context
+from pydantic_ai.exceptions import ToolFailed
 from pydantic_ai.messages import (
     AudioUrl,
     BinaryContent,
@@ -109,12 +110,22 @@ def test_wrapper_returns_success_payload_with_placeholder_for_raw_bytes(payload:
     assert result == expected
 
 
-def test_wrapper_call_tool_outcome_propagates_application_exception() -> None:
+def test_wrapper_call_tool_outcome_reports_application_exception() -> None:
     def test_raises() -> object:
         raise RuntimeError("boom")
 
-    with pytest.raises(RuntimeError, match="boom"):
-        _call_wrapped_tool_outcome(name="test_raises", function=test_raises)
+    tool_outcome = _call_wrapped_tool_outcome(name="test_raises", function=test_raises)
+    error = tool_outcome["error"]
+    assert tool_outcome["payload"] is None and error is not None
+    assert error["kind"] == "exception" and error["message"] == "RuntimeError: boom" and error.get("evaluation_started") is True
+
+
+def test_wrapper_call_tool_outcome_preserves_tool_failed_signal() -> None:
+    def test_fails() -> object:
+        raise ToolFailed("resource missing")
+
+    with pytest.raises(ToolFailed, match="resource missing"):
+        _call_wrapped_tool_outcome(name="test_fails", function=test_fails)
 
 
 def test_wrapper_call_tool_outcome_normalizes_bare_text_content_to_string() -> None:
@@ -165,12 +176,13 @@ def test_wrapper_call_tool_outcome_does_not_treat_namedtuple_as_top_level_multim
     assert all(not isinstance(item, BinaryContent) for item in payload)
 
 
-def test_wrapper_call_tool_propagates_application_exception() -> None:
+def test_wrapper_call_tool_reports_application_exception() -> None:
     def test_raises() -> object:
         raise RuntimeError("boom")
 
-    with pytest.raises(RuntimeError, match="boom"):
-        _call_wrapped_tool(name="test_raises", function=test_raises)
+    result = _call_wrapped_tool(name="test_raises", function=test_raises)
+    assert isinstance(result, dict) and result["value"] is None
+    assert result["error"]["kind"] == "exception" and result["error"]["message"] == "RuntimeError: boom"
 
 
 def test_wrapper_call_tool_outcome_propagates_oversight_abort() -> None:
@@ -298,7 +310,7 @@ def test_wrapper_call_tool_shim_preserves_error_shaped_success_payload() -> None
     assert result["guidance"] == "Next step is to review"
 
 
-def test_provider_tool_loop_propagates_application_failure() -> None:
+def test_provider_tool_loop_reports_application_failure_and_continues() -> None:
     tool_call_count = 0
 
     def test_failing_tool() -> int:  # type: ignore[no-untyped-def]
@@ -320,9 +332,13 @@ def test_provider_tool_loop_propagates_application_failure() -> None:
         model_request_list = [message for message in result.all_messages() if isinstance(message, ModelRequest)]
         return result.output, model_request_list
 
-    with nh.run(StubExecutor()), pytest.raises(RuntimeError, match="tool crashed"):
-        anyio.run(run_agent)
-    assert tool_call_count == 1
+    with nh.run(StubExecutor()):
+        output, model_request_list = anyio.run(run_agent)
+    assert output == "done" and tool_call_count == 1
+    returned = [part.content for request in model_request_list for part in request.parts if isinstance(part, ToolReturnPart)]
+    assert len(returned) == 1 and isinstance(returned[0], dict)
+    assert cast(dict[str, Any], returned[0])["error"]["message"] == "RuntimeError: tool crashed"
+    assert step_context._operation_state.failure is None
 
 
 _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"

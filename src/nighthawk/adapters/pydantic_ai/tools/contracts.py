@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Literal, NotRequired, TypedDict
 
-from nighthawk.core.operation_contract import OperationRejection
+from nighthawk.core.operation_contract import OperationFinished, OperationRejection
 
-type ErrorKind = Literal["invalid_input", "resolution", "oversight"]
+type ErrorKind = Literal["invalid_input", "resolution", "oversight", "exception"]
+
+_MAXIMUM_EXCEPTION_TEXT_LENGTH = 2000
 
 
 class ToolError(TypedDict):
@@ -15,7 +17,7 @@ class ToolError(TypedDict):
     evaluation_started: NotRequired[bool]
     operation_id: NotRequired[str]
     step_execution_id: NotRequired[str | None]
-    status: NotRequired[Literal["rejected", "skipped"]]
+    status: NotRequired[Literal["rejected", "skipped", "failed"]]
 
 
 class ToolOutcome(TypedDict):
@@ -49,4 +51,29 @@ def rejection_feedback(rejection: OperationRejection) -> ToolError:
         "guidance": rejection.guidance,
         "phase": "inspection",
         "evaluation_started": False,
+    }
+
+
+def exception_feedback(finished: OperationFinished) -> ToolError:
+    """Report a failed operation's exception type and bounded message, never its traceback or live values."""
+    exception = finished.original_exception
+    assert exception is not None
+    text = f"{type(exception).__name__}: {exception}"
+    if len(text) > _MAXIMUM_EXCEPTION_TEXT_LENGTH:
+        text = text[:_MAXIMUM_EXCEPTION_TEXT_LENGTH] + " [truncated]"
+    return {
+        "kind": "exception",
+        "status": "failed",
+        "operation_id": finished.request.operation_id,
+        "step_execution_id": finished.request.execution_reference.step_execution_id,
+        "message": text,
+        "guidance": (
+            "The operation raised this exception; effects completed before it remain, so do not repeat them blindly. "
+            if finished.evaluation_started
+            else "The operation was refused by this exception before evaluation started. "
+        )
+        + "Correct the cause and continue, or, when raise is allowed, end the step with raise and this "
+        "raise_operation_id to propagate the original exception.",
+        "phase": finished.phase,
+        "evaluation_started": finished.evaluation_started,
     }

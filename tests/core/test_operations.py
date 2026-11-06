@@ -11,13 +11,15 @@ import nighthawk as nh
 from nighthawk.adapters.pydantic_ai.tools.execution import ToolResultWrapperToolset
 from nighthawk.core import oversight
 from nighthawk.core.assignment import assign_expression_async
+from nighthawk.core.errors import ExecutionError
 from nighthawk.core.execution_reference import ExecutionReference
 from nighthawk.core.expression import evaluate_expression_async
 from nighthawk.core.lifecycle import StepFailed, StepFinished, StepLifecycle, StepRaised
-from nighthawk.core.operation_contract import OperationDeliveryError, OperationError, OperationFinished, OperationRequest
+from nighthawk.core.operation_contract import OperationDeliveryError, OperationError, OperationFinished, OperationRequest, TerminalOperationError
+from nighthawk.core.operations import failed_operation
 from nighthawk.core.oversight import AbortStep, Accept, Oversight, StepAbortedError
 from nighthawk.core.step_context import StepContext
-from nighthawk.core.step_outcome import Pass, Return
+from nighthawk.core.step_outcome import Pass, Raise, Return
 from nighthawk.core.step_request import StepCandidate, StepRequest
 from tests.support.contexts import new_context
 from tests.support.executors import StubExecutor
@@ -183,7 +185,7 @@ def test_cancelled_approval_never_starts_pending_body() -> None:
     assert recorded[0].phase == "inspection" and not recorded[0].evaluation_started
 
 
-def test_child_raise_propagates_and_records_distinct_parent_and_child_steps() -> None:
+def test_child_raise_fails_the_parent_operation_and_records_distinct_steps() -> None:
     terminal: list[StepFinished] = []
     operations: list[OperationFinished] = []
 
@@ -205,14 +207,16 @@ def test_child_raise_propagates_and_records_distinct_parent_and_child_steps() ->
     with (
         nh.run(StubExecutor()),
         nh.scope(lifecycle=StepLifecycle(on_step_finished=terminal.append, on_operation_finished=operations.append)),
-        pytest.raises(ValueError) as caught,
+        pytest.raises(ExecutionError) as caught,
     ):
         asyncio.run(parent())
     assert len(terminal) == 2
     assert isinstance(terminal[0], StepRaised) and isinstance(terminal[1], StepFailed)
-    assert terminal[0].exception is terminal[1].original_exception is caught.value
+    # The stub executor does not recover the failed return operation, so the parent step fails with the child's exception.
+    assert terminal[0].exception is terminal[1].original_exception is caught.value.__cause__
     assert terminal[0].execution_reference.parent_step_execution_id == terminal[1].execution_reference.step_execution_id
-    assert operations[-1].original_exception is caught.value
+    assert operations[-1].status == "failed" and operations[-1].original_exception is terminal[0].exception
+    assert terminal[1].failed_operation_tuple == (operations[-1],)
     assert operations[0].value is ValueError
 
 
@@ -269,41 +273,17 @@ def test_native_tool_uses_the_same_operation_inspection_and_live_argument_record
     assert operations[0].value == requests[0].argument_name_to_value["value"] + 1  # type: ignore[operator]
 
 
-def test_executor_declared_retry_does_not_poison_step() -> None:
-    class RetryRequestedError(Exception):
-        pass
-
-    calls = 0
-
-    def retry_once() -> int:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise RetryRequestedError("try again")
-        return 7
-
-    context = new_context(retry_once=retry_once)
-    context.recoverable_operation_errors = (RetryRequestedError,)
-
-    async def execute() -> None:
-        with pytest.raises(RetryRequestedError):
-            await evaluate_expression_async(context, "retry_once()")
-        assert await evaluate_expression_async(context, "retry_once()") == 7
-
-    asyncio.run(execute())
-
-
 @pytest.mark.parametrize("native_tool", [False, True])
 @pytest.mark.parametrize("asynchronous_helper", [False, True])
 @pytest.mark.parametrize("reuse_diagnostic", [False, True])
-async def test_application_operation_error_is_terminal(native_tool: bool, asynchronous_helper: bool, reuse_diagnostic: bool) -> None:
+async def test_application_exception_fails_only_its_operation(native_tool: bool, asynchronous_helper: bool, reuse_diagnostic: bool) -> None:
     context = new_context()
     if reuse_diagnostic:
         with pytest.raises(OperationError) as caught:
             await evaluate_expression_async(context, "missing")
-        error = caught.value
+        error: Exception = caught.value
     else:
-        error = OperationError(message="application failed", phase="evaluation", evaluation_started=True, guidance="Inspect the failure.")
+        error = ValueError("application failed")
     effects: list[str] = []
     operations: list[OperationFinished] = []
 
@@ -319,31 +299,50 @@ async def test_application_operation_error_is_terminal(native_tool: bool, asynch
     context.environment.assign("fail", helper)
     context.environment.assign("effects", effects)
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=operations.append)):
-        with pytest.raises(nh.NighthawkError) as caught:
-            if native_tool:
-                agent = Agent(TestModel(call_tools="all", custom_output_text="done"), deps_type=StepContext)
-                await agent.run("Run the tool", deps=context, toolsets=[ToolResultWrapperToolset(FunctionToolset([helper]))])
-            else:
+        if native_tool:
+            agent = Agent(TestModel(call_tools="all", custom_output_text="done"), deps_type=StepContext)
+            result = await agent.run("Run the tool", deps=context, toolsets=[ToolResultWrapperToolset(FunctionToolset([helper]))])
+            assert result.output == "done"
+        else:
+            with pytest.raises(type(error)) as caught_failure:
                 await evaluate_expression_async(context, "fail()")
-        assert caught.value is error
-        with pytest.raises(OperationError) as repeated:
+            assert caught_failure.value is error
+        await evaluate_expression_async(context, "effects.append('continued')")
+    assert effects == ["entered", "continued"]
+    assert [operation.status for operation in operations] == ["failed", "succeeded"]
+    assert operations[0].original_exception is error and operations[0].evaluation_started
+    assert failed_operation(context, operation_id=operations[0].request.operation_id) is operations[0]
+
+
+async def test_terminal_operation_error_ends_the_step() -> None:
+    class IntegrityError(TerminalOperationError):
+        pass
+
+    error = IntegrityError("ledger mismatch")
+    effects: list[str] = []
+
+    def fail() -> int:
+        raise error
+
+    context = new_context(fail=fail, effects=effects)
+    with nh.run(StubExecutor()):
+        with pytest.raises(IntegrityError):
+            await evaluate_expression_async(context, "fail()")
+        with pytest.raises(IntegrityError) as repeated:
             await evaluate_expression_async(context, "effects.append('continued')")
-        assert repeated.value is error
-    assert effects == ["entered"]
-    assert len(operations) == 1
-    assert operations[0].original_exception is error
-    assert operations[0].status == "failed" and operations[0].evaluation_started
+    assert repeated.value is error and effects == []
+    assert failed_operation(context, exception=error) is None
 
 
 @pytest.mark.parametrize("abort", [False, True])
 def test_executor_cannot_suppress_terminal_operation_failure(abort: bool) -> None:
     terminal: list[StepFinished] = []
-    error = OperationError(message="helper failed", phase="evaluation", evaluation_started=True, guidance="Inspect the failure.")
+    error = TerminalOperationError("helper ended the step")
 
     def fail() -> None:
         raise error
 
-    error_type = StepAbortedError if abort else OperationError
+    error_type = StepAbortedError if abort else TerminalOperationError
 
     class Executor:
         async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
@@ -374,6 +373,7 @@ def test_executor_cannot_suppress_terminal_operation_failure(abort: bool) -> Non
     assert terminal[0].original_exception is caught.value
     if not abort:
         assert caught.value is error
+        assert terminal[0].failure_stage == "operation_execution" and terminal[0].failed_operation_tuple == ()
 
 
 def test_request_freezes_arguments_mapping_but_preserves_values() -> None:
@@ -389,3 +389,54 @@ def test_request_freezes_arguments_mapping_but_preserves_values() -> None:
 
     with pytest.raises(TypeError):
         tool_call.argument_name_to_value["values"] = []  # type: ignore[index]
+
+
+@pytest.mark.parametrize("decision", ["reraise", "abort_commit"])
+def test_recovered_failure_is_visible_to_commit_inspection_and_can_be_reraised(decision: str) -> None:
+    error = ValueError("helper failed")
+    commits: list[oversight.StepCommit] = []
+    terminal: list[StepFinished] = []
+
+    def fail() -> None:
+        raise error
+
+    class Executor:
+        async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
+            with pytest.raises(ValueError):
+                await evaluate_expression_async(request.step_context, "fail()")
+            finished = failed_operation(request.step_context, exception=error)
+            assert finished is not None
+            return StepCandidate(outcome=Raise.of(error) if decision == "reraise" else Pass())
+
+    def inspect(commit: oversight.StepCommit) -> oversight.StepCommitDecision:
+        commits.append(commit)
+        return AbortStep("unresolved failure") if commit.failed_operation_tuple and decision == "abort_commit" else oversight.Accept()
+
+    @nh.function
+    async def workflow() -> None:
+        """execute
+        Call fail.
+        """
+
+    with (
+        nh.run(Executor()),
+        nh.scope(
+            task_references={"fail": fail},
+            oversight=Oversight(inspect_step_commit=inspect),
+            lifecycle=StepLifecycle(on_step_finished=terminal.append),
+        ),
+        pytest.raises(ValueError if decision == "reraise" else StepAbortedError) as caught,
+    ):
+        asyncio.run(workflow())
+    assert len(commits) == 1 and [operation.original_exception for operation in commits[0].failed_operation_tuple] == [error]
+    assert terminal[0].failed_operation_tuple == commits[0].failed_operation_tuple
+    if decision == "reraise":
+        assert caught.value is error
+        assert isinstance(terminal[0], StepRaised) and terminal[0].exception is error
+
+
+def test_raise_exception_must_match_its_error_type() -> None:
+    with pytest.raises(TypeError, match="exactly error_type"):
+        Raise("failed", Exception, exception=ValueError("failed"))
+    error = KeyError("missing")
+    assert Raise.of(error).exception is error and Raise.of(error).error_type is KeyError

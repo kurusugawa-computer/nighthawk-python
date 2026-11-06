@@ -14,17 +14,19 @@ from nighthawk.errors import NighthawkError
 
 if TYPE_CHECKING:
     from nighthawk.core.lifecycle import FailureStage
+    from nighthawk.core.operation_contract import OperationFinished
     from nighthawk.core.oversight import StepAbortedError
 
 
 @dataclass
 class _OperationState:
-    """Runtime-owned serialization and terminal failure state for one step's operations."""
+    """Runtime-owned serialization, terminal failure, and recovered failure facts for one step's operations."""
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     failure: BaseException | None = None
     failure_stage: FailureStage | None = None
     abort: StepAbortedError | None = None
+    failed_operation_list: list[OperationFinished] = field(default_factory=list)
 
 
 @dataclass
@@ -42,7 +44,6 @@ class StepContext:
     read_binding_names: frozenset[str] = frozenset()
     type_alias_reference_names: frozenset[str] = frozenset()
     executor_result: object = None
-    recoverable_operation_errors: tuple[type[Exception], ...] = ()
     _operation_state: _OperationState = field(default_factory=_OperationState, init=False, repr=False)
 
 

@@ -47,13 +47,17 @@ class ModelContinue(BaseModel):
 
 
 class ModelRaise(BaseModel):
-    """Raise an exception with raise_message."""
+    """Raise an exception with raise_message, or re-raise a failed operation's original exception."""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["raise"]
     raise_message: str
     raise_error_type: str | None = None
+    raise_operation_id: str | None = Field(
+        default=None,
+        description="operation_id of a failed operation whose original exception is raised unchanged; null raises a new exception.",
+    )
 
 
 type ModelOutcome = Annotated[
@@ -102,7 +106,7 @@ def build_model_response_schema(
                 }
             else:
                 del variant["properties"]["raise_error_type"]
-                variant["description"] = "Raise Exception with raise_message."
+                variant["description"] = "Raise Exception with raise_message, or re-raise a failed operation's original exception."
         variants.append(variant)
 
     if len(variants) == 1:

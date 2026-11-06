@@ -43,7 +43,7 @@ Untyped model output is never accepted as authoritative state or executable sour
 New generated source reaches dispatch through exactly those two boundaries: an inert `CodeProposal` returned through a write binding and submitted by deterministic Python, or a typed request to the granted `execute_code` capability.
 Both enter the same host-owned dispatch, and no interface accepts only a natural-language subproblem and thereby initiates recursive model execution.
 
-Within an agent run, a `raise` outcome is classified as a failed Natural execution rather than as the requested exception type.
+Within an agent run, a `raise` outcome is classified as a failed Natural execution rather than as the requested exception type; the raised exception, including a re-raised original from a failed operation, is its cause.
 The rationale is one stable public failure class for every Natural execution failure under host mediation, with the requested type preserved as data;
 "ordinary Python semantics" here means ordinary `try`/`except` handling and propagation of that class.
 The exact contract is owned by `NaturalExecutionError`.
@@ -89,9 +89,9 @@ The rule against raw dynamic execution (`exec`, `eval`, `compile`, dynamic impor
 Dispatch validation rejects detectable violations in generated source deterministically before execution.
 The host applies the same rule to the model-authored expressions the core executor evaluates inside a Natural execution:
 it inspects each expression-bearing operation, rejects detectable raw dynamic execution before evaluation, and records the attempt as a trace anomaly.
-A recoverable operation refusal gives the model its reason and correction guidance so it can choose a different operation within the same Natural step.
+A recoverable operation refusal gives the model its reason and correction guidance, and a failed operation gives it the exception class and message, so it can choose a different operation within the same Natural step or raise the original exception.
 Recovery preserves prior effects, the effective grant, resource accounting, and the single terminal outcome; it never replays the block or clears a host stop.
-Explicit step aborts and unexpected execution or notification failures remain terminal.
+Explicit step aborts, rejected perimeter effects, inspection failures, and notification failures remain terminal.
 This distinction does not change the detective tier or establish perimeter confinement.
 No other filtering of those expressions exists.
 An operation evaluated under a host gateway allowance is instead an authority error of the second tier, independent of its expression:

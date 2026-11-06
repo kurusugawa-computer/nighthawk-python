@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Model configuration, `selected_configuration` (replacing `ModelSelection.apply`), prompts, prompt suffixes, context building, tools, and capabilities belong to `nighthawk.adapters.pydantic_ai`; the adapter projects operation rejection feedback.
 - Breaking: `OperationError` inherits `NighthawkError`; the operation boundary, not the exception type, decides whether a diagnostic is recoverable.
   Core errors live in `nighthawk.core.errors` and tool declaration errors in `nighthawk.adapters.pydantic_ai.errors`.
+- Breaking: an ordinary exception raised while admitting or executing a Natural operation, including application helpers, argument validators, native tool bodies, child Natural functions, and a generated expression's own errors, fails only that operation and returns to the model, which can correct the cause, finish, or raise the original exception unchanged with `raise_operation_id`.
+  Raise a `TerminalOperationError` subclass for failures that must end the step; `StepCommit` and terminal records list recovered failures in `failed_operation_tuple`.
 
 ### Removed
 

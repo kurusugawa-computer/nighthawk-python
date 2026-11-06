@@ -91,10 +91,11 @@ def test_ordered_model_batch_remains_ordered_across_async_capability_hooks(rejec
 
 
 @pytest.mark.parametrize("end_strategy", ["early", "graceful", "exhaustive"])
-def test_native_validator_failure_preserves_earlier_body_and_stops_later_validation(end_strategy: Any) -> None:
+def test_native_validator_failure_returns_to_the_model_without_skipping_later_calls(end_strategy: Any) -> None:
     events: list[str] = []
     original = TypeError("second validator failed")
     operations: list[OperationFinished] = []
+    model_calls = 0
 
     async def validate(context: Any, value: int) -> None:
         events.append(f"validate:{value}")
@@ -106,7 +107,11 @@ def test_native_validator_failure_preserves_earlier_body_and_stops_later_validat
         return value
 
     async def respond(messages: Any, information: Any) -> ModelResponse:
-        return ModelResponse(parts=[ToolCallPart("record", {"value": value}, str(value)) for value in (1, 2, 3)])
+        nonlocal model_calls
+        model_calls += 1
+        if model_calls == 1:
+            return ModelResponse(parts=[ToolCallPart("record", {"value": value}, str(value)) for value in (1, 2, 3)])
+        return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
 
     executor = AgentStepExecutor.from_agent(agent=Agent(FunctionModel(respond), deps_type=StepContext, end_strategy=end_strategy))
 
@@ -119,12 +124,16 @@ def test_native_validator_failure_preserves_earlier_body_and_stops_later_validat
     with (
         nh.run(executor),
         nh.scope(tools=[Tool(record, args_validator=validate)], lifecycle=StepLifecycle(on_operation_finished=operations.append)),
-        pytest.raises(TypeError) as caught,
     ):
         asyncio.run(workflow())
-    assert caught.value is original
-    assert events == ["validate:1", "body:1", "validate:2"]
-    assert [(operation.status, operation.phase) for operation in operations] == [("succeeded", "completed"), ("failed", "admission")]
+    # Unlike a host rejection, a failed operation does not skip the remaining calls of its response.
+    assert events == ["validate:1", "body:1", "validate:2", "validate:3", "body:3"]
+    assert [(operation.status, operation.phase) for operation in operations] == [
+        ("succeeded", "completed"),
+        ("failed", "admission"),
+        ("succeeded", "completed"),
+    ]
+    assert operations[1].original_exception is original and model_calls == 2
 
 
 def test_exhaustive_output_settlement_keeps_later_valid_output_after_retry_exhaustion() -> None:

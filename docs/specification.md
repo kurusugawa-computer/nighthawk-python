@@ -701,7 +701,7 @@ Tool result transport contract:
     - The MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Native MCP document and video carriage are unsupported. Multimodal-capable providers that bypass MCP still send supported items natively via `ToolReturnPart.files`.
 - Provider-backed backends that use Pydantic AI's standard tool loop SHOULD surface general `ToolOutcome.error` failures as ordinary tool results rather than retry prompts.
     - Argument validation failures and explicit `ModelRetry` use Pydantic AI's retry path, which answers the call with a `ToolReturnPart` whose `outcome` is `"retried"`.
-      Ordinary application exceptions propagate to Python.
+      Ordinary application exceptions return failed-operation results, as specified in [operation inspection](#103-operation-inspection).
     - When a provider-backed backend surfaces a tool failure without native multimodal content, it SHOULD use the same structured preview envelope shape described above.
 - User-prompt transport is backend-dependent.
     - Provider-backed executors that accept Pydantic AI `UserContent` MAY send user-prompt multimodal content natively.
@@ -719,18 +719,21 @@ Tool result transport contract:
 - `UploadedFile` values are provider-owned references. Backends that cannot resolve the provider file identifier MUST reject them at the user-prompt boundary.
 - For tool results, backends that cannot resolve an `UploadedFile` MUST preserve the rest of the top-level payload and replace only that item with an explanatory text fallback instead of silently dropping it.
 
-Error kind categories: `invalid_input`, `resolution`, and `oversight`.
+Error kind categories: `invalid_input`, `resolution`, `oversight`, and `exception`.
 
 Boundary rule for tool-call failures:
 
 - Runtime input and name-resolution failures provide recoverable observations, as specified in [operation inspection](#103-operation-inspection).
-- Ordinary application exceptions and host oversight failures propagate toward the Python caller; a transport MUST NOT replace them with generic retry advice.
+- Ordinary application exceptions return failed-operation results that retain the original exception for `raise_operation_id`.
+- Host oversight failures and `TerminalOperationError` propagate toward the Python caller.
+- A transport MUST NOT replace a failed-operation result or a terminal failure with generic retry advice.
 - Native tool dispatch uses Pydantic AI's argument validators, capability hooks, and approval requirements.
-  Actual argument validation failures and explicit `ModelRetry` remain recoverable; a validator's propagated application exception or an exception raised by the tool body retains its original meaning.
+  Actual argument validation failures and explicit `ModelRetry` remain recoverable through Pydantic AI's retry path.
+  An application validator's ordinary exception is a failed admission reported with Pydantic AI's `ToolFailed`, which consumes no retry budget, and a tool body's ordinary exception is a failed-operation result; capability error hooks do not receive either.
 
 Coding-agent tool callbacks execute on the event loop that owns the backend request, including when the MCP HTTP server runs in another thread.
 Callbacks preserve the captured Natural scope and serialize in transport admission order.
-A failed callback stops the backend request even if its client converts the callback exception into a protocol error response.
+A terminal callback failure stops the backend request even if its client converts the callback exception into a protocol error response.
 Request cancellation cancels pending callbacks and cleans up the coding-agent process.
 
 The projected `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
@@ -773,8 +776,9 @@ Outcome kinds:
     - A loop's `else` clause is outside that loop's body. If nested within another loop body, these outcomes control the enclosing loop.
 - `raise`:
     - Failure.
-    - Payload keys: `kind`, `raise_message`, and optional `raise_error_type`.
+    - Payload keys: `kind`, `raise_message`, optional `raise_error_type`, and optional `raise_operation_id`.
     - A non-null `raise_error_type` MUST be one of the exception binding names listed in the prompt. Bindings may use aliases, such as `selected_error = ValueError`.
+    - A non-null `raise_operation_id` names a failed operation of the current step; the runner raises that operation's original exception unchanged and ignores `raise_message` and `raise_error_type`. An Id that names no failed operation is returned to the model for another result.
     - The structured output JSON Schema constrains this field to the allowed binding names or `null`, preserving the default even when a provider requires every field.
     - The adapter resolves the exception class through the common operation pipeline. An omitted or null selection uses `Exception`.
     - The runner constructs the final exception with `raise_message` after commit inspection.
@@ -962,7 +966,9 @@ For example, an initialized `Annotated[str, AfterValidator(str.strip)]` output c
 Selected output contracts are fixed at step entry.
 A custom executor cannot change finalization contracts by replacing context metadata.
 
-`StepCommit.outcome` uses the frozen Pydantic models defined in `nighthawk.core.step_outcome`: `Pass()`, `Return(value)`, `Break()`, `Continue()`, and `Raise(message, error_type=Exception)`.
+`StepCommit.outcome` uses the frozen Pydantic models defined in `nighthawk.core.step_outcome`: `Pass()`, `Return(value)`, `Break()`, `Continue()`, and `Raise(message, error_type=Exception, exception=None)`.
+`Raise.of(exception)` re-raises an existing instance unchanged; its `error_type` must be exactly the instance's class.
+`StepCommit.failed_operation_tuple` lists the step's failed operations, so commit inspection can refuse a candidate that leaves a failure unresolved.
 `Return(None)` is distinct from `Pass()`.
 `Raise.error_type` is a resolved exception class, validated before inspection.
 An initial Raise selects no writes and discards pending working values without validating them.
@@ -1026,17 +1032,25 @@ Operation identities differ across attempts; step identity and live application 
 Ordinary result validation, commit inspection, writeback, and one terminal delivery still apply.
 A model's decision to finish after a rejection does not establish task correctness; application acceptance checks remain necessary.
 
-`AbortStep`, inspection failures, operation delivery failures, and interruptions remain terminal for that step.
+`AbortStep`, inspection failures, operation delivery failures, interruptions, and `TerminalOperationError` remain terminal for that step.
 Later queued operations cannot execute their bodies, and an executor cannot suppress a recorded terminal failure and finalize a successful candidate.
 Only a normally returned `RejectOperation` decision authorizes recoverable oversight feedback.
 An inspector raising `OperationRejectedError`, `OperationError`, or `ModelRetry` has failed; exception type alone never makes that inspection recoverable.
-Ordinary exceptions from application helpers and native tools propagate to Python.
-Runtime syntax, name-resolution, and value-validation errors provide recoverable operation feedback; Pydantic AI control signals retain their native meaning.
-Other exceptions raised while evaluating a generated expression propagate, including those from its own attribute, subscript, call, and arithmetic operations.
-Classify failures by origin, not exception class: `NameError` or `ValueError` from a helper body remains an application exception.
-An uncaught child Natural exception preserves its child terminal event and also fails its parent operation.
-Return expected domain failures as ordinary helper results when the model should act on them; Python helpers may catch specific domain exceptions to construct those results.
-Preserve explicit `ModelRetry`, `CallDeferred`, and `ApprovalRequired` signals through Pydantic AI machinery, and distinguish Pydantic validation failures from propagated validator exceptions.
+
+The Natural step decides how it ends after any other operation failure.
+An ordinary `Exception` raised while admitting or executing an operation fails only that operation.
+This includes a generated expression's own attribute, subscript, call, and arithmetic errors, application helpers and argument validators, native tool bodies, and an uncaught child Natural failure, whose child terminal event is preserved.
+The step retains each failed operation's `OperationFinished` with its original exception, and the operation's caller receives that exception.
+The Pydantic AI executor returns it to the model as a failed operation: `kind="exception"`, `status="failed"`, the operation and step identities, the exception class name and message bounded to 2,000 characters, `phase`, `evaluation_started`, and guidance.
+It never sends a traceback or live values; exception text does reach the model provider, so keep secrets out of exception messages raised inside Natural operations.
+The model may correct the cause, choose another operation, finish normally, or select `raise` with `raise_operation_id` to raise that operation's original exception unchanged, including its class, attributes, traceback, and cause.
+A failed return expression or an invalid raise selection in the control result is returned to the model the same way for another result.
+A custom executor receives the original exception and may likewise continue, finish, or return `Raise.of(exception)`; an exception it leaves unhandled fails the step at the `executor` stage.
+Effects completed before a failure remain; failure feedback neither rolls back nor replays them, and it does not skip the remaining calls of the same model response.
+Hosts and applications raise a subclass of `TerminalOperationError` for decisions the model must not handle; the Harness's `PerimeterEffectRejectedError` is one.
+Runtime syntax, name-resolution, and value-validation diagnostics keep their `OperationError` feedback; Pydantic AI control signals retain their native meaning.
+A model's decision to finish after a failure does not establish task correctness; `failed_operation_tuple` on the commit and terminal records lets hosts and acceptance checks see recovered failures.
+Preserve explicit `ModelRetry`, `ToolFailed`, `CallDeferred`, and `ApprovalRequired` signals through Pydantic AI machinery, and distinguish Pydantic validation failures from propagated validator exceptions.
 Each completed operation delivers an `OperationFinished` fact with its phase, whether evaluation started, and its live result or original exception.
 Statuses are `succeeded`, `rejected`, `aborted`, `skipped`, `failed`, and `interrupted`.
 Recoverable rejection includes `rejection`; explicit `AbortStep` produces `aborted` and its original `StepAbortedError`.
@@ -1048,7 +1062,7 @@ The existing interruption and cleanup responsibilities continue to apply.
 Pydantic AI validates native and provided tool arguments before entering the tool body boundary.
 A failed schema or argument-validator admission receives an operation Id and an `OperationFinished` record with `phase="admission"` and `evaluation_started=False`, retaining the original exception and unvalidated arguments.
 Malformed JSON arguments are retained under `unvalidated_arguments` in the request's argument mapping.
-Validation errors remain recoverable through Pydantic AI; ordinary exceptions propagated by application validators terminate the step unchanged.
+Validation errors remain recoverable through Pydantic AI; an application validator's ordinary exception is a failed admission reported through Pydantic AI's `ToolFailed` without consuming the tool's retry budget.
 If a capability repairs invalid arguments, the failed admission remains recorded and the repaired request enters a separately identified inspected operation; the tool body runs once.
 Approval and deferral during argument validation remain in Pydantic AI's designated machinery and do not fabricate a failed admission.
 
@@ -1080,12 +1094,12 @@ See [operation feedback](operation-feedback.md) for executable examples and the 
 `on_step_started` runs before preparation, and `on_operation_finished` delivers operation facts.
 All three callbacks support direct and asynchronous completion. Omission or `UNSET` inherits; `None` clears. A new run resets lifecycle. Each execution captures the configuration on entry, before preparation. If that configuration has a handler, core attempts notification once while Python can unwind normally; a cleared or absent handler receives no notification. Definition-time parsing, decorator compilation, and failure to enter a required run are outside this boundary. Identity, step context when established, and the step span remain active during delivery and restore afterward, including when delivery fails.
 
-`nighthawk.core.scoping.get_scope().lifecycle` is the currently scoped configuration object, or `None`. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. Reading it observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; application exceptions recorded by the operation pipeline propagate unchanged.
+`nighthawk.core.scoping.get_scope().lifecycle` is the currently scoped configuration object, or `None`. Hosts can compare it by identity with their installed StepLifecycle at a host-controlled admission boundary. Reading it observes configuration; it neither prevents `scope(lifecycle=None)` or nested-run resets nor guarantees later checks use the captured configuration of an already-started step. When a required lifecycle is absent, the host must record any mediation-bypass failure at a boundary that remains active, not rely on the removed callback. Core wraps preparation and finalization failures when no handler translates them; terminal failures recorded by the operation pipeline propagate unchanged.
 
 Generated Python resolves the candidate, performs each selected write assignment, records each completed assignment, delivers the terminal record, and then dispatches return/break/continue. A prepared DSL exception is dispatched after delivery as well. Callback failure prevents further control dispatch but does not undo completed assignments, object mutation, tools, validators, or expression side effects. Partial assignment failures report only writes whose assignments completed. Rejected commits perform no generated assignments.
 
 `StepFinished` is the discriminated union of frozen `StepCompleted`, `StepRaised`, `StepFailed`, and `StepInterrupted`, with respective `kind` values `completed`, `raised`, `failed`, and `interrupted`.
-All carry `execution_reference`, `block_kind`, `executor_result`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, and `assigned_binding_name_to_value`.
+All carry `execution_reference`, `block_kind`, `executor_result`, `processed_natural_program`, `input_binding_name_to_value`, `allowed_outcome_kinds`, `assigned_binding_name_to_value`, and `failed_operation_tuple`.
 The declared `block_kind` is known on entry, including failures or interruptions in started delivery, f-string rendering, and embedded argument validation before preparation.
 Preparation-dependent fields are `None` when not established; empty mappings or tuples mean known empty values.
 `executor_result` is absent until a managed model run returns its native result.
@@ -1095,7 +1109,7 @@ Hosts must serialize or copy deliberately for durable records.
 The processed Natural program and execution identity do not identify the complete program revision: helper implementations, declarations, and dependency versions are not snapshotted as a revision record.
 See [Record revision evidence](embedded-execution.md#record-revision-evidence) for host records that supplement this execution evidence.
 
-`StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its successfully constructed `exception`, including domain exceptions subclassing NighthawkError. Model-selected exception expressions use the operation pipeline; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. An explicit `AbortStep` decision about this step additionally carries `inspection_subject` and `abort_reason`. Invalid hook decisions and exceptions raised by inspectors remain inspection failures.
+`StepCompleted.outcome` is the final Pass/Return/Break/Continue. `StepRaised` holds a final Raise and its `exception`, either successfully constructed or the instance re-raised by `Raise.of`, including domain exceptions subclassing NighthawkError. Model-selected exception expressions use the operation pipeline; exception constructor failures are `StepFailed` at `raise_construction`, not domain raises. `StepFailed` holds `original_exception`, `failure_stage`, optional `attempted_outcome`, and optional `validated_binding_name_to_value`. An explicit `AbortStep` decision about this step additionally carries `inspection_subject` and `abort_reason`. Invalid hook decisions and exceptions raised by inspectors remain inspection failures.
 
 `FailureStage` identifies preparation, started_delivery, operation_inspection, operation_execution, operation_delivery, executor, outcome_validation, binding_validation, return_await, return_validation, commit_inspection, rewrite_validation, oversight_abort, raise_construction, or binding_assignment.
 Classification uses structured runtime state, not exception text.
@@ -1197,15 +1211,15 @@ Application and provider exceptions can propagate with their original types, and
 | Adapter tool declarations | `ToolDeclarationError` reports invalid tools; `ToolNameConflictError` also inherits `NameConflictError` because a collision belongs to both contracts. |
 | Independent bindings | `BindingDeclarationError` and `BindingValidationError` inherit `BindingError`; these helpers create no step lifecycle records. |
 | Natural step execution | `ExecutionError` retains `step_failed` and chains the original exception. Operation failures and explicit abort decisions propagate according to terminal delivery rules. |
-| Runtime operations | `OperationError` carries admission, lookup, or value-validation diagnostics; `OperationRejectedError` carries a normally returned inspection refusal. Both inherit `NighthawkError` and permit another operation when the operation boundary records them as recoverable. |
+| Runtime operations | `OperationError` carries admission, lookup, or value-validation diagnostics; `OperationRejectedError` carries a normally returned inspection refusal. Both inherit `NighthawkError` and permit another operation when the operation boundary records them as recoverable. `TerminalOperationError` ends the step instead of returning to the model. |
 | Step abortion and notification | `StepAbortedError` ends the inspected step; `OperationDeliveryError` retains the operation fact and notification failure. Neither becomes recoverable feedback. |
 | Function interception | `FunctionCallError` reports a violated invocation contract, including a handler returning without completing its continuation. |
 | Harness | Concrete errors retain the relevant rejection reason, execution identity, or ledger event. A `NaturalExecutionError` describes a host-governed Natural failure; it is distinct from Core's `ExecutionError` and its `StepFailed` record. |
 | Session | `SessionError` groups busy, closed, lookup, and wait-context failures under `NighthawkError`. `SessionLookupError` also inherits Python's `LookupError`. |
 
-Recovery follows the failure's origin and recorded execution state.
-A runtime-generated `OperationError` can become model feedback; an application helper or native tool raising that same type fails its operation.
-Catching such a terminal failure in an executor does not allow subsequent operations or successful step finalization.
+Recovery follows the recorded execution state.
+An ordinary exception from an operation fails only that operation and returns to the model, which selects how the step ends; `raise_operation_id` propagates the original exception unchanged.
+Inspection failures, `AbortStep`, delivery failures, interruptions, and `TerminalOperationError` end the step; catching such a terminal failure in an executor does not allow subsequent operations or successful step finalization.
 A DSL Raise defaults to ordinary `Exception`; explicitly selected domain exceptions retain their types, including subclasses of `NighthawkError`.
 Neither the common base nor a specific error authorizes replaying earlier effects.
 

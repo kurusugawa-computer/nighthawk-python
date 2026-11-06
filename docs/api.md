@@ -155,6 +155,7 @@ See [Architecture](architecture.md) for dependency direction and composition.
         - OperationRejectedError
         - OperationFinished
         - OperationError
+        - TerminalOperationError
         - OperationDeliveryError
 
 ::: nighthawk.core.expression

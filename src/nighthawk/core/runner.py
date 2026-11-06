@@ -19,6 +19,7 @@ from nighthawk.core.execution_reference import ExecutionReference
 from nighthawk.core.interruption import chain_cleanup_errors
 from nighthawk.core.lifecycle import FailureStage, StepCompleted, StepFailed, StepFinished, StepInterrupted, StepLifecycle, StepRaised, StepStarted
 from nighthawk.core.notifications import await_notification
+from nighthawk.core.operation_contract import OperationFinished
 from nighthawk.core.oversight import (
     AbortStep,
     Accept,
@@ -122,6 +123,9 @@ class Runner:
             ):
                 yield execution_reference, step_span, lifecycle
 
+    def _failed_operation_tuple(self) -> tuple[OperationFinished, ...]:
+        return () if self.preparation is None else tuple(self.preparation.step_context._operation_state.failed_operation_list)
+
     def _classify_finished(
         self, original_exception: BaseException | None, execution_reference: ExecutionReference, step_span: Span
     ) -> tuple[StepFinished, BaseException | None]:
@@ -144,6 +148,7 @@ class Runner:
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                failed_operation_tuple=self._failed_operation_tuple(),
                 failure_stage="oversight_abort" if rejection else self.failure_stage,
                 original_exception=original_exception,
                 attempted_outcome=self.attempted_outcome,
@@ -161,6 +166,7 @@ class Runner:
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                failed_operation_tuple=self._failed_operation_tuple(),
                 failure_stage=self.failure_stage,
                 original_exception=original_exception,
             )
@@ -176,6 +182,7 @@ class Runner:
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                failed_operation_tuple=self._failed_operation_tuple(),
                 outcome=self.outcome,
                 exception=self.raise_exception,
             )
@@ -191,6 +198,7 @@ class Runner:
                 input_binding_name_to_value=self.preparation_state.input_binding_name_to_value,
                 allowed_outcome_kinds=self.preparation_state.allowed_outcome_kinds,
                 assigned_binding_name_to_value=self.assigned_binding_name_to_value,
+                failed_operation_tuple=self._failed_operation_tuple(),
                 outcome=self.outcome,
             )
             _add_step_completed_event(step_span=step_span, step_outcome_kind=self.outcome.kind)
@@ -347,6 +355,7 @@ class Runner:
             allowed_outcome_kinds=preparation.allowed_outcome_kinds,
             output_binding_names=preparation.output_binding_names,
             binding_name_to_type=preparation.binding_name_to_type,
+            failed_operation_tuple=self._failed_operation_tuple(),
         )
         decision = oversight.inspect_step_commit(step_commit)
         if inspect.isawaitable(decision):
@@ -442,7 +451,7 @@ class Runner:
         self.validated_binding_name_to_value = validated_bindings
         if isinstance(outcome, Raise):
             self.failure_stage = "raise_construction"
-            self.raise_exception = outcome.error_type(outcome.message)
+            self.raise_exception = outcome.exception if outcome.exception is not None else outcome.error_type(outcome.message)
         self.failure_stage = "binding_assignment"
         return _StepEnvelope(outcome=outcome, bindings=validated_bindings)
 

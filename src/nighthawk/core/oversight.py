@@ -9,7 +9,7 @@ from opentelemetry.trace import get_current_span
 
 from nighthawk.core.configuration import UNSET, UnsetType
 from nighthawk.core.execution_reference import ExecutionReference
-from nighthawk.core.operation_contract import OperationRequest
+from nighthawk.core.operation_contract import OperationFinished, OperationRequest
 from nighthawk.core.scoping import RUN_ID, SCOPE_ID, SOURCE_LOCATION, STEP_EXECUTION_ID
 from nighthawk.core.step_outcome import Break, Continue, OutcomeKind, Pass, Raise, Return, StepOutcome
 from nighthawk.errors import NighthawkError
@@ -46,6 +46,7 @@ class StepCommit:
     allowed_outcome_kinds: tuple[OutcomeKind, ...]
     output_binding_names: tuple[str, ...]
     binding_name_to_type: Mapping[str, object]
+    failed_operation_tuple: tuple[OperationFinished, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(

@@ -9,7 +9,7 @@ from typing import Any
 import tiktoken
 from pydantic import TypeAdapter
 from pydantic_ai import RunContext
-from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
+from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry, ToolFailed
 from pydantic_ai.messages import CachePoint, TextContent, ToolReturnContent, is_multi_modal_content
 from pydantic_ai.tools import ToolDenied
 from pydantic_ai.toolsets.abstract import ToolsetTool
@@ -20,10 +20,10 @@ from nighthawk.adapters.pydantic_ai._rendering import project_discovery_value, t
 from nighthawk.adapters.pydantic_ai._user_content import is_top_level_sequence_payload
 from nighthawk.adapters.pydantic_ai.model_response import record_response_rejection
 from nighthawk.adapters.pydantic_ai.presentation import get_rendering_policy
-from nighthawk.adapters.pydantic_ai.tools.contracts import ErrorKind, ToolError, ToolOutcome, rejection_feedback
+from nighthawk.adapters.pydantic_ai.tools.contracts import ErrorKind, ToolError, ToolOutcome, exception_feedback, rejection_feedback
 from nighthawk.core.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
 from nighthawk.core.operation_contract import OperationError, OperationRejectedError
-from nighthawk.core.operations import OperationExecution, execute_operation_async, new_operation_request
+from nighthawk.core.operations import OperationExecution, execute_operation_async, failed_operation, new_operation_request
 from nighthawk.core.step_context import StepContext
 
 # Multimodal pass-through is guarded explicitly below by Nighthawk's UserContent checks so media objects do not get JSON-serialized.
@@ -98,25 +98,29 @@ async def _run_tool_and_normalize(tool_call: Callable[[], Awaitable[object]], st
             raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
         record_response_rejection(step_context, exception.rejection)
         return {"payload": None, "error": rejection_feedback(exception.rejection)}
-    except (ModelRetry, CallDeferred, ApprovalRequired):
+    except (ModelRetry, CallDeferred, ApprovalRequired, ToolFailed):
         raise
-    except OperationError as exception:
-        if step_context._operation_state.failure is not None:
-            raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
-        outcome = _normalize_tool_failure(
-            kind=exception.kind,
-            message=str(exception),
-            guidance=exception.guidance,
-        )
-        assert outcome["error"] is not None
-        outcome["error"]["phase"] = exception.phase
-        outcome["error"]["evaluation_started"] = exception.evaluation_started
-        return outcome
+    except Exception as exception:
+        error = operation_failure_feedback(step_context, exception)
+        if error is None:
+            raise
+        return {"payload": None, "error": error}
 
     return _normalize_tool_success(value)
 
 
-RECOVERABLE_OPERATION_ERRORS = (ModelRetry, ApprovalRequired, CallDeferred)
+def operation_failure_feedback(step_context: StepContext, exception: Exception) -> ToolError | None:
+    """Project a recoverable operation failure; None means the exception did not fail a recovered operation."""
+    if step_context._operation_state.failure is not None:
+        raise step_context._operation_state.failure from step_context._operation_state.failure.__cause__
+    if isinstance(exception, OperationError):
+        outcome = _normalize_tool_failure(kind=exception.kind, message=str(exception), guidance=exception.guidance)
+        assert outcome["error"] is not None
+        outcome["error"]["phase"] = exception.phase
+        outcome["error"]["evaluation_started"] = exception.evaluation_started
+        return outcome["error"]
+    finished = failed_operation(step_context, exception=exception)
+    return None if finished is None else exception_feedback(finished)
 
 
 class ToolResultWrapperToolset(WrapperToolset[StepContext]):
@@ -130,8 +134,6 @@ class ToolResultWrapperToolset(WrapperToolset[StepContext]):
         run_context: RunContext[StepContext],
         tool: ToolsetTool[StepContext],
     ) -> ToolOutcome:
-        run_context.deps.recoverable_operation_errors = RECOVERABLE_OPERATION_ERRORS
-
         async def tool_call() -> object:
             if (tool.tool_def.metadata or {}).get("nighthawk.provided"):
                 return await self.wrapped.call_tool(name, tool_args, run_context, tool)

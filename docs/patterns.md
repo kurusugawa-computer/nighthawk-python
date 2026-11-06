@@ -60,7 +60,8 @@ def route_message(message: str) -> str:
 
 An `execute` block allows every syntactically available outcome by default.
 It can start with YAML frontmatter to disallow outcomes that would bypass required Python work.
-This restricts accepted control outcomes; runtime and helper exceptions can still interrupt execution.
+This restricts accepted control outcomes.
+A failed operation, including a helper exception, returns to the model, so a block that denies `raise` must recover or finish; host decisions and `TerminalOperationError` still end the step.
 Decision blocks only complete with `pass` and do not accept control-flow frontmatter.
 
 There are two standard patterns:
@@ -165,11 +166,13 @@ except InputError as error:
 
 ### Error types
 
-Nighthawk's public error contracts share `NighthawkError`; ordinary application/helper exceptions and explicit Natural raises retain their own types.
+Nighthawk's public error contracts share `NighthawkError`; application exceptions and explicit Natural raises retain their own types.
+A helper exception inside a Natural block first returns to the model as a failed operation; the model can recover, or raise it with `raise_operation_id` so that the original exception reaches Python unchanged.
 Catch the concrete error for recovery: belonging to this hierarchy alone does not tell you whether the step can continue or earlier effects can be retried safely.
 See [Error handling](specification.md#13-error-handling) for operation, execution, Harness, and Session boundaries.
-Expected domain failures that the model should act on can instead be returned as ordinary helper results.
-Recoverable operation failures, including invalid values supplied to an assignment, return structured errors to the model rather than ending the block immediately.
+Helpers can also return expected domain failures as ordinary results when a structured value serves the model better than an exception.
+Operation failures, including helper exceptions and invalid values supplied to an assignment, return structured errors to the model rather than ending the block immediately.
+Raise a `TerminalOperationError` subclass from a helper when the model must not handle that failure.
 Invalid outcomes and output values rejected during finalization raise `ExecutionError`, carrying the failure stage and original exception.
 
 Handle only the failure stage for which the application has a recovery policy:

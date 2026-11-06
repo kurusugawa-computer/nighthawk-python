@@ -51,7 +51,7 @@ def _render_preview_text_for_test(tool_handler_result: ToolHandlerResult) -> str
     )
 
 
-def test_backend_handler_propagates_application_error() -> None:
+def test_backend_handler_reports_application_exception_as_failed_operation() -> None:
     def failing_tool() -> int:  # type: ignore[no-untyped-def]
         raise RuntimeError("tool crashed")
 
@@ -89,8 +89,13 @@ def test_backend_handler_propagates_application_error() -> None:
         with set_current_run_context(run_context):
             return await handler({})
 
-    with nh.run(StubExecutor()), pytest.raises(RuntimeError, match="tool crashed"):
-        anyio.run(call_handler)
+    with nh.run(StubExecutor()):
+        result = anyio.run(call_handler)
+    assert result["kind"] == "tool_result"
+    error = result["tool_outcome"]["error"]
+    assert error is not None and error["kind"] == "exception" and error.get("status") == "failed"
+    assert error["message"] == "RuntimeError: tool crashed" and error.get("operation_id")
+    assert step_context._operation_state.failure is None
 
 
 def test_backend_handler_invalid_args_returns_retry_prompt_text() -> None:

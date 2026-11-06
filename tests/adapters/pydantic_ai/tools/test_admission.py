@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Annotated, Any
 
 import pytest
@@ -8,7 +9,7 @@ from pydantic import BeforeValidator, ValidationError
 from pydantic_ai import RunContext, Tool
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import ApprovalRequired, CallDeferred, ModelRetry
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets.function import FunctionToolset
@@ -19,7 +20,7 @@ from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfigurati
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from nighthawk.adapters.pydantic_ai.models.tool_bridge import execute_tool_call
 from nighthawk.adapters.pydantic_ai.tools.execution import ToolResultWrapperToolset
-from nighthawk.core.lifecycle import StepFailed, StepFinished, StepLifecycle
+from nighthawk.core.lifecycle import StepFinished, StepLifecycle, StepRaised
 from nighthawk.core.operation_contract import OperationFinished
 from tests.support.executors import StubExecutor
 from tests.support.prompts import build_step_context
@@ -33,7 +34,7 @@ async def run_validated_action() -> None:
 
 
 @pytest.mark.parametrize("validator_kind", ["schema", "arguments"])
-def test_native_validator_python_exception_preserves_identity_and_admission(validator_kind: str) -> None:
+def test_native_validator_exception_returns_to_the_model_and_can_be_reraised(validator_kind: str) -> None:
     original = TypeError("application validator failed")
     cause = RuntimeError("application cause")
     original.__cause__ = cause
@@ -63,7 +64,15 @@ def test_native_validator_python_exception_preserves_identity_and_admission(vali
     async def respond(messages: Any, information: Any) -> ModelResponse:
         nonlocal model_calls
         model_calls += 1
-        return ModelResponse(parts=[ToolCallPart("action", {"value": 1}, "failed-admission")])
+        if model_calls == 1:
+            return ModelResponse(parts=[ToolCallPart("action", {"value": 1}, "failed-admission")])
+        failed = next(part for message in messages for part in message.parts if isinstance(part, ToolReturnPart) and part.outcome == "failed")
+        assert isinstance(failed.content, str)
+        error = json.loads(failed.content)
+        assert error["kind"] == "exception" and error["phase"] == "admission" and error["evaluation_started"] is False
+        assert error["message"] == "TypeError: application validator failed"
+        result = {"kind": "raise", "raise_message": "propagate", "raise_operation_id": error["operation_id"]}
+        return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": result}, "finish")])
 
     executor = AgentStepExecutor(configuration=StepExecutorConfiguration(execution_model=FunctionModel(respond)))
     with (
@@ -75,7 +84,7 @@ def test_native_validator_python_exception_preserves_identity_and_admission(vali
 
     assert caught.value is original
     assert caught.value.__cause__ is cause
-    assert validator_calls == model_calls == 1
+    assert validator_calls == 1 and model_calls == 2
     assert body_calls == 0
     assert len(operations) == len(terminals) == 1
     assert operations[0].request.operation_id
@@ -84,8 +93,8 @@ def test_native_validator_python_exception_preserves_identity_and_admission(vali
     assert operations[0].phase == "admission"
     assert operations[0].evaluation_started is False
     assert operations[0].original_exception is original
-    assert isinstance(terminals[0], StepFailed)
-    assert terminals[0].original_exception is original
+    assert isinstance(terminals[0], StepRaised)
+    assert terminals[0].exception is original and terminals[0].failed_operation_tuple == (operations[0],)
 
 
 @pytest.mark.parametrize("failure_kind", ["schema", "python", "retry", "approval", "deferred"])
@@ -126,10 +135,14 @@ def test_backend_native_validation_preserves_records_and_control_signals(failure
         )
 
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=operations.append)):
-        if failure_kind in ("schema", "retry"):
+        if failure_kind in ("schema", "retry", "python"):
             result = asyncio.run(execute())
-            assert result["kind"] == "retry_prompt"
+            # An application validator exception is a failed admission without the retry budget.
+            assert result["kind"] == ("tool_result" if failure_kind == "python" else "retry_prompt")
             assert context._operation_state.failure is None
+            if result["kind"] == "tool_result":
+                error = result["tool_outcome"]["error"]
+                assert error is not None and error["message"] == "TypeError: validator failed" and error["phase"] == "admission"
         else:
             with pytest.raises(type(original)) as caught:
                 asyncio.run(execute())
@@ -147,8 +160,6 @@ def test_backend_native_validation_preserves_records_and_control_signals(failure
             assert isinstance(operations[0].original_exception, ValidationError)
         else:
             assert operations[0].original_exception is original
-        if failure_kind == "python":
-            assert context._operation_state.failure is original
 
 
 @pytest.mark.parametrize(

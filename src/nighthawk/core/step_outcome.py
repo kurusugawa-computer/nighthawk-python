@@ -43,10 +43,14 @@ class Continue(_Outcome):
 
 
 class Raise(_Outcome):
-    """Raise an exception of the resolved class after commit inspection."""
+    """Raise an exception of the resolved class after commit inspection.
+
+    ``exception`` re-raises an existing instance, such as a failed operation's original exception, unchanged.
+    """
 
     message: str
     error_type: type[BaseException] = Exception
+    exception: BaseException | None = None
     kind: Literal["raise"] = "raise"
 
     def __init__(self, message: str, error_type: type[BaseException] = Exception, **data: Any) -> None:
@@ -54,8 +58,15 @@ class Raise(_Outcome):
             raise TypeError("Raise requires a string message")
         if not isinstance(error_type, type) or not issubclass(error_type, BaseException):
             raise TypeError("Raise error_type must be a resolved exception class")
+        exception = data.get("exception")
+        if exception is not None and type(exception) is not error_type:
+            raise TypeError("Raise exception must be an instance of exactly error_type")
         data.update(message=message, error_type=error_type)
         super().__init__(**data)
+
+    @classmethod
+    def of(cls, exception: BaseException) -> "Raise":
+        return cls(str(exception), type(exception), exception=exception)
 
 
 type StepOutcome = Annotated[Pass | Return | Break | Continue | Raise, Field(discriminator="kind")]

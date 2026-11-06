@@ -408,12 +408,14 @@ def test_pre_await_failure_preserves_original_exception(asynchronous: bool) -> N
         """
         return 0
 
-    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(ValueError) as caught:
+    with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_step_finished=events.append)), pytest.raises(ExecutionError) as caught:
         asyncio.run(asynchronous_function()) if asynchronous else synchronous()
     assert len(events) == 1
     event = events[0]
-    assert isinstance(event, StepFailed) and event.failure_stage == "operation_execution"
-    assert event.original_exception is failure is caught.value
+    # The failed return operation is recoverable; the stub executor leaves it unhandled.
+    assert isinstance(event, StepFailed) and event.failure_stage == "executor"
+    assert event.original_exception is failure is caught.value.__cause__
+    assert [operation.original_exception for operation in event.failed_operation_tuple] == [failure]
 
 
 def test_worker_bridge_retains_identity_and_caller_thread_delivery() -> None:

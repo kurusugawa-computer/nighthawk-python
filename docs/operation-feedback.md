@@ -27,6 +27,19 @@ Unexpected exceptions, invalid decisions, and notification failures are terminal
 `OperationDeliveryError.finished` retains the operation fact and `delivery_cause` retains its notification failure.
 Successful delivery is an in-process notification attempt, not an external storage transaction.
 
+## Failed operations
+
+An ordinary exception raised by an expression, helper, argument validator, native tool, or child Natural function fails only its operation.
+The Natural step then decides how it ends.
+The Pydantic AI adapter returns the exception class and a bounded message to the model with the failed `operation_id`; the model can correct the cause, choose another operation, finish, or select `raise` with `raise_operation_id` to raise the original exception unchanged.
+A custom executor receives the original exception from the direct operation API and can return `Raise.of(exception)` for the same result.
+Completed effects remain, and later calls in the same response still run; only refusals skip their siblings.
+
+Raise a subclass of `nighthawk.core.operation_contract.TerminalOperationError` when the model must not handle a failure; it ends the step like `AbortStep`.
+`StepCommit.failed_operation_tuple` and terminal records list recovered failures, so commit inspection or acceptance checks can refuse a result that ignored one.
+Exception messages reach the model provider; keep secrets out of them.
+See [operation inspection](specification.md#103-operation-inspection) for the complete contract.
+
 ## Synchronous and asynchronous model examples
 
 This deterministic example verifies execution semantics without a provider service.
@@ -198,7 +211,7 @@ A refusal at that native-output boundary skips the co-emitted calls and consumes
 
 Python function composition also defines nesting.
 An `AbortStep` permanently ends its target step.
-An uncaught child failure fails the parent operation; a Python helper may explicitly catch that child failure and return an application result.
+An uncaught child failure fails the parent operation, which then returns to the parent's model as a failed operation; a Python helper may instead catch that child failure and return an application result.
 It cannot change the child's terminal fact or resume that child execution.
 Run-wide cancellation is a separate host responsibility.
 

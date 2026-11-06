@@ -3,6 +3,7 @@
 from nighthawk.adapters.pydantic_ai.model_outcome import ModelOutcome, ModelRaise, ModelReturn
 from nighthawk.core.expression import evaluate_expression_operation
 from nighthawk.core.operation_contract import OperationError
+from nighthawk.core.operations import failed_operation
 from nighthawk.core.step_outcome import Break, Continue, Pass, Raise, Return, StepOutcome
 from nighthawk.core.step_request import StepCandidate, StepRequest
 from nighthawk.errors import NighthawkError
@@ -22,6 +23,11 @@ async def resolve_model_candidate(request: StepRequest, outcome: ModelOutcome) -
             expected_type=request.return_annotation,
         )
         resolved = Return(value)
+    elif isinstance(outcome, ModelRaise) and outcome.raise_operation_id is not None:
+        finished = failed_operation(request.step_context, operation_id=outcome.raise_operation_id)
+        if finished is None or finished.original_exception is None:
+            raise NighthawkError(f"No failed operation has raise_operation_id {outcome.raise_operation_id!r}")
+        resolved = Raise.of(finished.original_exception)
     elif isinstance(outcome, ModelRaise):
         error_type: object = Exception
         if outcome.raise_error_type is not None:

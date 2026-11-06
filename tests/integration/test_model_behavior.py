@@ -372,6 +372,57 @@ async def test_return_preserves_opaque_identity(model_evaluation: ModelEvaluatio
     assert outcome.value is value
 
 
+async def test_failed_helper_call_is_retried_after_its_reported_failure(model_evaluation: ModelEvaluation) -> None:
+    calls: list[str] = []
+
+    def fetch_rate(currency: str) -> float:
+        calls.append(currency)
+        if len(calls) == 1:
+            raise ConnectionError("rate service temporarily unavailable; calling again will succeed")
+        return 1.25
+
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(calls=calls, bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Get the EUR exchange rate with <fetch_rate> and assign it to <:rate>.",
+            input_binding_names=("fetch_rate",),
+            output_binding_names=("rate",),
+        ),
+        name_to_value={"fetch_rate": fetch_rate},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"rate": 1.25}
+    assert calls == ["EUR", "EUR"]
+
+
+async def test_failed_helper_exception_propagates_unchanged_when_requested(model_evaluation: ModelEvaluation) -> None:
+    class PaymentDeclinedError(Exception):
+        def __init__(self, reason: str) -> None:
+            super().__init__(f"payment declined: {reason}")
+            self.reason = reason
+
+    raised: list[PaymentDeclinedError] = []
+
+    def charge(amount_cents: int) -> str:
+        raised.append(PaymentDeclinedError("insufficient funds"))
+        raise raised[-1]
+
+    model_evaluation.name_to_observation.update(raised=raised)
+    with pytest.raises(PaymentDeclinedError) as caught:
+        await execute_step_async(
+            StepDefinition(
+                "Charge <amount_cents> with <charge> exactly once. If the charge fails, let its original exception propagate without retrying.",
+                input_binding_names=("amount_cents", "charge"),
+            ),
+            name_to_value={"amount_cents": 1250, "charge": charge},
+            write_binding=lambda name, value: pytest.fail(f"Unexpected write to {name}"),
+        )
+    assert len(raised) == 1
+    assert caught.value is raised[0] and caught.value.reason == "insufficient funds"
+
+
 async def test_default_exception(model_evaluation: ModelEvaluation) -> None:
     with pytest.raises(Exception) as caught:
         await execute_step_async(

@@ -11,7 +11,7 @@ from pydantic_ai._instrumentation import InstrumentationNames
 
 # Pydantic AI exposes its active transport context only through this private module.
 from pydantic_ai._run_context import get_current_run_context, set_current_run_context
-from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
+from pydantic_ai.exceptions import ModelRetry, ToolFailed, UnexpectedModelBehavior
 from pydantic_ai.messages import RetryInfo, ToolCallPart, ToolReturnPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.tool_manager import ToolManager
@@ -26,8 +26,16 @@ from nighthawk.adapters.pydantic_ai.presentation import (
 )
 from nighthawk.adapters.pydantic_ai.tools._admission import with_tool_admission
 from nighthawk.adapters.pydantic_ai.tools._rendering import build_tool_handler_result_trace_text
-from nighthawk.adapters.pydantic_ai.tools.contracts import RetryPromptObservation, ToolHandlerResult, ToolOutcome, ToolResultObservation
+from nighthawk.adapters.pydantic_ai.tools.contracts import (
+    RetryPromptObservation,
+    ToolError,
+    ToolHandlerResult,
+    ToolOutcome,
+    ToolResultObservation,
+    exception_feedback,
+)
 from nighthawk.adapters.pydantic_ai.tools.execution import ToolResultWrapperToolset, _build_standard_tool_return_value, _normalize_tool_success
+from nighthawk.core.operations import failed_operation
 from nighthawk.core.step_context import StepContext
 from nighthawk.errors import NighthawkError
 
@@ -183,6 +191,14 @@ async def execute_tool_call(
             if observed_toolset.outcome is not None and (observed_toolset.outcome["error"] or {}).get("status") == "rejected":
                 return ToolResultObservation(kind="tool_result", tool_outcome=observed_toolset.outcome)
             return RetryPromptObservation(kind="retry_prompt", retry_text=exception.message)
+        except ToolFailed as exception:
+            if run_context.deps._operation_state.failure is not None:
+                raise run_context.deps._operation_state.failure from run_context.deps._operation_state.failure.__cause__
+            finished = None if exception.__cause__ is None else failed_operation(run_context.deps, exception=exception.__cause__)
+            error: ToolError = (
+                exception_feedback(finished) if finished is not None else {"kind": "exception", "message": exception.message, "guidance": None}
+            )
+            return ToolResultObservation(kind="tool_result", tool_outcome={"payload": None, "error": error})
 
         if run_context.deps._operation_state.failure is not None:
             raise run_context.deps._operation_state.failure

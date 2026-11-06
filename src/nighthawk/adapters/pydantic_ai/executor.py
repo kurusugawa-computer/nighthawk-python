@@ -38,7 +38,7 @@ from nighthawk.adapters.pydantic_ai.tools._admission import ToolAdmissionCapabil
 from nighthawk.adapters.pydantic_ai.tools._ordering import sequential_model_tools
 from nighthawk.adapters.pydantic_ai.tools.contracts import rejection_feedback
 from nighthawk.adapters.pydantic_ai.tools.declarations import get_visible_tools
-from nighthawk.adapters.pydantic_ai.tools.execution import RECOVERABLE_OPERATION_ERRORS, ToolResultWrapperToolset
+from nighthawk.adapters.pydantic_ai.tools.execution import ToolResultWrapperToolset, operation_failure_feedback
 from nighthawk.adapters.pydantic_ai.usage import execution_usage
 from nighthawk.core.async_bridge import run_coroutine_synchronously
 from nighthawk.core.configuration import UNSET, UnsetType
@@ -104,6 +104,12 @@ class _StepOutputBoundary(_OperationFailureGuard):
                 raise ctx.deps._operation_state.failure from ctx.deps._operation_state.failure.__cause__
             record_response_rejection(ctx.deps, exception.rejection)
             raise ModelRetry(json.dumps(rejection_feedback(exception.rejection), ensure_ascii=False)) from exception
+        except Exception as exception:
+            # A failed return expression or invalid raise selection is the model's to correct, like a failed tool operation.
+            error = operation_failure_feedback(ctx.deps, exception)
+            if error is None:
+                error = {"kind": "invalid_input", "message": str(exception), "guidance": "Correct the control result."}
+            raise ModelRetry(json.dumps(error, ensure_ascii=False)) from exception
 
 
 def _parse_model_outcome(raw_output: Any) -> ModelOutcome:
@@ -415,7 +421,6 @@ class AgentStepExecutor:
         return await resolve_model_candidate(request, _parse_model_outcome(result.output))
 
     async def run_step_async(self, *, request: StepRequest) -> StepCandidate:
-        request.step_context.recoverable_operation_errors = RECOVERABLE_OPERATION_ERRORS
         with rendering_scope(self._tool_result_rendering_policy):
             return await self._execute_step(request=request)
 

@@ -26,6 +26,7 @@ from nighthawk.adapters.pydantic_ai.models.tool_bridge import build_tool_name_to
 from nighthawk.adapters.pydantic_ai.models.tool_transport import ToolTransport, wrap_transported_tool
 from nighthawk.adapters.pydantic_ai.tools.contracts import ToolHandlerResult
 from nighthawk.adapters.pydantic_ai.tools.declarations import get_visible_tools
+from nighthawk.core.operations import failed_operation
 from nighthawk.core.step_context import StepContext
 from tests.support.codex import _write_executable_codex_stub
 from tests.support.contexts import new_context
@@ -141,7 +142,7 @@ def test_caller_cancellation_cancels_transport_and_pending_handler() -> None:
     assert effects == ["handler stopped", "provider stopped"]
 
 
-def test_backend_schema_validator_exception_is_not_a_retry() -> None:
+def test_backend_schema_validator_exception_returns_feedback_and_keeps_the_original() -> None:
     failure = TypeError("application validator failed")
 
     def reject(value: object) -> object:
@@ -163,9 +164,12 @@ def test_backend_schema_validator_exception_is_not_a_retry() -> None:
                 model_request_parameters=ModelRequestParameters(function_tools=[tool_name_to_tool["action"].tool_def]),
                 visible_tools=[action],
             )
-            with pytest.raises(TypeError) as caught:
-                await tool_name_to_handler["action"]({"value": 1})
-        assert caught.value is failure
+            result = await tool_name_to_handler["action"]({"value": 1})
+        assert result["kind"] == "tool_result"
+        error = result["tool_outcome"]["error"]
+        assert error is not None and error["kind"] == "exception" and error["message"] == "TypeError: application validator failed"
+        finished = failed_operation(context.deps, operation_id=error.get("operation_id"))
+        assert finished is not None and finished.original_exception is failure
 
     asyncio.run(execute())
 
@@ -225,7 +229,7 @@ def test_backend_respects_pydantic_ai_tool_approval_requirement() -> None:
     asyncio.run(execute())
 
 
-def test_backend_native_body_validation_error_propagates_without_retry() -> None:
+def test_backend_native_body_validation_error_is_a_failed_operation_without_retry() -> None:
     calls: list[str] = []
 
     async def action() -> int:
@@ -247,9 +251,13 @@ def test_backend_native_body_validation_error_propagates_without_retry() -> None
                 model_request_parameters=ModelRequestParameters(function_tools=[tool_name_to_tool["action"].tool_def]),
                 visible_tools=[action],
             )
-            with pytest.raises(ValidationError) as caught:
-                await tool_name_to_handler["action"]({})
-        assert context.deps._operation_state.failure is caught.value
+            result = await tool_name_to_handler["action"]({})
+        assert result["kind"] == "tool_result"
+        error = result["tool_outcome"]["error"]
+        assert error is not None and error["kind"] == "exception" and error["message"].startswith("ValidationError:")
+        assert context.deps._operation_state.failure is None
+        finished = failed_operation(context.deps, operation_id=error.get("operation_id"))
+        assert finished is not None and isinstance(finished.original_exception, ValidationError)
 
     asyncio.run(execute())
     assert calls == ["hook", "body"]
@@ -283,7 +291,7 @@ def test_explicit_native_model_retry_does_not_abort_transport() -> None:
 
 
 @pytest.mark.parametrize("fail", [False, True])
-def test_codex_mcp_executes_on_owner_loop_and_preserves_original_failure(tmp_path: Path, fail: bool) -> None:
+def test_codex_mcp_executes_on_owner_loop_and_reports_original_failure(tmp_path: Path, fail: bool) -> None:
     executable = _write_executable_codex_stub(directory=tmp_path)
     executable.write_text(executable.read_text().replace('"expression": "1 + 1"', '"expression": "application()"'))
     failure = ValueError("application failed over MCP")
@@ -309,9 +317,11 @@ def test_codex_mcp_executes_on_owner_loop_and_preserves_original_failure(tmp_pat
         with nh.run(StubExecutor()):
             tools = FunctionToolset(get_visible_tools())
             if fail:
-                with pytest.raises(ValueError) as caught:
-                    await asyncio.wait_for(agent.run("Call application.", deps=context, toolsets=[tools], model_settings=settings), timeout=10)
-                assert caught.value is context._operation_state.failure is failure
+                result = await asyncio.wait_for(agent.run("Call application.", deps=context, toolsets=[tools], model_settings=settings), timeout=10)
+                assert "ValueError: application failed over MCP" in result.output
+                assert context._operation_state.failure is None
+                finished = failed_operation(context, exception=failure)
+                assert finished is not None and finished.original_exception is failure
             else:
                 result = await asyncio.wait_for(agent.run("Call application.", deps=context, toolsets=[tools], model_settings=settings), timeout=10)
                 assert "nh_evaluate_text" in result.output

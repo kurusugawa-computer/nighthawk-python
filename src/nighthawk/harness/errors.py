@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from nighthawk.core.operation_contract import TerminalOperationError
 from nighthawk.errors import NighthawkError
 
 __all__ = [
@@ -67,7 +68,8 @@ class NaturalExecutionError(NighthawkError):
     Inside an agent run a ``raise`` outcome does not surface as the requested
     exception type: ``except ValueError`` in the containing invocation will not
     catch it. Catch ``NaturalExecutionError`` and branch on
-    ``raise_error_type_name`` instead. Inside an agent run the core ``return``
+    ``raise_error_type_name`` instead; the raised exception, including a failed
+    operation's re-raised original, is its ``__cause__``. Inside an agent run the core ``return``
     outcome is never offered to the executor and is reported as
     ``disallowed_outcome_kind`` if an executor emits it anyway: a model-selected
     return would skip the containing function's deterministic Python and is not
@@ -293,12 +295,13 @@ class RunTerminationError(NighthawkError):
 type PerimeterEffectRejectionReason = Literal["attempt_record_failed", "outside_effective_authority", "unmediated_python_effect"]
 
 
-class PerimeterEffectRejectedError(NighthawkError):
+class PerimeterEffectRejectedError(TerminalOperationError):
     """A perimeter effect was not attempted.
 
     The durable attempt record could not be written, the effect lies outside the effective perimeter authority,
     or a Python audit event exposed an unmediated effect.
     For an audit rejection, ``capability_name`` identifies the observed event.
+    Inside a Natural operation, the rejection ends the step rather than returning to the model.
     """
 
     capability_name: str

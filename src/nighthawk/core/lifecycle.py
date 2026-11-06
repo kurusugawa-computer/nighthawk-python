@@ -45,6 +45,7 @@ class _StepFinished:
     input_binding_name_to_value: Mapping[str, object] | None = None
     allowed_outcome_kinds: tuple[OutcomeKind, ...] | None = None
     assigned_binding_name_to_value: Mapping[str, object] = field(default_factory=dict)
+    failed_operation_tuple: tuple[OperationFinished, ...] = ()
 
     def __post_init__(self) -> None:
         if self.execution_reference.step_execution_id is None or self.execution_reference.source_location is None:

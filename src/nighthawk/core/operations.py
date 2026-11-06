@@ -20,6 +20,7 @@ from nighthawk.core.operation_contract import (
     OperationRejection,
     OperationRequest,
     OperationStatus,
+    TerminalOperationError,
 )
 from nighthawk.core.oversight import AbortStep, Accept, RejectOperation, StepAbortedError, record_oversight_decision
 from nighthawk.core.step_context import StepContext
@@ -46,9 +47,13 @@ async def execute_operation_async(
     *,
     admit: Callable[[OperationExecution], None],
     execute: Callable[[OperationExecution], Awaitable[object]],
-    recoverable_admission_error: BaseException | None = None,
     blocked_by: OperationRejection | None = None,
 ) -> object:
+    """Run one operation; an ordinary exception from admission or its body fails only that operation.
+
+    The failed operation is retained with its original exception and the exception is re-raised to the caller.
+    Inspection failures, aborts, interruptions, delivery failures, and TerminalOperationError end the step.
+    """
     from nighthawk.core.scoping import optional_scope
 
     active_scope = optional_scope()
@@ -109,14 +114,8 @@ async def execute_operation_async(
                     status = "failed"
                 else:
                     status = "interrupted"
-                recoverable_admission = execution.phase == "admission" and exception is recoverable_admission_error
-                if (
-                    exception is not rejection_error
-                    and not recoverable_admission
-                    and (
-                        (exception is not execution.diagnostic and not isinstance(exception, step_context.recoverable_operation_errors))
-                        or execution.phase == "inspection"
-                    )
+                if exception is not rejection_error and (
+                    execution.phase == "inspection" or not isinstance(exception, Exception) or isinstance(exception, TerminalOperationError)
                 ):
                     step_context._operation_state.failure = exception
                     step_context._operation_state.failure_stage = "operation_inspection" if execution.phase == "inspection" else "operation_execution"
@@ -130,6 +129,8 @@ async def execute_operation_async(
                 rejection=rejection_error.rejection if rejection_error is not None else None,
                 blocked_by_operation_id=blocked_by.request.operation_id if blocked_by is not None else None,
             )
+            if status == "failed" and step_context._operation_state.failure is not original_exception:
+                step_context._operation_state.failed_operation_list.append(finished)
             lifecycle = active_scope.lifecycle if active_scope is not None else None
             if lifecycle is not None and lifecycle.on_operation_finished is not None:
                 try:
@@ -155,6 +156,16 @@ async def execute_operation_async(
             return outcome
         finally:
             _active_operation_context.reset(token)
+
+
+def failed_operation(
+    step_context: StepContext, *, operation_id: str | None = None, exception: BaseException | None = None
+) -> OperationFinished | None:
+    """Find a recovered failed operation of this step by its Id or its original exception."""
+    for finished in reversed(step_context._operation_state.failed_operation_list):
+        if finished.request.operation_id == operation_id or (exception is not None and finished.original_exception is exception):
+            return finished
+    return None
 
 
 def new_operation_request(
