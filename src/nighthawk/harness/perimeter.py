@@ -27,9 +27,8 @@ PERIMETER_EFFECT_CLASS_TUPLE: tuple[PerimeterEffectClass, ...] = get_args(Perime
 class EffectFootprint(BaseModel):
     """Declared effects of one capability, code proposal, or generated definition.
 
-    ``namespace_read_name_set`` and ``namespace_write_name_set`` name shared
-    bindings the execution reads or rebinds, ``mutable_reference_name_set``
-    names declared references it may mutate in place,
+    ``namespace_write_name_set`` names shared bindings the execution rebinds,
+    ``mutable_reference_name_set`` names declared references it may mutate in place,
     ``capability_name_set`` names the capabilities it may request, and
     ``perimeter_effect_class_set`` lists the perimeter classes it may cause.
     """
@@ -38,7 +37,6 @@ class EffectFootprint(BaseModel):
 
     NONE: ClassVar[EffectFootprint]
 
-    namespace_read_name_set: frozenset[str] = frozenset()
     namespace_write_name_set: frozenset[str] = frozenset()
     mutable_reference_name_set: frozenset[str] = frozenset()
     capability_name_set: frozenset[str] = frozenset()
