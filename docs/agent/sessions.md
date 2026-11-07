@@ -83,7 +83,7 @@ See [Error handling](../specification.md#13-error-handling) for the common excep
 
 ## Input and persistent bindings
 
-Use `CellInput(source, mode="python")` for operator Python or `CellInput(text, mode="natural")` for a Natural cell.
+Use `CellInput(source, mode="python")` for operator Python or `CellInput(text, mode="natural_language")` for a Natural cell.
 Implicit mode recognizes the `> ` Python prefix; explicit mode avoids interpreting that prefix.
 Only submit Python or Natural program text authorized by the host; do not turn untrusted text into operator approval.
 
@@ -253,7 +253,7 @@ page = session.read_run_evidence(execution.run_id_tuple[0], EvidenceQuery())
 Natural can declare a function directly into a Session write binding:
 
 ```python
-execution = session.submit(CellInput("Declare a Fibonacci function <:fib> with an integer argument and result.", mode="natural"))
+execution = session.submit(CellInput("Declare a Fibonacci function <:fib> with an integer argument and result.", mode="natural_language"))
 outcome = await execution.wait_async()
 if outcome.status == "success":
     invocation = session.submit(CellInput("fib(3)", mode="python"))
