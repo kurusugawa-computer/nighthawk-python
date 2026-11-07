@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0]
+
 ### Added
 
 - Ship host-owned Harness mechanisms and reusable Agent Parts alongside Core for generated Python/Natural composition, capability grants, resource accounting, causal evidence, and mediated effects.
@@ -520,7 +522,8 @@ Invalid initial results fail before oversight; use resilience retries to recover
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.16.0...v0.17.0

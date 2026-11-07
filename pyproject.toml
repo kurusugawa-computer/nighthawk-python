@@ -1,6 +1,6 @@
 [project]
 name = "nighthawk-python"
-version = "0.19.0"
+version = "0.20.0"
 description = "Compose Natural judgments, governed execution, and reusable Agent Parts with ordinary Python."
 readme = "README.md"
 requires-python = ">=3.13"
