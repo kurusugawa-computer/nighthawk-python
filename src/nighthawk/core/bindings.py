@@ -1,10 +1,11 @@
 """Shared binding contracts for Natural blocks and Python integrations."""
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import is_dataclass
 from keyword import iskeyword
 from typing import cast
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from typing_extensions import TypeForm
 
 from nighthawk.errors import NighthawkError
@@ -95,6 +96,9 @@ def validate_output_bindings(
     Contracts must already be resolved Python annotations.
     No assignment, initial-value supplementation, or assignment recording occurs here.
     Values are not deep-copied, and validator effects are not rolled back.
+    Pydantic accepts model and dataclass instances without revalidating their fields, so each such instance in a value
+    whose contract contains them is also checked against its own class through a round-trip copy.
+    The check does not rerun the declared contract's validators, and the original objects are retained when it succeeds.
     """
     output_binding_names = normalize_binding_names(output_binding_names)
     require_declared_binding_names(binding_name_to_value, output_binding_names)
@@ -105,7 +109,45 @@ def validate_output_bindings(
         if name not in validated_name_to_value or expected_type is MISSING_ANNOTATION:
             continue
         try:
-            validated_name_to_value[name] = TypeAdapter(cast(TypeForm[object], expected_type)).validate_python(validated_name_to_value[name])
+            adapter = TypeAdapter(cast(TypeForm[object], expected_type))
+            validated_value = adapter.validate_python(validated_name_to_value[name])
+            if _contains_instance_schema(adapter.core_schema):
+                # In-place changes, which the model is told to make through nh_evaluate, would otherwise bypass the contract.
+                _validate_instance_fields(validated_value, set())
+            validated_name_to_value[name] = validated_value
         except Exception as exception:
             raise BindingValidationError(name, exception) from exception
     return validated_name_to_value
+
+
+def _contains_instance_schema(schema: object) -> bool:
+    if isinstance(schema, Mapping):
+        if schema.get("type") in ("model", "dataclass"):
+            return True
+        return any(_contains_instance_schema(value) for value in schema.values())
+    if isinstance(schema, list | tuple):
+        return any(_contains_instance_schema(item) for item in schema)
+    return False
+
+
+def _validate_instance_fields(value: object, visited_id_set: set[int]) -> None:
+    if id(value) in visited_id_set:
+        return
+    visited_id_set.add(id(value))
+    if isinstance(value, BaseModel):
+        model_class = type(value)
+        if model_class.model_config.get("revalidate_instances", "never") == "never":
+            model_class.model_validate(value.model_dump(round_trip=True, warnings="none"))
+        return
+    if is_dataclass(value) and not isinstance(value, type):
+        configuration = getattr(type(value), "__pydantic_config__", {})
+        if configuration.get("revalidate_instances", "never") == "never":
+            adapter = TypeAdapter(type(value))
+            adapter.validate_python(adapter.dump_python(value, round_trip=True, warnings="none"))
+        return
+    if isinstance(value, Mapping):
+        for item in value.values():
+            _validate_instance_fields(item, visited_id_set)
+    elif isinstance(value, list | tuple | set | frozenset):
+        for item in value:
+            _validate_instance_fields(item, visited_id_set)

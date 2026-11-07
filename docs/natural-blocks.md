@@ -173,6 +173,7 @@ def judge_review(review_data: str) -> ReviewVerdict:
 
 When the LLM assigns a value to `verdict`, Nighthawk validates and coerces it to a `ReviewVerdict` instance.
 Assignment validation failures give the model recoverable feedback; boundary validation failure prevents pending Python name assignments.
+Boundary validation also checks a model instance changed in place, so in-place changes cannot commit an invalid `ReviewVerdict`.
 For direct model-field mutation, use ordinary declared Pydantic fields with `validate_assignment=True`.
 Their constraints, validators, and frozen restrictions apply through Pydantic's assignment machinery.
 Use ordinary Python helpers for properties, custom objects, and other mutation routes; helper effects are not automatically validated or rolled back.

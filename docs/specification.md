@@ -674,6 +674,7 @@ Commit and mutation notes:
 - An executor may select a complete subset through `StepCandidate.binding_name_to_value`; omission or `UNSET` selects initialized declared outputs from the environment.
 - Tracked assignment and mutation marks support working-state bookkeeping; they do not select which initialized outputs receive final validation.
 - All selected outputs receive final validation; an initial `Raise` discards pending working values and rejects explicit nonempty output mappings.
+- Pydantic accepts model and dataclass instances without revalidating their fields, so final validation also checks each such instance against its own class through a round-trip copy, without rerunning the declared contract's validators. An in-place change cannot commit fields outside their model's contract; the original objects are committed when the check succeeds.
 - Mutation of a shared object is immediately visible and does not require a generated name assignment.
 - Objects outside declared outputs are not recursively validated at finalization.
 

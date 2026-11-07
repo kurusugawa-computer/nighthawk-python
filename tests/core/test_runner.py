@@ -10,7 +10,7 @@ from nighthawk.core.errors import ExecutionError
 from nighthawk.core.scoping import get_scope
 from nighthawk.core.step_outcome import Break, Continue, Pass, Return
 from nighthawk.core.step_request import StepCandidate, StepRequest
-from nighthawk.core.testing import ScriptedExecutor
+from nighthawk.core.testing import CallbackExecutor, ScriptedExecutor
 
 GLOBAL_NUMBER = 7
 
@@ -39,6 +39,10 @@ RuntimeProposal = Annotated[RuntimeApproveProposal | RuntimeRejectProposal, Fiel
 
 class RuntimeProposalEnvelope(BaseModel):
     proposals: list[RuntimeProposal]
+
+
+class RuntimeValueList(BaseModel):
+    values: list[int] = Field(default_factory=list)
 
 
 class RuntimePlanUpdateDecision(BaseModel):
@@ -182,6 +186,26 @@ def test_pass_step_finalize_rejects_cross_field_model_violation() -> None:
 
         with pytest.raises(ExecutionError, match="Output binding 'decision' failed validation"):
             f()
+
+
+def test_pass_step_finalize_rejects_output_model_changed_in_place() -> None:
+    def append_invalid_value(request: StepRequest) -> StepCandidate:
+        output = request.snapshot_output_bindings()["result"]
+        assert isinstance(output, RuntimeValueList)
+        output.values.append("not an integer")  # pyright: ignore[reportArgumentType]
+        return StepCandidate()
+
+    @nh.function
+    def workflow() -> RuntimeValueList:
+        result: RuntimeValueList = RuntimeValueList()
+        """execute
+        <:result>
+        Complete this step.
+        """
+        return result
+
+    with nh.run(CallbackExecutor(append_invalid_value)), pytest.raises(ExecutionError, match="Output binding 'result' failed validation"):
+        workflow()
 
 
 def test_async_step_execution_sets_execution_reference_step_execution_id() -> None:

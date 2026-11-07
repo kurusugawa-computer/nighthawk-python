@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 import pytest
-from pydantic import AfterValidator, ValidationError
+from pydantic import AfterValidator, BaseModel, Field, ValidationError
 
 from nighthawk.core.bindings import (
     MISSING_ANNOTATION,
@@ -103,3 +104,31 @@ def test_undeclared_contract_is_rejected() -> None:
     with pytest.raises(BindingDeclarationError) as caught:
         validate_output_bindings({}, {"extra": int}, ())
     assert caught.value.binding_names == ("extra",)
+
+
+class _Record(BaseModel):
+    values: list[int] = Field(default_factory=list)
+
+
+@dataclass
+class _Point:
+    x: int
+
+
+def test_instances_changed_in_place_are_validated_and_retained() -> None:
+    record = _Record(values=[1])
+    validated_name_to_value = validate_output_bindings(
+        {"record": record, "records": [record]}, {"record": _Record, "records": list[_Record]}, ("record", "records")
+    )
+    assert validated_name_to_value["record"] is record
+    assert validated_name_to_value["records"] == [record]
+    assert validated_name_to_value["records"][0] is record  # pyright: ignore[reportIndexIssue]
+
+    record.values.append("not an integer")  # pyright: ignore[reportArgumentType]
+    point = _Point(1)
+    point.x = "one"  # pyright: ignore[reportAttributeAccessIssue]
+    for name, value, expected_type in (("record", record, _Record), ("records", [record], list[_Record]), ("point", point, _Point)):
+        with pytest.raises(BindingValidationError) as caught:
+            validate_output_bindings({name: value}, {name: expected_type}, (name,))
+        assert caught.value.binding_name == name
+        assert isinstance(caught.value.original_exception, ValidationError)
