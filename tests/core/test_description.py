@@ -74,6 +74,13 @@ def test_annotation_metadata_and_callable_defaults_do_not_invoke_repr() -> None:
     assert effects == []
 
 
+def test_variadic_tuple_annotation_is_spelled_as_python() -> None:
+    def collect(values: tuple[int, ...]) -> tuple[str, ...]:
+        return tuple(str(value) for value in values)
+
+    assert describe_callable(collect).signature_text == "(values: tuple[int, ...]) -> tuple[str, ...]"
+
+
 def test_custom_signature_parameter_methods_are_not_called() -> None:
     effects: list[str] = []
 

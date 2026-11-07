@@ -95,6 +95,8 @@ def annotation_text(annotation: object, *, depth: int = 0) -> str:
         return "<annotation omitted>"
     if annotation is None or annotation is type(None):
         return "None"
+    if annotation is Ellipsis:
+        return "..."
     if type(annotation) is str:
         return annotation if len(annotation) <= 500 else annotation[:500] + "<snipped annotation spelling>"
     if type(annotation) is SourceAnnotation:
