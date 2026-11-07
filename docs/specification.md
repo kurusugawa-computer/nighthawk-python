@@ -450,6 +450,12 @@ Rendering format:
     - Class attributes that are public and non-callable are included as fields.
     - Method expansion is bounded by `context_limits.object_max_methods`; field expansion is bounded by `context_limits.object_max_fields`; each field value preview is bounded by `context_limits.object_field_value_max_tokens`.
     - If object member limits are exceeded, comments identify the object and the number of omitted methods or fields.
+- Output contracts that are or contain Pydantic models or dataclasses list declared fields, such as `name.field: Literal['a', 'b']  # required`, `# default 'a'`, or `# default factory`.
+    - The field annotations are the ones Pydantic and dataclasses stored when the class was defined; display does not evaluate annotation expressions.
+    - An unbound output lists its own declared fields under its name.
+    - An output holding an instance of its declared type uses the declared field annotations in its field lines instead of runtime types.
+    - Other model and dataclass types reachable from an output contract appear once per section under their type name, such as `Person.name: str  # required`.
+    - Each type lists at most `context_limits.object_max_fields` fields, and a fixed number of types are described per output; a comment counts omitted fields. TypedDict contracts are not expanded.
 - Complete previews of ordinary scalar, list, and string-keyed dictionary values use Python literals, including `None`, `True`, and `False`.
   JSON preview rendering and its configured style still supply bounded summaries; JSON literals outside strings are translated to Python spelling for context display.
   Lossy or non-literal previews appear in `# preview: ...` comments rather than assignments to invented values.

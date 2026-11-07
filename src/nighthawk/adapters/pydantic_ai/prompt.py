@@ -5,11 +5,12 @@ import logging
 import math
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass, fields, is_dataclass
 from string import Template
-from typing import Any, NamedTuple, TypeAliasType
+from typing import Annotated, Any, NamedTuple, TypeAliasType, get_args, get_origin
 
 import tiktoken
+from pydantic import BaseModel
 from pydantic_ai.messages import (
     AudioUrl,
     BinaryContent,
@@ -46,6 +47,7 @@ type PromptContentTuple = tuple[UserContent, ...]
 _MULTIMODAL_BINDING_TOKEN_COST = 64
 _UNBOUND = object()
 _MISSING = object()
+_MAX_CONTRACT_TYPE_COUNT = 8
 
 
 @dataclass(frozen=True)
@@ -204,6 +206,7 @@ def _render_object_capability_lines(
     value: object,
     render_context: _PromptRenderContext,
     annotation: str | None = None,
+    field_name_to_annotation: Mapping[str, str] | None = None,
 ) -> list[tuple[UserContent, ...]]:
     value_type_name = type_name(value)
     instance_comment = "instance" if annotation is None or annotation == value_type_name else f"{value_type_name} instance"
@@ -250,6 +253,7 @@ def _render_object_capability_lines(
                     value_max_tokens=render_context.context_limits.object_field_value_max_tokens,
                     token_encoding=render_context.token_encoding,
                     json_renderer_style=render_context.json_renderer_style,
+                    annotation=None if field_name_to_annotation is None else field_name_to_annotation.get(field_name),
                 ),
             )
         )
@@ -262,15 +266,140 @@ def _render_object_capability_lines(
     return lines
 
 
+def _declared_field_list(contract: object) -> list[tuple[str, object, str]] | None:
+    """Return declared fields of a Pydantic model or dataclass contract without evaluating annotations.
+
+    Pydantic and dataclasses resolve field annotations when the class is defined; this reads the stored results.
+    """
+    if isinstance(contract, type) and issubclass(contract, BaseModel):
+        return [
+            (
+                name,
+                information.annotation,
+                "required"
+                if information.is_required()
+                else "default factory"
+                if information.default_factory is not None
+                else f"default {_default_text(information.default)}",
+            )
+            for name, information in contract.model_fields.items()
+        ]
+    if isinstance(contract, type) and is_dataclass(contract):
+        return [
+            (
+                declared_field.name,
+                declared_field.type,
+                "default factory"
+                if declared_field.default_factory is not MISSING
+                else "required"
+                if declared_field.default is MISSING
+                else f"default {_default_text(declared_field.default)}",
+            )
+            for declared_field in fields(contract)
+        ]
+    return None
+
+
+def _default_text(default: object) -> str:
+    # Only exact builtin values are spelled, so application representation methods never run.
+    if default is None or exact_type(default, bool) or exact_type(default, int) or exact_type(default, float):
+        return repr(default)
+    if exact_type(default, str):
+        return repr(default) if len(default) <= 40 else f"str of length {len(default)}"
+    if any(exact_type(default, container_type) for container_type in (tuple, list, dict, set, frozenset)) and not default:  # type: ignore[arg-type]
+        return repr(default)
+    return f"{type_name(default)} value"
+
+
+def _collect_contract_types(annotation: object, collected_type_list: list[type]) -> None:
+    if len(collected_type_list) >= _MAX_CONTRACT_TYPE_COUNT or annotation in collected_type_list:
+        return
+    declared_field_list = _declared_field_list(annotation)
+    if declared_field_list is not None:
+        collected_type_list.append(annotation)  # type: ignore[arg-type]
+        for _, field_annotation, _ in declared_field_list:
+            _collect_contract_types(field_annotation, collected_type_list)
+        return
+    if get_origin(annotation) is Annotated:
+        _collect_contract_types(get_args(annotation)[0], collected_type_list)
+        return
+    for argument in get_args(annotation):
+        _collect_contract_types(argument, collected_type_list)
+
+
+def _declared_field_lines(
+    *,
+    reference: str,
+    declared_field_list: list[tuple[str, object, str]],
+    max_fields: int,
+) -> list[tuple[UserContent, ...]]:
+    lines: list[tuple[UserContent, ...]] = [
+        (f"{reference}.{name}: {annotation_text(field_annotation)}  # {requirement}",)
+        for name, field_annotation, requirement in declared_field_list[:max_fields]
+    ]
+    if len(declared_field_list) > max_fields:
+        lines.append((f"# {reference}: {len(declared_field_list) - max_fields} declared fields omitted",))
+    return lines
+
+
+def _render_contract_lines(
+    *,
+    reference: str,
+    value: object,
+    contract: object,
+    render_context: _PromptRenderContext,
+    described_type_list: list[type],
+) -> tuple[list[tuple[UserContent, ...]], Mapping[str, str] | None]:
+    """Describe the declared structure of an output contract as Python field declarations.
+
+    Returns lines for an unbound root output and for declared types not yet in ``described_type_list``,
+    plus root field annotations that replace runtime types when the current value is an instance of the root type.
+    Newly described types are appended to ``described_type_list``.
+    """
+    collected_type_list: list[type] = []
+    _collect_contract_types(contract, collected_type_list)
+    if not collected_type_list:
+        return [], None
+    root_type = get_args(contract)[0] if get_origin(contract) is Annotated else contract
+    max_fields = render_context.context_limits.object_max_fields
+    lines: list[tuple[UserContent, ...]] = []
+    root_field_name_to_annotation: Mapping[str, str] | None = None
+    for declared_type in collected_type_list:
+        declared_field_list = _declared_field_list(declared_type)
+        assert declared_field_list is not None
+        if declared_type is root_type and value is _UNBOUND:
+            lines.extend(_declared_field_lines(reference=reference, declared_field_list=declared_field_list, max_fields=max_fields))
+        elif declared_type is root_type and isinstance(value, declared_type):
+            root_field_name_to_annotation = {name: annotation_text(field_annotation) for name, field_annotation, _ in declared_field_list}
+        elif declared_type not in described_type_list:
+            lines.extend(
+                _declared_field_lines(reference=annotation_text(declared_type), declared_field_list=declared_field_list, max_fields=max_fields)
+            )
+            described_type_list.append(declared_type)
+    return lines, root_field_name_to_annotation
+
+
 def _render_reference_and_value_lines(
     *,
     reference: str,
     value: object,
     render_context: _PromptRenderContext,
     annotation: str | None = None,
+    contract: object = _MISSING,
+    described_type_list: list[type] | None = None,
 ) -> list[tuple[UserContent, ...]]:
+    contract_lines: list[tuple[UserContent, ...]] = []
+    field_name_to_annotation: Mapping[str, str] | None = None
+    if contract is not _MISSING:
+        contract_lines, field_name_to_annotation = _render_contract_lines(
+            reference=reference,
+            value=value,
+            contract=contract,
+            render_context=render_context,
+            described_type_list=[] if described_type_list is None else described_type_list,
+        )
     if value is _UNBOUND:
-        return [(f"{reference}: {annotation or 'object'}  # unbound",)]
+        return [(f"{reference}: {annotation or 'object'}  # unbound",), *contract_lines]
     if exact_type(value, TypeAliasType):
         return [(f"{reference}: {annotation or 'TypeAliasType'}  # {annotation_text(value)}; alias expansion omitted (requires evaluation)",)]
 
@@ -290,12 +419,16 @@ def _render_reference_and_value_lines(
         return [(f"{reference}: {annotation or type_name(value)}  # attached content: ", *prompt_user_content)]
 
     if _is_object_capability_candidate(value):
-        return _render_object_capability_lines(
-            reference=reference,
-            value=value,
-            render_context=render_context,
-            annotation=annotation,
-        )
+        return [
+            *_render_object_capability_lines(
+                reference=reference,
+                value=value,
+                render_context=render_context,
+                annotation=annotation,
+                field_name_to_annotation=field_name_to_annotation,
+            ),
+            *contract_lines,
+        ]
 
     return [
         (
@@ -307,7 +440,8 @@ def _render_reference_and_value_lines(
                 json_renderer_style=render_context.json_renderer_style,
                 annotation=annotation,
             ),
-        )
+        ),
+        *contract_lines,
     ]
 
 
@@ -324,22 +458,29 @@ def _render_reference_and_value_list_section(
     total_tokens = 0
     shown_items = 0
     token_limit_reached = False
+    described_contract_type_list: list[type] = []
 
     for reference, value in reference_and_value_list:
         if shown_items >= max_items:
             break
 
         annotation = None
+        contract: object = _MISSING
         if "." not in reference:
             named_description = step_context.environment.describe(reference)
             selected_annotation = named_description["output_contract"] or named_description["annotation"]
             if isinstance(selected_annotation, str):
                 annotation = selected_annotation
+            if named_description["output_contract"] is not None:
+                contract = step_context.environment.binding_name_to_type.get(reference, _MISSING)
+        pending_described_type_list = list(described_contract_type_list)
         rendered_line_list = _render_reference_and_value_lines(
             reference=reference,
             value=value,
             render_context=render_context,
             annotation=annotation,
+            contract=contract,
+            described_type_list=pending_described_type_list,
         )
 
         rendered_tokens = sum(
@@ -358,6 +499,7 @@ def _render_reference_and_value_list_section(
             _append_prompt_line(content_part_list=content_part_list, prompt_line=rendered_line)
         total_tokens += rendered_tokens
         shown_items += 1
+        described_contract_type_list = pending_described_type_list
 
     truncated = shown_items < len(reference_and_value_list)
     if truncated:

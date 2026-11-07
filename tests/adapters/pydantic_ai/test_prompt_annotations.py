@@ -1,8 +1,10 @@
 import ast
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Literal
 
 import pytest
+from pydantic import BaseModel, Field
 from pydantic_ai.messages import BinaryContent
 
 import nighthawk as nh
@@ -31,6 +33,72 @@ def test_selected_contract_and_read_annotation_replace_runtime_types() -> None:
     declarations = ast.parse(section).body
     assert all(isinstance(statement, ast.AnnAssign) for statement in declarations)
     assert "Alias" not in section
+
+
+class _Person(BaseModel):
+    name: str
+    age: int
+
+
+class _Roster(BaseModel):
+    people: tuple[_Person, ...]
+    source_language: Literal["en", "ja"] = "en"
+    notes: list[str] = Field(default_factory=list)
+
+
+class _Ticket(BaseModel):
+    priority: Literal["low", "high"]
+
+
+@dataclass
+class _Measurement:
+    unit: Literal["celsius", "fahrenheit"]
+    value: float = 0.0
+    labels: list[str] = field(default_factory=list)
+
+
+def test_output_contracts_present_declared_fields_once() -> None:
+    ticket = _Ticket(priority="low")
+    context = build_step_context(python_globals={}, python_locals={"ticket": ticket, "reference_ticket": _Ticket(priority="high")})
+    context.environment = StepEnvironment(
+        python_name_to_value=context.step_locals,
+        python_globals={},
+        output_name_set=frozenset({"roster", "people", "measurement", "ticket"}),
+        binding_name_to_type={"roster": _Roster, "people": list[_Person], "measurement": _Measurement, "ticket": _Ticket},
+    )
+    section = locals_section(build_user_prompt_text(processed_natural_program="Fill the outputs.", step_context=context))
+    for line in (
+        "roster: _Roster  # unbound",
+        "roster.people: tuple[_Person, ...]  # required",
+        "roster.source_language: Literal['en', 'ja']  # default 'en'",
+        "roster.notes: list[str]  # default factory",
+        "people: list[_Person]  # unbound",
+        "_Person.name: str  # required",
+        "_Person.age: int  # required",
+        "measurement.unit: Literal['celsius', 'fahrenheit']  # required",
+        "measurement.value: float  # default 0.0",
+        "measurement.labels: list[str]  # default factory",
+        "ticket.priority: Literal['low', 'high'] = \"low\"",
+        'reference_ticket.priority: str = "high"',
+    ):
+        assert line in section
+    assert section.count("_Person.name") == 1
+    assert all(isinstance(statement, ast.AnnAssign) for statement in ast.parse(section).body)
+
+
+def test_output_contract_fields_follow_the_object_field_limit() -> None:
+    context = build_step_context(python_globals={}, python_locals={})
+    context.environment = StepEnvironment(
+        python_name_to_value=context.step_locals,
+        python_globals={},
+        output_name_set=frozenset({"roster"}),
+        binding_name_to_type={"roster": _Roster},
+    )
+    configuration = StepExecutorConfiguration(context_limits=StepContextLimits(object_max_fields=1))
+    section = locals_section(build_user_prompt_text(processed_natural_program="Fill the roster.", step_context=context, configuration=configuration))
+    assert "roster.people: tuple[_Person, ...]  # required" in section
+    assert "roster.source_language" not in section
+    assert "# roster: 2 declared fields omitted" in section
 
 
 def test_read_annotations_are_rendered_without_evaluation() -> None:

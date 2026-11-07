@@ -454,7 +454,7 @@ When a Natural block produces a single value (a label, a score, a summary), a si
 Design guidelines for structured output models:
 
 - **Use structure that matches the result.** Keep independent fields such as `approved`, `reason`, and `risk_level` flat; use nested models when grouping clarifies required relationships.
-- **Use descriptive field names.** The LLM sees the model schema; field names are the primary signal for what to produce.
+- **Use descriptive field names.** The step context lists an output model's declared fields with their annotations and defaults, so field names and types are the primary signal for what to produce.
 - **Constrain field types.** Use `Literal["low", "medium", "high"]` instead of `str` where possible. This enables both LLM guidance and host-side validation.
 - **Handle validation failures at their boundary.** A recoverable assignment validation failure is returned to the model so it can correct the value. Invalid output bindings at finalization instead raise `ExecutionError`, whose `step_failed.failure_stage` is `"binding_validation"` and whose cause is the original validation exception. See [Error handling](patterns.md#error-handling) for executable examples. Choose retry or fallback only when repeating earlier helper calls, mutations, and other effects is acceptable; validation failure does not roll them back.
 
