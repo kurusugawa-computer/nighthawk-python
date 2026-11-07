@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Literal
 
 import pytest
+from pydantic import BaseModel
 
 import nighthawk as nh
 from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits
@@ -55,6 +57,83 @@ async def test_committed_values(
     assert outcome == Pass()
     assert committed == {"result": expected}
     assert type(committed["result"]) is type(expected)
+
+
+class _Ticket(BaseModel):
+    priority: Literal["low", "high"]
+    component: Literal["database", "network", "ui"]
+
+
+class _Person(BaseModel):
+    name: str
+    age: int
+
+
+class _Roster(BaseModel):
+    people: tuple[_Person, ...]
+    source_language: Literal["en", "ja"]
+
+
+@dataclass
+class _Measurement:
+    unit: Literal["celsius", "fahrenheit"]
+    value: float
+
+
+@pytest.mark.parametrize(
+    ("program", "make_inputs", "output_type", "expected"),
+    [
+        pytest.param(
+            "Classify <report> into <:result>.",
+            lambda: {"report": "The checkout button is misaligned on small screens. Customers can still pay."},
+            _Ticket,
+            _Ticket(priority="low", component="ui"),
+            id="model-literal-fields",
+        ),
+        pytest.param(
+            "Record every person mentioned in <text> in <:result>.",
+            lambda: {"text": "Alice is 31 years old, and her colleague Bob is 45."},
+            _Roster,
+            _Roster(people=(_Person(name="Alice", age=31), _Person(name="Bob", age=45)), source_language="en"),
+            id="nested-models",
+        ),
+        pytest.param(
+            "Record the reading in <text> as <:result>.",
+            lambda: {"text": "The thermometer outside shows 21.5 degrees Celsius."},
+            _Measurement,
+            _Measurement(unit="celsius", value=21.5),
+            id="dataclass",
+        ),
+        pytest.param(
+            "Update <:result> to classify <report>.",
+            lambda: {
+                "report": "The primary database rejects every connection. All customers are affected.",
+                "result": _Ticket(priority="low", component="ui"),
+            },
+            _Ticket,
+            _Ticket(priority="high", component="database"),
+            id="initialized-model",
+        ),
+    ],
+)
+async def test_structured_output_contracts(
+    model_evaluation: ModelEvaluation, program: str, make_inputs: Callable[[], dict[str, object]], output_type: type, expected: object
+) -> None:
+    name_to_value = make_inputs()
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            program,
+            input_binding_names=tuple(name for name in name_to_value if name != "result"),
+            output_binding_names=("result",),
+            binding_name_to_type={"result": output_type},
+        ),
+        name_to_value=name_to_value,
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"result": expected}
 
 
 async def test_multiple_outputs(model_evaluation: ModelEvaluation) -> None:
