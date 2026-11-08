@@ -136,6 +136,127 @@ async def test_structured_output_contracts(
     assert committed == {"result": expected}
 
 
+@dataclass(frozen=True)
+class _LineItem:
+    product: str
+    quantity: int
+    unit_price: int
+
+
+@dataclass(frozen=True)
+class _Order:
+    customer: str
+    line_items: tuple[_LineItem, ...]
+
+
+class _Member(BaseModel):
+    name: str
+    role: Literal["engineer", "designer", "manager"]
+    years: int
+
+
+class _Team(BaseModel):
+    name: str
+    members: tuple[_Member, ...]
+
+
+@dataclass(frozen=True)
+class _Finding:
+    severity: Literal["advisory", "blocking"]
+    message: str
+
+
+class _Review(BaseModel):
+    subject: str
+    findings: tuple[_Finding, ...]
+
+
+def _order() -> _Order:
+    return _Order(
+        customer="Northwind",
+        line_items=(_LineItem("cable", 3, 120), _LineItem("adapter", 2, 45), _LineItem("monitor", 1, 999)),
+    )
+
+
+def _team() -> _Team:
+    return _Team(
+        name="Platform",
+        members=(
+            _Member(name="Aoi", role="engineer", years=4),
+            _Member(name="Chiaki", role="manager", years=11),
+            _Member(name="Ren", role="designer", years=7),
+        ),
+    )
+
+
+def _review() -> _Review:
+    return _Review(
+        subject="billing service",
+        findings=(
+            _Finding("advisory", "Rename the retry helper."),
+            _Finding("blocking", "The refund path skips authorization."),
+            _Finding("advisory", "Add a docstring to the public client."),
+            _Finding("blocking", "Invoices are written before validation."),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("program", "make_inputs", "expected"),
+    [
+        pytest.param(
+            "Set <:result> to the total price of <order>: the sum of quantity times unit price over its line items.",
+            lambda: {"order": _order()},
+            1449,
+            id="dataclass-values",
+        ),
+        pytest.param(
+            "Set <:result> to the name of the member of <team> with the most years.",
+            lambda: {"team": _team()},
+            "Chiaki",
+            id="model-values",
+        ),
+        pytest.param(
+            "Set <:result> to the messages of the blocking findings in <review>, in their order, as a list.",
+            lambda: {"review": _review()},
+            ["The refund path skips authorization.", "Invoices are written before validation."],
+            id="dataclass-in-model-values",
+        ),
+    ],
+)
+async def test_nested_structured_inputs(
+    model_evaluation: ModelEvaluation, program: str, make_inputs: Callable[[], dict[str, object]], expected: object
+) -> None:
+    name_to_value = make_inputs()
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(program, input_binding_names=tuple(name_to_value), output_binding_names=("result",)),
+        name_to_value=name_to_value,
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"result": expected}
+
+
+async def test_nested_structured_input_selection_preserves_identity(model_evaluation: ModelEvaluation) -> None:
+    team = _team()
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Set <:result> to the member object in <team> with the most years.",
+            input_binding_names=("team",),
+            output_binding_names=("result",),
+        ),
+        name_to_value={"team": team},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed.keys() == {"result"}
+    assert committed["result"] is team.members[1]
+
+
 async def test_multiple_outputs(model_evaluation: ModelEvaluation) -> None:
     committed: dict[str, object] = {}
     model_evaluation.name_to_observation.update(bindings=committed)
