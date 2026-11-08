@@ -133,6 +133,7 @@ uv run --env-file .env pytest -q tests/integration/ -m model_evaluation \
 | `--evaluation-model MODEL` | Select a production model identifier. Repeat the option to compare models on the same cases. |
 | `--evaluation-repeat N` | Run each selected case/model N times with fresh fixture state; defaults to one. |
 | `--evaluation-settings JSON` | Supply `execution_model_settings` as a JSON object; defaults to production defaults. Applies to every selected model. |
+| `--evaluation-context-limits JSON` | Supply `StepContextLimits` fields as a JSON object, such as `'{"tool_result_max_tokens":4000}'`; defaults to production defaults. Applies to every selected model. |
 | `--evaluation-output DIRECTORY` | Write to a new directory. Defaults to a timestamped directory under ignored `evals/outputs/`. Existing directories are rejected. |
 | `-k EXPRESSION` | Select ordinary pytest test names or parameter Ids. |
 | `--collect-only` | Inspect the selected matrix without execution or result files. |
@@ -153,8 +154,8 @@ Ordinary pytest failure reporting and exit status remain authoritative.
 Each run writes:
 
 - `manifest.json`: selected tests, start time, Git revision, source-file hashes, and Python/package versions.
-- `trial-*.json`: model/settings, case parameters, repetition, pytest phase results, observations, lifecycle results, available model transcripts, elapsed time, and completed-agent usage.
-- `summary.json`: counts and per-case/model pass rates, elapsed time, and observed usage totals.
+- `trial-*.json`: model/settings and context limits, case parameters, repetition, pytest phase results, observations, lifecycle results, available model transcripts, elapsed time, and completed-agent usage.
+- `summary.json`: counts and per-case/model pass rates, elapsed time, and observed usage totals, including cache-read input tokens.
 
 The summary distinguishes `passed`, assertion `failed`, execution/setup/teardown `error`, `interrupted`, `skipped`, and `not_run`.
 Pass rates include failed, errored, and interrupted attempts; skipped and unattempted trials remain visible outside the denominator.

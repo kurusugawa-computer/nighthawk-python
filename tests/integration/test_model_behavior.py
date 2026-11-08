@@ -784,3 +784,135 @@ async def test_application_inspect_and_task_collision(model_evaluation: ModelEva
     assert outcome == Pass()
     assert name_to_value == {"result": 12}
     assert calls == [7]
+
+
+_NOTICE_TOPICS = (
+    "cafeteria hours",
+    "bicycle parking",
+    "meeting room bookings",
+    "printer maintenance",
+    "visitor registration",
+    "recycling collection",
+    "window cleaning",
+    "network upgrades",
+    "fire drill practice",
+    "plant watering",
+)
+
+
+def _facilities_notice() -> str:
+    paragraph_list = []
+    for index in range(100):
+        topic = _NOTICE_TOPICS[index % len(_NOTICE_TOPICS)]
+        paragraph_list.append(
+            f"Item {index + 1}: The schedule for {topic} changes during week {index % 9 + 1}. "
+            f"Staff on floor {index % 6 + 1} should check the updated plan posted near the lifts, "
+            f"and questions about {topic} go to the coordinator for zone {chr(65 + index % 5)}. "
+            "Previous arrangements stay valid until the new plan starts."
+        )
+    paragraph_list[9] = (
+        "Item 10: The loading dock code 2290-HERON expires at the end of this month. A replacement code is announced later in this notice."
+    )
+    paragraph_list[89] = "Item 90: The replacement access code for the loading dock is 4417-KESTREL. It applies from the first day of next month."
+    return "\n\n".join(paragraph_list)
+
+
+async def test_drained_text_is_read_beyond_the_tool_result_budget(model_evaluation: ModelEvaluation) -> None:
+    pending_list = [_facilities_notice()]
+    calls: list[str] = []
+
+    def take_notice() -> str:
+        """Remove the pending notice from the queue and return it; later calls return an empty string."""
+        calls.append("take")
+        return pending_list.pop() if pending_list else ""
+
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(calls=calls, bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Take the pending notice with <take_notice> and set <:result> to the replacement access code for the loading dock stated in it.",
+            input_binding_names=("take_notice",),
+            output_binding_names=("result",),
+        ),
+        name_to_value={"take_notice": take_notice},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"result": "4417-KESTREL"}
+
+
+_EVENT_NOTE_TEMPLATES = (
+    "Package for order {order} left the warehouse this morning.",
+    "Customer updated the delivery address for order {order}.",
+    "Customer asked whether order {order} can arrive before Friday.",
+    "Courier reported a one-day delay for order {order}.",
+    "Customer confirmed receipt of order {order} and left a rating.",
+    "Customer asked to add gift wrapping to order {order}.",
+)
+
+
+async def test_drained_records_are_read_beyond_the_tool_result_budget(model_evaluation: ModelEvaluation) -> None:
+    event_list = [
+        {"id": f"E{index:03}", "region": ("north", "south", "east", "west")[index % 4], "note": template.format(order=7000 + index)}
+        for index, template in ((index, _EVENT_NOTE_TEMPLATES[index % len(_EVENT_NOTE_TEMPLATES)]) for index in range(240))
+    ]
+    event_list[205]["note"] = "Customer wants their money back for order 7205 because the package arrived broken."
+    pending_list = [event_list]
+    calls: list[str] = []
+
+    def drain_events() -> list[dict[str, str]]:
+        """Remove the pending events from the queue and return them; later calls return an empty list."""
+        calls.append("drain")
+        return pending_list.pop() if pending_list else []
+
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(calls=calls, bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Drain the pending events with <drain_events> and set <:result> to the id of the event whose note asks for a refund.",
+            input_binding_names=("drain_events",),
+            output_binding_names=("result",),
+        ),
+        name_to_value={"drain_events": drain_events},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"result": "E205"}
+
+
+def _maintenance_manual() -> str:
+    section_list = [
+        f"Section {index + 1}: Inspect the {part} every {index % 5 + 2} weeks, record wear on the service card, "
+        f"and replace worn parts with the approved kit for model line {chr(70 + index % 6)}."
+        for index, part in enumerate(
+            ("door seals", "cabin filters", "wiper blades", "mirror mounts", "seat rails", "light housings", "cable guides", "hinge pins") * 20
+        )
+    ]
+    section_list[6] = "Section 7: Tighten the front axle bolts to 140 newton meters after any wheel change."
+    section_list[149] = "Section 150: Tighten the rear axle bolts to 185 newton meters after any wheel change."
+    return "\n".join(section_list)
+
+
+async def test_drained_native_tool_result_is_read_beyond_the_tool_result_budget(model_evaluation: ModelEvaluation) -> None:
+    pending_list = [_maintenance_manual()]
+    calls: list[str] = []
+
+    def read_manual() -> str:
+        """Return the maintenance manual; it can be read once, and later calls return an empty string."""
+        calls.append("read")
+        return pending_list.pop() if pending_list else ""
+
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(calls=calls, bindings=committed)
+    with nh.scope(tools=[read_manual]):
+        outcome = await execute_step_async(
+            StepDefinition(
+                "Read the maintenance manual with the read_manual tool and set <:result> to the torque in newton meters "
+                "specified for the rear axle bolts, as an integer.",
+                output_binding_names=("result",),
+            ),
+            name_to_value={},
+            write_binding=committed.__setitem__,
+        )
+    assert outcome == Pass()
+    assert committed == {"result": 185}

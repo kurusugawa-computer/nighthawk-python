@@ -20,7 +20,7 @@ from pydantic_ai import AgentRunResult
 from pydantic_core import to_jsonable_python
 
 import nighthawk as nh
-from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
 from nighthawk.core.lifecycle import StepFinished, StepLifecycle
 from nighthawk.core.usage import UsageMeter
 
@@ -58,7 +58,12 @@ class _Trial:
             usage = evaluation.usage.snapshot()
             self.record.update(
                 observations=_json_value(evaluation.name_to_observation),
-                usage={"requests": usage.request_count, "input_tokens": usage.input_token_count, "output_tokens": usage.output_token_count},
+                usage={
+                    "requests": usage.request_count,
+                    "input_tokens": usage.input_token_count,
+                    "cache_read_tokens": usage.cache_read_token_count,
+                    "output_tokens": usage.output_token_count,
+                },
                 steps=[
                     {
                         "kind": step.kind,
@@ -80,6 +85,7 @@ class _Trial:
 _TRIAL = pytest.StashKey[_Trial]()
 _TRIALS = pytest.StashKey[list[_Trial]]()
 _SETTINGS = pytest.StashKey[dict[str, Any]]()
+_CONTEXT_LIMITS = pytest.StashKey[StepContextLimits]()
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -87,6 +93,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--evaluation-model", action="append", default=[], help="Run model evaluations against this model; repeat to compare models.")
     group.addoption("--evaluation-repeat", type=int, default=1, help="Execute every selected model case this many times.")
     group.addoption("--evaluation-settings", default="{}", help="JSON execution_model_settings applied to each selected model.")
+    group.addoption("--evaluation-context-limits", default="{}", help="JSON StepContextLimits fields applied to each selected model.")
     group.addoption("--evaluation-output", help="New directory for trial records and summary; defaults to evals/outputs/<timestamp>.")
 
 
@@ -102,6 +109,10 @@ def pytest_configure(config: pytest.Config) -> None:
     if config.getoption("evaluation_output") and not config.getoption("evaluation_model"):
         raise pytest.UsageError("--evaluation-output requires --evaluation-model")
     config.stash[_SETTINGS] = settings
+    try:
+        config.stash[_CONTEXT_LIMITS] = StepContextLimits.model_validate_json(config.option.evaluation_context_limits)
+    except ValueError as exception:
+        raise pytest.UsageError(f"--evaluation-context-limits must be a JSON object of StepContextLimits fields: {exception}") from exception
     config.addinivalue_line("markers", "model_evaluation: explicitly selected, repeated live-model evaluation")
 
 
@@ -158,6 +169,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             "model": parameters["evaluation_model"],
             "repeat": parameters["evaluation_repeat"],
             "settings": config.stash[_SETTINGS],
+            "context_limits": config.stash[_CONTEXT_LIMITS].model_dump(exclude_defaults=True),
             "status": "not_run",
             "phases": {},
         }
@@ -175,7 +187,11 @@ def model_evaluation(request: pytest.FixtureRequest, evaluation_model: str | Non
     if evaluation_model is None:
         pytest.skip("Select live models with --evaluation-model")
     trial = request.node.stash[_TRIAL]
-    configuration = StepExecutorConfiguration(execution_model=evaluation_model, execution_model_settings=request.config.stash[_SETTINGS])
+    configuration = StepExecutorConfiguration(
+        execution_model=evaluation_model,
+        execution_model_settings=request.config.stash[_SETTINGS],
+        context_limits=request.config.stash[_CONTEXT_LIMITS],
+    )
     evaluation = ModelEvaluation(configuration)
     trial.evaluation = evaluation
     with (
@@ -248,7 +264,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
                 "pass_rate": counts["passed"] / attempted if attempted else None,
                 "seconds": sum(record.get("seconds", 0) for record in records),
                 "observed_usage": {
-                    name: sum(record.get("usage", {}).get(name, 0) for record in records) for name in ("requests", "input_tokens", "output_tokens")
+                    name: sum(record.get("usage", {}).get(name, 0) for record in records)
+                    for name in ("requests", "input_tokens", "cache_read_tokens", "output_tokens")
                 },
             }
         )
