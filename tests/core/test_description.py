@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import functools
 import inspect
-from dataclasses import dataclass
-from typing import Annotated
+from dataclasses import InitVar, dataclass, field
+from typing import Annotated, ClassVar, NamedTuple
 
 import pytest
 from pydantic import BaseModel, field_serializer
 
-from nighthawk.core.description import describe_callable, describe_public_members, discover_type_alias_reference_names
+from nighthawk.core.description import describe_callable, describe_public_members, discover_type_alias_reference_names, safe_preview
 from nighthawk.core.inspection import describe_value
 from tests.support.prompts import build_step_context, build_user_prompt_text
 
@@ -176,6 +176,85 @@ def test_slot_replaced_by_property_is_omitted_without_execution() -> None:
 
     Record.value = property(read_property)  # type: ignore[assignment]
     assert describe_public_members(record).omitted_names == ("value",)
+    assert effects == []
+
+
+class _Location(NamedTuple):
+    path: str
+    line: int
+
+
+@dataclass(slots=True)
+class _Finding:
+    severity: str
+    location: _Location
+    category: ClassVar[str] = "review"
+    scale: InitVar[int] = 1
+    note: str = field(default="", repr=False)
+
+    def __post_init__(self, scale: int) -> None:
+        del scale
+
+
+class _Report(BaseModel):
+    subject: str
+    findings: tuple[_Finding, ...]
+
+
+def test_nested_dataclass_and_model_previews_list_declared_fields_in_order() -> None:
+    report = _Report(subject="billing", findings=(_Finding("blocking", _Location("a.py", 3)),))
+    assert safe_preview({"report": report}, depth=5) == {
+        "report": {"subject": "billing", "findings": [{"severity": "blocking", "location": {"path": "a.py", "line": 3}, "note": ""}]}
+    }
+    assert safe_preview([report], depth=3) == [{"subject": "billing", "findings": ["<_Finding; fields omitted>"]}]
+
+
+def test_nested_instance_preview_snips_fields_beyond_the_item_limit() -> None:
+    @dataclass
+    class Wide:
+        first: int
+        second: int
+        third: int
+
+    assert safe_preview([Wide(1, 2, 3)], max_items=2) == [
+        {"first": 1, "second": 2, "<snipped>": "More named fields are available through inspection or Python access"}
+    ]
+
+
+def test_nested_instance_preview_reads_storage_without_attribute_hooks() -> None:
+    effects: list[str] = []
+
+    @dataclass
+    class Hooked:
+        value: int
+
+        def __getattribute__(self, name: str) -> object:
+            effects.append(name)
+            return super().__getattribute__(name)
+
+    context = build_step_context(python_globals={}, python_locals={"holder": {"item": Hooked(3)}})
+    effects.clear()
+    prompt = build_user_prompt_text(processed_natural_program="Describe <holder>.", step_context=context)
+    assert '"value":3' in prompt.replace(" ", "")
+    assert effects == []
+
+
+def test_nested_instance_with_descriptor_field_remains_opaque() -> None:
+    effects: list[str] = []
+
+    @dataclass
+    class Record:
+        value: int
+        label: str
+
+    record = Record(3, "kept")
+
+    def read_property(self: Record) -> int:
+        effects.append("property")
+        return 5
+
+    Record.value = property(read_property)  # type: ignore[assignment]
+    assert safe_preview([record]) == ["<opaque Record>"]
     assert effects == []
 
 

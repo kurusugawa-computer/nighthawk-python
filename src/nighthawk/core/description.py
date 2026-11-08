@@ -7,6 +7,7 @@ are not executed to obtain a description. Unknown values remain opaque.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import functools
 import inspect
 import sys
@@ -167,25 +168,62 @@ def safe_preview(
                 item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length, unknown_value=unknown_value
             )
         return key_to_preview
-    if any(base is tuple for base in class_bases(value_type)):
-        field_names = _static_attribute(value_type, "_fields")
-        if exact_type(field_names, tuple) and all(exact_type(name, str) for name in field_names):
-            if depth <= 0:
-                return f"<{_class_name(value_type)}; fields omitted>"
-            field_name_to_preview = {
-                name: safe_preview(
-                    tuple.__getitem__(typing.cast(tuple, value), i),
-                    depth=depth - 1,
-                    max_items=max_items,
-                    max_string_length=max_string_length,
-                    unknown_value=unknown_value,
-                )
-                for i, name in enumerate(field_names[:max_items])
-            }
-            if len(field_names) > max_items:
-                field_name_to_preview["<snipped>"] = "More named fields are available through inspection or Python access"
-            return field_name_to_preview
+    field_name_to_value = _declared_field_name_to_value(value)
+    if field_name_to_value is not None:
+        if depth <= 0:
+            return f"<{_class_name(value_type)}; fields omitted>"
+        field_name_to_preview = {
+            name: safe_preview(item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length, unknown_value=unknown_value)
+            for name, item in list(field_name_to_value.items())[:max_items]
+        }
+        if len(field_name_to_value) > max_items:
+            field_name_to_preview["<snipped>"] = "More named fields are available through inspection or Python access"
+        return field_name_to_preview
     return unknown_value(value) if unknown_value is not None else f"<opaque {type_name(value)}>"
+
+
+def _declared_field_name_to_value(value: object) -> dict[str, object] | None:
+    """Return the declared fields of a named tuple, dataclass, or Pydantic model instance in declaration order.
+
+    The instance is described only when every field value is stored in tuple items, the instance dictionary, or standard slots.
+    """
+    from pydantic import BaseModel
+
+    value_type = type(value)
+    bases = class_bases(value_type)
+    if any(base is tuple for base in bases):
+        field_names = _static_attribute(value_type, "_fields")
+        if not (exact_type(field_names, tuple) and all(exact_type(name, str) for name in field_names)):
+            return None
+        return {name: tuple.__getitem__(typing.cast(tuple, value), i) for i, name in enumerate(field_names)}
+    if any(base is BaseModel for base in bases):
+        model_fields = _static_attribute(value_type, "__pydantic_fields__")
+        if not (exact_type(model_fields, dict) and all(exact_type(name, str) for name in model_fields)):
+            return None
+        field_names = tuple(model_fields)
+    else:
+        dataclass_fields = _static_attribute(value_type, "__dataclass_fields__")
+        if not exact_type(dataclass_fields, dict):
+            return None
+        # dataclasses.fields() reads through attribute hooks; its filter excludes ClassVar and InitVar pseudo-fields.
+        field_list = [field for field in dataclass_fields.values() if exact_type(field, dataclasses.Field)]
+        if len(field_list) != len(dataclass_fields) or not all(exact_type(field.name, str) for field in field_list):
+            return None
+        field_names = tuple(field.name for field in field_list if field._field_type is dataclasses._FIELD)  # type: ignore[attr-defined]
+    instance_name_to_value = _instance_namespace(value)
+    field_name_to_value: dict[str, object] = {}
+    for name in field_names:
+        class_attribute = _class_attribute(value_type, name)
+        if exact_type(class_attribute, types.MemberDescriptorType):
+            try:
+                field_name_to_value[name] = class_attribute.__get__(value, value_type)
+            except AttributeError:
+                return None
+        elif _is_data_descriptor(class_attribute) or name not in instance_name_to_value:
+            return None
+        else:
+            field_name_to_value[name] = instance_name_to_value[name]
+    return field_name_to_value
 
 
 def _safe_literal(value: object) -> str:

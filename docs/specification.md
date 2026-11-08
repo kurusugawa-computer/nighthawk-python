@@ -459,8 +459,11 @@ Rendering format:
 - Complete previews of ordinary scalar, list, and string-keyed dictionary values use Python literals, including `None`, `True`, and `False`.
   JSON preview rendering and its configured style still supply bounded summaries; JSON literals outside strings are translated to Python spelling for context display.
   Lossy or non-literal previews appear in `# preview: ...` comments rather than assignments to invented values.
-  This includes truncated containers and strings, tuples projected as lists, opaque objects, and non-finite floats.
+  This includes truncated containers and strings, tuples projected as lists, instances projected as field mappings, opaque objects, and non-finite floats.
   Display does not execute application equality, representation, annotation, or serialization code.
+- Value previews project named tuple, dataclass, and Pydantic model instances to mappings of their declared fields in declaration order, within the same depth and item bounds as containers.
+    - An instance is projected only when every declared field value is stored in tuple items, the instance dictionary, or standard slots; otherwise it remains opaque.
+    - Dataclass `ClassVar` and `InitVar` pseudo-fields, Pydantic extra and private attributes, computed fields, and properties are not shown.
 - Top-level Pydantic AI multimodal values are rendered as `name: TypeName  # attached content: ` followed by inline user content in the prompt payload.
     - This applies to top-level locals/globals entries.
 - Top-level `list` / `tuple` values are also rendered as inline user content when every item is valid Pydantic AI `UserContent` and at least one item is multimodal.
