@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import re
 from collections import namedtuple
 from contextlib import nullcontext
 from typing import Any
@@ -344,7 +345,7 @@ _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 def test_provider_backed_tool_return_preserves_mixed_list_order_via_content_items() -> None:
     """Provider-backed models read ``ToolReturnPart.content_items``; ``resolve_tool_return_segments`` short-circuits only the MCP path."""
     image = BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png", identifier="img-1")
-    normalized = _normalize_tool_success(["caption", image, "tail"])
+    normalized = _normalize_tool_success(["caption", image, "tail"], step_context=_new_step_context())
 
     tool_return_part = ToolReturnPart(tool_name="sample_tool", content=normalized["payload"])
     items = tool_return_part.content_items(mode="str")
@@ -358,7 +359,7 @@ def test_tool_success_preserves_multimodal_items_in_list_subclass() -> None:
 
     image = BinaryContent(data=_VALID_PNG_HEADER, media_type="image/png", identifier="img-1")
 
-    normalized = _normalize_tool_success(MediaList(["caption", image, "tail"]))
+    normalized = _normalize_tool_success(MediaList(["caption", image, "tail"]), step_context=_new_step_context())
 
     assert normalized["payload"] == ["caption", image, "tail"]
     tool_return_part = ToolReturnPart(tool_name="sample_tool", content=normalized["payload"])
@@ -418,3 +419,119 @@ def test_provider_evaluation_bounds_text_and_states_where_to_continue() -> None:
     shown, marker = result.rsplit("\n", 1)
     assert len(tiktoken.get_encoding("o200k_base").encode(result)) <= 200
     assert marker == f"<+{40_000 - len(shown)} characters; request[{len(shown)}:]>"
+
+
+def _continuation(result: str) -> str:
+    match = re.search(r"<\+\d+ (?:characters|items|entries); ([^>]+)>", result)
+    assert match is not None, result
+    return match[1]
+
+
+def test_call_results_keep_omitted_parts_readable_without_repeating_the_call() -> None:
+    call_list: list[object] = []
+
+    def load_report() -> str:
+        report = "".join(f"line {index}\n" for index in range(2_000))
+        call_list.append(report)
+        return report
+
+    def list_rows() -> list[dict[str, int]]:
+        row_list = [{"row": index} for index in range(300)]
+        call_list.append(row_list)
+        return row_list
+
+    context = build_step_context(python_globals={}, python_locals={"load_report": load_report, "list_rows": list_rows})
+    policy = ToolResultRenderingPolicy("o200k_base", 200, 8)
+
+    async def execute() -> None:
+        run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
+        toolset = ToolResultWrapperToolset(FunctionToolset(get_provided_tools()))
+        evaluate = (await toolset.get_tools(run_context))["nh_evaluate"]
+
+        async def evaluate_text(expression: str) -> str:
+            result = await toolset.call_tool("nh_evaluate", {"expression": expression}, run_context, evaluate)
+            assert isinstance(result, str)
+            return result
+
+        report_text = await evaluate_text("load_report()")
+        report_continuation = _continuation(report_text)
+        assert report_continuation.startswith("nh_results[0][")
+        shown = report_text.rsplit("\n", 1)[0]
+        rest = await evaluate_text(report_continuation)
+        assert call_list[0][len(shown) :].startswith(rest.rsplit("\n", 1)[0])  # type: ignore[index]
+        assert _continuation(rest).startswith("nh_results[1][")
+
+        assert await evaluate_text("len(list_rows())") == "300"
+        assert context.environment._next_result_path() == "nh_results[2]"
+
+        row_continuation = _continuation(await evaluate_text("list_rows()"))
+        assert row_continuation.startswith("nh_results[2][")
+        namespace = context.environment._expression_namespace()
+        retained = namespace["nh_results"]
+        assert isinstance(retained, tuple) and retained[0] is call_list[0] and retained[2] is call_list[2]
+        omitted_start = int(row_continuation.removeprefix("nh_results[2][").removesuffix(":]"))
+        assert eval(row_continuation, namespace, namespace) == call_list[2][omitted_start:]  # type: ignore[index]
+        assert len(call_list) == 3
+
+    with rendering_scope(policy):
+        asyncio.run(execute())
+
+
+def test_native_tool_results_and_self_references_name_the_retained_result() -> None:
+    fetch_count = 0
+
+    def fetch_document() -> str:
+        """Return the document."""
+        nonlocal fetch_count
+        fetch_count += 1
+        return "word " * 5_000
+
+    def build_loop() -> list[object]:
+        """Return a list that contains itself."""
+        loop: list[object] = ["start"]
+        loop.append(loop)
+        return loop
+
+    context = build_step_context(python_globals={}, python_locals={})
+    policy = ToolResultRenderingPolicy("o200k_base", 200, 8)
+
+    async def execute() -> None:
+        run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
+        native_toolset = ToolResultWrapperToolset(FunctionToolset([fetch_document, build_loop]))
+        native_tool_name_to_tool = await native_toolset.get_tools(run_context)
+        with nh.run(StubExecutor()), set_current_run_context(run_context):
+            document = await native_toolset.call_tool("fetch_document", {}, run_context, native_tool_name_to_tool["fetch_document"])
+            loop_text = await native_toolset.call_tool("build_loop", {}, run_context, native_tool_name_to_tool["build_loop"])
+        assert isinstance(document, str) and isinstance(loop_text, str)
+        assert _continuation(document).startswith("nh_results[0][")
+        assert loop_text == "['start', nh_results[1]]"
+
+        provided_toolset = ToolResultWrapperToolset(FunctionToolset(get_provided_tools()))
+        evaluate = (await provided_toolset.get_tools(run_context))["nh_evaluate"]
+        rest = await provided_toolset.call_tool("nh_evaluate", {"expression": _continuation(document)}, run_context, evaluate)
+        assert isinstance(rest, str) and rest.strip().startswith("word")
+        identity = await provided_toolset.call_tool("nh_evaluate", {"expression": "nh_results[1][1] is nh_results[1]"}, run_context, evaluate)
+        assert identity == "True"
+        assert fetch_count == 1
+
+    with rendering_scope(policy):
+        asyncio.run(execute())
+
+
+def test_path_results_and_complete_results_are_not_retained() -> None:
+    context = build_step_context(python_globals={}, python_locals={"request": "text " * 2_000, "small": [1, 2]})
+    policy = ToolResultRenderingPolicy("o200k_base", 200, 8)
+
+    async def execute() -> None:
+        run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
+        toolset = ToolResultWrapperToolset(FunctionToolset(get_provided_tools()))
+        evaluate = (await toolset.get_tools(run_context))["nh_evaluate"]
+        for expression in ("request", "list(small)", "len(request)"):
+            result = await toolset.call_tool("nh_evaluate", {"expression": expression}, run_context, evaluate)
+            assert isinstance(result, str) and "nh_results" not in result
+        error = await toolset.call_tool("nh_evaluate", {"expression": "1 / 0"}, run_context, evaluate)
+        assert isinstance(error, str) and error.startswith("error = ")
+        assert context.environment._next_result_path() == "nh_results[0]"
+
+    with rendering_scope(policy):
+        asyncio.run(execute())

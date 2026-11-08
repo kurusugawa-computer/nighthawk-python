@@ -43,8 +43,9 @@ _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 @pytest.mark.parametrize("budget", [64, 128, 512])
 def test_discovery_content_is_rendered_under_the_active_rendering_policy(budget: int) -> None:
     environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
-    with step_context_scope(new_context()), rendering_scope(ToolResultRenderingPolicy("o200k_base", budget, 8)):
-        tool_outcome = _normalize_tool_success(environment.discover(source="task"))
+    step_context = new_context()
+    with step_context_scope(step_context), rendering_scope(ToolResultRenderingPolicy("o200k_base", budget, 8)):
+        tool_outcome = _normalize_tool_success(environment.discover(source="task"), step_context=step_context)
         content = mcp_boundary_module.tool_handler_result_to_low_level_mcp_content(
             tool_name="discovery",
             tool_handler_result=_test_tool_handler_result(payload=tool_outcome["payload"]),

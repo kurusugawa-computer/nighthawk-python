@@ -212,7 +212,7 @@ async def execute_tool_call(
         elif observed_toolset.outcome is not None and value is observed_toolset.return_value:
             tool_outcome = observed_toolset.outcome
         else:
-            tool_outcome = _normalize_tool_success(value)
+            tool_outcome = _normalize_tool_success(value, step_context=run_context.deps)
 
     return ToolResultObservation(kind="tool_result", tool_outcome=tool_outcome)
 

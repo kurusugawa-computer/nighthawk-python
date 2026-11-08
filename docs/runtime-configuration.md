@@ -508,6 +508,7 @@ See [Specification Section 8.2](specification.md#82-prompt-context) for the full
 Values in LOCALS and GLOBALS and tool results use Python notation: literals for builtin values and constructor form for dataclass, named tuple, and Pydantic model instances.
 `value_max_tokens`, `object_field_value_max_tokens`, and `tool_result_max_tokens` bound each rendering, and `value_max_depth` bounds its nesting depth.
 Omitted parts are marked with their amount and, when available, the Python expression that reads them, such as `<+22 items; items[8:]>`.
+A tool result that is not read from a name, such as a helper call or a native tool return, keeps its omitted parts readable until the step ends through a step-scoped sequence, such as `<+22 items; nh_results[3][8:]>`, so reading them does not repeat the call.
 An object shown again in the same context is written as the path where it first appeared, such as `p.d: Q = o.b`.
 
 ```py

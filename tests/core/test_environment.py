@@ -137,6 +137,24 @@ def test_existing_python_names_require_output_declaration() -> None:
             environment.assign(name, 9)
 
 
+def test_retained_results_are_read_through_a_reserved_name_that_avoids_application_names() -> None:
+    environment = StepEnvironment(python_name_to_value={"nh_results": "application"}, python_globals={}, task_name_to_value={"nh_results_1": 1})
+    assert environment.result_reference == "nh_results_2"
+    assert environment._next_result_path() == "nh_results_2[0]"
+    retained = ["first"]
+    environment._retain_result(retained)
+    assert environment._next_result_path() == "nh_results_2[1]"
+    namespace = environment._expression_namespace()
+    retained_sequence = namespace["nh_results_2"]
+    assert isinstance(retained_sequence, tuple) and retained_sequence[0] is retained
+    assert namespace["nh_results"] == "application"
+    with pytest.raises(ValueError, match="Cannot rebind"):
+        environment.assign("nh_results_2", [])
+    assert environment.result_reference not in environment.step_name_to_value
+    assert environment.result_reference not in environment.snapshot_working_state()
+    assert all(item["name"] != environment.result_reference for item in environment.discover(max_items=50)["names"])  # type: ignore[union-attr]
+
+
 def test_nested_natural_counter_proof() -> None:
     child_parent_execution_id_list: list[str] = []
     parent_execution_id_list: list[str] = []

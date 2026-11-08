@@ -351,3 +351,29 @@ def test_backend_handler_preserves_oversight_abort_and_records_tool_span_event(
     assert oversight_attributes["run.id"]
     assert oversight_attributes["scope.id"]
     assert oversight_attributes["step.execution.id"] == "test_tool_boundary"
+
+
+def test_backend_handler_names_the_retained_result_in_omission_markers() -> None:
+    def long_listing() -> list[int]:  # type: ignore[no-untyped-def]
+        return list(range(2_000))
+
+    step_context = _new_step_context()
+    run_context = RunContext(deps=step_context, model=TestModel(), usage=RunUsage())
+    with nh.run(StubExecutor()), nh.scope(tools=[Tool(long_listing, name="long_listing")]):
+        visible_tools = get_visible_tools()
+    base_toolset = FunctionToolset(visible_tools)
+
+    async def call_handler() -> ToolHandlerResult:
+        with set_current_run_context(run_context):
+            tool_def = (await base_toolset.get_tools(run_context))["long_listing"].tool_def
+            handlers = await build_tool_name_to_handler(
+                model_request_parameters=ModelRequestParameters(function_tools=[tool_def]), visible_tools=visible_tools
+            )
+            return await handlers["long_listing"]({})
+
+    with nh.run(StubExecutor()):
+        result = anyio.run(call_handler)
+    preview = _render_preview_text_for_test(result)
+    assert "; nh_results[0][" in preview
+    retained = step_context.environment._expression_namespace()["nh_results"]
+    assert isinstance(retained, tuple) and retained[0] == list(range(2_000))

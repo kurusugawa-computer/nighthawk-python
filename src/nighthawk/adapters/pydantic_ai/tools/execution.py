@@ -29,9 +29,11 @@ def _is_native_content(item: object) -> bool:
     return is_multi_modal_content(item) or isinstance(item, CachePoint)
 
 
-def _normalize_tool_success(value: object, *, root_path: str | None = None) -> ToolOutcome:
+def _normalize_tool_success(value: object, *, step_context: StepContext, root_path: str | None = None) -> ToolOutcome:
     """Render the return in Python form within the tool result budget; multimodal items stay native for transports.
 
+    A result without *root_path* is rendered under the step's next retained-result path and retained only when its text
+    names that path, so omission markers and self-references stay readable without repeating the call.
     None stays an empty success, as Pydantic AI renders it.
     """
     if value is None:
@@ -39,25 +41,42 @@ def _normalize_tool_success(value: object, *, root_path: str | None = None) -> T
     policy = get_rendering_policy()
     encoding = tiktoken.get_encoding(policy.tokenizer_encoding_name)
 
-    def render(item: object, max_tokens: int, path: str | None = None) -> str:
+    def render(item: object, max_tokens: int, item_path: str) -> str:
         projected = project_discovery_value(item, max_tokens=max_tokens, encoding=encoding, max_depth=policy.value_max_depth)
         if projected is not None:
             return projected.text
-        return render_tool_value_text(item, max_tokens=max_tokens, encoding=encoding, max_depth=policy.value_max_depth, path=path)
+        return render_tool_value_text(item, max_tokens=max_tokens, encoding=encoding, max_depth=policy.value_max_depth, path=item_path)
 
+    # Unwrapped TextContent is a new value, so the evaluated expression no longer reads what is shown.
     if isinstance(value, TextContent):
         value = value.content
+        root_path = None
     if _is_native_content(value):
         return {"payload": value, "error": None}
+    native_item_list: list[object] | None = None
     if is_top_level_sequence_payload(value):
         item_list = [item.content if isinstance(item, TextContent) else item for item in value]
-        if any(_is_native_content(item) for item in item_list):
-            rendered_item_count = sum(1 for item in item_list if not _is_native_content(item))
-            item_max_tokens = max(policy.tool_result_max_tokens // max(rendered_item_count, 1), 1)
-            return {"payload": [item if _is_native_content(item) else render(item, item_max_tokens) for item in item_list], "error": None}
         if any(isinstance(item, TextContent) for item in value):
+            root_path = None
             value = item_list if isinstance(value, list) else tuple(item_list)
-    return {"payload": render(value, policy.tool_result_max_tokens, root_path), "error": None}
+        if any(_is_native_content(item) for item in item_list):
+            native_item_list = item_list
+    environment = step_context.environment
+    path = root_path if root_path is not None else environment._next_result_path()
+    if native_item_list is not None:
+        rendered_item_count = sum(1 for item in native_item_list if not _is_native_content(item))
+        item_max_tokens = max(policy.tool_result_max_tokens // max(rendered_item_count, 1), 1)
+        payload_list = [
+            item if _is_native_content(item) else render(item, item_max_tokens, f"{path}[{index}]") for index, item in enumerate(native_item_list)
+        ]
+        payload: object = payload_list
+        text_list = [item for item in payload_list if isinstance(item, str)]
+    else:
+        payload = render(value, policy.tool_result_max_tokens, path)
+        text_list = [payload]
+    if root_path is None and any(path in text for text in text_list):
+        environment._retain_result(value)
+    return {"payload": payload, "error": None}
 
 
 def _reference_path(expression: object) -> str | None:
@@ -128,7 +147,7 @@ async def _run_tool_and_normalize(
             raise
         return {"payload": None, "error": error}
 
-    return _normalize_tool_success(value, root_path=root_path)
+    return _normalize_tool_success(value, step_context=step_context, root_path=root_path)
 
 
 def operation_failure_feedback(step_context: StepContext, exception: Exception) -> ToolError | None:

@@ -710,6 +710,11 @@ Tool result transport contract:
 - Tool results use the value notation of the step context and are bounded by `context_limits.tool_result_max_tokens` on every transport.
     - Success: the rendered return value. A top-level string is sent as its text; a truncated string ends with a line such as `<+12040 characters; request[3000:]>`. `None` remains an empty success.
     - When `nh_evaluate` evaluates a name with attribute and constant-subscript access, that expression is the path of the result, so shared references and omission markers name expressions that read the omitted parts.
+    - Every other successful result, including native tool results and tool calls from coding-agent backends, is rendered under the step's next retained-result path, such as `nh_results[3]`.
+      The result is retained only when its rendering names that path, through an omission marker such as `<+22 items; nh_results[3][8:]>` or a reference to an object shown earlier in the same result, so the model reads omitted parts by evaluating the marker expression instead of repeating the call.
+      Retained results remain the same live objects until the step ends.
+      The reserved sequence name avoids application names (for example, `nh_results_1`), cannot be assigned, and does not appear in LOCALS, discovery, outputs, child steps, later steps, or the caller.
+      Failures are not retained.
     - Failure: `error = {'kind': '<category>', 'message': '<detail>', 'guidance': '<recovery hint>', ...}`. Control feedback for refused or skipped operations is not shortened by the budget.
     - The default system prompt states the notation and the tool-result budget.
 - Multimodal-capable transports MAY send top-level multimodal payload items natively instead of embedding them into the preview text.

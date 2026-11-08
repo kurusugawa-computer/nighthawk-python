@@ -62,7 +62,13 @@ class _ExpressionNamespace(dict[str, object]):
     """Use one live namespace for top-level and nested Python expression scopes."""
 
     def __init__(self, environment: StepEnvironment) -> None:
-        super().__init__({"__builtins__": environment._python_builtin_name_to_value, environment.runtime_reference: _RuntimeAccess(environment)})
+        super().__init__(
+            {
+                "__builtins__": environment._python_builtin_name_to_value,
+                environment.runtime_reference: _RuntimeAccess(environment),
+                environment.result_reference: tuple(environment._retained_result_list),
+            }
+        )
         self._environment = environment
 
     def __missing__(self, name: str) -> object:
@@ -89,6 +95,7 @@ class StepEnvironment:
 
     Python working associations and scoped task references are captured at entry.
     Application values remain live; the views do not freeze their object graphs.
+    Expressions read retained tool results, in retention order, through the reserved ``result_reference`` sequence.
     """
 
     def __init__(
@@ -134,7 +141,15 @@ class StepEnvironment:
         while f"__nighthawk_runtime_{suffix}" in known_names:
             suffix += 1
         self.runtime_reference = f"__nighthawk_runtime_{suffix}"
-        self._runtime_name_set = self._runtime_name_set | {self.runtime_reference}
+        # Omission markers spell this name, so it stays short and readable while avoiding application names.
+        result_reference = "nh_results"
+        suffix = 0
+        while result_reference in known_names:
+            suffix += 1
+            result_reference = f"nh_results_{suffix}"
+        self.result_reference = result_reference
+        self._retained_result_list: list[object] = []
+        self._runtime_name_set = self._runtime_name_set | {self.runtime_reference, self.result_reference}
 
     def _is_runtime_name(self, name: str) -> bool:
         return name in self._runtime_name_set
@@ -192,12 +207,22 @@ class StepEnvironment:
         raise MissingEnvironmentNameError(f"Name {name!r} is absent from the {source} environment", name=name)
 
     def _check_assignment(self, name: str) -> None:
-        if name == self.runtime_reference or (self._has_python_name(name) and name not in self._output_name_set):
+        if name in (self.runtime_reference, self.result_reference):
+            raise ValueError(f"Cannot rebind runtime name {name!r}")
+        if self._has_python_name(name) and name not in self._output_name_set:
             raise ValueError(f"Cannot rebind Python name {name!r}; declare <:{name}> for Python writeback")
 
     def assign(self, name: str, value: object) -> None:
         self._check_assignment(name)
         self._step_name_to_value[name] = value
+
+    def _next_result_path(self) -> str:
+        """Return the expression that reads the next retained tool result."""
+        return f"{self.result_reference}[{len(self._retained_result_list)}]"
+
+    def _retain_result(self, value: object) -> None:
+        """Keep a tool result whose presentation named ``_next_result_path()`` readable until the step ends."""
+        self._retained_result_list.append(value)
 
     def snapshot_working_state(self) -> dict[str, object]:
         """Copy this step's bound working names for explicit application-owned sharing.
@@ -281,7 +306,7 @@ class StepEnvironment:
             "shadowed_sources": sources[1:],
             "unbound": unbound,
             "write_eligible": source in ("effective", "step")
-            and name != self.runtime_reference
+            and name not in (self.runtime_reference, self.result_reference)
             and (name in self._output_name_set or not self._has_python_name(name)),
             "annotation": None if annotation is MISSING_ANNOTATION else annotation_text(annotation),
             "output_contract": None if contract is MISSING_ANNOTATION else annotation_text(contract),

@@ -21,6 +21,7 @@ from nighthawk.adapters.pydantic_ai.tools.provided import get_provided_tools
 from nighthawk.core.environment import StepEnvironment
 from nighthawk.core.inspection import describe_value
 from tests.support.prompts import build_step_context
+from tests.support.tools import _new_step_context
 
 _ENCODING = tiktoken.get_encoding("o200k_base")
 
@@ -32,7 +33,7 @@ def literal_payload(text: str) -> Any:
 
 def normalized_text(value: object, max_tokens: int) -> str:
     with rendering_scope(ToolResultRenderingPolicy("o200k_base", max_tokens, 8)):
-        payload = _normalize_tool_success(value)["payload"]
+        payload = _normalize_tool_success(value, step_context=_new_step_context())["payload"]
     assert isinstance(payload, str)
     assert len(_ENCODING.encode(payload)) <= max_tokens
     return payload
@@ -147,7 +148,7 @@ def test_provider_and_content_boundary_preserve_nested_discovery_and_native_medi
             tool_name_to_tool["nh_evaluate"],
         )
         assert_continuation(literal_payload(result)["discovery"][0], context.environment)
-        normalized = _normalize_tool_success([{"discovery": context.environment.discover(source="task")}, payload])["payload"]
+        normalized = _normalize_tool_success([{"discovery": context.environment.discover(source="task")}, payload], step_context=context)["payload"]
         assert isinstance(normalized, list) and normalized[1] is payload
         assert_continuation(literal_payload(normalized[0])["discovery"], context.environment)
         segments = resolve_tool_return_segments(tool_name="nh_evaluate", payload=normalized)
