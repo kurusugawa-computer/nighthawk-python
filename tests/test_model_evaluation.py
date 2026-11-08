@@ -40,7 +40,7 @@ from nighthawk.core.testing import CallbackExecutor
 @pytest.fixture(autouse=True)
 def local_executor(monkeypatch):
     def respond(request):
-        get_scope().usage_meter.record(ExecutionUsage(input_token_count=11, output_token_count=7, request_count=2))
+        get_scope().usage_meter.record(ExecutionUsage(input_token_count=11, cache_read_token_count=4, output_token_count=7, request_count=2))
         request.input_binding_name_to_value["items"].append(9)
         return StepCandidate(binding_name_to_value={"result": None})
     monkeypatch.setattr(AgentStepExecutor, "resolve_model_selection", lambda self, selection: CallbackExecutor(respond))
@@ -103,6 +103,8 @@ def test_evaluation_records_every_repeat_and_separates_failures(evaluation_proje
         "2",
         "--evaluation-settings",
         '{"temperature": 0.2}',
+        "--evaluation-context-limits",
+        '{"tool_result_max_tokens": 4000}',
         "--evaluation-output",
         str(output),
     )
@@ -116,10 +118,11 @@ def test_evaluation_records_every_repeat_and_separates_failures(evaluation_proje
     assert {record["repeat"] for record in records} == {1, 2}
     assert {record["model"] for record in records} == {"test:first", "test:second"}
     assert all(record["settings"] == {"temperature": 0.2} for record in records)
+    assert all(record["context_limits"] == {"tool_result_max_tokens": 4000} for record in records)
     for record in records:
         if record["case"].endswith("::test_pass") or record["case"].endswith("::test_assertion_failure"):
             assert record["observations"]["items"] == [9]
-            assert record["usage"] == {"requests": 2, "input_tokens": 11, "output_tokens": 7}
+            assert record["usage"] == {"requests": 2, "input_tokens": 11, "cache_read_tokens": 4, "output_tokens": 7}
             assert record["steps"][0]["bindings"] == {"result": None}
         if record["case"].endswith("::test_teardown_failure"):
             assert record["status"] == "error"
@@ -172,7 +175,7 @@ from nighthawk.core.scoping import get_scope
 from nighthawk.core.usage import ExecutionUsage
 
 async def test_interrupt(model_evaluation):
-    get_scope().usage_meter.record(ExecutionUsage(input_token_count=11, output_token_count=7, request_count=2))
+    get_scope().usage_meter.record(ExecutionUsage(input_token_count=11, cache_read_token_count=4, output_token_count=7, request_count=2))
     model_evaluation.name_to_observation["retained_effect"] = True
     raise {interruption}()
 
@@ -185,11 +188,20 @@ def test_after(model_evaluation):
     record = json.loads((output / "trial-0001.json").read_text())
     assert record["status"] == "interrupted"
     assert record["observations"] == {"retained_effect": True}
-    assert record["usage"] == {"requests": 2, "input_tokens": 11, "output_tokens": 7}
+    assert record["usage"] == {"requests": 2, "input_tokens": 11, "cache_read_tokens": 4, "output_tokens": 7}
     assert json.loads((output / "summary.json").read_text())["counts"]["interrupted"] == 1
 
 
-@pytest.mark.parametrize("option,value", [("--evaluation-repeat", "0"), ("--evaluation-settings", "[]"), ("--evaluation-settings", "invalid")])
+@pytest.mark.parametrize(
+    "option,value",
+    [
+        ("--evaluation-repeat", "0"),
+        ("--evaluation-settings", "[]"),
+        ("--evaluation-settings", "invalid"),
+        ("--evaluation-context-limits", "[]"),
+        ("--evaluation-context-limits", '{"unknown_limit": 1}'),
+    ],
+)
 def test_invalid_evaluation_options_fail_before_execution(evaluation_project: Path, option: str, value: str) -> None:
     result = _run(evaluation_project, option, value)
     assert result.returncode == 4
