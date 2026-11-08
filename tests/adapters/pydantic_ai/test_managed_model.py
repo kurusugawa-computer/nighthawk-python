@@ -22,6 +22,7 @@ from pydantic_ai.usage import RequestUsage
 import nighthawk as nh
 from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.adapters.pydantic_ai.prompt import build_system_prompt
 from nighthawk.core import oversight
 from nighthawk.core.operation_contract import OperationRequest
 from nighthawk.core.scoping import get_scope
@@ -105,7 +106,7 @@ def test_managed_model_keeps_prompts_tools_settings_and_dynamic_contract(
         assert "configured-user" in prompt and "scoped-user" in prompt
         assert "<<<NH:PROGRAM>>>" in prompt
         assert any(
-            isinstance(part, SystemPromptPart) and part.content.startswith(configuration.system_prompt_template)
+            isinstance(part, SystemPromptPart) and part.content.startswith(build_system_prompt(configuration=configuration))
             for message in messages
             for part in message.parts
         )

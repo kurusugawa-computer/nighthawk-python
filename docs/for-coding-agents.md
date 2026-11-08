@@ -177,7 +177,7 @@ Natural functions are also callables and can serve as judgment helpers.
 
 Use module-level helpers for stable capabilities and explicit parameters for invocation-specific data.
 Reduce incidental locals and large previews before increasing context limits.
-Presentation and callable metadata discovery are best-effort: a `<snipped>` preview does not mean the underlying value is missing.
+Presentation and callable metadata discovery are best-effort: an omission marker such as `# <snipped>` or `<+22 items; items[8:]>` does not mean the underlying value is missing.
 Provide focused retrieval helpers for large data and make essential dependencies explicit.
 
 Read [binding function design](https://kurusugawa-computer.github.io/nighthawk-python/natural-blocks/#designing-binding-functions) when designing a larger capability surface, and [cross-block composition](https://kurusugawa-computer.github.io/nighthawk-python/patterns/#cross-block-composition) before relying on inherited context or shared mutable state.

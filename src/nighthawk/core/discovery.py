@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import tiktoken
 
-
-def map_discovery_containers(
-    value: object, transform_leaf: Callable[[object], object], *, transform_key: Callable[[object], object] | None = None
-) -> object:
+def map_discovery_containers(value: object, transform_leaf: Callable[[object], object]) -> object:
     """Visit exact builtin containers, treating discovery pages as atomic leaves."""
     active_object_id_set: set[int] = set()
 
@@ -24,7 +19,7 @@ def map_discovery_containers(
         active_object_id_set.add(id(item))
         try:
             if isinstance(item, dict):
-                return {(transform_key(key) if transform_key is not None else key): visit(value) for key, value in item.items()}
+                return {key: visit(value) for key, value in item.items()}
             assert isinstance(item, (list, tuple))
             return [visit(value) for value in item]
         finally:
@@ -61,9 +56,11 @@ class DiscoveryResult(dict[str, object]):
         self._item_count = item_count
         self._repage = repage
 
-    def for_budget(self, max_tokens: int, encoding: tiktoken.Encoding) -> dict[str, object]:
+    def for_budget(self, max_tokens: int, count_tokens: Callable[[dict[str, object]], int]) -> dict[str, object]:
+        """Return the largest page whose rendering, as counted by *count_tokens*, fits *max_tokens*."""
+
         def fits(description: dict[str, object]) -> bool:
-            return len(encoding.encode(json.dumps(description, ensure_ascii=False, separators=(",", ":")))) <= max_tokens
+            return count_tokens(description) <= max_tokens
 
         candidate = dict(self)
         if fits(candidate):

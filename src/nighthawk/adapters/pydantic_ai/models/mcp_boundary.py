@@ -43,7 +43,6 @@ def _tool_outcome_to_mcp_content_list(
     *,
     tool_name: str,
     tool_outcome: ToolOutcome,
-    rendering_policy: ToolResultRenderingPolicy,
 ) -> list[object]:
     from mcp import types as mcp_types
 
@@ -52,7 +51,6 @@ def _tool_outcome_to_mcp_content_list(
     segments = resolve_tool_return_segments(
         tool_name=tool_name,
         payload=tool_outcome["payload"],
-        rendering_policy=rendering_policy,
     )
     if segments.is_empty_success():
         return []
@@ -156,7 +154,7 @@ def tool_handler_result_to_low_level_mcp_content(
             tool_handler_result=tool_handler_result,
             max_tokens=effective_rendering_policy.tool_result_max_tokens,
             encoding=encoding,
-            style=effective_rendering_policy.json_renderer_style,
+            max_depth=effective_rendering_policy.value_max_depth,
         )
 
     if tool_handler_result["kind"] != "tool_result":
@@ -170,7 +168,6 @@ def tool_handler_result_to_low_level_mcp_content(
         return _tool_outcome_to_mcp_content_list(
             tool_name=tool_name,
             tool_outcome=tool_outcome,
-            rendering_policy=effective_rendering_policy,
         )
     except Exception as exception:
         _record_mcp_projection_fallback(tool_name=tool_name, exception=exception)

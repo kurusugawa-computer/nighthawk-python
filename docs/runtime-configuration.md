@@ -503,9 +503,23 @@ configuration = StepExecutorConfiguration(
 
 See [Specification Section 8.2](specification.md#82-prompt-context) for the full specification.
 
-## JSON rendering style
+## Value rendering
 
-`StepExecutorConfiguration` also accepts `json_renderer_style`, which controls how values are rendered in prompt context and tool results (e.g., strict JSON vs annotated pseudo-JSON with omission markers). See [Specification Section 5.2](specification.md#52-configuration) for available styles.
+Values in LOCALS and GLOBALS and tool results use Python notation: literals for builtin values and constructor form for dataclass, named tuple, and Pydantic model instances.
+`value_max_tokens`, `object_field_value_max_tokens`, and `tool_result_max_tokens` bound each rendering, and `value_max_depth` bounds its nesting depth.
+Omitted parts are marked with their amount and, when available, the Python expression that reads them, such as `<+22 items; items[8:]>`.
+An object shown again in the same context is written as the path where it first appeared, such as `p.d: Q = o.b`.
+
+```py
+from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
+
+configuration = StepExecutorConfiguration(
+    execution_model="openai-responses:gpt-6-luna",
+    context_limits=StepContextLimits(value_max_tokens=1_000, value_max_depth=4, tool_result_max_tokens=4_000),
+)
+```
+
+See [context construction](specification.md#82-prompt-context) and the [tool result transport contract](specification.md#83-tools-available-to-the-llm) for details.
 
 ## Runtime execution identity
 

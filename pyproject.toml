@@ -22,7 +22,6 @@ classifiers = [
 ]
 
 dependencies = [
-  "headson>=0.17.1",
   "idna>=3.20",
   "opentelemetry-api>=1.45.2",
   "pydantic>=2.14.2",

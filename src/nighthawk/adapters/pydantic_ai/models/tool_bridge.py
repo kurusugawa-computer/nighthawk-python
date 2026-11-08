@@ -269,7 +269,7 @@ async def build_tool_name_to_handler(
                     tool_handler_result=tool_handler_result,
                     max_tokens=rendering_policy.tool_result_max_tokens,
                     encoding=encoding,
-                    style=rendering_policy.json_renderer_style,
+                    max_depth=rendering_policy.value_max_depth,
                 )
 
             return await _run_tool_instrumented(

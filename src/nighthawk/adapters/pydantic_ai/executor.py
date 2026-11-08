@@ -222,8 +222,8 @@ class AgentStepExecutor:
         )
         self._tool_result_rendering_policy = ToolResultRenderingPolicy(
             tokenizer_encoding_name=self.configuration.resolve_token_encoding().name,
-            tool_result_max_tokens=(self.configuration.context_limits.tool_result_max_tokens),
-            json_renderer_style=self.configuration.json_renderer_style,
+            tool_result_max_tokens=self.configuration.context_limits.tool_result_max_tokens,
+            value_max_depth=self.configuration.context_limits.value_max_depth,
         )
 
     @classmethod

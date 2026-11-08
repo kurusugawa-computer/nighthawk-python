@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import ast
 from typing import Any
 
 import anyio
@@ -31,6 +31,7 @@ from nighthawk.adapters.pydantic_ai.tools.contracts import (
     ToolHandlerResult,
     ToolOutcome,
 )
+from nighthawk.adapters.pydantic_ai.tools.execution import _normalize_tool_success
 from nighthawk.core.environment import StepEnvironment
 from nighthawk.core.step_context import step_context_scope
 from tests.support.contexts import new_context
@@ -40,20 +41,17 @@ _VALID_PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
 
 @pytest.mark.parametrize("budget", [64, 128, 512])
-@pytest.mark.parametrize("explicit", [False, True])
-def test_discovery_content_uses_selected_rendering_policy(budget: int, explicit: bool) -> None:
-    context = new_context()
-    policy = ToolResultRenderingPolicy("o200k_base", 2_000 if explicit else budget, "default")
+def test_discovery_content_is_rendered_under_the_active_rendering_policy(budget: int) -> None:
     environment = StepEnvironment(python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)})
-    with step_context_scope(context), rendering_scope(policy):
+    with step_context_scope(new_context()), rendering_scope(ToolResultRenderingPolicy("o200k_base", budget, 8)):
+        tool_outcome = _normalize_tool_success(environment.discover(source="task"))
         content = mcp_boundary_module.tool_handler_result_to_low_level_mcp_content(
             tool_name="discovery",
-            tool_handler_result=_test_tool_handler_result(payload=environment.discover(source="task")),
-            rendering_policy=ToolResultRenderingPolicy("o200k_base", budget, "default") if explicit else None,
+            tool_handler_result=_test_tool_handler_result(payload=tool_outcome["payload"]),
         )
     assert len(content) == 1 and isinstance(content[0], TextContent)
-    observed = json.loads(content[0].text)
-    assert len(tiktoken.get_encoding("o200k_base").encode(json.dumps(observed, separators=(",", ":")))) <= budget
+    assert len(tiktoken.get_encoding("o200k_base").encode(content[0].text)) <= budget
+    observed = ast.literal_eval(content[0].text)
     if budget == 64:
         assert "recovery" in observed
     else:
@@ -564,7 +562,7 @@ def test_mcp_boundary_low_level_mcp_server_falls_back_to_preview_when_rich_proje
         def set_attribute(self, name: str, value: object) -> None:
             self.attribute_name_to_value[name] = value
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -588,7 +586,7 @@ def test_mcp_boundary_low_level_mcp_server_falls_back_to_preview_when_rich_proje
 
     assert len(content) == 1
     assert isinstance(content[0], TextContent)
-    assert content[0].text == '{"value":2,"error":null}'
+    assert content[0].text == "2"
     assert any(
         "MCP rich projection fallback for tool projection_tool after UserError: projection boom" in record.message for record in caplog.records
     )
@@ -608,7 +606,7 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
 
     captured: dict[str, object] = {}
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -618,12 +616,12 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
         tool_handler_result: ToolHandlerResult,
         max_tokens: int,
         encoding: tiktoken.Encoding,
-        style: str,
+        max_depth: int,
     ) -> str:
         captured["kind"] = tool_handler_result["kind"]
         captured["max_tokens"] = max_tokens
         captured["encoding_name"] = encoding.name
-        captured["style"] = style
+        captured["max_depth"] = max_depth
         return "preview from explicit policy"
 
     monkeypatch.setattr(mcp_boundary_module, "_tool_outcome_to_mcp_content_list", raise_projection_failure)
@@ -632,7 +630,7 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
     rendering_policy = ToolResultRenderingPolicy(
         tokenizer_encoding_name="o200k_base",
         tool_result_max_tokens=123,
-        json_renderer_style="strict",
+        value_max_depth=3,
     )
 
     async def call_boundary() -> list[ContentBlock]:
@@ -654,7 +652,7 @@ def test_mcp_boundary_low_level_mcp_server_uses_explicit_rendering_policy_for_pr
         "kind": "tool_result",
         "max_tokens": 123,
         "encoding_name": "o200k_base",
-        "style": "strict",
+        "max_depth": 3,
     }
 
 
@@ -665,7 +663,7 @@ def test_mcp_boundary_claude_code_falls_back_to_preview_when_rich_projection_rai
         assert arguments == {"x": 1}
         return _test_tool_handler_result(payload=2)
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -681,7 +679,7 @@ def test_mcp_boundary_claude_code_falls_back_to_preview_when_rich_projection_rai
         )
 
     response = anyio.run(call_boundary)
-    assert response == {"content": [{"type": "text", "text": '{"value":2,"error":null}'}]}
+    assert response == {"content": [{"type": "text", "text": "2"}]}
 
 
 def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
@@ -693,7 +691,7 @@ def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
 
     captured: dict[str, object] = {}
 
-    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome, rendering_policy: ToolResultRenderingPolicy) -> list[ContentBlock]:
+    def raise_projection_failure(*, tool_name: str, tool_outcome: ToolOutcome) -> list[ContentBlock]:
         _ = tool_name
         _ = tool_outcome
         raise UserError("projection boom")
@@ -703,12 +701,12 @@ def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
         tool_handler_result: ToolHandlerResult,
         max_tokens: int,
         encoding: tiktoken.Encoding,
-        style: str,
+        max_depth: int,
     ) -> str:
         captured["kind"] = tool_handler_result["kind"]
         captured["max_tokens"] = max_tokens
         captured["encoding_name"] = encoding.name
-        captured["style"] = style
+        captured["max_depth"] = max_depth
         return "preview from explicit policy"
 
     monkeypatch.setattr(mcp_boundary_module, "_tool_outcome_to_mcp_content_list", raise_projection_failure)
@@ -717,7 +715,7 @@ def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
     rendering_policy = ToolResultRenderingPolicy(
         tokenizer_encoding_name="o200k_base",
         tool_result_max_tokens=321,
-        json_renderer_style="strict",
+        value_max_depth=3,
     )
 
     async def call_boundary() -> dict[str, object]:
@@ -735,7 +733,7 @@ def test_mcp_boundary_claude_code_uses_explicit_rendering_policy_for_preview(
         "kind": "tool_result",
         "max_tokens": 321,
         "encoding_name": "o200k_base",
-        "style": "strict",
+        "max_depth": 3,
     }
 
 

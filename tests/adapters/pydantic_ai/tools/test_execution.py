@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 from collections import namedtuple
 from contextlib import nullcontext
-from typing import Any, cast
+from typing import Any
 
 import anyio
 import pytest
+import tiktoken
 from pydantic_ai import Agent, RunContext
 from pydantic_ai._run_context import set_current_run_context
 from pydantic_ai.exceptions import ToolFailed
@@ -29,7 +31,7 @@ from nighthawk.adapters.pydantic_ai.presentation import ToolResultRenderingPolic
 from nighthawk.adapters.pydantic_ai.tools.contracts import (
     ToolOutcome,
 )
-from nighthawk.adapters.pydantic_ai.tools.execution import ToolResultWrapperToolset, _normalize_tool_success
+from nighthawk.adapters.pydantic_ai.tools.execution import ToolResultWrapperToolset, _normalize_tool_success, _reference_path
 from nighthawk.adapters.pydantic_ai.tools.provided import get_provided_tools
 from nighthawk.core import oversight
 from nighthawk.core.environment import StepEnvironment
@@ -90,16 +92,16 @@ def test_wrapper_returns_success_payload_with_placeholder_for_unknown_value() ->
         return NotJson()
 
     result = _call_wrapped_tool(name="test_unknown_return", function=test_unknown_return)
-    assert result == "<nonserializable>"
+    assert result == "<opaque NotJson>"
 
 
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [
-        (b"\x89PNG\r\n\x1a\n", "<nonserializable>"),
-        (bytearray(b"\x89PNG\r\n\x1a\n"), "<nonserializable>"),
-        (["caption", b"\x89PNG\r\n\x1a\n"], ["caption", "<nonserializable>"]),
-        (("caption", b"\x89PNG\r\n\x1a\n"), ["caption", "<nonserializable>"]),
+        (b"\x89PNG\r\n\x1a\n", "<bytes; 8 bytes>"),
+        (bytearray(b"\x89PNG\r\n\x1a\n"), "<bytearray; 8 bytes>"),
+        (["caption", b"\x89PNG\r\n\x1a\n"], "['caption', <bytes; 8 bytes>]"),
+        (("caption", b"\x89PNG\r\n\x1a\n"), "('caption', <bytes; 8 bytes>)"),
     ],
 )
 def test_wrapper_returns_success_payload_with_placeholder_for_raw_bytes(payload: object, expected: object) -> None:
@@ -169,11 +171,9 @@ def test_wrapper_call_tool_outcome_does_not_treat_namedtuple_as_top_level_multim
 
     assert tool_outcome["error"] is None
     payload = tool_outcome["payload"]
-    assert isinstance(payload, list)
-    assert payload[0] == "before"
-    assert isinstance(payload[1], dict)
-    assert payload[1]["kind"] == "binary"
-    assert all(not isinstance(item, BinaryContent) for item in payload)
+    assert isinstance(payload, str)
+    assert payload.startswith("NamedImageReport(caption='before', image=BinaryContent(data=<bytes; 8 bytes>, media_type='image/png'")
+    assert "kind='binary'" in payload
 
 
 def test_wrapper_call_tool_reports_application_exception() -> None:
@@ -181,8 +181,8 @@ def test_wrapper_call_tool_reports_application_exception() -> None:
         raise RuntimeError("boom")
 
     result = _call_wrapped_tool(name="test_raises", function=test_raises)
-    assert isinstance(result, dict) and result["value"] is None
-    assert result["error"]["kind"] == "exception" and result["error"]["message"] == "RuntimeError: boom"
+    assert isinstance(result, str) and result.startswith("error = {'kind': 'exception'")
+    assert "'message': 'RuntimeError: boom'" in result
 
 
 def test_wrapper_call_tool_outcome_propagates_oversight_abort() -> None:
@@ -279,8 +279,8 @@ def test_wrapper_does_not_promote_nested_binary_content_to_file() -> None:
     result = _call_wrapped_tool(name="test_nested_binary", function=test_nested_binary)
     tool_return_part = ToolReturnPart(tool_name="test_nested_binary", content=result)
     assert tool_return_part.files == []
-    dumped = tool_return_ta.dump_python(tool_return_part.content, mode="json")
-    assert dumped["value"]["kind"] == "binary"
+    assert isinstance(result, str) and result.startswith("{'value': BinaryContent(data=<bytes; 8 bytes>")
+    assert "kind='binary'" in result and result.endswith("'error': None}")
 
 
 def test_wrapper_preserves_none_return_as_success_without_error() -> None:
@@ -304,10 +304,7 @@ def test_wrapper_call_tool_shim_preserves_error_shaped_success_payload() -> None
         }
 
     result = _call_wrapped_tool(name="test_error_shaped_success", function=test_error_shaped_success)
-    assert isinstance(result, dict)
-    assert result["kind"] == "user_requested"
-    assert result["message"] == "Operation completed with status"
-    assert result["guidance"] == "Next step is to review"
+    assert result == "{'kind': 'user_requested', 'message': 'Operation completed with status', 'guidance': 'Next step is to review'}"
 
 
 def test_provider_tool_loop_reports_application_failure_and_continues() -> None:
@@ -336,8 +333,8 @@ def test_provider_tool_loop_reports_application_failure_and_continues() -> None:
         output, model_request_list = anyio.run(run_agent)
     assert output == "done" and tool_call_count == 1
     returned = [part.content for request in model_request_list for part in request.parts if isinstance(part, ToolReturnPart)]
-    assert len(returned) == 1 and isinstance(returned[0], dict)
-    assert cast(dict[str, Any], returned[0])["error"]["message"] == "RuntimeError: tool crashed"
+    assert len(returned) == 1 and isinstance(returned[0], str)
+    assert returned[0].startswith("error = {'kind': 'exception'") and "'message': 'RuntimeError: tool crashed'" in returned[0]
     assert step_context._operation_state.failure is None
 
 
@@ -373,7 +370,7 @@ def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None
     context.environment = StepEnvironment(
         python_name_to_value={}, python_globals={}, task_name_to_value={f"capability_{i:02}": object() for i in range(30)}
     )
-    policy = ToolResultRenderingPolicy("o200k_base", 128, "default")
+    policy = ToolResultRenderingPolicy("o200k_base", 128, 8)
 
     async def execute() -> None:
         run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
@@ -385,10 +382,39 @@ def test_provider_evaluation_keeps_discovery_references_and_pagination() -> None
             run_context,
             tool_name_to_tool["nh_evaluate"],
         )
-        assert result["metadata_omitted"] is True
+        assert isinstance(result, str)
+        description = ast.literal_eval(result)
+        assert description["metadata_omitted"] is True
         namespace = context.environment._expression_namespace()
-        assert eval(result["continuation"], namespace, namespace)["names"][0]["name"] == "capability_01"
-        assert eval(result["references"][0], namespace, namespace) is context.environment.task_name_to_value["capability_00"]
+        assert eval(description["continuation"], namespace, namespace)["names"][0]["name"] == "capability_01"
+        assert eval(description["references"][0], namespace, namespace) is context.environment.task_name_to_value["capability_00"]
 
     with rendering_scope(policy):
         asyncio.run(execute())
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [("request", "request"), ("o.b[0]['key']", "o.b[0]['key']"), ("f(x)", None), ("items[-1]", None), ("items[1:]", None), ("await value", None)],
+)
+def test_only_name_attribute_and_constant_subscript_expressions_name_the_result(expression: str, expected: str | None) -> None:
+    assert _reference_path(expression) == expected
+
+
+def test_provider_evaluation_bounds_text_and_states_where_to_continue() -> None:
+    context = build_step_context(python_globals={}, python_locals={"request": "line of the request\n" * 2_000})
+    policy = ToolResultRenderingPolicy("o200k_base", 200, 8)
+
+    async def execute() -> str:
+        run_context = RunContext(deps=context, model=TestModel(), usage=RunUsage())
+        toolset = ToolResultWrapperToolset(FunctionToolset(get_provided_tools()))
+        tool_name_to_tool = await toolset.get_tools(run_context)
+        result = await toolset.call_tool("nh_evaluate", {"expression": "request"}, run_context, tool_name_to_tool["nh_evaluate"])
+        assert isinstance(result, str)
+        return result
+
+    with rendering_scope(policy):
+        result = asyncio.run(execute())
+    shown, marker = result.rsplit("\n", 1)
+    assert len(tiktoken.get_encoding("o200k_base").encode(result)) <= 200
+    assert marker == f"<+{40_000 - len(shown)} characters; request[{len(shown)}:]>"

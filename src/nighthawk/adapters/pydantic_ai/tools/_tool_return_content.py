@@ -10,10 +10,7 @@ from typing import NamedTuple
 
 from pydantic_ai.messages import ToolReturnPart, UserContent
 
-from nighthawk.adapters.pydantic_ai._rendering import project_discovery_value
 from nighthawk.adapters.pydantic_ai._user_content import try_project_ordered_user_content_sequence
-from nighthawk.adapters.pydantic_ai.presentation import ToolResultRenderingPolicy
-from nighthawk.core.discovery import contains_discovery_result
 
 
 class _ToolReturnSegments(NamedTuple):
@@ -29,18 +26,7 @@ def resolve_tool_return_segments(
     *,
     tool_name: str,
     payload: object,
-    rendering_policy: ToolResultRenderingPolicy,
 ) -> _ToolReturnSegments:
-    if contains_discovery_result(payload):
-        import tiktoken
-
-        projected = project_discovery_value(
-            payload,
-            max_tokens=rendering_policy.tool_result_max_tokens,
-            encoding=tiktoken.get_encoding(rendering_policy.tokenizer_encoding_name),
-        )
-        assert projected is not None
-        payload = projected.value
     # Revisit if a future Pydantic AI release preserves adjacency natively.
     ordered_user_content_tuple = try_project_ordered_user_content_sequence(payload)
     if ordered_user_content_tuple is not None:

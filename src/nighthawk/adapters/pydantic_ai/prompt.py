@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import logging
-import math
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import MISSING, dataclass, fields, is_dataclass
@@ -23,14 +21,23 @@ from pydantic_ai.messages import (
     is_multi_modal_content,
 )
 
-from nighthawk.adapters.pydantic_ai._rendering import JsonRendererStyle, count_tokens, render_json_text
+from nighthawk.adapters.pydantic_ai._rendering import count_tokens, render_value_within_budget
 from nighthawk.adapters.pydantic_ai._user_content import (
     coalesce_user_content,
     try_project_user_prompt_value,
 )
 from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
 from nighthawk.adapters.pydantic_ai.scoping import get_model_scope
-from nighthawk.core.description import annotation_text, class_bases, describe_callable, describe_public_members, exact_type, safe_preview, type_name
+from nighthawk.core.description import (
+    ReferenceScope,
+    annotation_text,
+    class_bases,
+    describe_callable,
+    describe_public_members,
+    exact_type,
+    is_reference_target,
+    type_name,
+)
 from nighthawk.core.environment import MissingEnvironmentNameError, UnboundEnvironmentNameError
 from nighthawk.core.scoping import (
     RUN_ID,
@@ -52,12 +59,12 @@ _MAX_CONTRACT_TYPE_COUNT = 8
 
 @dataclass(frozen=True)
 class _PromptRenderContext:
-    """Stable rendering invariants for one Natural block prompt pass."""
+    """Rendering inputs for one Natural block prompt pass; the reference scope spans the locals and globals sections."""
 
     context_limits: StepContextLimits
     token_encoding: tiktoken.Encoding
-    json_renderer_style: JsonRendererStyle
     explicit_dotted_reference_path_set: frozenset[str]
+    reference_scope: ReferenceScope
 
 
 class _ExtractedReferenceData(NamedTuple):
@@ -122,55 +129,26 @@ def _is_object_capability_candidate(value: object) -> bool:
     return not any(base is candidate for base in class_bases(type(value)) for candidate in (dict, list, tuple, set, frozenset))
 
 
-def _matches_literal_preview(value: object, preview: object) -> bool:
-    """Recognize exact literal previews without calling application equality methods."""
-    if type(value) is not type(preview):
-        return False
-    if exact_type(value, float) and not math.isfinite(value):
-        return False
-    if value is None or any(type(value) is candidate for candidate in (bool, int, float, str)):
-        return value == preview
-    if exact_type(value, list) and exact_type(preview, list):
-        return len(value) == len(preview) and all(_matches_literal_preview(item, shown) for item, shown in zip(value, preview, strict=True))
-    if exact_type(value, dict) and exact_type(preview, dict):
-        return (
-            len(value) == len(preview)
-            and all(type(key) is str for key in value)
-            and all(key in preview and _matches_literal_preview(item, preview[key]) for key, item in value.items())
-        )
-    return False
-
-
 def _render_value_preview_line(
     *,
     reference: str,
     value: object,
     value_max_tokens: int,
-    token_encoding: tiktoken.Encoding,
-    json_renderer_style: JsonRendererStyle,
+    render_context: _PromptRenderContext,
     annotation: str | None = None,
 ) -> str:
     reference_type_name = annotation or ("None" if value is None else type_name(value))
-
-    rendered_value, _ = render_json_text(
-        safe_preview(value, unknown_value=_media_preview),
+    rendered, _ = render_value_within_budget(
+        value,
         max_tokens=value_max_tokens,
-        encoding=token_encoding,
-        style=json_renderer_style,
+        encoding=render_context.token_encoding,
+        max_depth=render_context.context_limits.value_max_depth,
+        path=reference,
+        scope=render_context.reference_scope,
+        shown_fields=_media_fields,
     )
-
-    try:
-        complete_literal = _matches_literal_preview(value, json.loads(rendered_value))
-    except ValueError:
-        complete_literal = False
-    # Translate JSON literals only outside strings, preserving the renderer's bounded preview.
-    rendered_value = re.sub(
-        r'"(?:\\.|[^"\\])*"|\b(?:null|true|false)\b',
-        lambda match: {"null": "None", "true": "True", "false": "False"}.get(match[0], match[0]),
-        rendered_value,
-    )
-    separator = " = " if complete_literal else "  # preview: "
-    return f"{reference}: {reference_type_name}{separator}{rendered_value}"
+    separator = " = " if rendered.exact else "  # preview: "
+    return f"{reference}: {reference_type_name}{separator}{rendered.text}"
 
 
 def _append_prompt_line(
@@ -211,6 +189,8 @@ def _render_object_capability_lines(
     value_type_name = type_name(value)
     instance_comment = "instance" if annotation is None or annotation == value_type_name else f"{value_type_name} instance"
     lines: list[tuple[UserContent, ...]] = [(f"{reference}: {annotation or value_type_name}  # {instance_comment}",)]
+    if is_reference_target(value):
+        render_context.reference_scope.add(value, reference)
 
     public_members = describe_public_members(value)
     method_name_to_value = public_members.method_name_to_value
@@ -251,8 +231,7 @@ def _render_object_capability_lines(
                     reference=field_reference,
                     value=field_value,
                     value_max_tokens=render_context.context_limits.object_field_value_max_tokens,
-                    token_encoding=render_context.token_encoding,
-                    json_renderer_style=render_context.json_renderer_style,
+                    render_context=render_context,
                     annotation=None if field_name_to_annotation is None else field_name_to_annotation.get(field_name),
                 ),
             )
@@ -436,8 +415,7 @@ def _render_reference_and_value_lines(
                 reference=reference,
                 value=value,
                 value_max_tokens=render_context.context_limits.value_max_tokens,
-                token_encoding=render_context.token_encoding,
-                json_renderer_style=render_context.json_renderer_style,
+                render_context=render_context,
                 annotation=annotation,
             ),
         ),
@@ -474,6 +452,7 @@ def _render_reference_and_value_list_section(
             if named_description["output_contract"] is not None:
                 contract = step_context.environment.binding_name_to_type.get(reference, _MISSING)
         pending_described_type_list = list(described_contract_type_list)
+        reference_checkpoint = render_context.reference_scope.checkpoint()
         rendered_line_list = _render_reference_and_value_lines(
             reference=reference,
             value=value,
@@ -492,6 +471,7 @@ def _render_reference_and_value_list_section(
         )
 
         if total_tokens + rendered_tokens > section_max_tokens:
+            render_context.reference_scope.rollback(reference_checkpoint)
             token_limit_reached = True
             break
 
@@ -779,8 +759,8 @@ def _build_user_prompt_content(
     render_context = _PromptRenderContext(
         context_limits=context_limits,
         token_encoding=token_encoding,
-        json_renderer_style=configuration.json_renderer_style,
         explicit_dotted_reference_path_set=explicit_dotted_reference_path_set,
+        reference_scope=ReferenceScope(),
     )
 
     locals_content = _render_locals_section(
@@ -844,12 +824,8 @@ def build_user_prompt(
     return append_user_prompt_suffixes(content, configuration=configuration)
 
 
-def _media_preview(value: object) -> object:
+def _media_fields(value: object) -> dict[str, object] | None:
     if any(type(value) is candidate for candidate in (BinaryContent, ImageUrl, AudioUrl, DocumentUrl, VideoUrl, UploadedFile)):
         namespace = object.__getattribute__(value, "__dict__")
-        return {
-            name: safe_preview(item, depth=1)
-            for name, item in namespace.items()
-            if name in ("kind", "media_type", "url", "file_id", "provider_name", "data")
-        }
-    return f"<opaque {type_name(value)}>"
+        return {name: item for name, item in namespace.items() if name in ("kind", "media_type", "url", "file_id", "provider_name", "data")}
+    return None

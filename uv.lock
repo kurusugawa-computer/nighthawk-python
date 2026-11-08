@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -420,18 +420,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250, upload-time = "2025-04-24T03:35:25.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
-]
-
-[[package]]
-name = "headson"
-version = "0.17.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a7/a8/5b60b040533d6b4f016d2e491c76d65eef8440b2ba6571dee97299b0b8b4/headson-0.17.1.tar.gz", hash = "sha256:5e797bc4ebc98b084403ed78199fa15835af617517556b2fa4577d5496664dae", size = 3781245, upload-time = "2026-09-06T23:39:01.472Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/cb/1e4246ba8a67105c27d21faecb44620e4bc45ad27eb8aba25eb5eac386e1/headson-0.17.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:f5206278f6381f17044ebfff91224eacab398ed0f754a7841187e205d27cdbec", size = 1527163, upload-time = "2026-09-06T23:39:00.138Z" },
-    { url = "https://files.pythonhosted.org/packages/51/e8/c598ae2556b1cc9bce5d4a3f07911239ed466d450e86c9305897018cc13d/headson-0.17.1-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bf2662e6971fc2ae06301c1718d898fa25f02fe5dc2af282554a3eb8d6805859", size = 1645122, upload-time = "2026-09-06T23:39:14.455Z" },
-    { url = "https://files.pythonhosted.org/packages/e8/67/f9eaf771e6619753b830d3af08e274bbf6b477fb6b874ffed9c3dd543a0f/headson-0.17.1-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:76142568e67eb198390bfbe55e59de2bf1dadb80cf38f44449bd7c85f99ca163", size = 1723381, upload-time = "2026-09-06T23:41:15.203Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/f5/cd73ac76ad630cc1f02d0647ce0b02f4eb85f9320dbdc836f36fa54ac273/headson-0.17.1-cp310-abi3-win_amd64.whl", hash = "sha256:5c14d54563235320a13e0316f306ffac974d90726963512be2c1ef4f6248c1f1", size = 1574218, upload-time = "2026-09-06T23:42:43.334Z" },
 ]
 
 [[package]]
@@ -976,7 +964,6 @@ name = "nighthawk-python"
 version = "0.20.0"
 source = { editable = "." }
 dependencies = [
-    { name = "headson" },
     { name = "idna" },
     { name = "opentelemetry-api" },
     { name = "pydantic" },
@@ -1025,7 +1012,6 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk", marker = "extra == 'claude-code-sdk'", specifier = ">=0.2.175" },
-    { name = "headson", specifier = ">=0.17.1" },
     { name = "httpx", marker = "extra == 'http'", specifier = ">=0.28.1" },
     { name = "idna", specifier = ">=3.20" },
     { name = "mcp", marker = "extra == 'claude-code-cli'", specifier = ">=2.3.0" },

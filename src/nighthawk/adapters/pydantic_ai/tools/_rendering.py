@@ -4,8 +4,15 @@ import json
 
 import tiktoken
 
-from nighthawk.adapters.pydantic_ai._rendering import JsonRendererStyle, render_json_text
-from nighthawk.adapters.pydantic_ai.tools.contracts import ToolHandlerResult
+from nighthawk.adapters.pydantic_ai._rendering import render_complete_value_text, render_tool_value_text, render_value_within_budget
+from nighthawk.adapters.pydantic_ai.tools.contracts import ToolError, ToolHandlerResult
+
+
+def render_tool_error_text(error: ToolError, *, max_tokens: int, encoding: tiktoken.Encoding, max_depth: int) -> str:
+    if error.get("status") in ("rejected", "skipped"):
+        # Control feedback is not a lossy value preview. Preserve its identity and host-supplied reason.
+        return "error = " + render_complete_value_text(error, max_depth=max_depth)
+    return "error = " + render_value_within_budget(error, max_tokens=max_tokens, encoding=encoding, max_depth=max_depth)[0].text
 
 
 def render_tool_handler_result_preview_text(
@@ -13,20 +20,16 @@ def render_tool_handler_result_preview_text(
     tool_handler_result: ToolHandlerResult,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: JsonRendererStyle,
+    max_depth: int,
 ) -> str:
     if tool_handler_result["kind"] == "tool_result":
         tool_outcome = tool_handler_result["tool_outcome"]
-        if tool_outcome["error"] is not None and tool_outcome["error"].get("status") in ("rejected", "skipped"):
-            # Control feedback is not a lossy value preview. Preserve its identity and host-supplied reason.
-            return json.dumps({"value": None, "error": tool_outcome["error"]}, ensure_ascii=False)
-        return render_tool_result_json_text(
-            value=tool_outcome["payload"],
-            error=tool_outcome["error"],
-            max_tokens=max_tokens,
-            encoding=encoding,
-            style=style,
-        )
+        if tool_outcome["error"] is not None:
+            return render_tool_error_text(tool_outcome["error"], max_tokens=max_tokens, encoding=encoding, max_depth=max_depth)
+        payload = tool_outcome["payload"]
+        if type(payload) is str:
+            return payload
+        return render_tool_value_text(payload, max_tokens=max_tokens, encoding=encoding, max_depth=max_depth)
 
     return tool_handler_result["retry_text"]
 
@@ -36,7 +39,7 @@ def build_tool_handler_result_trace_text(
     tool_handler_result: ToolHandlerResult,
     max_tokens: int,
     encoding: tiktoken.Encoding,
-    style: JsonRendererStyle,
+    max_depth: int,
 ) -> str:
     if tool_handler_result["kind"] == "retry_prompt":
         trace_payload = {
@@ -49,7 +52,7 @@ def build_tool_handler_result_trace_text(
         tool_handler_result=tool_handler_result,
         max_tokens=max_tokens,
         encoding=encoding,
-        style=style,
+        max_depth=max_depth,
     )
 
     tool_outcome = tool_handler_result["tool_outcome"]
@@ -59,39 +62,3 @@ def build_tool_handler_result_trace_text(
         "preview_chars": len(preview_text),
     }
     return json.dumps(trace_payload, ensure_ascii=False, separators=(",", ":"))
-
-
-def render_tool_result_json_text(
-    *,
-    value: object | None,
-    error: object | None,
-    max_tokens: int,
-    encoding: tiktoken.Encoding,
-    style: JsonRendererStyle,
-) -> str:
-    """The sub-values are valid JSON fragments, so assembling them with an f-string is structurally safe."""
-    if error is None:
-        error_text = "null"
-        error_token_count = 0
-        value_max_tokens = max_tokens
-    else:
-        error_max_tokens = int(max_tokens * 0.9)
-        error_text, error_token_count = render_json_text(
-            error,
-            max_tokens=error_max_tokens,
-            encoding=encoding,
-            style=style,
-        )
-        value_max_tokens = max(max_tokens - error_token_count, 0)
-
-    if value is None:
-        value_text = "null"
-    else:
-        value_text, _ = render_json_text(
-            value,
-            max_tokens=value_max_tokens,
-            encoding=encoding,
-            style=style,
-        )
-
-    return f'{{"value":{value_text},"error":{error_text}}}'

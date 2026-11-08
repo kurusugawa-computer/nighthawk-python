@@ -78,8 +78,8 @@ def test_output_contracts_present_declared_fields_once() -> None:
         "measurement.unit: Literal['celsius', 'fahrenheit']  # required",
         "measurement.value: float  # default 0.0",
         "measurement.labels: list[str]  # default factory",
-        "ticket.priority: Literal['low', 'high'] = \"low\"",
-        'reference_ticket.priority: str = "high"',
+        "ticket.priority: Literal['low', 'high'] = 'low'",
+        "reference_ticket.priority: str = 'high'",
     ):
         assert line in section
     assert section.count("_Person.name") == 1
@@ -176,7 +176,13 @@ def test_effective_binding_and_unbound_local_do_not_expose_shadowed_values() -> 
     assert context.environment.resolve("value", source="task") == 100
 
 
-@pytest.mark.parametrize("value", [None, True, False, [None, True, False], {"null": None, "true": True}, 'null true false "true"'])
+TRIPLE = "'" * 3
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, True, False, [None, True, False], {"null": None, "true": True}, 'null true false "true"', (1, 2), {1: "one"}, "first\nsecond " + TRIPLE],
+)
 def test_complete_literal_previews_preserve_python_values(value: object) -> None:
     context = build_step_context(python_globals={}, python_locals={"value": value})
     section = locals_section(build_user_prompt_text(processed_natural_program="Read value.", step_context=context))
@@ -185,7 +191,7 @@ def test_complete_literal_previews_preserve_python_values(value: object) -> None
     assert ast.literal_eval(statement.value) == value
 
 
-@pytest.mark.parametrize("value", [list(range(20)), "x" * 300, (1, 2), {1: "one"}, b"bytes", float("inf")])
+@pytest.mark.parametrize("value", [list(range(2_000)), "word " * 2_000, b"bytes", float("inf")])
 def test_lossy_previews_do_not_claim_an_actual_assignment(value: object) -> None:
     context = build_step_context(python_globals={}, python_locals={"value": value})
     section = locals_section(build_user_prompt_text(processed_natural_program="Read value.", step_context=context))
@@ -232,3 +238,51 @@ def test_callable_annotation_keeps_signature_and_media_leaf_keeps_its_own_type()
     assert "holder.photo: BinaryContent  # attached content:" in section
     assert any(item is holder.photo for item in content)
     ast.parse(section)
+
+
+@dataclass
+class _Inner:
+    c: object = None
+
+
+@dataclass
+class _Outer:
+    a: int
+    b: _Inner
+
+
+@dataclass
+class _Holder:
+    d: object
+
+
+def test_context_shows_each_shared_object_once_and_refers_to_its_first_path() -> None:
+    outer = _Outer(1, _Inner())
+    outer.b.c = outer
+    context = build_step_context(python_globals={}, python_locals={"o": outer, "p": _Holder(outer.b)})
+    section = locals_section(build_user_prompt_text(processed_natural_program="Read <o> and <p>.", step_context=context))
+    assert section.splitlines() == [
+        "o: _Outer  # instance",
+        "o.a: int = 1",
+        "o.b: _Inner = _Inner(c=o)",
+        "p: _Holder  # instance",
+        "p.d: _Inner = o.b",
+    ]
+    nested = locals_section(
+        build_user_prompt_text(
+            processed_natural_program="Read <values>.", step_context=build_step_context(python_globals={}, python_locals={"values": [outer, outer.b]})
+        )
+    )
+    assert nested == "values: list = [_Outer(a=1, b=_Inner(c=values[0])), values[0].b]"
+
+
+def test_long_text_is_bounded_by_the_value_token_budget_with_a_continuation() -> None:
+    request = "requirement line\n" * 300
+    configuration = StepExecutorConfiguration(context_limits=StepContextLimits(value_max_tokens=3_000))
+    context = build_step_context(python_globals={}, python_locals={"request": request})
+    complete = locals_section(build_user_prompt_text(processed_natural_program="Read <request>.", step_context=context, configuration=configuration))
+    assert complete.startswith("request: str = " + "'" * 3 + "requirement line\n") and complete.count("requirement line") == 300
+
+    bounded = locals_section(build_user_prompt_text(processed_natural_program="Read <request>.", step_context=context))
+    assert bounded.startswith("request: str  # preview: " + "'" * 3 + "requirement line\n")
+    assert "characters; request[" in bounded

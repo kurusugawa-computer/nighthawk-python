@@ -12,7 +12,7 @@ from pydantic_ai.settings import ModelSettings
 
 from nighthawk.adapters.pydantic_ai._rendering import to_jsonable_value
 from nighthawk.adapters.pydantic_ai.models._claude_code_usage import normalize_claude_code_usage
-from nighthawk.adapters.pydantic_ai.models.base import BackendModelBase, append_text_projected_tool_result_preview_prompt
+from nighthawk.adapters.pydantic_ai.models.base import BackendModelBase
 from nighthawk.adapters.pydantic_ai.models.claude_code_settings import (
     NIGHTHAWK_MCP_TOOL_PREFIX,
     TOOL_ACCESS_SYSTEM_PROMPT_FRAGMENT,
@@ -98,9 +98,6 @@ class ClaudeCodeSdkModel(BackendModelBase):
                 configured_allowed_tool_names=claude_code_model_settings.allowed_tool_names,
                 visible_tools=get_visible_tools(),
             )
-
-            if allowed_tool_names:
-                system_prompt_text = append_text_projected_tool_result_preview_prompt(system_prompt_text=system_prompt_text)
 
             mcp_tools: list[Any] = []
             for tool_name, handler in tool_name_to_handler.items():

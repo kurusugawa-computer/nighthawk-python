@@ -149,7 +149,7 @@ def test_user_prompt_renders_globals_and_locals_for_references(tmp_path):
         <<<NH:LOCALS>>>
         a: float = 1.0
         x: int = 10
-        y: str = "hello"
+        y: str = 'hello'
         <<<NH:END_LOCALS>>>
 
         <<<NH:GLOBALS>>>
@@ -343,7 +343,7 @@ def test_object_surface_renders_public_slots() -> None:
     )
 
     locals_text = locals_section(prompt)
-    assert 'collector.slot_name: str = "slot"' in locals_text
+    assert "collector.slot_name: str = 'slot'" in locals_text
     assert "collector._private_slot" not in locals_text
 
 

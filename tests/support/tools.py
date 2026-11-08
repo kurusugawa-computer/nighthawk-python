@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import ast
+from typing import Any
+
 from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
@@ -46,3 +49,11 @@ def _test_tool_handler_result(
         "kind": "tool_result",
         "tool_outcome": tool_outcome,
     }
+
+
+def parse_tool_error(content: object) -> dict[str, Any]:
+    """Read the Python-form error that a tool result reports."""
+    assert isinstance(content, str) and content.startswith("error = "), content
+    error = ast.literal_eval(content.removeprefix("error = "))
+    assert isinstance(error, dict)
+    return error

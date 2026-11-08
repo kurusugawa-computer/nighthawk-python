@@ -16,7 +16,7 @@ from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
-from nighthawk.adapters.pydantic_ai.models.base import BackendModelBase, BackendModelSettings, append_text_projected_tool_result_preview_prompt
+from nighthawk.adapters.pydantic_ai.models.base import BackendModelBase, BackendModelSettings
 from nighthawk.adapters.pydantic_ai.models.mcp_server import mcp_server_if_needed
 from nighthawk.adapters.pydantic_ai.models.process_management import stop_process
 from nighthawk.adapters.pydantic_ai.models.text_projection import TextProjectedRequest, resolve_text_projection_staging_root_directory
@@ -217,9 +217,6 @@ class CodexModel(BackendModelBase):
                 configured_allowed_tool_names=codex_model_settings.allowed_tool_names,
                 visible_tools=get_visible_tools(),
             )
-
-            if allowed_tool_names:
-                system_prompt_text = append_text_projected_tool_result_preview_prompt(system_prompt_text=system_prompt_text)
 
             prompt_parts = [p for p in [system_prompt_text, user_prompt_text] if p]
             prompt_text = "\n\n".join(prompt_parts)

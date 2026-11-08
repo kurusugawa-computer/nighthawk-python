@@ -162,7 +162,7 @@ def test_top_level_text_only_sequence_remains_preview_only() -> None:
 
     assert all(not isinstance(content, BinaryContent | AudioUrl | ImageUrl | UploadedFile) for content in prompt_content)
     prompt_text = prompt_content_to_text(prompt_content)
-    assert 'lines: list = ["alpha","beta"]' in prompt_text
+    assert "lines: list = ['alpha', 'beta']" in prompt_text
 
 
 def test_dotted_multimodal_reference_adds_explicit_native_prompt_line() -> None:
@@ -303,7 +303,7 @@ def test_dotted_mapping_key_multimodal_reference_is_not_hoisted() -> None:
     prompt_text = prompt_content_to_text(prompt_content)
     assert "payload: dict  # preview: " in prompt_text
     assert "payload.photo: BinaryContent  # attached content: <image>" not in prompt_text
-    assert '"kind":"binary"' in prompt_text
+    assert "kind='binary'" in prompt_text
 
 
 def test_top_level_mixed_non_user_content_sequence_remains_preview_only() -> None:
@@ -322,7 +322,7 @@ def test_top_level_mixed_non_user_content_sequence_remains_preview_only() -> Non
     assert all(not isinstance(content, BinaryContent) for content in prompt_content)
     prompt_text = prompt_content_to_text(prompt_content)
     assert "gallery: list  # preview: [" in prompt_text
-    assert '"label":"cat"' in prompt_text
+    assert "'label': 'cat'" in prompt_text
     assert "<bytes; 8 bytes>" in prompt_text
 
 
@@ -346,8 +346,8 @@ def test_namedtuple_multimodal_reference_remains_record_preview_only() -> None:
     assert all(not isinstance(content, BinaryContent) for content in prompt_content)
     prompt_text = prompt_content_to_text(prompt_content)
     assert "report: PhotoReport  # preview: " in prompt_text
-    assert '"caption":"cat"' in prompt_text
-    assert '"kind":"binary"' in prompt_text
+    assert "caption='cat'" in prompt_text
+    assert "kind='binary'" in prompt_text
 
 
 def test_deep_dotted_multimodal_reference_adds_explicit_native_prompt_line() -> None:

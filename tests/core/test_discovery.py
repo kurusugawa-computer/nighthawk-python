@@ -62,7 +62,7 @@ def test_explicit_value_description_uses_ordinary_binding_and_rendering(source: 
     assert ("metadata: Callable" in locals_section(prompt)) is (source == "local")
     assert context.environment.resolve("metadata") is describe_value
     namespace = context.environment._expression_namespace()
-    assert eval("metadata(7)", namespace, namespace)["preview"] == 7
+    assert repr(eval("metadata(7)", namespace, namespace)["preview"]) == "7"
     with pytest.raises(NameError):
         eval("describe_value", namespace, namespace)
 
@@ -123,7 +123,7 @@ def test_explicit_value_description_and_discovery_are_one_evaluation_operation()
     expression = f"(metadata(value), {reference}.environment.describe('value'))"
     with nh.run(StubExecutor()), nh.scope(lifecycle=StepLifecycle(on_operation_finished=finished.append)):
         result = asyncio.run(evaluate_expression_async(context, expression))
-        assert result[0]["preview"] == [1, 2]  # type: ignore[index]
+        assert repr(result[0]["preview"]) == "[1, 2]"  # type: ignore[index]
         assert len(finished) == 1
         assert finished[0].request.expression == expression
         describe_value([1, 2])

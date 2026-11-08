@@ -3,20 +3,18 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from nighthawk.adapters.pydantic_ai._rendering import JsonRendererStyle
-
 
 @dataclass(frozen=True)
 class ToolResultRenderingPolicy:
     tokenizer_encoding_name: str
     tool_result_max_tokens: int
-    json_renderer_style: JsonRendererStyle
+    value_max_depth: int
 
 
 DEFAULT_TOOL_RESULT_RENDERING_POLICY = ToolResultRenderingPolicy(
     tokenizer_encoding_name="o200k_base",
     tool_result_max_tokens=2_000,
-    json_renderer_style="default",
+    value_max_depth=8,
 )
 
 _rendering_policy: ContextVar[ToolResultRenderingPolicy] = ContextVar("nighthawk_pydantic_ai_rendering", default=DEFAULT_TOOL_RESULT_RENDERING_POLICY)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 import pytest
@@ -27,6 +26,7 @@ from nighthawk.core.operation_contract import OperationFinished, OperationReques
 from nighthawk.core.oversight import Accept, Oversight, RejectOperation
 from tests.support.contexts import new_context
 from tests.support.executors import StubExecutor
+from tests.support.tools import parse_tool_error
 
 
 @pytest.mark.parametrize("transport", ["handler", "mcp", "sdk"])
@@ -82,21 +82,21 @@ def test_transported_refusal_keeps_feedback_and_allows_correction(transport: str
                             arguments=arguments,
                             tool_handler=handler,
                             parent_otel_context=otel_context.get_current(),
-                            rendering_policy=ToolResultRenderingPolicy("o200k_base", 4, "default"),
+                            rendering_policy=ToolResultRenderingPolicy("o200k_base", 4, 8),
                         )
                         is_error = result.is_error
                         error = result.structured_content["error"] if result.structured_content is not None else None
                         if value == 1:
                             content = result.content[0]
                             assert isinstance(content, TextContent)
-                            assert json.loads(content.text)["error"]["message"] == reason
+                            assert parse_tool_error(content.text)["message"] == reason
                     else:
                         result = await call_tool_for_claude_code_sdk(
                             tool_name="action",
                             arguments=arguments,
                             tool_handler=handler,
                             parent_otel_context=otel_context.get_current(),
-                            rendering_policy=ToolResultRenderingPolicy("o200k_base", 4, "default"),
+                            rendering_policy=ToolResultRenderingPolicy("o200k_base", 4, 8),
                         )
                         is_error = result.get("isError", False)
                         structured_content = result.get("structuredContent")
@@ -105,7 +105,7 @@ def test_transported_refusal_keeps_feedback_and_allows_correction(transport: str
                         if value == 1:
                             content = result["content"]
                             assert isinstance(content, list)
-                            assert json.loads(content[0]["text"])["error"]["message"] == reason
+                            assert parse_tool_error(content[0]["text"])["message"] == reason
                     assert is_error is (value == 1)
                     if value == 1:
                         assert isinstance(error, dict)

@@ -48,8 +48,8 @@ Read <text> and update <:priority> with one of: low, normal, high.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-priority: str = "normal"
-text: str = "Server is on fire!"
+priority: str = 'normal'
+text: str = 'Server is on fire!'
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
@@ -237,8 +237,8 @@ Select the single best policy and set <:selected_policy>.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-post: str = "Breaking: earthquake hits downtown"
-selected_policy: str = ""
+post: str = 'Breaking: earthquake hits downtown'
+selected_policy: str = ''
 <<<NH:END_LOCALS>>>
 
 <<<NH:GLOBALS>>>
@@ -358,7 +358,7 @@ then compute <:result> by calling <python_average> with the mapped list.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-numbers: list = [1,"2","three","cuatro"]
+numbers: list = [1, '2', 'three', 'cuatro']
 result: int = 0
 <<<NH:END_LOCALS>>>
 

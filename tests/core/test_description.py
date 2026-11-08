@@ -8,7 +8,13 @@ from typing import Annotated, ClassVar, NamedTuple
 import pytest
 from pydantic import BaseModel, field_serializer
 
-from nighthawk.core.description import describe_callable, describe_public_members, discover_type_alias_reference_names, safe_preview
+from nighthawk.core.description import (
+    ReferenceScope,
+    describe_callable,
+    describe_public_members,
+    discover_type_alias_reference_names,
+    render_value_text,
+)
 from nighthawk.core.inspection import describe_value
 from tests.support.prompts import build_step_context, build_user_prompt_text
 
@@ -201,12 +207,53 @@ class _Report(BaseModel):
     findings: tuple[_Finding, ...]
 
 
-def test_nested_dataclass_and_model_previews_list_declared_fields_in_order() -> None:
+def _text(value: object, *, level: int = 8, max_depth: int = 8, path: str | None = None, scope: ReferenceScope | None = None) -> str:
+    rendered = render_value_text(value, level=level, max_depth=max_depth, path=path, scope=scope)
+    assert rendered is not None
+    return rendered.text
+
+
+def test_nested_dataclass_and_model_previews_use_constructor_form_with_declared_fields_in_order() -> None:
     report = _Report(subject="billing", findings=(_Finding("blocking", _Location("a.py", 3)),))
-    assert safe_preview({"report": report}, depth=5) == {
-        "report": {"subject": "billing", "findings": [{"severity": "blocking", "location": {"path": "a.py", "line": 3}, "note": ""}]}
-    }
-    assert safe_preview([report], depth=3) == [{"subject": "billing", "findings": ["<_Finding; fields omitted>"]}]
+    assert _text({"report": report}) == (
+        "{'report': _Report(subject='billing', findings=(_Finding(severity='blocking', location=_Location(path='a.py', line=3), note=''),))}"
+    )
+    assert _text([report], max_depth=3, path="reports") == "[_Report(subject='billing', findings=(_Finding(<3 fields; reports[0].findings[0]>),))]"
+
+
+def test_shared_and_cyclic_objects_refer_to_the_first_displayed_path() -> None:
+    @dataclass
+    class Inner:
+        owner: object = None
+
+    @dataclass
+    class Outer:
+        a: int
+        b: Inner
+
+    @dataclass
+    class Holder:
+        d: object
+
+    outer = Outer(1, Inner())
+    outer.b.owner = outer
+    scope = ReferenceScope()
+    assert _text(outer, path="o", scope=scope) == "Outer(a=1, b=Inner(owner=o))"
+    assert _text(Holder(outer.b), path="p", scope=scope) == "Holder(d=o.b)"
+    assert _text([outer.b, outer.b]) == "[Inner(owner=Outer(a=1, b=<cycle Inner>)), Inner(owner=Outer(a=1, b=<cycle Inner>))]"
+
+
+def test_incidentally_shared_immutable_values_are_repeated() -> None:
+    text = "shared"
+    empty: tuple[()] = ()
+    assert _text({"first": (text, empty), "second": (text, empty)}, path="value") == "{'first': ('shared', ()), 'second': ('shared', ())}"
+
+
+def test_multiline_text_uses_a_triple_quoted_literal() -> None:
+    value = "first\nsecond 'quoted' \\ ends'"
+    rendered = _text(value)
+    assert rendered.startswith("'" * 3 + "first\nsecond")
+    assert eval(rendered) == value
 
 
 def test_nested_instance_preview_snips_fields_beyond_the_item_limit() -> None:
@@ -216,9 +263,7 @@ def test_nested_instance_preview_snips_fields_beyond_the_item_limit() -> None:
         second: int
         third: int
 
-    assert safe_preview([Wide(1, 2, 3)], max_items=2) == [
-        {"first": 1, "second": 2, "<snipped>": "More named fields are available through inspection or Python access"}
-    ]
+    assert _text([Wide(1, 2, 3)], level=2, path="values") == "[Wide(first=1, second=2, <+1 field; values[0]>)]"
 
 
 def test_nested_instance_preview_reads_storage_without_attribute_hooks() -> None:
@@ -235,7 +280,7 @@ def test_nested_instance_preview_reads_storage_without_attribute_hooks() -> None
     context = build_step_context(python_globals={}, python_locals={"holder": {"item": Hooked(3)}})
     effects.clear()
     prompt = build_user_prompt_text(processed_natural_program="Describe <holder>.", step_context=context)
-    assert '"value":3' in prompt.replace(" ", "")
+    assert "Hooked(value=3)" in prompt
     assert effects == []
 
 
@@ -254,7 +299,7 @@ def test_nested_instance_with_descriptor_field_remains_opaque() -> None:
         return 5
 
     Record.value = property(read_property)  # type: ignore[assignment]
-    assert safe_preview([record]) == ["<opaque Record>"]
+    assert _text([record]) == "[<opaque Record>]"
     assert effects == []
 
 
@@ -297,5 +342,5 @@ def test_lazy_type_alias_is_discovered_without_evaluating_its_body() -> None:
 def test_known_value_inspection_does_not_infer_binding_provenance() -> None:
     value: list[str] = []
     result = describe_value(value)
-    assert result["type"] == "list" and result["preview"] == []
+    assert result["type"] == "list" and repr(result["preview"]) == "[]"
     assert all(name not in result for name in ("origin", "source", "annotation", "output_contract", "write_eligible"))

@@ -18,7 +18,7 @@ def test_normalization_failure_does_not_dispose_application_value(monkeypatch: p
     async def tool_call():
         return retained
 
-    def fail(value: object) -> None:
+    def fail(value: object, *, root_path: str | None = None) -> None:
         assert value is retained
         raise ValueError("normalization failed")
 

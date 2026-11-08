@@ -203,7 +203,7 @@ def test_backend_runs_pydantic_ai_async_argument_validator_once() -> None:
             assert "nonnegative" in retry["retry_text"]
             success = await tool_name_to_handler["action"]({"value": 3})
             assert success["kind"] == "tool_result"
-            assert success["tool_outcome"]["payload"] == 3
+            assert success["tool_outcome"]["payload"] == "3"
 
     asyncio.run(execute())
     assert effects == ["validate", "validate", "body"]

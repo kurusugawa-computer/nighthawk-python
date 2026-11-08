@@ -31,7 +31,6 @@ from nighthawk.adapters.pydantic_ai.models._text_fallback import (
     is_image_content,
 )
 from nighthawk.adapters.pydantic_ai.models.base import RequestPromptPartList
-from nighthawk.adapters.pydantic_ai.presentation import get_rendering_policy
 from nighthawk.adapters.pydantic_ai.tools._tool_return_content import resolve_tool_return_segments
 
 
@@ -208,7 +207,6 @@ def _project_tool_return_part_to_text(
     segments = resolve_tool_return_segments(
         tool_name=tool_return_part.tool_name,
         payload=tool_return_part.content,
-        rendering_policy=get_rendering_policy(),
     )
     if segments.is_empty_success():
         return f"Tool return from {tool_return_part.tool_name}:"

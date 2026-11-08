@@ -6,10 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExecutionUsage(BaseModel):
+    """Provider-reported usage; cache read and write counts are subsets of ``input_token_count``."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     request_count: int = Field(default=0, ge=0)
     input_token_count: int = Field(default=0, ge=0)
+    cache_read_token_count: int = Field(default=0, ge=0)
+    cache_write_token_count: int = Field(default=0, ge=0)
     output_token_count: int = Field(default=0, ge=0)
     total_token_count: int = Field(default_factory=lambda values: values["input_token_count"] + values["output_token_count"], ge=0)
 
@@ -17,6 +21,8 @@ class ExecutionUsage(BaseModel):
         return ExecutionUsage(
             request_count=self.request_count + other.request_count,
             input_token_count=self.input_token_count + other.input_token_count,
+            cache_read_token_count=self.cache_read_token_count + other.cache_read_token_count,
+            cache_write_token_count=self.cache_write_token_count + other.cache_write_token_count,
             output_token_count=self.output_token_count + other.output_token_count,
             total_token_count=self.total_token_count + other.total_token_count,
         )
@@ -25,6 +31,8 @@ class ExecutionUsage(BaseModel):
         return ExecutionUsage(
             request_count=max(0, self.request_count - earlier.request_count),
             input_token_count=max(0, self.input_token_count - earlier.input_token_count),
+            cache_read_token_count=max(0, self.cache_read_token_count - earlier.cache_read_token_count),
+            cache_write_token_count=max(0, self.cache_write_token_count - earlier.cache_write_token_count),
             output_token_count=max(0, self.output_token_count - earlier.output_token_count),
             total_token_count=max(0, self.total_token_count - earlier.total_token_count),
         )

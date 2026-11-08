@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nighthawk.core.description import describe_callable, describe_public_members, safe_preview, type_name
+from nighthawk.core.description import DisplayText, describe_callable, describe_public_members, render_value_text, type_name
 from nighthawk.core.discovery import DiscoveryResult, page_names
 
 
@@ -20,7 +20,7 @@ def describe_value(value: object, *, cursor: str | None = None, max_items: int =
     page = page_names(names, source="value members", cursor=cursor, max_items=max_items)
     if page.error is not None:
         return {"error": page.error, "recovery": "Call this function again with the same value, without a cursor and with max_items from 1 to 100."}
-    description: dict[str, object] = {"type": type_name(value), "preview": safe_preview(value)}
+    description: dict[str, object] = {"type": type_name(value), "preview": _preview(value, level=8, max_depth=2)}
     if callable(value):
         callable_description = describe_callable(value)
         description["signature"] = callable_description.signature_text
@@ -40,7 +40,7 @@ def describe_value(value: object, *, cursor: str | None = None, max_items: int =
         elif name in members.field_name_to_value:
             field_value = members.field_name_to_value[name]
             described_members.append(
-                {"name": name, "kind": "field", "type": type_name(field_value), "preview": safe_preview(field_value, depth=1, max_items=4)}
+                {"name": name, "kind": "field", "type": type_name(field_value), "preview": _preview(field_value, level=4, max_depth=1)}
             )
         else:
             described_members.append({"name": name, "kind": "opaque", "omission": "Descriptor or unbound slot; not read during inspection."})
@@ -51,3 +51,9 @@ def describe_value(value: object, *, cursor: str | None = None, max_items: int =
     elif not names:
         description["member_omission"] = "No supported public member metadata; use ordinary Python or a domain helper for further detail."
     return DiscoveryResult(description, item_count=len(page.names), repage=lambda count: describe_value(value, cursor=cursor, max_items=count))
+
+
+def _preview(value: object, *, level: int, max_depth: int) -> DisplayText:
+    rendered = render_value_text(value, level=level, max_depth=max_depth)
+    assert rendered is not None
+    return DisplayText(rendered.text)

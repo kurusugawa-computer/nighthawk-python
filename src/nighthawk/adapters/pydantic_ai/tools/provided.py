@@ -5,7 +5,6 @@ from functools import cache
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 
-from nighthawk.adapters.pydantic_ai._rendering import to_jsonable_value
 from nighthawk.core.assignment import assign_expression_async
 from nighthawk.core.expression import evaluate_expression_async
 from nighthawk.core.step_context import StepContext
@@ -22,7 +21,7 @@ def get_provided_tools() -> tuple[Tool[StepContext], ...]:
         return {
             "target_path": result.target_path,
             "retained_as": result.retained_as,
-            "updates": [{"path": result.target_path, "value": to_jsonable_value(result.value)}],
+            "updates": [{"path": result.target_path, "value": result.value}],
         }
 
     async def nh_evaluate(run_context: RunContext[StepContext], expression: str) -> object:

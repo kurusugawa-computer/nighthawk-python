@@ -5,6 +5,7 @@ from pydantic_ai.usage import RunUsage
 
 import nighthawk as nh
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
+from nighthawk.adapters.pydantic_ai.usage import execution_usage
 from nighthawk.core.scoping import get_scope
 from nighthawk.core.usage import ExecutionUsage, UsageMeter
 from tests.support.executors import StubExecutor
@@ -14,6 +15,14 @@ class TestExecutionUsage:
     def test_addition_is_fieldwise(self) -> None:
         total = ExecutionUsage(request_count=1, total_token_count=3) + ExecutionUsage(request_count=2, input_token_count=4)
         assert total == ExecutionUsage(request_count=3, input_token_count=4, total_token_count=7)
+
+    def test_provider_cache_counts_are_kept_as_input_subsets(self) -> None:
+        usage = execution_usage(RunUsage(requests=2, input_tokens=100, cache_read_tokens=60, cache_write_tokens=10, output_tokens=5))
+        assert usage == ExecutionUsage(
+            request_count=2, input_token_count=100, cache_read_token_count=60, cache_write_token_count=10, output_token_count=5, total_token_count=105
+        )
+        assert (usage + usage).cache_read_token_count == 120
+        assert (usage + usage).difference(usage).cache_write_token_count == 10
 
 
 class TestUsageMeterRecord:

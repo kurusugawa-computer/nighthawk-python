@@ -25,11 +25,8 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
-from nighthawk.adapters.pydantic_ai.configuration import TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT
 from nighthawk.adapters.pydantic_ai.models.tool_bridge import ToolHandler, prepare_allowed_tools
 from nighthawk.adapters.pydantic_ai.models.tool_transport import ToolTransport
-from nighthawk.adapters.pydantic_ai.presentation import get_rendering_policy
-from nighthawk.adapters.pydantic_ai.prompt import resolve_system_prompt_template_text
 
 if TYPE_CHECKING:
     from nighthawk.adapters.pydantic_ai.models.text_projection import TextProjectedRequest
@@ -87,26 +84,6 @@ def _collect_instruction_text(
         return model_request_list[1].instructions
 
     return None
-
-
-def _resolve_current_tool_result_max_tokens() -> int:
-    return get_rendering_policy().tool_result_max_tokens
-
-
-def append_text_projected_tool_result_preview_prompt(*, system_prompt_text: str) -> str:
-    """Append the text-projected tool-result preview warning to a system prompt.
-
-    Backends should call this only after confirming that at least one Nighthawk
-    tool will actually be exposed to the model. If no tool is exposed, the
-    preview-loss caveat is irrelevant and adds prompt noise.
-    """
-    fragment = resolve_system_prompt_template_text(
-        template_text=TEXT_PROJECTED_TOOL_RESULT_PREVIEW_SYSTEM_PROMPT_FRAGMENT,
-        tool_result_max_tokens=_resolve_current_tool_result_max_tokens(),
-    )
-    if not system_prompt_text:
-        return fragment
-    return "\n".join([system_prompt_text, fragment])
 
 
 @dataclass(frozen=True)

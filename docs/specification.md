@@ -114,7 +114,6 @@ Authorization does not change supported source forms.
     - `system_prompt_template`: system prompt template that defines the step execution protocol.
     - `user_prompt_template`: full user prompt template including section delimiters.
     - `context_limits`: limits for rendering dynamic context into the prompt.
-    - `json_renderer_style`: [headson](https://github.com/kantord/headson) rendering style used in prompt context and projected tool-result previews. Default: `"default"`. Available values: `"strict"` (valid JSON, no annotations), `"default"` (pseudo-JSON with omission markers like `…`), `"detailed"` (JS-like with inline comments such as `// N more`).
     - `system_prompt_suffix_fragments`: optional baseline system prompt suffix fragments for this executor configuration.
     - `user_prompt_suffix_fragments`: optional baseline user prompt suffix fragments for this executor configuration.
 
@@ -142,7 +141,7 @@ Scopes restore the exact parent executor on exit or error, and the host retains 
 
 - `StepContextLimits`
     - Limits for rendering dynamic context into the LLM prompt.
-    - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
+    - Fields: `locals_max_tokens`, `locals_max_items`, `globals_max_tokens`, `globals_max_items`, `value_max_tokens`, `value_max_depth`, `object_max_methods`, `object_max_fields`, `object_field_value_max_tokens`, `tool_result_max_tokens`.
 - `ExecutionReference`
     - Frozen dataclass representing runtime execution identity.
     - `run_id`: the Id of the active run; nested runs create independent identities unless an Id is supplied explicitly.
@@ -456,14 +455,20 @@ Rendering format:
     - An output holding an instance of its declared type uses the declared field annotations in its field lines instead of runtime types.
     - Other model and dataclass types reachable from an output contract appear once per section under their type name, such as `Person.name: str  # required`.
     - Each type lists at most `context_limits.object_max_fields` fields, and a fixed number of types are described per output; a comment counts omitted fields. TypedDict contracts are not expanded.
-- Complete previews of ordinary scalar, list, and string-keyed dictionary values use Python literals, including `None`, `True`, and `False`.
-  JSON preview rendering and its configured style still supply bounded summaries; JSON literals outside strings are translated to Python spelling for context display.
-  Lossy or non-literal previews appear in `# preview: ...` comments rather than assignments to invented values.
-  This includes truncated containers and strings, tuples projected as lists, instances projected as field mappings, opaque objects, and non-finite floats.
+- Value previews use Python notation: literals for scalars, strings, `list`, `tuple`, `dict`, `set`, and `frozenset`, including `None`, `True`, and `False`, and constructor form for named tuple, dataclass, and Pydantic model instances, such as `_LineItem(product='cable', quantity=3)`.
+  Strings that contain line breaks use triple-quoted literals so that their lines stay readable.
   Display does not execute application equality, representation, annotation, or serialization code.
-- Value previews project named tuple, dataclass, and Pydantic model instances to mappings of their declared fields in declaration order, within the same depth and item bounds as containers.
-    - An instance is projected only when every declared field value is stored in tuple items, the instance dictionary, or standard slots; otherwise it remains opaque.
+    - Instance fields are the declared fields in declaration order, read from tuple items, the instance dictionary, or standard slots; an instance whose declared field is stored elsewhere remains opaque.
     - Dataclass `ClassVar` and `InitVar` pseudo-fields, Pydantic extra and private attributes, computed fields, and properties are not shown.
+- Each value preview is the most detailed rendering that fits `context_limits.value_max_tokens` (`object_field_value_max_tokens` for object fields).
+  One detail level bounds items per container, characters per string, and expanded depth together; `context_limits.value_max_depth` additionally bounds depth.
+  Omitted parts are marked with their amount and, when the position has a Python path, the expression that reads them, such as `<+22 items; items[8:]>`, `<+12040 characters; request[3000:]>`, or `Node(<2 fields; o.next.next>)`.
+  Values without a safe description appear as `<opaque TypeName>`, and byte strings as `<bytes; N bytes>`.
+  Previews with any marker appear in `# preview: ...` comments rather than assignments to invented values.
+- Within one context construction, a list, dict, set, or declared-field instance that appears again is written as the Python path where it was first displayed, for example `o: O = O(a=1, b=Q(c=o))` and `p: P = P(d=o.b)`.
+  Cycles use the same rule.
+  Strings, numbers, tuples, and other immutable values are repeated because the interpreter may share them incidentally.
+  Positions without a Python path, such as set elements, and occurrences shown only as an omission marker are not reference targets; a cycle through such a position is marked `<cycle TypeName>`.
 - Top-level Pydantic AI multimodal values are rendered as `name: TypeName  # attached content: ` followed by inline user content in the prompt payload.
     - This applies to top-level locals/globals entries.
 - Top-level `list` / `tuple` values are also rendered as inline user content when every item is valid Pydantic AI `UserContent` and at least one item is multimodal.
@@ -573,9 +578,10 @@ Metadata may be omitted explicitly to retain those expressions.
 If even one reference and its continuation cannot fit, the response explains the limit and recommends Python slices on environment views or a larger response budget; it does not return a truncated cursor.
 Discovery pages nested in builtin dictionaries, lists, and tuples receive the same protection and share the whole value's response budget.
 If the surrounding data cannot fit alongside the pages, the response recommends evaluating discovery separately or increasing the budget.
-Recovery records are complete JSON; extremely small budgets may retain only a shorter recovery record or `{}`.
+Recovery records are complete Python literals; extremely small budgets may retain only a shorter recovery record or `{}`.
 Composing discovery with native media preserves the native content objects when the composed value fits.
 Descriptors and unavailable metadata are identified as omissions, without promising that another page can execute them.
+The `preview` entries are rendered Python notation (`DisplayText`) at a fixed detail level, so a description does not depend on the tool-result budget.
 Large collections can be examined with ordinary Python slices.
 
 An inspection or environment-helper call inside an evaluation expression belongs to that one operation.
@@ -698,14 +704,14 @@ Write tool return value:
 Tool result transport contract:
 
 - Internally, tool execution produces a canonical `ToolOutcome` with:
-    - `payload`: the success payload, which may include native Pydantic AI multimodal values
+    - `payload`: the rendered success text; native Pydantic AI multimodal values stay native, alone or as items of a top-level list or tuple whose other items are rendered separately
     - `error`: `null` on success or a structured error object on failure
-- The host also derives a projected preview observation for text-only transports, logging, and tracing.
-    - This projection may be derived lazily at the transport or tracing boundary rather than eagerly at tool execution time.
-- Text-projected backends that expose Nighthawk tools automatically add system-prompt guidance that tool-result previews may be lossy and are bounded by `context_limits.tool_result_max_tokens`.
-- The projected preview uses the following JSON shape:
-    - Success: `{"value": <bounded JSON rendering>, "error": null}`
-    - Failure: `{"value": null, "error": {"kind": "<category>", "message": "<detail>", "guidance": "<recovery hint>"}}`
+- The host derives the error text and the preview observation for logging and tracing at the transport or tracing boundary.
+- Tool results use the value notation of the step context and are bounded by `context_limits.tool_result_max_tokens` on every transport.
+    - Success: the rendered return value. A top-level string is sent as its text; a truncated string ends with a line such as `<+12040 characters; request[3000:]>`. `None` remains an empty success.
+    - When `nh_evaluate` evaluates a name with attribute and constant-subscript access, that expression is the path of the result, so shared references and omission markers name expressions that read the omitted parts.
+    - Failure: `error = {'kind': '<category>', 'message': '<detail>', 'guidance': '<recovery hint>', ...}`. Control feedback for refused or skipped operations is not shortened by the budget.
+    - The default system prompt states the notation and the tool-result budget.
 - Multimodal-capable transports MAY send top-level multimodal payload items natively instead of embedding them into the preview text.
     - When they do, they preserve the original top-level content item order from the tool payload, including text/media adjacency for qualifying mixed `list` / `tuple` payloads.
     - The MCP tool-return transport carries only image (`BinaryContent.is_image`) and audio (`BinaryContent.is_audio`) items natively (as `mcp.types.ImageContent` / `mcp.types.AudioContent`). All other `BinaryContent` and `FileUrl` items, including document and video, project to `mcp.types.TextContent` so the transport stays symmetric with text-projected backends. Native MCP document and video carriage are unsupported. Multimodal-capable providers that bypass MCP still send supported items natively via `ToolReturnPart.files`.
@@ -745,8 +751,6 @@ Coding-agent tool callbacks execute on the event loop that owns the backend requ
 Callbacks preserve the captured Natural scope and serialize in transport admission order.
 A terminal callback failure stops the backend request even if its client converts the callback exception into a protocol error response.
 Request cancellation cancels pending callbacks and cleans up the coding-agent process.
-
-The projected `value` field is bounded by `context_limits.tool_result_max_tokens` and may be summarized using [headson](https://github.com/kantord/headson) truncation when the full rendering exceeds the token budget. Headson is a structure-aware JSON summarizer: it parses the full JSON tree, then selects representative nodes to produce a compact preview that preserves the shape and key values of the data within a strict byte budget (analogous to `head`/`tail` but for structured data).
 
 Partial effects:
 

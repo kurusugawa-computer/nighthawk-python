@@ -419,7 +419,7 @@ Append a one-line summary of what you did to <carry>.
 <<<NH:END_PROGRAM>>>
 
 <<<NH:LOCALS>>>
-carry: list = ["Set result to 10."]
+carry: list = ['Set result to 10.']
 result: int = 0
 <<<NH:END_LOCALS>>>
 

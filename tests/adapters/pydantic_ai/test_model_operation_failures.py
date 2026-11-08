@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -16,6 +16,7 @@ from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfigurati
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from nighthawk.core.lifecycle import StepCompleted, StepFinished, StepLifecycle, StepRaised
 from nighthawk.core.operation_contract import OperationFinished
+from tests.support.tools import parse_tool_error
 
 
 @nh.function
@@ -57,8 +58,7 @@ def test_application_exception_returns_to_the_model_which_selects_the_step_end(r
             )
             return ModelResponse(parts=[selected])
         feedback = next(part.content for message in messages for part in message.parts if isinstance(part, ToolReturnPart))
-        assert isinstance(feedback, dict)
-        error = cast(dict[str, Any], feedback)["error"]
+        error = parse_tool_error(feedback)
         assert error["kind"] == "exception" and error["status"] == "failed"
         assert error["message"].startswith("ValidationError:") and error["evaluation_started"] is True
         result: dict[str, object] = {"kind": "pass"}

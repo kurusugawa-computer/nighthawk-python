@@ -47,7 +47,7 @@ def _render_preview_text_for_test(tool_handler_result: ToolHandlerResult) -> str
         tool_handler_result=tool_handler_result,
         max_tokens=1_200,
         encoding=tiktoken.get_encoding("o200k_base"),
-        style="default",
+        max_depth=8,
     )
 
 
@@ -198,9 +198,7 @@ def test_backend_handler_calls_oversight_once_for_accept_decision(
             return await handler({})
 
     tool_handler_result = anyio.run(call_handler)
-    parsed = json.loads(_render_preview_text_for_test(tool_handler_result))
-    assert parsed["value"] == 3
-    assert parsed["error"] is None
+    assert _render_preview_text_for_test(tool_handler_result) == "3"
     assert inspection_count == 1
 
     tool_spans = _get_finished_tool_spans(span_exporter)

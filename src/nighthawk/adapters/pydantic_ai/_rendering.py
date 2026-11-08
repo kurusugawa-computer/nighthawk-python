@@ -2,25 +2,26 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Mapping, Sequence
-from typing import Literal
+from collections.abc import Callable, Mapping, Sequence
 
-import headson
 import tiktoken
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
+from nighthawk.core.description import ReferenceScope, ValueText, declared_field_name_to_value, render_value_text
 from nighthawk.core.discovery import DiscoveryResult, contains_discovery_result, map_discovery_containers
-
-type JsonRendererStyle = Literal["strict", "default", "detailed"]
 
 _SENTINEL_CYCLE = "<cycle>"
 _SENTINEL_NONSERIALIZABLE = "<nonserializable>"
 _SENTINEL_FUNCTION = "<function>"
 _SENTINEL_EXCEPTION = "<exception>"
 
-_MINIMUM_OUTPUT = "{}"
-# Fixed lower bound for budget arithmetic; the real count varies by encoding and is recomputed when needed.
-_MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT = 1
+# Rendering stops before tokenizing text that cannot fit; ordinary text has far fewer characters per token.
+_MAX_CHARACTERS_PER_TOKEN = 16
+_COMPLETE_LEVEL = 1 << 30
+# Room kept for the continuation marker of truncated top-level text.
+_TEXT_MARKER_TOKEN_RESERVE = 32
+
+type ShownFields = Callable[[object], Mapping[str, object] | None]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,12 +36,90 @@ class _DiscoverySlot:
     index: int
 
 
-def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoken.Encoding) -> _DiscoveryProjection | None:
-    """Budget composed discovery atomically while preserving native content leaves.
+def render_value_within_budget(
+    value: object,
+    *,
+    max_tokens: int,
+    encoding: tiktoken.Encoding,
+    max_depth: int,
+    path: str | None = None,
+    scope: ReferenceScope | None = None,
+    shown_fields: ShownFields | None = None,
+) -> tuple[ValueText, int]:
+    """Render the most detailed Python form of *value* within *max_tokens*, returning it with its token count.
 
-    Ordinary leaves are converted once before trying smaller pages, so budget
-    selection never repeats application serializers.
+    Shared objects first shown by this rendering are added to *scope*. The minimum rendering may exceed the budget.
     """
+    reference_scope = scope if scope is not None else ReferenceScope()
+    checkpoint = reference_scope.checkpoint()
+
+    def fits(level: int) -> ValueText | None:
+        rendered = render_value_text(
+            value,
+            level=level,
+            max_depth=max_depth,
+            path=path,
+            scope=reference_scope,
+            shown_fields=shown_fields,
+            max_characters=max_tokens * _MAX_CHARACTERS_PER_TOKEN,
+        )
+        reference_scope.rollback(checkpoint)
+        if rendered is None or count_tokens(rendered.text, encoding) > max_tokens:
+            return None
+        return rendered
+
+    best_level = 0
+    failed_level: int | None = None
+    level = 1
+    while True:
+        rendered = fits(level)
+        if rendered is None:
+            failed_level = level
+            break
+        best_level = level
+        if not rendered.truncated:
+            break
+        level *= 2
+    if failed_level is not None:
+        lower, upper = best_level + 1, failed_level - 1
+        while lower <= upper:
+            middle = (lower + upper) // 2
+            rendered = fits(middle)
+            if rendered is None:
+                upper = middle - 1
+                continue
+            best_level = middle
+            if not rendered.truncated:
+                break
+            lower = middle + 1
+    final = render_value_text(value, level=best_level, max_depth=max_depth, path=path, scope=reference_scope, shown_fields=shown_fields)
+    assert final is not None
+    return final, count_tokens(final.text, encoding)
+
+
+def render_complete_value_text(value: object, *, max_depth: int) -> str:
+    rendered = render_value_text(value, level=_COMPLETE_LEVEL, max_depth=max_depth)
+    assert rendered is not None
+    return rendered.text
+
+
+def render_tool_value_text(value: object, *, max_tokens: int, encoding: tiktoken.Encoding, max_depth: int, path: str | None = None) -> str:
+    """Render a tool return within *max_tokens*: top-level text stays raw, other values use Python form."""
+    if type(value) is not str:
+        return render_value_within_budget(value, max_tokens=max_tokens, encoding=encoding, max_depth=max_depth, path=path)[0].text
+    token_list = encoding.encode(value[: max_tokens * _MAX_CHARACTERS_PER_TOKEN + 1])
+    if len(token_list) <= max_tokens and len(value) <= max_tokens * _MAX_CHARACTERS_PER_TOKEN:
+        return value
+    shown = encoding.decode(token_list[: max(max_tokens - _TEXT_MARKER_TOKEN_RESERVE, 0)])
+    while shown and not value.startswith(shown):
+        shown = shown[:-1]
+    omitted_count = len(value) - len(shown)
+    continuation = "" if path is None else f"; {path}[{len(shown)}:]"
+    return f"{shown}\n<+{omitted_count} characters{continuation}>"
+
+
+def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoken.Encoding, max_depth: int) -> _DiscoveryProjection | None:
+    """Budget composed discovery atomically, measuring the Python form that the model receives."""
     if not contains_discovery_result(value):
         return None
     pages: list[DiscoveryResult] = []
@@ -49,19 +128,19 @@ def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoke
         if type(item) is DiscoveryResult:
             pages.append(item)
             return _DiscoverySlot(len(pages) - 1)
-        return to_jsonable_value(item)
+        return item
 
-    prepared = map_discovery_containers(
-        value, prepare_leaf, transform_key=lambda key: key if isinstance(key, str) else _render_compact_json(to_jsonable_value(key))
-    )
+    prepared = map_discovery_containers(value, prepare_leaf)
+
+    def text_token_count(item: object) -> tuple[str, int]:
+        text = render_complete_value_text(item, max_depth=max_depth)
+        return text, count_tokens(text, encoding)
 
     def candidate(page_budget: int) -> _DiscoveryProjection:
-        replacements = [page.for_budget(page_budget, encoding) for page in pages]
+        replacements = [page.for_budget(page_budget, lambda description: text_token_count(description)[1]) for page in pages]
         projected = map_discovery_containers(prepared, lambda item: replacements[item.index] if type(item) is _DiscoverySlot else item)
-        text = _render_compact_json(to_jsonable_value(projected))
-        replacement_iterator = iter(replacements)
-        native_value = map_discovery_containers(value, lambda item: next(replacement_iterator) if type(item) is DiscoveryResult else item)
-        return _DiscoveryProjection(native_value, text, count_tokens(text, encoding=encoding))
+        text, token_count = text_token_count(projected)
+        return _DiscoveryProjection(projected, text, token_count)
 
     full = candidate(max_tokens)
     if full.token_count <= max_tokens:
@@ -83,52 +162,17 @@ def project_discovery_value(value: object, *, max_tokens: int, encoding: tiktoke
         {"recovery": "Evaluate discovery separately."},
         {},
     ):
-        text = _render_compact_json(to_jsonable_value(recovery))
-        token_count = count_tokens(text, encoding=encoding)
+        text, token_count = text_token_count(recovery)
         if token_count <= max_tokens or not recovery:
             return _DiscoveryProjection(recovery, text, token_count)
     raise AssertionError("The minimum discovery response must be returned")
 
 
-def render_json_text(
-    value: object,
-    *,
-    max_tokens: int,
-    encoding: tiktoken.Encoding,
-    style: JsonRendererStyle,
-) -> tuple[str, int]:
-    """Render *value* as compact JSON summarized by headson within *max_tokens*, returning the text and its token count.
-
-    The minimum output ``{}`` may exceed the budget.
-    """
-
-    if max_tokens < _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT:
-        raise ValueError(f"max_tokens must be >= {_MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT}")
-
-    discovery = project_discovery_value(value, max_tokens=max_tokens, encoding=encoding)
-    if discovery is not None:
-        return discovery.text, discovery.token_count
-    jsonable = to_jsonable_value(value)
-    compact_json_input = _render_compact_json(jsonable)
-    compact_json_input_token_count = count_tokens(compact_json_input, encoding=encoding)
-    if compact_json_input_token_count <= max_tokens:
-        return compact_json_input, compact_json_input_token_count
-
-    summarized, summarized_token_count = _maximize_headson_output_under_max_tokens(
-        compact_json_input,
-        max_tokens=max_tokens,
-        encoding=encoding,
-        style=style,
-    )
-
-    if summarized is None:
-        return _MINIMUM_OUTPUT, _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT
-
-    return summarized, summarized_token_count
-
-
 def to_jsonable_value(value: object) -> JsonValue:
-    """Convert a Python value to JSON data, replacing non-serializable values with sentinels."""
+    """Convert a Python value to JSON data for records that are not model input, replacing non-serializable values with sentinels.
+
+    Instances contribute their declared fields; application serializers are not called.
+    """
     active_object_id_set: set[int] = set()
     return _to_jsonable_value_inner(value, active_object_id_set=active_object_id_set)
 
@@ -164,22 +208,15 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
 
     active_object_id_set.add(object_id)
     try:
-        if isinstance(value, BaseModel):
-            dumped = value.model_dump(mode="python")
-            return _to_jsonable_value_inner(dumped, active_object_id_set=active_object_id_set)
-
-        if dataclasses.is_dataclass(value) and not isinstance(value, type):
-            as_dict = dataclasses.asdict(value)
-            return _to_jsonable_value_inner(as_dict, active_object_id_set=active_object_id_set)
+        field_name_to_value = declared_field_name_to_value(value)
+        if field_name_to_value is not None:
+            return {name: _to_jsonable_value_inner(item, active_object_id_set=active_object_id_set) for name, item in field_name_to_value.items()}
 
         if isinstance(value, Mapping):
             return _mapping_to_jsonable(value, active_object_id_set=active_object_id_set)
 
         if isinstance(value, (set, frozenset)):
             return _set_to_jsonable(value, active_object_id_set=active_object_id_set)
-
-        if _is_namedtuple_instance(value):
-            return _namedtuple_to_jsonable(value, active_object_id_set=active_object_id_set)
 
         if isinstance(value, Sequence):
             return _sequence_to_jsonable(value, active_object_id_set=active_object_id_set)
@@ -189,20 +226,6 @@ def _to_jsonable_value_inner(value: object, *, active_object_id_set: set[int]) -
         return _SENTINEL_NONSERIALIZABLE
     finally:
         active_object_id_set.remove(object_id)
-
-
-def _is_namedtuple_instance(value: object) -> bool:
-    return isinstance(value, tuple) and hasattr(value, "_fields") and callable(getattr(value, "_asdict", None))
-
-
-def _namedtuple_to_jsonable(value: object, *, active_object_id_set: set[int]) -> JsonValue:
-    as_dict_method = getattr(value, "_asdict", None)
-    if not callable(as_dict_method):
-        return _SENTINEL_NONSERIALIZABLE
-    as_dict = as_dict_method()
-    if not isinstance(as_dict, Mapping):
-        return _SENTINEL_NONSERIALIZABLE
-    return _mapping_to_jsonable(as_dict, active_object_id_set=active_object_id_set)
 
 
 def _mapping_to_jsonable(value: Mapping[object, object], *, active_object_id_set: set[int]) -> JsonValue:
@@ -241,43 +264,6 @@ def _sequence_to_jsonable(value: Sequence[object], *, active_object_id_set: set[
         return _SENTINEL_NONSERIALIZABLE
 
     return [_to_jsonable_value_inner(item, active_object_id_set=active_object_id_set) for item in items]
-
-
-def _maximize_headson_output_under_max_tokens(
-    compact_json_input: str,
-    *,
-    max_tokens: int,
-    encoding: tiktoken.Encoding,
-    style: JsonRendererStyle,
-) -> tuple[str | None, int]:
-    best_output: str | None = None
-    best_output_token_count = 0
-
-    lower = _MINIMUM_OUTPUT_ESTIMATED_TOKEN_COUNT
-    high = len(compact_json_input.encode("utf-8"))
-    while lower <= high:
-        trial = (lower + high) // 2
-        candidate = headson.summarize(
-            compact_json_input,
-            format="json",
-            input_format="json",
-            style=style,
-            byte_budget=trial,
-        )
-
-        if candidate == "":
-            lower = trial + 1
-            continue
-
-        candidate_token_count = count_tokens(candidate, encoding=encoding)
-        if candidate_token_count <= max_tokens:
-            best_output = candidate
-            best_output_token_count = candidate_token_count
-            lower = trial + 1
-        else:
-            high = trial - 1
-
-    return best_output, best_output_token_count
 
 
 def _render_compact_json(value: JsonValue) -> str:

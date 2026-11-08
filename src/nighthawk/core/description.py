@@ -10,6 +10,7 @@ import ast
 import dataclasses
 import functools
 import inspect
+import math
 import sys
 import tokenize
 import types
@@ -132,57 +133,260 @@ def annotation_text(annotation: object, *, depth: int = 0) -> str:
     return f"<opaque {type_name(annotation)} annotation>"
 
 
-def safe_preview(
-    value: object, *, depth: int = 2, max_items: int = 8, max_string_length: int = 160, unknown_value: Callable[[object], object] | None = None
-) -> object:
-    """Return JSON-compatible preview data without invoking input hooks; optional unknown-value projection is caller-owned."""
-    value_type = type(value)
-    if exact_type(value, int) and value.bit_length() > 512:
-        return "<large int; preview omitted>"
-    if value is None or any(value_type is candidate for candidate in (bool, int, float)):
-        return value
-    if exact_type(value, str):
-        return value if len(value) <= max_string_length else value[:max_string_length] + "<snipped>"
-    if exact_type(value, bytes) or exact_type(value, bytearray):
-        return f"<{_class_name(value_type)}; {len(value)} bytes>"
-    if exact_type(value, list) or exact_type(value, tuple):
-        if depth <= 0:
-            return f"<{_class_name(value_type)}; {len(value)} items>"
-        result = [
-            safe_preview(item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length, unknown_value=unknown_value)
-            for item in value[:max_items]
-        ]
-        if len(value) > max_items:
-            result.append(f"<snipped {len(value) - max_items} items; use a Python slice>")
-        return result
-    if exact_type(value, dict):
-        if depth <= 0:
-            return f"<dict; {len(value)} entries>"
-        key_to_preview: dict[str, object] = {}
-        for i, (key, item) in enumerate(value.items()):
-            if i >= max_items:
-                key_to_preview["<snipped>"] = "More entries are available through Python iteration"
-                break
-            key_text = key if type(key) is str else _safe_literal(key)
-            key_to_preview[key_text] = safe_preview(
-                item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length, unknown_value=unknown_value
+class ReferenceScope:
+    """Objects shown in one presentation, keyed by identity, with the first path that displayed each one.
+
+    Shown objects are retained so that their identities stay unique while the scope is in use.
+    """
+
+    def __init__(self) -> None:
+        self._object_id_to_path: dict[int, str] = {}
+        self._shown_object_list: list[object] = []
+
+    def path(self, value: object) -> str | None:
+        return self._object_id_to_path.get(id(value))
+
+    def add(self, value: object, path: str) -> None:
+        if id(value) not in self._object_id_to_path:
+            self._object_id_to_path[id(value)] = path
+            self._shown_object_list.append(value)
+
+    def checkpoint(self) -> int:
+        return len(self._shown_object_list)
+
+    def rollback(self, checkpoint: int) -> None:
+        for value in self._shown_object_list[checkpoint:]:
+            del self._object_id_to_path[id(value)]
+        del self._shown_object_list[checkpoint:]
+
+
+@dataclass(frozen=True)
+class ValueText:
+    """Python-form text of a value.
+
+    ``truncated`` means a higher detail level would show more; ``exact`` means the text spells the whole value.
+    """
+
+    text: str
+    truncated: bool
+    exact: bool
+
+
+_STRING_CHARACTERS_PER_LEVEL = 32
+
+
+def is_reference_target(value: object) -> bool:
+    """Identity is meaningful only for mutable containers and declared-field instances.
+
+    CPython may share equal strings, numbers, tuples, and other immutable values incidentally.
+    """
+    return any(type(value) is candidate for candidate in (list, dict, set)) or declared_field_name_to_value(value) is not None
+
+
+def render_value_text(
+    value: object,
+    *,
+    level: int,
+    max_depth: int,
+    path: str | None = None,
+    scope: ReferenceScope | None = None,
+    shown_fields: Callable[[object], Mapping[str, object] | None] | None = None,
+    max_characters: int | None = None,
+) -> ValueText | None:
+    """Render *value* in Python form at a detail *level*, or return None when the text exceeds *max_characters*.
+
+    The level bounds items per container, string length, and expanded depth (also bounded by *max_depth*).
+    An object already in *scope* is written as the path that first showed it; *path* names the value itself.
+    *shown_fields* may select the fields displayed for an instance.
+    """
+    renderer = _ValueRenderer(level=level, max_depth=max_depth, scope=scope, shown_fields=shown_fields, max_characters=max_characters)
+    try:
+        text = renderer.render(value, path, 0)
+    except _CharacterLimitExceededError:
+        return None
+    return ValueText(text, truncated=renderer.truncated, exact=renderer.exact)
+
+
+class _CharacterLimitExceededError(Exception):
+    pass
+
+
+class _ValueRenderer:
+    def __init__(
+        self,
+        *,
+        level: int,
+        max_depth: int,
+        scope: ReferenceScope | None,
+        shown_fields: Callable[[object], Mapping[str, object] | None] | None,
+        max_characters: int | None,
+    ) -> None:
+        self._item_limit = max(level, 0)
+        self._string_limit = max(level, 0) * _STRING_CHARACTERS_PER_LEVEL
+        self._depth_limit = max(min(max_depth, level), 0)
+        self._scope = scope if scope is not None else ReferenceScope()
+        self._shown_fields = shown_fields
+        self._max_characters = max_characters
+        self._character_count = 0
+        self._active_object_id_set: set[int] = set()
+        self.truncated = False
+        self.exact = True
+
+    def _emit(self, text: str) -> str:
+        self._character_count += len(text)
+        if self._max_characters is not None and self._character_count > self._max_characters:
+            raise _CharacterLimitExceededError
+        return text
+
+    def _marker(self, text: str, *, path: str | None = None, truncated: bool) -> str:
+        self.exact = False
+        if truncated:
+            self.truncated = True
+        return self._emit(f"<{text}; {path}>" if path is not None else f"<{text}>")
+
+    def render(self, value: object, path: str | None, depth: int) -> str:
+        value_type = type(value)
+        if value is None or value_type is bool:
+            return self._emit(repr(value))
+        if exact_type(value, int):
+            if value.bit_length() > 512:
+                return self._marker(f"int; {value.bit_length()} bits", truncated=False)
+            return self._emit(repr(value))
+        if exact_type(value, float):
+            if not math.isfinite(value):
+                self.exact = False
+            return self._emit(repr(value))
+        if exact_type(value, str):
+            return self._render_string(value, path)
+        if exact_type(value, bytes) or exact_type(value, bytearray):
+            return self._marker(f"{_class_name(value_type)}; {_count_text(len(value), 'byte')}", truncated=False)
+        if exact_type(value, DisplayText):
+            return self._emit(value.text)
+        shown_path = self._scope.path(value)
+        if shown_path is not None:
+            return self._emit(shown_path)
+        if id(value) in self._active_object_id_set:
+            return self._marker(f"cycle {_class_name(value_type)}", truncated=False)
+        if any(value_type is candidate for candidate in (list, tuple, dict, set, frozenset)):
+            return self._render_container(
+                typing.cast(list[object] | tuple[object, ...] | dict[object, object] | set[object] | frozenset[object], value), path, depth
             )
-        return key_to_preview
-    field_name_to_value = _declared_field_name_to_value(value)
-    if field_name_to_value is not None:
-        if depth <= 0:
-            return f"<{_class_name(value_type)}; fields omitted>"
-        field_name_to_preview = {
-            name: safe_preview(item, depth=depth - 1, max_items=max_items, max_string_length=max_string_length, unknown_value=unknown_value)
-            for name, item in list(field_name_to_value.items())[:max_items]
-        }
-        if len(field_name_to_value) > max_items:
-            field_name_to_preview["<snipped>"] = "More named fields are available through inspection or Python access"
-        return field_name_to_preview
-    return unknown_value(value) if unknown_value is not None else f"<opaque {type_name(value)}>"
+        field_name_to_value = self._shown_fields(value) if self._shown_fields is not None else None
+        if field_name_to_value is None:
+            field_name_to_value = declared_field_name_to_value(value)
+        if field_name_to_value is not None:
+            return self._render_instance(value, field_name_to_value, path, depth)
+        return self._marker(f"opaque {type_name(value)}", truncated=False)
+
+    def _render_string(self, value: str, path: str | None) -> str:
+        if len(value) <= self._string_limit:
+            return self._emit(_string_literal(value))
+        if self._string_limit == 0:
+            return self._marker(f"str; {_count_text(len(value), 'character')}", path=path, truncated=True)
+        continuation = None if path is None else f"{path}[{self._string_limit}:]"
+        shown = self._emit(_string_literal(value[: self._string_limit]))
+        return shown + " " + self._marker(f"+{_count_text(len(value) - self._string_limit, 'character')}", path=continuation, truncated=True)
+
+    def _render_container(
+        self, value: list[object] | tuple[object, ...] | dict[object, object] | set[object] | frozenset[object], path: str | None, depth: int
+    ) -> str:
+        value_type = type(value)
+        item_count = len(value)
+        if item_count == 0:
+            return self._emit({list: "[]", tuple: "()", dict: "{}", set: "set()", frozenset: "frozenset()"}[value_type])
+        if depth >= self._depth_limit:
+            noun = "entry" if isinstance(value, dict) else "item"
+            return self._marker(f"{_class_name(value_type)}; {_count_text(item_count, noun)}", path=path, truncated=True)
+        if path is not None and value_type is not tuple and value_type is not frozenset:
+            self._scope.add(value, path)
+        self._active_object_id_set.add(id(value))
+        try:
+            part_list: list[str] = []
+            omitted_count = max(item_count - self._item_limit, 0)
+            if isinstance(value, dict):
+                for index, (key, item) in enumerate(value.items()):
+                    if index >= self._item_limit:
+                        break
+                    item_path = (
+                        f"{path}[{key!r}]"
+                        if path is not None and (key is None or any(type(key) is candidate for candidate in (str, int, bool)))
+                        else None
+                    )
+                    part_list.append(self._emit(f"{self.render(key, None, depth + 1)}: ") + self.render(item, item_path, depth + 1))
+                if omitted_count:
+                    continuation = None if path is None else f"list({path}.items())[{self._item_limit}:]"
+                    part_list.append(self._marker(f"+{_count_text(omitted_count, 'entry')}", path=continuation, truncated=True))
+                return "{" + ", ".join(part_list) + "}"
+            if isinstance(value, set | frozenset):
+                for index, item in enumerate(value):
+                    if index >= self._item_limit:
+                        break
+                    part_list.append(self.render(item, None, depth + 1))
+                if omitted_count:
+                    part_list.append(self._marker(f"+{_count_text(omitted_count, 'item')}", truncated=True))
+                body = "{" + ", ".join(part_list) + "}"
+                return body if value_type is set else f"frozenset({body})"
+            for index, item in enumerate(value[: self._item_limit]):
+                part_list.append(self.render(item, None if path is None else f"{path}[{index}]", depth + 1))
+            if omitted_count:
+                continuation = None if path is None else f"{path}[{self._item_limit}:]"
+                part_list.append(self._marker(f"+{_count_text(omitted_count, 'item')}", path=continuation, truncated=True))
+            if value_type is list:
+                return "[" + ", ".join(part_list) + "]"
+            return "(" + ", ".join(part_list) + ("," if len(part_list) == 1 and item_count == 1 else "") + ")"
+        finally:
+            self._active_object_id_set.discard(id(value))
+
+    def _render_instance(self, value: object, field_name_to_value: Mapping[str, object], path: str | None, depth: int) -> str:
+        name = _class_name(type(value))
+        field_count = len(field_name_to_value)
+        if field_count == 0:
+            return self._emit(f"{name}()")
+        if depth >= self._depth_limit:
+            return self._emit(f"{name}(") + self._marker(_count_text(field_count, "field"), path=path, truncated=True) + ")"
+        if path is not None:
+            self._scope.add(value, path)
+        self._active_object_id_set.add(id(value))
+        try:
+            part_list: list[str] = []
+            for index, (field_name, item) in enumerate(field_name_to_value.items()):
+                if index >= self._item_limit:
+                    break
+                field_path = None if path is None or not field_name.isidentifier() else f"{path}.{field_name}"
+                part_list.append(self._emit(f"{field_name}=") + self.render(item, field_path, depth + 1))
+            if field_count > self._item_limit:
+                part_list.append(self._marker(f"+{_count_text(field_count - self._item_limit, 'field')}", path=path, truncated=True))
+            return f"{name}(" + ", ".join(part_list) + ")"
+        finally:
+            self._active_object_id_set.discard(id(value))
 
 
-def _declared_field_name_to_value(value: object) -> dict[str, object] | None:
+def _count_text(count: int, noun: str) -> str:
+    if count == 1:
+        return f"1 {noun}"
+    return f"{count} {noun[:-1]}ies" if noun.endswith("y") else f"{count} {noun}s"
+
+
+def _string_literal(value: str) -> str:
+    """Spell multi-line text in a triple-quoted literal so that lines stay readable."""
+    if "\n" not in value:
+        return repr(value)
+    character_list: list[str] = []
+    for index, character in enumerate(value):
+        if character == "\\":
+            character_list.append("\\\\")
+        elif character == "\n":
+            character_list.append(character)
+        elif character == "'" and (index + 1 == len(value) or value[index + 1] == "'"):
+            character_list.append("\\'")
+        elif not character.isprintable():
+            character_list.append(repr(character)[1:-1])
+        else:
+            character_list.append(character)
+    return "'''" + "".join(character_list) + "'''"
+
+
+def declared_field_name_to_value(value: object) -> dict[str, object] | None:
     """Return the declared fields of a named tuple, dataclass, or Pydantic model instance in declaration order.
 
     The instance is described only when every field value is stored in tuple items, the instance dictionary, or standard slots.
@@ -227,7 +431,7 @@ def _declared_field_name_to_value(value: object) -> dict[str, object] | None:
 
 
 def _safe_literal(value: object) -> str:
-    if exact_type(value, _DisplayText):
+    if exact_type(value, DisplayText):
         return value.text
     if value is Ellipsis:
         return "..."
@@ -239,7 +443,9 @@ def _safe_literal(value: object) -> str:
 
 
 @dataclass(frozen=True)
-class _DisplayText:
+class DisplayText:
+    """Text already rendered for display; renderers emit it verbatim."""
+
     text: str
 
     def __repr__(self) -> str:
@@ -251,8 +457,8 @@ def _signature_text(signature: inspect.Signature) -> str:
         parameter.replace(
             annotation=inspect.Parameter.empty
             if parameter.annotation is inspect.Parameter.empty
-            else _DisplayText(annotation_text(parameter.annotation)),
-            default=inspect.Parameter.empty if parameter.default is inspect.Parameter.empty else _DisplayText(_safe_literal(parameter.default)),
+            else DisplayText(annotation_text(parameter.annotation)),
+            default=inspect.Parameter.empty if parameter.default is inspect.Parameter.empty else DisplayText(_safe_literal(parameter.default)),
         )
         for parameter in signature.parameters.values()
     ]
@@ -262,7 +468,7 @@ def _signature_text(signature: inspect.Signature) -> str:
             parameters=parameters,
             return_annotation=inspect.Signature.empty
             if return_annotation is inspect.Signature.empty
-            else _DisplayText(annotation_text(return_annotation)),
+            else DisplayText(annotation_text(return_annotation)),
         )
     )
     return text if len(text) <= 2_000 else text[:2_000] + "<snipped signature metadata>"
@@ -390,8 +596,8 @@ def describe_callable(value: object, *, depth: int = 0) -> _CallableDescription:
                 pass
 
             mirror.__signature__ = description.signature  # type: ignore[attr-defined]
-            arguments = tuple(_DisplayText(_safe_literal(item)) for item in value.args)
-            keyword_name_to_value = {name: _DisplayText(_safe_literal(item)) for name, item in (value.keywords or {}).items()}
+            arguments = tuple(DisplayText(_safe_literal(item)) for item in value.args)
+            keyword_name_to_value = {name: DisplayText(_safe_literal(item)) for name, item in (value.keywords or {}).items()}
             with suppress(TypeError, ValueError):
                 signature = inspect.signature(functools.partial(mirror, *arguments, **keyword_name_to_value), eval_str=False)
         return _CallableDescription(signature, description.documentation, description.asynchronous, description.annotation_note)

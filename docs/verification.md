@@ -211,9 +211,9 @@ Inspect `prompt_text`, or print it, to see the captured text.
 Multimodal message parts also need their native content inspected; this text-only example does not project images or files.
 For observation during real execution, use a scoped Pydantic AI capability as in [request observations](host-integration.md#request-usage-and-admission).
 
-## Diagnosing `<snipped>` markers
+## Diagnosing omission markers
 
-Context budgets limit what appears in LOCALS and GLOBALS; a `<snipped>` marker indicates an abbreviated preview.
+Context budgets limit what appears in LOCALS and GLOBALS: `# <snipped>` ends a section whose entries were omitted, and markers such as `<+22 items; items[8:]>` mark omitted parts of a value.
 The underlying values remain in Python memory and accessible through runtime discovery, inspection, and Python helpers.
 A diagnostic log message is emitted on the `nighthawk` logger.
 To improve prompt coherence:

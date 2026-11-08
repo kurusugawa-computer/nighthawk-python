@@ -2,9 +2,9 @@ from typing import cast
 
 import pytest
 
+from nighthawk.adapters.pydantic_ai._rendering import render_tool_value_text
 from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
 from nighthawk.adapters.pydantic_ai.prompt import build_user_prompt
-from nighthawk.adapters.pydantic_ai.tools._rendering import render_tool_result_json_text
 from nighthawk.core.assignment import assign_expression_async
 from nighthawk.core.expression import evaluate_expression_async
 from nighthawk.core.step_outcome import Pass
@@ -109,12 +109,11 @@ def test_core_context_and_tool_previews_are_lossy_without_changing_python_histor
             assert isinstance(page, ConversationPage)
             original_records = page.record_tuple
             assert "FULL_HISTORY_PAYLOAD" in original_records[0].text
-            preview = render_tool_result_json_text(
-                value=page,
-                error=None,
+            preview = render_tool_value_text(
+                page,
                 max_tokens=20,
                 encoding=configuration.resolve_token_encoding(),
-                style=configuration.json_renderer_style,
+                max_depth=configuration.context_limits.value_max_depth,
             )
             assert len(preview) < len(original_records[0].text)
             assert "FULL_HISTORY_PAYLOAD" not in preview
