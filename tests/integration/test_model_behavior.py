@@ -257,6 +257,67 @@ async def test_nested_structured_input_selection_preserves_identity(model_evalua
     assert committed["result"] is team.members[1]
 
 
+@dataclass
+class _Account:
+    owner: str
+    balance: int
+
+
+@dataclass
+class _Transfer:
+    source: _Account
+    target: _Account
+    amount: int
+
+
+async def test_shared_nested_objects_are_counted_by_identity(model_evaluation: ModelEvaluation) -> None:
+    first = _Account("Aoi", 100)
+    second = _Account("Ren", 40)
+    twin = _Account("Aoi", 100)
+    transfers = [_Transfer(first, second, 10), _Transfer(second, first, 5), _Transfer(twin, second, 1)]
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Set <:result> to the number of distinct account objects (by identity, not by equal values) used as a source or target in <transfers>.",
+            input_binding_names=("transfers",),
+            output_binding_names=("result",),
+        ),
+        name_to_value={"transfers": transfers},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"result": 3}
+
+
+async def test_multiline_text_input_is_read_beyond_its_opening(model_evaluation: ModelEvaluation) -> None:
+    notice = "\n".join(
+        [
+            "Facilities notice for the north building.",
+            "The elevator on the east side will be serviced next week.",
+            "Use the west stairs while the service is in progress.",
+            "Visitors should register at the front desk as usual.",
+            "Parking on level two remains closed for repainting.",
+            "Questions can be sent to the facilities team.",
+            "Badge renewals must be completed by 2026-12-04 to keep building access.",
+            "Thank you for your patience.",
+        ]
+    )
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Set <:result> to the badge renewal deadline stated in <notice>, as a YYYY-MM-DD string.",
+            input_binding_names=("notice",),
+            output_binding_names=("result",),
+        ),
+        name_to_value={"notice": notice},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    assert committed == {"result": "2026-12-04"}
+
+
 async def test_multiple_outputs(model_evaluation: ModelEvaluation) -> None:
     committed: dict[str, object] = {}
     model_evaluation.name_to_observation.update(bindings=committed)
