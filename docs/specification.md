@@ -670,7 +670,7 @@ Semantics of `nh_assign`:
 - To mutate an explicitly selected parent or task object, retain it under an eligible temporary name before using an attribute path.
 - Evaluate `expression` once in the effective environment, awaiting its result when needed.
 - If `target_path` is a bare `name`:
-    - A declared output validates against its entry-time contract before updating the tracked working value.
+    - A declared output validates against its entry-time contract, including the instance check of final validation, before updating the tracked working value.
     - An existing Python name requires an output declaration, including when the Python name is currently unbound.
     - A new temporary name may shadow parent or task state; it receives no Python writeback without an output declaration.
     - The generated environment helper root is protected from assignment.
@@ -689,7 +689,7 @@ Commit and mutation notes:
 - An executor may select a complete subset through `StepCandidate.binding_name_to_value`; omission or `UNSET` selects initialized declared outputs from the environment.
 - Tracked assignment and mutation marks support working-state bookkeeping; they do not select which initialized outputs receive final validation.
 - All selected outputs receive final validation; an initial `Raise` discards pending working values and rejects explicit nonempty output mappings.
-- Pydantic accepts model and dataclass instances without revalidating their fields, so final validation also checks each such instance against its own class through a round-trip copy, without rerunning the declared contract's validators. An in-place change cannot commit fields outside their model's contract; the original objects are committed when the check succeeds.
+- Pydantic accepts model and dataclass instances without revalidating their fields, so final validation also checks each such instance against its own class through a round-trip copy, without rerunning the declared contract's validators. The instance must already hold what that validation produces in place of models, dataclasses, lists, and tuples; a dict left where a model is declared by `model_copy(update=...)` or `model_construct` is rejected. An in-place change cannot commit fields outside their model's contract; the original objects are committed when the check succeeds.
 - Mutation of a shared object is immediately visible and does not require a generated name assignment.
 - Objects outside declared outputs are not recursively validated at finalization.
 

@@ -1,7 +1,7 @@
 """Shared binding contracts for Natural blocks and Python integrations."""
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import is_dataclass
+from dataclasses import fields, is_dataclass
 from keyword import iskeyword
 from typing import cast
 
@@ -97,7 +97,7 @@ def validate_output_bindings(
     No assignment, initial-value supplementation, or assignment recording occurs here.
     Values are not deep-copied, and validator effects are not rolled back.
     Pydantic accepts model and dataclass instances without revalidating their fields, so each such instance in a value
-    whose contract contains them is also checked against its own class through a round-trip copy.
+    whose contract contains them is also checked by ``validate_instance_fields``.
     The check does not rerun the declared contract's validators, and the original objects are retained when it succeeds.
     """
     output_binding_names = normalize_binding_names(output_binding_names)
@@ -111,13 +111,24 @@ def validate_output_bindings(
         try:
             adapter = TypeAdapter(cast(TypeForm[object], expected_type))
             validated_value = adapter.validate_python(validated_name_to_value[name])
-            if _contains_instance_schema(adapter.core_schema):
-                # In-place changes, which the model is told to make through nh_evaluate, would otherwise bypass the contract.
-                _validate_instance_fields(validated_value, set())
+            # In-place changes, which the model is told to make through nh_evaluate, would otherwise bypass the contract.
+            validate_instance_fields(validated_value, adapter)
             validated_name_to_value[name] = validated_value
         except Exception as exception:
             raise BindingValidationError(name, exception) from exception
     return validated_name_to_value
+
+
+def validate_instance_fields(value: object, adapter: TypeAdapter[object]) -> None:
+    """Check each model and dataclass instance in a value validated by *adapter* against its own class.
+
+    Each instance must validate through a round-trip copy and already hold what that validation produces in place of
+    models, dataclasses, lists, and tuples.
+    ``model_copy(update=...)`` and ``model_construct`` skip validation, so a dict where a model is declared would
+    otherwise be committed as a dict.
+    """
+    if _contains_instance_schema(adapter.core_schema):
+        _validate_instance_fields(value, set())
 
 
 def _contains_instance_schema(schema: object) -> bool:
@@ -137,13 +148,13 @@ def _validate_instance_fields(value: object, visited_id_set: set[int]) -> None:
     if isinstance(value, BaseModel):
         model_class = type(value)
         if model_class.model_config.get("revalidate_instances", "never") == "never":
-            model_class.model_validate(value.model_dump(round_trip=True, warnings="none"))
+            _require_validated_shape(value, model_class.model_validate(value.model_dump(round_trip=True, warnings="none")))
         return
     if is_dataclass(value) and not isinstance(value, type):
         configuration = getattr(type(value), "__pydantic_config__", {})
         if configuration.get("revalidate_instances", "never") == "never":
             adapter = TypeAdapter(type(value))
-            adapter.validate_python(adapter.dump_python(value, round_trip=True, warnings="none"))
+            _require_validated_shape(value, adapter.validate_python(adapter.dump_python(value, round_trip=True, warnings="none")))
         return
     if isinstance(value, Mapping):
         for item in value.values():
@@ -151,3 +162,26 @@ def _validate_instance_fields(value: object, visited_id_set: set[int]) -> None:
     elif isinstance(value, list | tuple | set | frozenset):
         for item in value:
             _validate_instance_fields(item, visited_id_set)
+
+
+def _require_validated_shape(original: object, validated: object) -> None:
+    # Validation may narrow a subclass instance or a NamedTuple to its declared type, so subclasses keep their shape.
+    if isinstance(validated, BaseModel) or (is_dataclass(validated) and not isinstance(validated, type)):
+        if not isinstance(original, type(validated)):
+            raise ValueError(
+                f"Found {type(original).__name__} where {type(validated).__name__} is declared; "
+                "build the value with its class or model_validate, because model_copy(update=...) and model_construct do not validate"
+            )
+        field_names = type(validated).model_fields if isinstance(validated, BaseModel) else [field.name for field in fields(validated)]
+        for name in field_names:
+            _require_validated_shape(getattr(original, name, None), getattr(validated, name, None))
+        return
+    if isinstance(validated, list | tuple):
+        if not isinstance(original, type(validated)) or len(original) != len(validated):
+            raise ValueError(f"Found {type(original).__name__} where {type(validated).__name__} is declared")
+        for original_item, validated_item in zip(original, validated, strict=True):
+            _require_validated_shape(original_item, validated_item)
+        return
+    if isinstance(validated, Mapping) and isinstance(original, Mapping) and len(original) == len(validated):
+        for original_item, validated_item in zip(original.values(), validated.values(), strict=True):
+            _require_validated_shape(original_item, validated_item)

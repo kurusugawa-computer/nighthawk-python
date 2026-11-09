@@ -11,6 +11,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from typing_extensions import TypeForm
 
 from nighthawk.core.async_bridge import run_coroutine_synchronously
+from nighthawk.core.bindings import validate_instance_fields
 from nighthawk.core.expression import compile_expression, evaluate_compiled_expression
 from nighthawk.core.operation_contract import OperationError
 from nighthawk.core.operations import OperationExecution, execute_operation_async, new_operation_request
@@ -63,8 +64,10 @@ def _assign_value(
         execution.phase = "validation"
         if name in step_context.environment.binding_name_to_type:
             try:
-                value = TypeAdapter(cast(TypeForm[object], step_context.environment.binding_name_to_type[name])).validate_python(value)
-            except ValidationError as exception:
+                adapter = TypeAdapter(cast(TypeForm[object], step_context.environment.binding_name_to_type[name]))
+                value = adapter.validate_python(value)
+                validate_instance_fields(value, adapter)
+            except (ValidationError, ValueError) as exception:
                 raise _failure(
                     execution,
                     f"Target {name!r} failed contract {step_context.environment.binding_name_to_type[name]!r}: {exception}",

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 import pytest
-from pydantic import AfterValidator, BaseModel, Field, ValidationError
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
 
 from nighthawk.core.bindings import (
     MISSING_ANNOTATION,
@@ -132,3 +132,34 @@ def test_instances_changed_in_place_are_validated_and_retained() -> None:
             validate_output_bindings({name: value}, {name: expected_type}, (name,))
         assert caught.value.binding_name == name
         assert isinstance(caught.value.original_exception, ValidationError)
+
+
+class _Entry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+
+
+class _NotedEntry(_Entry):
+    note: str = ""
+
+
+class _Ledger(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    entry_tuple: tuple[_Entry, ...] = ()
+
+
+def test_unvalidated_copies_that_hold_raw_values_are_rejected() -> None:
+    ledger = _Ledger(entry_tuple=(_Entry(label="a"),))
+    noted = _Ledger(entry_tuple=(_NotedEntry(label="b", note="kept"),))
+    assert validate_output_bindings({"ledger": noted}, {"ledger": _Ledger}, ("ledger",))["ledger"] is noted
+
+    for value in (
+        ledger.model_copy(update={"entry_tuple": ({"label": "a"},)}),
+        ledger.model_copy(update={"entry_tuple": [_Entry(label="a")]}),
+        _Ledger.model_construct(entry_tuple=({"label": "a"},)),
+    ):
+        with pytest.raises(BindingValidationError) as caught:
+            validate_output_bindings({"ledger": value}, {"ledger": _Ledger}, ("ledger",))
+        assert "is declared" in str(caught.value.original_exception)

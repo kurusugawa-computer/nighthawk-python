@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
+from pydantic import BaseModel, ConfigDict
 from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
 
 from nighthawk.adapters.pydantic_ai.tools.provided import get_provided_tools
 from nighthawk.core.execution_reference import ExecutionReference
+from nighthawk.core.operation_contract import OperationError
 from nighthawk.core.step_context import StepContext
 from tests.support.contexts import new_step_context
 
@@ -99,3 +101,33 @@ def test_nh_assign_handles_sync_expression() -> None:
 
     assert update["updates"][0]["value"] == 30
     assert step_context.environment.resolve("result") == 30
+
+
+class _Entry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+
+
+class _Ledger(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    entry_tuple: tuple[_Entry, ...] = ()
+
+
+def test_nh_assign_rejects_an_unvalidated_copy_of_a_declared_output() -> None:
+    step_context = new_step_context(output_binding_names={"ledger"}, binding_name_to_type={"ledger": _Ledger})
+    step_context.environment.assign("base", _Ledger())
+    step_context.environment.assign("built", _Ledger(entry_tuple=(_Entry(label="a"),)))
+    run_context = _new_run_context(step_context)
+    nh_assign = _get_tool_function("nh_assign")
+
+    try:
+        asyncio.run(nh_assign(run_context, target_path="ledger", expression="base.model_copy(update={'entry_tuple': ({'label': 'a'},)})"))
+    except OperationError as error:
+        assert "model_copy" in str(error)
+    else:
+        raise AssertionError("nh_assign committed a dict where _Entry is declared")
+
+    update = asyncio.run(nh_assign(run_context, target_path="ledger", expression="built"))
+    assert update["updates"][0]["value"] == _Ledger(entry_tuple=(_Entry(label="a"),))
