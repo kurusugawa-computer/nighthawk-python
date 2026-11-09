@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from pydantic_ai.messages import (
     AudioUrl,
     BinaryContent,
+    CachePoint,
     DocumentUrl,
     ImageUrl,
     TextContent,
@@ -27,6 +28,7 @@ from nighthawk.adapters.pydantic_ai._user_content import (
     try_project_user_prompt_value,
 )
 from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.context import PROGRAM_CACHE_BOUNDARY
 from nighthawk.adapters.pydantic_ai.scoping import get_model_scope
 from nighthawk.core.description import (
     ReferenceScope,
@@ -781,7 +783,7 @@ def _build_user_prompt_content(
     prompt_content = _resolve_step_user_prompt_content(
         template_text=template_text,
         name_to_content={
-            "program": (program_text,),
+            "program": _program_content(program_text, caches_prompt=_caches_prompt(configuration)),
             "locals": locals_content,
             "globals": globals_content,
             "tool_result_max_tokens": (str(context_limits.tool_result_max_tokens),),
@@ -791,6 +793,30 @@ def _build_user_prompt_content(
     if any(is_multi_modal_content(content) for content in prompt_content):
         return coalesce_user_content(("Use attached media directly for perceptual judgments.\n\n", *prompt_content))
     return prompt_content
+
+
+def _caches_prompt(configuration: StepExecutorConfiguration) -> bool:
+    settings = configuration.execution_model_settings
+    cache = settings.get("cache") if isinstance(settings, dict) else getattr(settings, "cache", None)
+    return cache is not None and cache is not False
+
+
+def remove_program_cache_boundaries(program_text: str) -> str:
+    return program_text.replace(PROGRAM_CACHE_BOUNDARY, "")
+
+
+def _program_content(program_text: str, *, caches_prompt: bool) -> PromptContentTuple:
+    if not caches_prompt:
+        return (remove_program_cache_boundaries(program_text),)
+    # Providers reuse a cached prefix only at a breakpoint placed at the same position in the later request,
+    # so every marked boundary and the end of the program carry one.
+    content_list: list[UserContent] = []
+    for segment in program_text.split(PROGRAM_CACHE_BOUNDARY):
+        if segment:
+            content_list.append(segment)
+        if content_list and not isinstance(content_list[-1], CachePoint):
+            content_list.append(CachePoint())
+    return tuple(content_list)
 
 
 def append_user_prompt_suffixes(prompt_content: PromptContentTuple, *, configuration: StepExecutorConfiguration) -> PromptContentTuple:

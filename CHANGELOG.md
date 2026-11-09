@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Place prompt cache points after the Natural program text, and at `PROGRAM_CACHE_BOUNDARY` markers inside it, when `execution_model_settings` enables Pydantic AI's `cache` setting, so repeated calls can reuse the program prefix.
+  Without `cache`, the markers are removed and the presented text is unchanged.
+  See [prompt caching across calls](docs/runtime-configuration.md#prompt-caching-across-calls).
+
 ## [0.20.0]
 
 ### Added

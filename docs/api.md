@@ -650,6 +650,7 @@ See [Architecture](architecture.md) for dependency direction and composition.
       members:
         - ContextBuilder
         - DefaultContextBuilder
+        - PROGRAM_CACHE_BOUNDARY
 
 ::: nighthawk.adapters.pydantic_ai.presentation
     options:

@@ -56,8 +56,20 @@ class ContextBuilder(Protocol):
     def build(self, request: ContextRequest) -> Sequence[UserContent]: ...
 
 
+PROGRAM_CACHE_BOUNDARY = "<<<NH:CACHE_BOUNDARY>>>"
+"""Marks, in trusted Natural program text, the end of a prefix that stays the same across calls.
+
+The default builder never presents the marker.
+When the configuration's `execution_model_settings` enable Pydantic AI's `cache` setting,
+it places a `CachePoint` at each marker and after the program text; otherwise it removes the markers.
+"""
+
+
 class DefaultContextBuilder:
-    """Present the environment using configured templates and context budgets."""
+    """Present the environment using configured templates and context budgets.
+
+    Program cache boundaries become cache points only when `execution_model_settings` enable `cache`.
+    """
 
     def build(self, request: ContextRequest) -> Sequence[UserContent]:
         from nighthawk.adapters.pydantic_ai.prompt import _build_user_prompt_content

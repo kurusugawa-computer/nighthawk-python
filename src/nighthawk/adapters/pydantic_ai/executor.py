@@ -31,6 +31,7 @@ from nighthawk.adapters.pydantic_ai.prompt import (
     _resolve_name_in_step_context,
     build_system_prompt,
     extract_references_and_program,
+    remove_program_cache_boundaries,
     resolve_system_prompt_template_text,
 )
 from nighthawk.adapters.pydantic_ai.scoping import get_model_scope, system_prompt_suffix_fragment_scope
@@ -285,7 +286,7 @@ class AgentStepExecutor:
             model=model,
             output_type=cast(Any, output_type),
             deps_type=StepContext,
-            instructions=extract_references_and_program(request.processed_natural_program)[1],
+            instructions=remove_program_cache_boundaries(extract_references_and_program(request.processed_natural_program)[1]),
             model_settings=cast(ModelSettings, self.configuration.decision_model_settings),
         )
         with step_context_scope(request.step_context):

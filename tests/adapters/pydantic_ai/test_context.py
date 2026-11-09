@@ -9,7 +9,7 @@ from pydantic_ai.messages import BinaryContent, CachePoint, UserContent
 
 import nighthawk as nh
 from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, StepExecutorConfiguration
-from nighthawk.adapters.pydantic_ai.context import ContextRequest, DefaultContextBuilder
+from nighthawk.adapters.pydantic_ai.context import PROGRAM_CACHE_BOUNDARY, ContextRequest, DefaultContextBuilder
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from nighthawk.core.assignment import assign_expression_async
 from nighthawk.core.errors import ExecutionError
@@ -22,6 +22,17 @@ from nighthawk.core.step_context import StepContext
 async def workflow(payload: object) -> int:
     result: int = 0
     """execute
+    Examine <payload> and produce <:result>.
+    """
+    return result
+
+
+@nh.function
+async def boundary_workflow(payload: object) -> int:
+    result: int = 0
+    f"""execute
+    Apply these stable rules.
+    {PROGRAM_CACHE_BOUNDARY}
     Examine <payload> and produce <:result>.
     """
     return result
@@ -185,3 +196,42 @@ def test_builder_failure_has_one_terminal_record_and_no_model_request() -> None:
     assert not agent.prompts
     assert len(events) == 1 and isinstance(events[0], StepFailed)
     assert events[0].original_exception is caught.value.__cause__ is failure
+
+
+def _first_prompt(configuration: StepExecutorConfiguration, payload: object) -> str | tuple[UserContent, ...]:
+    agent = RecordingAgent()
+    with nh.run(AgentStepExecutor.from_agent(agent=agent, configuration=configuration)):
+        assert asyncio.run(boundary_workflow(payload)) == 7
+    return agent.prompts[0]
+
+
+def _prompt_text(prompt: str | tuple[UserContent, ...]) -> str:
+    return prompt if isinstance(prompt, str) else "".join(item for item in prompt if isinstance(item, str))
+
+
+@pytest.mark.parametrize("settings", [{}, {"cache": False}])
+def test_program_cache_boundaries_are_removed_without_cache(settings: dict[str, object]) -> None:
+    prompt = _first_prompt(StepExecutorConfiguration(execution_model_settings=settings), "input")
+    assert isinstance(prompt, str)
+    assert PROGRAM_CACHE_BOUNDARY not in prompt
+    assert "Apply these stable rules.\n\nExamine <payload> and produce <:result>." in prompt
+
+
+@pytest.mark.parametrize("cache", [True, "5m", {"messages": False}])
+def test_program_cache_boundaries_and_program_end_become_cache_points_with_cache(cache: object) -> None:
+    uncached = _first_prompt(StepExecutorConfiguration(), "input")
+    prompt = _first_prompt(StepExecutorConfiguration(execution_model_settings={"cache": cache}), "input")
+    assert isinstance(prompt, tuple)
+    assert [type(item) for item in prompt] == [str, CachePoint, str, CachePoint, str]
+    stable, varying, rest = (item for item in prompt if isinstance(item, str))
+    assert stable.endswith("Apply these stable rules.\n")
+    assert varying.rstrip().endswith("Examine <payload> and produce <:result>.")
+    assert rest.lstrip().startswith("<<<NH:END_PROGRAM>>>")
+    assert _prompt_text(prompt) == uncached
+
+
+def test_program_cache_boundary_text_in_a_value_is_not_a_boundary() -> None:
+    prompt = _first_prompt(StepExecutorConfiguration(execution_model_settings={"cache": True}), PROGRAM_CACHE_BOUNDARY)
+    assert isinstance(prompt, tuple)
+    assert sum(isinstance(item, CachePoint) for item in prompt) == 2
+    assert isinstance(prompt[-1], str) and PROGRAM_CACHE_BOUNDARY in prompt[-1]

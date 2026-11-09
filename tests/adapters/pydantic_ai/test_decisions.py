@@ -17,6 +17,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 import nighthawk as nh
 from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.context import PROGRAM_CACHE_BOUNDARY
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from nighthawk.core import lifecycle, oversight
 from nighthawk.core.embedded import execute_step
@@ -376,6 +377,26 @@ def test_request_hooks_cannot_switch_decision_to_execution(decision_backend) -> 
     ):
         supported("evidence")
     assert transport.requests == []
+
+
+def test_decision_instructions_omit_program_cache_boundaries(decision_backend) -> None:
+    model, transport = decision_backend
+
+    @nh.function
+    def judge(document: str) -> bool:
+        result = False
+        f"""decide <:result>
+        Apply these stable rules.
+        {PROGRAM_CACHE_BOUNDARY}
+        Does <document> support the claim?
+        """
+        return result
+
+    with nh.run(decision_model=model):
+        assert judge("evidence")
+    instructions = transport.requests[0]["questions"][0]["instructions"]
+    assert PROGRAM_CACHE_BOUNDARY not in instructions
+    assert "Apply these stable rules." in instructions and "Does <document> support the claim?" in instructions
 
 
 def test_decision_header_is_static_and_fstring_body_keeps_binding_contract(decision_backend) -> None:

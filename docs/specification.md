@@ -398,6 +398,18 @@ The default user prompt template renders three delimited sections:
 
 The template uses `$program`, `$locals`, and `$globals` placeholders, substituted at prompt construction time.
 When native media is included, one line before the template directs perceptual judgments to that attached content.
+
+Program cache boundaries:
+
+- Trusted program text may contain `PROGRAM_CACHE_BOUNDARY` (`<<<NH:CACHE_BOUNDARY>>>`, from `nighthawk.adapters.pydantic_ai.context`) to mark the end of a prefix that stays the same across calls.
+  The same string inside a binding value, a summary, or a tool result is not a boundary.
+- The presented text never contains the marker; the text on both sides of it is kept unchanged.
+- When `execution_model_settings` contains a Pydantic AI `cache` setting other than `False`, the default presentation substitutes `$program` as the program segments with a `CachePoint` after each marked segment and after the program text.
+  Otherwise it removes the markers.
+  The presented text, value lookup, and validation are the same in both cases.
+- Providers reuse a cached prefix only at a cache point placed at the same position in a later request, and they bound the number of cache points per request (OpenAI keeps the last four).
+  Cache writes cost more than uncached input; providers without request-side cache points ignore them.
+- Decide blocks remove the markers from their instructions.
 Environment discovery and named-description expressions appear beside omitted context entries.
 
 #### 8.2.2. Locals summary
@@ -549,6 +561,7 @@ It returns a sequence rather than a scalar string, bytes, or serialized record.
 Native multimodal items and cache points retain identity through this boundary.
 Configured and scoped user-prompt suffix fragments are appended by common code once after builder output; builders should not add them again.
 `DefaultContextBuilder.build(request)` can be composed inside a custom builder and uses the presentation described above.
+`processed_natural_program` keeps program cache boundary markers (8.2.1); a builder that presents it without the default builder removes or converts them.
 Builder exceptions and invalid content fail the step before model execution and receive the ordinary terminal lifecycle notification.
 
 #### 8.2.5. Value inspection and name discovery

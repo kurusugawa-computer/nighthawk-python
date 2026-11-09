@@ -485,6 +485,49 @@ The request exposes the live environment, Natural program, output contracts, and
 Presentation changes do not change runtime value access.
 See [context construction](specification.md#824-replaceable-context-construction) for the contract.
 
+## Prompt caching across calls
+
+Calls to the same Natural function send the same system prompt, tools, and program before their differing bindings.
+When `execution_model_settings` contains a Pydantic AI `cache` setting other than `False`, the default presentation places a cache point after the program text, so later calls can read that prefix from the provider's cache.
+A program whose later part changes between calls can mark the end of its stable part with `PROGRAM_CACHE_BOUNDARY` from `nighthawk.adapters.pydantic_ai.context`:
+
+```py
+from typing import Literal
+
+import nighthawk as nh
+from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration
+from nighthawk.adapters.pydantic_ai.context import PROGRAM_CACHE_BOUNDARY
+
+ROUTING_RULES = "Route billing questions to billing and outages to operations."
+SEGMENT_RULES = {
+    "retail": "Retail refunds go to billing.",
+    "wholesale": "Wholesale contract changes go to accounts.",
+}
+
+configuration = StepExecutorConfiguration(
+    execution_model="openai-responses:gpt-6-luna",
+    execution_model_settings={"cache": True},
+)
+
+
+@nh.function
+def route(ticket: str, segment: Literal["retail", "wholesale"]) -> str:
+    team = ""
+    f"""execute
+    {ROUTING_RULES}
+    {PROGRAM_CACHE_BOUNDARY}
+    {SEGMENT_RULES[segment]}
+    Set <:team> to the team for <ticket>.
+    """
+    return team
+```
+
+The interpolated rules are trusted program text chosen by a typed key; task data stays in bindings such as `<ticket>`.
+
+The marker never reaches the model, and without `cache` it is removed.
+Cache writes cost more than uncached input, so enable `cache` when calls repeat the program; providers bound the number of cache points per request.
+See [user prompt structure](specification.md#821-user-prompt-structure) for the contract.
+
 ## Context limits
 
 The LOCALS and GLOBALS sections are bounded by token and item limits configured via `StepContextLimits`. When a limit is reached, remaining entries are omitted and a `<snipped>` marker is appended. The underlying data remains in Python memory and is accessible through binding functions at runtime -- truncation affects prompt coherence, not data availability.
