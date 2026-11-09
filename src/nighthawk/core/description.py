@@ -224,6 +224,8 @@ class _ValueRenderer:
         self._item_limit = max(level, 0)
         self._string_limit = max(level, 0) * _STRING_CHARACTERS_PER_LEVEL
         self._depth_limit = max(min(max_depth, level), 0)
+        # Depth cut at max_depth is final: a higher level cannot show it, so it is not truncation.
+        self._level_limits_depth = level < max_depth
         self._scope = scope if scope is not None else ReferenceScope()
         self._shown_fields = shown_fields
         self._max_characters = max_characters
@@ -296,7 +298,7 @@ class _ValueRenderer:
             return self._emit({list: "[]", tuple: "()", dict: "{}", set: "set()", frozenset: "frozenset()"}[value_type])
         if depth >= self._depth_limit:
             noun = "entry" if isinstance(value, dict) else "item"
-            return self._marker(f"{_class_name(value_type)}; {_count_text(item_count, noun)}", path=path, truncated=True)
+            return self._marker(f"{_class_name(value_type)}; {_count_text(item_count, noun)}", path=path, truncated=self._level_limits_depth)
         if path is not None and value_type is not tuple and value_type is not frozenset:
             self._scope.add(value, path)
         self._active_object_id_set.add(id(value))
@@ -343,7 +345,7 @@ class _ValueRenderer:
         if field_count == 0:
             return self._emit(f"{name}()")
         if depth >= self._depth_limit:
-            return self._emit(f"{name}(") + self._marker(_count_text(field_count, "field"), path=path, truncated=True) + ")"
+            return self._emit(f"{name}(") + self._marker(_count_text(field_count, "field"), path=path, truncated=self._level_limits_depth) + ")"
         if path is not None:
             self._scope.add(value, path)
         self._active_object_id_set.add(id(value))
