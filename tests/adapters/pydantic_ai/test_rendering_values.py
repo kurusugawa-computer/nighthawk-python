@@ -72,6 +72,13 @@ def test_cycle_without_a_path_is_marked() -> None:
     assert rendered.text == "[<cycle list>]"
 
 
+def test_values_deeper_than_max_depth_stop_at_the_depth_cut() -> None:
+    rendered, _ = render_value_within_budget([[[[["deep"]]]]], max_tokens=10_000, encoding=tiktoken_encoding, max_depth=3)
+
+    assert rendered.text == "[[[<list; 1 item>]]]"
+    assert not rendered.truncated and not rendered.exact
+
+
 def test_top_level_text_stays_raw_and_states_its_continuation() -> None:
     text = "line of the request\n" * 400
 
