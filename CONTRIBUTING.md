@@ -133,7 +133,7 @@ uv run --env-file .env pytest -q tests/integration/ -m model_evaluation \
 | `--evaluation-model MODEL` | Select a production model identifier. Repeat the option to compare models on the same cases. |
 | `--evaluation-repeat N` | Run each selected case/model N times with fresh fixture state; defaults to one. |
 | `--evaluation-settings JSON` | Supply `execution_model_settings` as a JSON object; defaults to production defaults. Applies to every selected model. |
-| `--evaluation-context-limits JSON` | Supply `StepContextLimits` fields as a JSON object, such as `'{"tool_result_max_tokens":4000}'`; defaults to production defaults. Applies to every selected model. |
+| `--evaluation-context-limits JSON` | Supply `StepContextLimits` fields as a JSON object, such as `'{"tool_result_max_tokens":8000}'`; defaults to production defaults. Applies to every selected model. |
 | `--evaluation-output DIRECTORY` | Write to a new directory. Defaults to a timestamped directory under ignored `evals/outputs/`. Existing directories are rejected. |
 | `-k EXPRESSION` | Select ordinary pytest test names or parameter Ids. |
 | `--collect-only` | Inspect the selected matrix without execution or result files. |

@@ -81,7 +81,7 @@ class StepContextLimits(BaseModel):
     object_max_methods: int = Field(default=16, ge=0)
     object_max_fields: int = Field(default=16, ge=0)
     object_field_value_max_tokens: int = Field(default=120, ge=1)
-    tool_result_max_tokens: int = Field(default=1_200, ge=1)
+    tool_result_max_tokens: int = Field(default=4_000, ge=1)
 
 
 class StepExecutorConfiguration(BaseModel):

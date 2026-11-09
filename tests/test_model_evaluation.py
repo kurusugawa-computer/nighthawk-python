@@ -104,7 +104,7 @@ def test_evaluation_records_every_repeat_and_separates_failures(evaluation_proje
         "--evaluation-settings",
         '{"temperature": 0.2}',
         "--evaluation-context-limits",
-        '{"tool_result_max_tokens": 4000}',
+        '{"tool_result_max_tokens": 8000}',
         "--evaluation-output",
         str(output),
     )
@@ -118,7 +118,7 @@ def test_evaluation_records_every_repeat_and_separates_failures(evaluation_proje
     assert {record["repeat"] for record in records} == {1, 2}
     assert {record["model"] for record in records} == {"test:first", "test:second"}
     assert all(record["settings"] == {"temperature": 0.2} for record in records)
-    assert all(record["context_limits"] == {"tool_result_max_tokens": 4000} for record in records)
+    assert all(record["context_limits"] == {"tool_result_max_tokens": 8000} for record in records)
     for record in records:
         if record["case"].endswith("::test_pass") or record["case"].endswith("::test_assertion_failure"):
             assert record["observations"]["items"] == [9]

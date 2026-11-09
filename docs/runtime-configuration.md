@@ -516,7 +516,7 @@ from nighthawk.adapters.pydantic_ai.configuration import StepContextLimits, Step
 
 configuration = StepExecutorConfiguration(
     execution_model="openai-responses:gpt-6-luna",
-    context_limits=StepContextLimits(value_max_tokens=1_000, value_max_depth=4, tool_result_max_tokens=4_000),
+    context_limits=StepContextLimits(value_max_tokens=1_000, value_max_depth=4, tool_result_max_tokens=8_000),
 )
 ```
 
