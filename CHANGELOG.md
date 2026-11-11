@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Place prompt cache points after the Natural program text, and at `PROGRAM_CACHE_BOUNDARY` markers inside it, when `execution_model_settings` enables Pydantic AI's `cache` setting, so repeated calls can reuse the program prefix.
   Without `cache`, the markers are removed and the presented text is unchanged.
   See [prompt caching across calls](docs/runtime-configuration.md#prompt-caching-across-calls).
+- Accept `model_exchange_observer` on `nighthawk.adapters.pydantic_ai.harness.model_runner`, trusted host code that receives the request messages and the response of every provider request of an executor step, so hosts can record tool calls, their results, and usage per request for debugging and evaluation.
 - Report provider reasoning tokens as `ExecutionUsage.reasoning_token_count`, a subset of `output_token_count`, so hosts can separate reasoning from visible output in request observations and run evidence.
 
 ## [0.20.0]

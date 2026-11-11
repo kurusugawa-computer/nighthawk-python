@@ -206,6 +206,7 @@ Block citations do not create ledger events, and publication observations refer 
 
 `nighthawk.adapters.pydantic_ai.harness.model_runner(model_configuration_tuple=..., default_execution_model=..., default_decision_model=..., perimeter_policy=..., resource_allocation_factory=...)` identifies each configuration by its execution and decision model names, copies it at construction, and lazily builds one delegate per selected pair.
 `create_session(execution_model=..., decision_model=...)` uses the same integration with exactly one permitted pair.
+For debugging and evaluation records, `model_runner(model_exchange_observer=...)` passes the request messages and the response of every provider request of an executor step to trusted host code after the host accounted the step.
 There is no fallback, automatic routing, or mutable Session model registry.
 
 Natural functions carry no model configuration; they use the models selected for their caller.

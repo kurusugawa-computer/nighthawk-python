@@ -4,7 +4,7 @@ from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any
 
-from nighthawk.adapters.pydantic_ai._harness_executor import _LazyExecutor
+from nighthawk.adapters.pydantic_ai._harness_executor import ModelExchangeObserver, _LazyExecutor
 from nighthawk.adapters.pydantic_ai.configuration import StepExecutorConfiguration, selected_configuration
 from nighthawk.adapters.pydantic_ai.executor import AgentStepExecutor
 from nighthawk.core.model_selection import ModelSelection
@@ -35,6 +35,7 @@ class _ModelExecutor:
         configurations: tuple[StepExecutorConfiguration, ...],
         default_model_pair: _ModelPair,
         factory: Callable[[StepExecutorConfiguration], AgentStepExecutor],
+        exchange_observer: ModelExchangeObserver | None = None,
     ) -> None:
         model_pair_to_configuration: dict[_ModelPair, StepExecutorConfiguration] = {}
         for configuration in configurations:
@@ -47,7 +48,7 @@ class _ModelExecutor:
         self._model_pair_to_configuration = MappingProxyType(model_pair_to_configuration)
         self._model_pair_to_executor = MappingProxyType(
             {
-                model_pair: _LazyExecutor(lambda configuration=configuration: factory(configuration.model_copy(deep=True)))
+                model_pair: _LazyExecutor(lambda configuration=configuration: factory(configuration.model_copy(deep=True)), exchange_observer)
                 for model_pair, configuration in model_pair_to_configuration.items()
             }
         )
@@ -85,6 +86,7 @@ def model_runner(
     perimeter_audit_store: PerimeterAuditStore | None = None,
     termination_mechanism: TerminationMechanism | None = None,
     executor_factory: Callable[[StepExecutorConfiguration], AgentStepExecutor] = AgentStepExecutor,
+    model_exchange_observer: ModelExchangeObserver | None = None,
 ) -> Runner:
     """Permit a fixed set of execution and decision model pairs without constructing providers.
 
@@ -95,9 +97,15 @@ def model_runner(
     Without a decision model, ``decide`` blocks fail. Every selection retains the same host, grant, and run allocation.
     ``executor_factory`` is trusted provider construction, invoked lazily once per selected pair
     and again only for an event loop that runs steps while every existing delegate's loop is still running.
+    ``model_exchange_observer`` is trusted host code for debugging and evaluation records.
+    After the host accounted an executor step, it receives the messages sent in that provider request, which carry the results of
+    the preceding tool calls, and the response with its parts, usage, and model name.
+    It runs as host infrastructure; it must not change the messages or the response, and an exception it raises fails the step.
     """
     return Runner(
-        step_executor=_ModelExecutor(model_configuration_tuple, (default_execution_model, default_decision_model), executor_factory),
+        step_executor=_ModelExecutor(
+            model_configuration_tuple, (default_execution_model, default_decision_model), executor_factory, model_exchange_observer
+        ),
         perimeter_policy=perimeter_policy,
         resource_allocation_factory=resource_allocation_factory,
         perimeter_confinement=perimeter_confinement,

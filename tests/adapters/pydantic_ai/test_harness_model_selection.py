@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from typing import Any
 
 import pytest
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelResponse
+from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.test import TestModel
 
 import nighthawk as nh
@@ -121,6 +121,7 @@ def _runner(
     maximum_tokens: int | None = None,
     model_factory: Any = _ObservedModel,
     decisions: DecisionsTransport | None = None,
+    model_exchange_observer: Callable[[Sequence[ModelMessage], ModelResponse], None] | None = None,
 ) -> Runner:
     """Permit (test:A, None), (test:B, None), and, with ``decisions``, both execution models paired with the decision model."""
 
@@ -149,6 +150,7 @@ def _runner(
             identity=identity.run_id, maximum_executor_step_count=limit, maximum_total_token_count=maximum_tokens
         ),
         executor_factory=factory,
+        model_exchange_observer=model_exchange_observer,
     )
 
 
@@ -159,6 +161,37 @@ def _models(handle: RunHandle) -> list[str | None]:
         if isinstance(entry.event, NaturalExecutionOutcomeEvent)
         for name in entry.event.response_model_name_tuple
     ]
+
+
+def test_runner_reports_every_provider_exchange_to_the_host_observer() -> None:
+    request_message_count_list: list[int] = []
+    response_list: list[ModelResponse] = []
+
+    def observer(message_tuple: Sequence[ModelMessage], response: ModelResponse) -> None:
+        request_message_count_list.append(len(message_tuple))
+        response_list.append(response)
+
+    runner = _runner([], [], model_exchange_observer=observer)
+
+    def body(value: None) -> None:
+        _plain()
+        _child()
+
+    handle = RunHandle()
+    runner.run(ScaffoldComposition(RunContract(type(None), type(None)), body), None, handle=handle)
+    assert [response.model_name for response in response_list] == ["test:A", "test:B"]
+    assert [part.part_kind for response in response_list for part in response.parts] == ["tool-call", "tool-call"]
+    assert request_message_count_list == [1, 1]
+    assert handle.ledger.executor_step_count() == 2
+
+
+def test_runner_fails_the_step_when_the_host_observer_raises() -> None:
+    def observer(message_tuple: Sequence[ModelMessage], response: ModelResponse) -> None:
+        raise LookupError(response.model_name)
+
+    runner = _runner([], [], model_exchange_observer=observer)
+    with pytest.raises(RunFailedError):
+        runner.run(ScaffoldComposition(RunContract(type(None), type(None)), lambda value: _plain()), None)
 
 
 @pytest.mark.parametrize("model_only", [False, True])
