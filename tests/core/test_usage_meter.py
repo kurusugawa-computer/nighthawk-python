@@ -24,6 +24,18 @@ class TestExecutionUsage:
         assert (usage + usage).cache_read_token_count == 120
         assert (usage + usage).difference(usage).cache_write_token_count == 10
 
+    def test_provider_reasoning_count_is_kept_as_an_output_subset(self) -> None:
+        reported = execution_usage(RunUsage(requests=1, input_tokens=10, output_tokens=50, output_reasoning_tokens=40))
+        assert reported == ExecutionUsage(
+            request_count=1, input_token_count=10, output_token_count=50, reasoning_token_count=40, total_token_count=60
+        )
+        # Some providers report reasoning tokens only as a usage detail.
+        detailed = execution_usage(RunUsage(requests=1, input_tokens=10, output_tokens=50, details={"reasoning_tokens": 30}))
+        assert detailed.reasoning_token_count == 30
+        assert (reported + detailed).reasoning_token_count == 70
+        assert (reported + detailed).difference(detailed).reasoning_token_count == 40
+        assert execution_usage(RunUsage(requests=1, input_tokens=10, output_tokens=50)).reasoning_token_count == 0
+
 
 class TestUsageMeterRecord:
     def test_record_accumulates_correctly(self) -> None:

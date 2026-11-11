@@ -6,7 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExecutionUsage(BaseModel):
-    """Provider-reported usage; cache read and write counts are subsets of ``input_token_count``."""
+    """Provider-reported usage.
+
+    Cache read and write counts are subsets of ``input_token_count``, and ``reasoning_token_count`` is a subset of
+    ``output_token_count``. A provider that does not report reasoning tokens leaves the count at zero.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -15,6 +19,7 @@ class ExecutionUsage(BaseModel):
     cache_read_token_count: int = Field(default=0, ge=0)
     cache_write_token_count: int = Field(default=0, ge=0)
     output_token_count: int = Field(default=0, ge=0)
+    reasoning_token_count: int = Field(default=0, ge=0)
     total_token_count: int = Field(default_factory=lambda values: values["input_token_count"] + values["output_token_count"], ge=0)
 
     def __add__(self, other: ExecutionUsage) -> ExecutionUsage:
@@ -24,6 +29,7 @@ class ExecutionUsage(BaseModel):
             cache_read_token_count=self.cache_read_token_count + other.cache_read_token_count,
             cache_write_token_count=self.cache_write_token_count + other.cache_write_token_count,
             output_token_count=self.output_token_count + other.output_token_count,
+            reasoning_token_count=self.reasoning_token_count + other.reasoning_token_count,
             total_token_count=self.total_token_count + other.total_token_count,
         )
 
@@ -34,6 +40,7 @@ class ExecutionUsage(BaseModel):
             cache_read_token_count=max(0, self.cache_read_token_count - earlier.cache_read_token_count),
             cache_write_token_count=max(0, self.cache_write_token_count - earlier.cache_write_token_count),
             output_token_count=max(0, self.output_token_count - earlier.output_token_count),
+            reasoning_token_count=max(0, self.reasoning_token_count - earlier.reasoning_token_count),
             total_token_count=max(0, self.total_token_count - earlier.total_token_count),
         )
 

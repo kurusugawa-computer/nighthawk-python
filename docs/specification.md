@@ -1541,6 +1541,7 @@ A host accumulator of 120 after two admitted requests against a threshold of 100
 Concurrent or already admitted requests may overrun that threshold; Core supplies neither reservations nor a strict cost cap.
 `UsageMeter` remains a separate completed-agent-run aggregate: do not add it to request observations as another charge.
 Coding-agent usage follows Pydantic AI's token convention: Claude Code input totals include uncached input, cache reads, and cache writes; the separate cache counters are subsets of that total.
+`ExecutionUsage.reasoning_token_count` is the subset of `output_token_count` that the provider reports as reasoning; it is zero when the provider reports none, which is not evidence that no reasoning occurred.
 These observations cover capability-visible requests, not every provider SDK retry, HTTP attempt, or coding-agent internal request.
 
 ### Coroutine ownership
