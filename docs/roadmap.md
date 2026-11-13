@@ -48,6 +48,13 @@ Keep live values accessible independently of their summaries.
 
 Extend descriptions of opaque domain values while preserving the [inspection contract](specification.md#825-value-inspection-and-name-discovery): bounded presentation, provenance, and live-value access.
 
+### Typed value tools loaded on demand
+
+A step exposes a [structured assignment tool](specification.md#83-tools-available-to-the-llm) for each declared model or dataclass output.
+Explore the same typed arguments for values that are not outputs, such as large arguments to a binding function, when an application shows that declaring an output or a child Natural function is not enough.
+Adding a tool definition in the middle of a step changes the request prefix and discards the provider's prompt cache, while provider tool search loads a tool declared as deferred without that loss or an extra request ([evidence](https://github.com/kurusugawa-computer/nighthawk-python/blob/main/evals/evidence/2026-11-13-structured-assignment-tools.md)).
+A design would therefore declare the candidate tools at step entry and let the provider load them.
+
 ### Model-capability-aware prompting
 
 Evaluate whether model-specific guidance improves judgment quality enough to justify additional prompt and maintenance cost.

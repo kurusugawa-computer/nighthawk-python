@@ -8,8 +8,12 @@ from typing import Any
 from pydantic_ai.tools import Tool
 
 from nighthawk.adapters.pydantic_ai.errors import ToolDeclarationError, ToolNameConflictError
-from nighthawk.adapters.pydantic_ai.tools.provided import get_provided_tools
-from nighthawk.core.step_context import StepContext
+from nighthawk.adapters.pydantic_ai.tools.provided import (
+    STRUCTURED_ASSIGNMENT_TOOL_NAME_PREFIX,
+    get_provided_tools,
+    get_structured_assignment_tools,
+)
+from nighthawk.core.step_context import StepContext, optional_step_context
 
 type ToolEntry = Callable[..., Any] | Tool[StepContext]
 """A tool declaration accepted by ``nighthawk.scope(tools=...)``.
@@ -60,6 +64,10 @@ def resolve_scoped_tools(
         _validate_tool_name(tool.name)
         if tool.name in builtin_tool_names:
             raise ToolNameConflictError(f"Tool name conflicts with a built-in tool: {tool.name!r}")
+        if tool.name.startswith(STRUCTURED_ASSIGNMENT_TOOL_NAME_PREFIX):
+            raise ToolNameConflictError(
+                f"Tool name {tool.name!r} uses the prefix {STRUCTURED_ASSIGNMENT_TOOL_NAME_PREFIX!r}, reserved for the built-in tools of declared outputs"
+            )
         previous = name_to_declaration.get(tool.name)
         if previous is not None:
             if entry is previous.origin or entry is previous.tool:
@@ -72,6 +80,9 @@ def resolve_scoped_tools(
 
 
 def get_visible_tools() -> list[Tool[StepContext]]:
+    """Built-in tools, the structured assignment tools of the innermost active step, and the scoped tools."""
     from nighthawk.adapters.pydantic_ai.scoping import get_model_scope
 
-    return [*get_provided_tools(), *get_model_scope().tools]
+    step_context = optional_step_context()
+    structured_assignment_tools = () if step_context is None else get_structured_assignment_tools(step_context)
+    return [*get_provided_tools(), *structured_assignment_tools, *get_model_scope().tools]

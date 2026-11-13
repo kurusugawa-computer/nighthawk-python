@@ -379,9 +379,6 @@ class AgentStepExecutor:
         context_request = build_context_request(request, self.configuration)
         user_prompt = build_context_content(context_request, get_model_scope().context_builder)
 
-        visible_tool_list = get_visible_tools()
-        toolset = ToolResultWrapperToolset(FunctionToolset(visible_tool_list))
-
         structured_output_type, step_system_prompt_fragment = self._build_structured_output_and_prompt_fragment(
             processed_natural_program=processed_natural_program,
             step_context=step_context,
@@ -398,7 +395,7 @@ class AgentStepExecutor:
                     agent=agent,
                     user_prompt=user_prompt,
                     request=request,
-                    toolset=toolset,
+                    toolset=ToolResultWrapperToolset(FunctionToolset(get_visible_tools())),
                     structured_output_type=structured_output_type,
                 )
             except Exception:

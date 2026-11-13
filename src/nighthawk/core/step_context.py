@@ -79,6 +79,11 @@ def get_python_cell_scope_stack() -> tuple[dict[str, CellType], ...]:
     return _python_cell_scope_stack.get()
 
 
+def optional_step_context() -> StepContext | None:
+    stack = _step_context_stack_var.get()
+    return stack[-1] if stack else None
+
+
 def get_step_context() -> StepContext:
     """Return the innermost active step context.
 

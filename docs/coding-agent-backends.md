@@ -71,7 +71,8 @@ The [operation feedback support matrix](operation-feedback.md#ordering-and-backe
 
 ### Allowed tool names
 
-Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the backend via MCP. When `None` (default), all tools visible in the current scope are exposed.
+Use `allowed_tool_names` to restrict which Nighthawk tools are exposed to the backend via MCP. When `None` (default), all tools visible in the current scope are exposed, including the [structured assignment tools](specification.md#83-tools-available-to-the-llm) of the step's declared outputs.
+A restriction exposes a structured assignment tool only when it names that tool, such as `nh_assign_result`.
 
 ```py
 from nighthawk.adapters.pydantic_ai.models.claude_code_sdk import ClaudeCodeSdkModelSettings

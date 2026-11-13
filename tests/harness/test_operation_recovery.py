@@ -5,6 +5,7 @@ from dataclasses import replace
 from typing import Literal, cast
 
 import pytest
+from pydantic import BaseModel
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
@@ -221,3 +222,49 @@ async def test_explicit_abort_cannot_be_recovered_as_a_success(asynchronous: boo
     outcome = _single_outcome(handle)
     assert outcome.status == "failure" and outcome.failure_kind == "commit_failed"
     assert not outcome.committed_binding_name_to_value
+
+
+class _Summary(BaseModel):
+    title: str
+    effect_count: int
+
+
+@nh.function
+async def _summarize(effects: list[str]) -> _Summary:
+    summary: _Summary
+    """execute
+    Summarize <effects> in <:summary>.
+    """
+    return summary  # pyright: ignore[reportUnboundVariable]  # noqa: F821
+
+
+async def test_structured_assignment_tool_is_not_ambient_authority() -> None:
+    handle = RunHandle()
+    effects = ["first", "second"]
+    seen_tool_names: list[str] = []
+
+    async def respond(messages: list[ModelMessage], information: AgentInfo) -> ModelResponse:
+        if not seen_tool_names:
+            seen_tool_names.extend(definition.name for definition in information.function_tools)
+            return ModelResponse(parts=[ToolCallPart("nh_assign_summary", {"title": "Effects", "effect_count": 2}, "assign")])
+        return ModelResponse(parts=[ToolCallPart(information.output_tools[0].name, {"result": {"kind": "pass"}}, "finish")])
+
+    runner = replace(
+        make_runner(accepts_aggregate_executor_accounting=False),
+        step_executor=AgentStepExecutor(configuration=StepExecutorConfiguration(execution_model=FunctionModel(respond))),
+    )
+    result = await runner.run(
+        AsyncScaffoldComposition(
+            RunContract(type(None), _Summary),
+            lambda value: _summarize(effects),
+            run_entry_grant=Grant.of(shared=effects),
+            function_definition_tuple=(_summarize,),
+        ),
+        None,
+        handle=handle,
+    )
+
+    assert result == _Summary(title="Effects", effect_count=2)
+    assert seen_tool_names == ["nh_assign", "nh_evaluate", "nh_assign_summary"]
+    assert _single_outcome(handle).status == "success"
+    assert handle.ledger.select(TraceAnomalyEvent) == ()

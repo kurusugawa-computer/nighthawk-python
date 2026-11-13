@@ -8,6 +8,7 @@ from types import CodeType
 from typing import Literal, cast
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic_core import to_json
 from typing_extensions import TypeForm
 
 from nighthawk.core.async_bridge import run_coroutine_synchronously
@@ -57,7 +58,13 @@ def _admit_assignment(step_context: StepContext, target_path: str, execution: Op
 
 
 def _assign_value(
-    step_context: StepContext, target_path: str, parsed: tuple[str, ...], value: object, execution: OperationExecution
+    step_context: StepContext,
+    target_path: str,
+    parsed: tuple[str, ...],
+    value: object,
+    execution: OperationExecution,
+    *,
+    structured: bool = False,
 ) -> AssignmentResult:
     name = parsed[0]
     if len(parsed) == 1:
@@ -65,7 +72,8 @@ def _assign_value(
         if name in step_context.environment.binding_name_to_type:
             try:
                 adapter = TypeAdapter(cast(TypeForm[object], step_context.environment.binding_name_to_type[name]))
-                value = adapter.validate_python(value)
+                # Structured data carries JSON types only, so the contract reads it as JSON: a list fills a tuple and a string fills a date.
+                value = adapter.validate_json(to_json(value)) if structured else adapter.validate_python(value)
                 validate_instance_fields(value, adapter)
             except (ValidationError, ValueError) as exception:
                 raise _failure(
@@ -138,6 +146,34 @@ async def assign_expression_async(step_context: StepContext, target_path: str, e
         assert compiled is not None
         value = await evaluate_compiled_expression(step_context, compiled, execution)
         return _assign_value(step_context, target_path, parsed, value, execution)
+
+    return cast(AssignmentResult, await execute_operation_async(step_context, request, admit=admit, execute=execute))
+
+
+async def assign_structured_value_async(step_context: StepContext, name: str, structured_value: object) -> AssignmentResult:
+    """Assign JSON-compatible data to a declared output through the operation boundary of an expression assignment.
+
+    The output's contract validates the data as JSON, followed by the instance check of final validation.
+    Admission and oversight precede validation; the request carries the data as its ``value`` argument and no expression.
+    Recoverable operation errors and rejections retain their structured diagnostics.
+    """
+    request = new_operation_request(
+        step_context,
+        kind="assignment",
+        target_path=name,
+        expected_type=step_context.environment.binding_name_to_type.get(name),
+        argument_name_to_value={"value": structured_value},
+    )
+    parsed: tuple[str, ...] = ()
+
+    def admit(execution: OperationExecution) -> None:
+        nonlocal parsed
+        parsed = _admit_assignment(step_context, name, execution)
+        if len(parsed) != 1 or name not in step_context.environment.output_name_set:
+            raise _failure(execution, f"Structured assignment requires a declared output; {name!r} is not one")
+
+    async def execute(execution: OperationExecution) -> AssignmentResult:
+        return _assign_value(step_context, name, parsed, structured_value, execution, structured=True)
 
     return cast(AssignmentResult, await execute_operation_async(step_context, request, admit=admit, execute=execute))
 

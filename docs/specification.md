@@ -650,6 +650,7 @@ Provided tools (built-in):
 
 - Provided tools are always available by default.
 - Provided tools are exposed with names prefixed by `nh_` to reduce collisions.
+- A step adds one structured assignment tool for each of its declared outputs whose contract is a Pydantic model or dataclass.
 
 Tools resolve names through `StepEnvironment`, using the precedence and source boundaries in Section 8.1.
 Expression evaluation uses one live namespace for both globals and locals, so immediately executed comprehensions, generators, and lambdas see the same environment.
@@ -695,6 +696,23 @@ Semantics of `nh_assign`:
     - Do not read the final attribute merely to infer its contract or probe its setter.
     - The right-hand side may change which live object is subsequently selected; a later traversal or validation failure retains earlier effects.
     - Properties, custom assignment machinery, and other attribute targets return a recoverable unsupported-target observation recommending an ordinary Python helper.
+
+Structured assignment tools:
+
+- `nh_assign_<name>(**fields) -> object`, one for each declared output `<name>` whose entry-time contract is a Pydantic model class or a dataclass.
+    - The argument schema is the JSON Schema that Pydantic derives from the contract; the output annotation is the only declaration.
+    - Outputs with any other contract, such as scalars, containers, unions, `Annotated` forms, or no annotation, receive no tool and use `nh_assign`.
+    - The tool exists only during the step that declares the output, after `nh_assign` and `nh_evaluate` and before scoped tools, on every backend that receives the built-in tools.
+    - A scoped tool name that starts with `nh_assign_` raises `ToolNameConflictError`.
+
+Semantics of structured assignment:
+
+- The arguments are data that the model writes; they cannot reference live Python values. `nh_assign` retains a value that Python computes or already holds.
+- Admission requires the declared output and precedes inspection. The operation request has kind `assignment`, the output name as `target_path`, no `expression`, and the arguments under `argument_name_to_value["value"]`.
+- The contract validates the arguments as JSON, so a list fills a tuple and a string fills a date, followed by the instance check of final validation, before updating the tracked working value.
+- Pydantic AI does not validate the arguments. A contract failure is a recoverable operation error in phase `validation`, like a failed `nh_assign`, and does not consume a tool retry budget.
+- The tool is sent as strict when closed objects with every property required and typed array items can express the contract. A provider that supports strict tool definitions then constrains generation to the schema, and the model writes every field, including fields with defaults. A contract that holds a free-form mapping, a fixed-length tuple, or an untyped array is sent without strict. In both cases assignment validation, not the schema, establishes that the value satisfies the contract.
+- The result names the target and how it was retained; it does not repeat the assigned value.
 
 Commit and mutation notes:
 
@@ -1368,6 +1386,7 @@ The runtime must not claim that type validation of `list[str]` proves the count 
 
 Custom executors materialize working names using `nighthawk.core.assignment.assign_expression_async` and call children with explicit arguments using `nighthawk.core.expression.evaluate_expression_async`.
 Their synchronous counterparts are `assign_expression` and `evaluate_expression`.
+`nighthawk.core.assignment.assign_structured_value_async` assigns JSON-compatible data to a declared output with the semantics of a structured assignment tool.
 These entry points include admission, inspection, ordering, workspace updates, and lifecycle delivery; do not mutate environment views or build a second operation policy.
 Directly constructing a `StepCandidate` proposes final values but creates no intermediate operation or shared temporary state.
 

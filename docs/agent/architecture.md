@@ -60,6 +60,7 @@ translating every failure into the library's typed exception chained to the orig
 An execution the core finishes without delivering its terminal record is a trace anomaly with a failed outcome at the next host seam.
 The same reasoning excludes any other core oversight hook or lifecycle and the core tools and Pydantic AI capabilities declared outside the host projection from agent runs:
 a foreign or cleared inspector or lifecycle bypasses the host seams, and a tool or capability visible without a grant is ambient authority, so the host records each as a trace anomaly and fails the execution.
+The built-in tools, including the structured assignment tools of a step's declared outputs, act only on that step's namespace and outputs through inspected operations and are not ambient authority.
 
 ## Graduated enforcement
 

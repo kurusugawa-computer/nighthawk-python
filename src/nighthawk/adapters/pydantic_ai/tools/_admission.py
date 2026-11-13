@@ -88,9 +88,10 @@ class ToolAdmissionCapability(AbstractCapability[StepContext]):
         recorded = _recorded_admission_errors.get()
         if recorded is not None:
             recorded.append(error)
-        operation_kind = (tool_def.metadata or {}).get("nighthawk.operation_kind")
+        metadata = tool_def.metadata or {}
+        operation_kind = metadata.get("nighthawk.operation_kind")
         expression = args.get("expression") if isinstance(args, dict) else None
-        target_path = args.get("target_path") if isinstance(args, dict) else None
+        target_path = metadata.get("nighthawk.assignment_target") or (args.get("target_path") if isinstance(args, dict) else None)
         request = new_operation_request(
             ctx.deps,
             kind=operation_kind if operation_kind in ("evaluation", "assignment") else "native_tool",

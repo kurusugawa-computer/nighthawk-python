@@ -170,6 +170,7 @@ See [Architecture](architecture.md) for dependency direction and composition.
         - AssignmentResult
         - assign_expression
         - assign_expression_async
+        - assign_structured_value_async
 
 ::: nighthawk.core.environment
     options:

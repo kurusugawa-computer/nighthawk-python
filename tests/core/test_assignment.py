@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Annotated, Self
 
 import pytest
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from nighthawk.core.assignment import assign_expression
+from nighthawk.core.assignment import assign_expression, assign_structured_value_async
 from nighthawk.core.execution_reference import ExecutionReference
 from nighthawk.core.operation_contract import OperationError
 from tests.support.contexts import new_context as context_for
@@ -295,3 +296,24 @@ def test_assign_dotted_path_updates_read_binding_root() -> None:
     assign_expression(step_context, "model.value", "2")
 
     assert step_context.environment.resolve("model") == Model(value=2)
+
+
+def test_structured_assignment_requires_a_declared_output_and_reads_data_as_json() -> None:
+    class Window(BaseModel):
+        days: tuple[int, ...]
+        label: str = "default"
+
+    context = new_step_context(output_binding_names={"window"}, binding_name_to_type={"window": Window})
+    result = asyncio.run(assign_structured_value_async(context, "window", {"days": [1, 2]}))
+    assert result.retained_as == "output" and result.value == Window(days=(1, 2))
+    assert context.environment.resolve("window") is result.value
+
+    for target in ("scratch", "window.label"):
+        with pytest.raises(OperationError, match="requires a declared output") as caught:
+            asyncio.run(assign_structured_value_async(context, target, {"days": []}))
+        assert caught.value.phase == "admission" and not caught.value.evaluation_started
+
+    with pytest.raises(OperationError, match="failed contract") as caught:
+        asyncio.run(assign_structured_value_async(context, "window", {"days": ["many"]}))
+    assert caught.value.phase == "validation"
+    assert context.environment.resolve("window") is result.value

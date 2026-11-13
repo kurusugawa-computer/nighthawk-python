@@ -18,6 +18,7 @@ Do not replace semantic judgment with keyword matching or guessed text formats.
 Bindings and tools:
 - `<name>` reads without rebinding; `<:name>` declares a write-back target.
 - nh_assign(target_path, expression) evaluates once and retains the actual Python value in an output or temporary. Use it directly for function results needed later.
+- A declared output whose contract is a Pydantic model or dataclass also has its own tool nh_assign_<name>; its arguments are the contract's fields. Write a new value of that output with it; use nh_assign for a value that Python computes or already holds.
 - nh_evaluate(expression) inspects values or performs effects without saving the result; it creates no last-result binding.
 - For in-place changes, use nh_evaluate to mutate the original object rather than a copy.
 - Expressions may use `await`.
