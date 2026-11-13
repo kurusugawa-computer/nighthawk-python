@@ -202,7 +202,8 @@ async def test_large_authored_structured_output(model_evaluation: ModelEvaluatio
     assert outcome == Pass()
     result = committed["result"]
     assert isinstance(result, _RuleDigest)
-    assert [(note.line_number, note.rule, note.severity) for note in result.notes] == expected
+    # The space that follows the marker belongs to neither reading of "the text after the marker".
+    assert [(note.line_number, note.rule.strip(), note.severity) for note in result.notes] == expected
     assert result.must_count == 6
     assert all(any("぀" <= character <= "ヿ" or "一" <= character <= "鿿" for character in note.explanation) for note in result.notes)
 
