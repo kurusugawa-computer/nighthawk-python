@@ -136,6 +136,77 @@ async def test_structured_output_contracts(
     assert committed == {"result": expected}
 
 
+class _RuleNote(BaseModel):
+    line_number: int
+    rule: str
+    severity: Literal["must", "should"]
+    explanation: str
+
+
+class _RuleDigest(BaseModel):
+    notes: tuple[_RuleNote, ...]
+    must_count: int
+    remark: str = ""
+
+
+_POLICY_RULE_TUPLE: tuple[tuple[Literal["must", "should"], str], ...] = (
+    ("must", "Reject a name that contains a double quote (\"), a single quote ('), or a backslash (\\)."),
+    ("should", "Prefer `snake_case` over camelCase; e.g. write user_id, not userId."),
+    ("must", 'Close every bracket: (), [], {} -- even inside f"{value!r}" strings.'),
+    ("should", "Keep a line under 100 characters (URLs such as https://example.com/a?b=1&c=2 are exempt)."),
+    ("must", 'Escape a literal percent sign as %% in a format string like "%d%% done".'),
+    ("should", 'Write a 日本語の comment only where the reader needs it ("なぜ" を書く).'),
+    ("must", "Never commit a file that matches *.pem, id_rsa*, or .env."),
+    ("should", 'Use a raw string for a regular expression, r"\\d+\\s*(?:px|em)".'),
+    ("must", "Return an empty tuple (), not None, when nothing matches."),
+    ("should", 'End a docstring with a period, and keep the summary on the line of the opening """.'),
+    ("must", "Compare with None by `is`, as in `if value is None:`."),
+    ("should", "Sort imports: standard library, third party, then local ('from . import x')."),
+)
+
+
+def _policy() -> str:
+    line_list = ["# Review policy", ""]
+    for index, (severity, rule) in enumerate(_POLICY_RULE_TUPLE):
+        if index % 3 == 0:
+            line_list.extend([f"## Group {index // 3 + 1}", "The rules of this group were agreed in review; the reasons are not recorded here."])
+        line_list.append(f"{severity.upper()}: {rule}")
+        if index % 4 == 1:
+            line_list.append("")
+    return "\n".join(line_list)
+
+
+async def test_large_authored_structured_output(model_evaluation: ModelEvaluation) -> None:
+    policy = _policy()
+    expected = [
+        (line_number, line.split(": ", 1)[1], line.split(": ", 1)[0].lower())
+        for line_number, line in enumerate(policy.splitlines(), start=1)
+        if line.startswith(("MUST: ", "SHOULD: "))
+    ]
+    committed: dict[str, object] = {}
+    model_evaluation.name_to_observation.update(bindings=committed)
+    outcome = await execute_step_async(
+        StepDefinition(
+            "Record every rule of <policy> in <:result>, in document order. "
+            "A rule is a line that starts with MUST: or SHOULD:. "
+            "For each rule give its 1-based line number, the text after the marker copied exactly, its severity, "
+            "and one sentence in Japanese that you write to explain why a maintainer would want the rule. "
+            "Also give the number of MUST rules.",
+            input_binding_names=("policy",),
+            output_binding_names=("result",),
+            binding_name_to_type={"result": _RuleDigest},
+        ),
+        name_to_value={"policy": policy},
+        write_binding=committed.__setitem__,
+    )
+    assert outcome == Pass()
+    result = committed["result"]
+    assert isinstance(result, _RuleDigest)
+    assert [(note.line_number, note.rule, note.severity) for note in result.notes] == expected
+    assert result.must_count == 6
+    assert all(any("぀" <= character <= "ヿ" or "一" <= character <= "鿿" for character in note.explanation) for note in result.notes)
+
+
 @dataclass(frozen=True)
 class _LineItem:
     product: str
