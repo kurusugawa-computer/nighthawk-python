@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0]
+
 ### Added
 
 - Place prompt cache points after the Natural program text, and at `PROGRAM_CACHE_BOUNDARY` markers inside it, when `execution_model_settings` enables Pydantic AI's `cache` setting, so repeated calls can reuse the program prefix.
@@ -17,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   See [tools available to the LLM](docs/specification.md#83-tools-available-to-the-llm).
 - Accept `model_exchange_observer` on `nighthawk.adapters.pydantic_ai.harness.model_runner`, trusted host code that receives the request messages and the response of every provider request of an executor step, so hosts can record tool calls, their results, and usage per request for debugging and evaluation.
 - Report provider reasoning tokens as `ExecutionUsage.reasoning_token_count`, a subset of `output_token_count`, so hosts can separate reasoning from visible output in request observations and run evidence.
+- Present the declared fields and constraints of model and dataclass output contracts in the step context.
+- Keep omitted tool-result values accessible through step-scoped `nh_results` references, so reading the omitted parts does not repeat the original call.
+
+### Changed
+
+- Breaking: render prompt values and tool results in Python notation, including declared fields of nested dataclass and Pydantic model instances, and remove `StepExecutorConfiguration.json_renderer_style` and the Headson dependency.
+  Use the token and depth limits in `StepContextLimits` to control presentation.
+- Increase the default `StepContextLimits.tool_result_max_tokens` from 2,000 to 4,000.
+
+### Fixed
+
+- Validate model and dataclass output instances after in-place changes, including invalid nested shapes introduced by `model_copy(update=...)` or `model_construct`.
+- Stop the rendering budget search when the depth limit alone causes an omission.
+- Use the supported `natural_language` cell mode in the Session guide.
 
 ## [0.20.0]
 
@@ -533,7 +549,8 @@ Invalid initial results fail before oversight; use resilience retries to recover
 - Step executor abstraction and provider integration foundation.
 - Core documentation and project scaffolding.
 
-[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kurusugawa-computer/nighthawk-python/compare/v0.17.0...v0.18.0
